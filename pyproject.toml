@@ -18,3 +18,12 @@ dev = ["pytest>=8.4,<9.0", "ruff>=0.12,<1.0", "mypy>=1.16,<2.0"]
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]
+
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["app*"]
+exclude = ["docker*", "projects*", "tests*", "scripts*"]
