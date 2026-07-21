@@ -1,0 +1,11 @@
+services:
+  slr-platform:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    container_name: slr-platform
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./projects:/app/projects
+    restart: unless-stopped

@@ -1,0 +1,74 @@
+project:
+  id: lean_energy
+  title: "Lean Management and Energy Efficiency"
+  protocol_version: "0.6"
+
+sources:
+  openalex:
+    enabled: true
+    mode: api
+  crossref:
+    enabled: true
+    mode: api
+  google_scholar:
+    enabled: true
+    mode: manual_import
+    accepted_formats: [ris, bibtex, csv]
+
+search:
+  strategy_version: "0.1"
+  lean_terms:
+    - "Lean Management"
+    - "Lean Manufacturing"
+    - "Lean Production"
+    - "Toyota Production System"
+    - "Kaizen"
+    - "Continuous Improvement"
+    - "Just-in-Time"
+  energy_terms:
+    - "Energy Efficiency"
+    - "Energy Consumption"
+    - "Energy Performance"
+    - "Energy Saving"
+    - "Energy Management"
+    - "Energy Use"
+  manufacturing_terms:
+    - "Manufacturing"
+    - "Production"
+    - "Industrial"
+    - "Factory"
+
+filters:
+  publication_year:
+    enabled: false
+    from: null
+    to: null
+  languages: [en, pl]
+  publication_types: [article, review]
+
+deduplication:
+  exact:
+    doi: true
+    title: true
+  fuzzy:
+    enabled: true
+    title_similarity_threshold: 0.92
+    require_review: true
+
+export:
+  formats: [json, csv]
+
+logging:
+  enabled: true
+  save_queries: true
+  save_raw_responses: true
+  save_statistics: true
+
+ai:
+  enabled: false
+  provider: ollama
+  base_url: "http://ai-node:11434"
+  model: null
+  agents:
+    deduplication_reviewer:
+      enabled: false
