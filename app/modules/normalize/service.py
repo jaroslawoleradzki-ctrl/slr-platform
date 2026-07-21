@@ -1,6 +1,6 @@
 import re
 import unicodedata
-from app.core.models import PublicationRecord
+from app.domain.models import PublicationRecord
 
 def normalize_doi(doi: str | None) -> str | None:
     if not doi:

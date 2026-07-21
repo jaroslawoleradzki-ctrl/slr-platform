@@ -1,4 +1,4 @@
-from app.core.models import PublicationRecord
+from app.domain.models import PublicationRecord
 
 def deduplicate_by_doi(
     records: list[PublicationRecord],

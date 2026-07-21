@@ -1,4 +1,4 @@
-from app.core.models import PublicationRecord
+from app.domain.models import PublicationRecord
 from app.modules.deduplicate.service import deduplicate_by_doi
 
 def test_deduplicate_by_doi():
