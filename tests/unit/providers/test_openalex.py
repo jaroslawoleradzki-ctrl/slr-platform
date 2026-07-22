@@ -61,7 +61,8 @@ async def test_search_works_rejects_invalid_page_size(per_page: int) -> None:
             await client.search_works("lean", per_page=per_page)
 
 
-def test_client_rejects_blank_mailto() -> None:
-    with httpx.AsyncClient() as http_client:
+@pytest.mark.anyio
+async def test_client_rejects_blank_mailto() -> None:
+    async with httpx.AsyncClient() as http_client:
         with pytest.raises(ValueError, match="mailto must not be blank"):
             OpenAlexClient(http_client=http_client, mailto="   ")
