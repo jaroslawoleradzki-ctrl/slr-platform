@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
 from typing import Any
 
 import httpx
@@ -56,3 +57,40 @@ class OpenAlexClient:
         if not isinstance(payload, dict):
             raise ValueError("OpenAlex response must be a JSON object")
         return payload
+
+    async def iterate_works(
+        self,
+        query: str,
+        *,
+        per_page: int = 200,
+    ) -> AsyncIterator[dict[str, Any]]:
+        """Yield all works by following OpenAlex cursor pagination."""
+
+        cursor = "*"
+        while True:
+            payload = await self.search_works(
+                query,
+                per_page=per_page,
+                cursor=cursor,
+            )
+
+            results = payload.get("results")
+            if not isinstance(results, list):
+                raise ValueError("OpenAlex response results must be a list")
+
+            for work in results:
+                if not isinstance(work, dict):
+                    raise ValueError("OpenAlex work must be a JSON object")
+                yield work
+
+            meta = payload.get("meta")
+            if not isinstance(meta, dict):
+                raise ValueError("OpenAlex response meta must be a JSON object")
+
+            next_cursor = meta.get("next_cursor")
+            if next_cursor is None:
+                return
+            if not isinstance(next_cursor, str) or not next_cursor.strip():
+                raise ValueError("OpenAlex next_cursor must be a non-blank string or null")
+
+            cursor = next_cursor
