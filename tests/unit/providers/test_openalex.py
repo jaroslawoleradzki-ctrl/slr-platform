@@ -4,6 +4,11 @@ import pytest
 from app.providers.openalex import OpenAlexClient
 
 
+@pytest.fixture
+def anyio_backend() -> str:
+    return "asyncio"
+
+
 @pytest.mark.anyio
 async def test_search_works_sends_expected_request() -> None:
     async def handler(request: httpx.Request) -> httpx.Response:
