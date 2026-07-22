@@ -1,6 +1,6 @@
 # SLR Platform — Project Status
 
-_Last updated: 2026-07-21_
+_Last updated: 2026-07-22_
 
 ## Current status
 
@@ -11,6 +11,10 @@ Infrastructure and project architecture are considered stable.
 Current version:
 
 v0.1.0
+
+Current development phase:
+
+Phase 2 — Search Providers.
 
 ---
 
@@ -53,7 +57,45 @@ app/
 
 Old architecture removed.
 
-Tests passing.
+## Phase 1 — Domain Model
+
+Completed:
+
+- Publication
+- Author
+- Affiliation
+- Venue
+- Identifier
+- SearchRun
+- SearchQuery
+- Provenance
+- ScreeningDecision
+- screening decision enum
+- decision rationale
+- reviewer or supporting agent attribution
+- audit trail
+- backward compatibility contract tests
+
+Phase 1 is considered complete.
+
+## Phase 2 — Search Providers
+
+OpenAlex completed increments:
+
+- 2.1 client
+- 2.2 cursor pagination
+- 2.3 retries implemented with Tenacity
+
+Retry currently covers transient connection failures and retryable HTTP statuses, including rate-limit and server errors.
+
+Quality status:
+
+- 61 tests passing
+- Ruff checks passing
+- mypy checks passing
+- working tree clean
+- GitHub synchronized
+- HomeLab mirror synchronized
 
 ---
 
@@ -106,22 +148,17 @@ Every feature must:
 
 # Next milestone
 
-Implement canonical domain model.
+Implement OpenAlex rate limiting.
 
-Target objects:
+Next roadmap increment:
 
-- Publication
-- Author
-- Venue
-- Identifier
-- SearchRun
-- SearchQuery
-- Provenance
-- ScreeningDecision
+- 2.4 rate limiting
 
 After that:
 
-OpenAlex provider.
+- OpenAlex provenance
+- completion of OpenAlex provider tests
+- next search providers according to the roadmap
 
 ---
 
@@ -132,3 +169,5 @@ Infrastructure is considered finished.
 Future work focuses on scientific functionality, not framework development.
 
 Every larger change should be implemented as a reviewable PR-sized increment.
+
+The roadmap is the authoritative sequence of work. Additional engineering tasks should be included within existing roadmap items unless a deliberate roadmap change is approved.
