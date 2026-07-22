@@ -26,10 +26,15 @@
 - [x] SearchQuery
 - [x] Provenance
 - [x] ScreeningDecision
+- [x] screening decision enum
+- [x] decision rationale
+- [x] reviewer or supporting agent attribution
+- [x] audit trail
+- [x] backward compatibility contract tests
 
 Deliverable:
 
-Canonical publication model.
+Canonical publication and review-process model.
 
 ---
 
@@ -37,12 +42,16 @@ Canonical publication model.
 
 ### OpenAlex
 
-- [ ] client
-- [ ] pagination
-- [ ] retries
+- [x] client
+- [x] pagination
+- [x] retries
 - [ ] rate limiting
 - [ ] provenance
-- [ ] tests
+- [x] unit tests for completed increments
+
+Current active increment:
+
+2.4 — rate limiting.
 
 ### Crossref
 
@@ -140,6 +149,14 @@ Canonical publication model.
 - [ ] documentation
 - [ ] tutorial
 - [ ] example project
+
+---
+
+# Roadmap governance
+
+The roadmap defines the agreed sequence of implementation.
+
+Additional engineering activities, such as integration testing, should be included within an existing roadmap item unless a deliberate decision is made to change the roadmap.
 
 ---
 
