@@ -38,14 +38,104 @@ async def test_search_works_sends_expected_request() -> None:
 
 
 @pytest.mark.anyio
-async def test_search_works_raises_for_http_errors() -> None:
-    transport = httpx.MockTransport(
-        lambda request: httpx.Response(503, request=request)
-    )
+async def test_search_works_retries_retryable_status_then_succeeds() -> None:
+    request_count = 0
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal request_count
+        request_count += 1
+        if request_count < 3:
+            return httpx.Response(503, request=request)
+        return httpx.Response(
+            200,
+            json={"meta": {"next_cursor": None}, "results": [{"id": "W1"}]},
+            request=request,
+        )
+
+    transport = httpx.MockTransport(handler)
     async with httpx.AsyncClient(transport=transport) as http_client:
-        client = OpenAlexClient(http_client=http_client)
+        client = OpenAlexClient(
+            http_client=http_client,
+            max_attempts=3,
+            retry_wait_multiplier=0,
+        )
+        payload = await client.search_works("lean")
+
+    assert request_count == 3
+    assert payload["results"] == [{"id": "W1"}]
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("status_code", [429, 500, 502, 503, 504])
+async def test_search_works_retries_supported_status_codes(status_code: int) -> None:
+    request_count = 0
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal request_count
+        request_count += 1
+        return httpx.Response(status_code, request=request)
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport) as http_client:
+        client = OpenAlexClient(
+            http_client=http_client,
+            max_attempts=3,
+            retry_wait_multiplier=0,
+        )
         with pytest.raises(httpx.HTTPStatusError):
             await client.search_works("lean")
+
+    assert request_count == 3
+
+
+@pytest.mark.anyio
+async def test_search_works_does_not_retry_non_retryable_status() -> None:
+    request_count = 0
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal request_count
+        request_count += 1
+        return httpx.Response(400, request=request)
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport) as http_client:
+        client = OpenAlexClient(
+            http_client=http_client,
+            max_attempts=3,
+            retry_wait_multiplier=0,
+        )
+        with pytest.raises(httpx.HTTPStatusError):
+            await client.search_works("lean")
+
+    assert request_count == 1
+
+
+@pytest.mark.anyio
+async def test_search_works_retries_transport_errors() -> None:
+    request_count = 0
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal request_count
+        request_count += 1
+        if request_count == 1:
+            raise httpx.ConnectError("connection failed", request=request)
+        return httpx.Response(
+            200,
+            json={"meta": {"next_cursor": None}, "results": []},
+            request=request,
+        )
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport) as http_client:
+        client = OpenAlexClient(
+            http_client=http_client,
+            max_attempts=2,
+            retry_wait_multiplier=0,
+        )
+        payload = await client.search_works("lean")
+
+    assert request_count == 2
+    assert payload["results"] == []
 
 
 @pytest.mark.anyio
@@ -71,6 +161,27 @@ async def test_client_rejects_blank_mailto() -> None:
     async with httpx.AsyncClient() as http_client:
         with pytest.raises(ValueError, match="mailto must not be blank"):
             OpenAlexClient(http_client=http_client, mailto="   ")
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    ("kwargs", "message"),
+    [
+        ({"max_attempts": 0}, "max_attempts must be at least 1"),
+        (
+            {"retry_wait_multiplier": -1},
+            "retry_wait_multiplier must not be negative",
+        ),
+        ({"retry_wait_max": -1}, "retry_wait_max must not be negative"),
+    ],
+)
+async def test_client_rejects_invalid_retry_configuration(
+    kwargs: dict[str, int],
+    message: str,
+) -> None:
+    async with httpx.AsyncClient() as http_client:
+        with pytest.raises(ValueError, match=message):
+            OpenAlexClient(http_client=http_client, **kwargs)
 
 
 @pytest.mark.anyio
@@ -142,7 +253,11 @@ async def test_iterate_works_propagates_http_error_from_later_page() -> None:
 
     transport = httpx.MockTransport(handler)
     async with httpx.AsyncClient(transport=transport) as http_client:
-        client = OpenAlexClient(http_client=http_client)
+        client = OpenAlexClient(
+            http_client=http_client,
+            max_attempts=2,
+            retry_wait_multiplier=0,
+        )
         with pytest.raises(httpx.HTTPStatusError):
             _ = [work async for work in client.iterate_works("lean")]
 
