@@ -15,17 +15,17 @@
 
 ---
 
-## Phase 1 — Domain Model
+## Phase 1 — Domain Model ✅
 
-- [ ] Publication
-- [ ] Author
-- [ ] Affiliation
-- [ ] Venue
-- [ ] Identifier
-- [ ] SearchRun
-- [ ] SearchQuery
-- [ ] Provenance
-- [ ] ScreeningDecision
+- [x] Publication
+- [x] Author
+- [x] Affiliation
+- [x] Venue
+- [x] Identifier
+- [x] SearchRun
+- [x] SearchQuery
+- [x] Provenance
+- [x] ScreeningDecision
 
 Deliverable:
 
