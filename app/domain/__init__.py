@@ -2,6 +2,12 @@ from app.domain.author import Affiliation, Author
 from app.domain.identifiers import Identifier, IdentifierType
 from app.domain.provenance import ProvenanceEntry
 from app.domain.publication import DocumentType, Publication
+from app.domain.screening import (
+    AIRecommendation,
+    ScreeningDecision,
+    ScreeningOutcome,
+    ScreeningStage,
+)
 from app.domain.search import (
     BooleanOperator,
     SearchExpression,
@@ -16,6 +22,7 @@ from app.domain.search import (
 from app.domain.venue import Venue, VenueType
 
 __all__ = [
+    "AIRecommendation",
     "Affiliation",
     "Author",
     "BooleanOperator",
@@ -24,6 +31,9 @@ __all__ = [
     "IdentifierType",
     "ProvenanceEntry",
     "Publication",
+    "ScreeningDecision",
+    "ScreeningOutcome",
+    "ScreeningStage",
     "SearchExpression",
     "SearchField",
     "SearchGroup",
