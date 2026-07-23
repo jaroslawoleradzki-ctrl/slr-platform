@@ -1,6 +1,6 @@
 # SLR Platform — Project Status
 
-_Last updated: 2026-07-22_
+_Last updated: 2026-07-23_
 
 ## Current status
 
@@ -85,17 +85,18 @@ OpenAlex completed increments:
 - 2.1 client
 - 2.2 cursor pagination
 - 2.3 retries implemented with Tenacity
+- 2.4 configurable asynchronous rate limiting
 
-Retry currently covers transient connection failures and retryable HTTP statuses, including rate-limit and server errors.
+The rate limiter applies before every physical HTTP attempt, including retries and cursor-pagination requests. It is instance-local, concurrency-safe, configurable through `requests_per_second`, and can be disabled with `None`.
 
-Quality status:
+Retry continues to cover transient connection failures and retryable HTTP statuses, including rate-limit and server errors.
 
-- 61 tests passing
+Quality status for OpenAlex 2.4:
+
+- 73 tests passing
 - Ruff checks passing
 - mypy checks passing
-- working tree clean
-- GitHub synchronized
-- HomeLab mirror synchronized
+- `git diff --check` passing
 
 ---
 
@@ -148,15 +149,14 @@ Every feature must:
 
 # Next milestone
 
-Implement OpenAlex rate limiting.
+Implement OpenAlex provenance.
 
 Next roadmap increment:
 
-- 2.4 rate limiting
+- 2.5 provenance
 
 After that:
 
-- OpenAlex provenance
 - completion of OpenAlex provider tests
 - next search providers according to the roadmap
 
