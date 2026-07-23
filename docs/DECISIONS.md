@@ -4,6 +4,44 @@ This document records important project decisions that do not require a full ADR
 
 ---
 
+## 2026-07-23
+
+### OpenAlex asynchronous rate limiting
+
+The OpenAlex provider uses a small custom asynchronous rate limiter rather than a third-party rate-limiting library.
+
+Reasons:
+
+- the required behavior is limited to enforcing a minimum interval between request starts
+- adding a new external dependency would be disproportionate to the scope
+- the limiter remains independent from Tenacity retry handling
+- injected `clock` and `sleep` functions make timing behavior deterministic in tests
+
+The limiter is configured with `requests_per_second`:
+
+- a finite positive number enables limiting
+- `None` disables limiting
+- zero, negative values, `NaN`, and positive or negative infinity are rejected
+
+The limiter state and `asyncio.Lock` belong to each `OpenAlexClient` instance. The lock serializes request-start reservations, but it is released before the HTTP response is awaited.
+
+Rate limiting is applied immediately before every physical HTTP attempt. Therefore, it covers:
+
+- normal search requests
+- Tenacity retry attempts
+- cursor-pagination requests
+
+This preserves the existing retry and pagination semantics while ensuring that all outbound OpenAlex requests respect the configured rate.
+
+Verified quality state:
+
+- 73 tests passing
+- Ruff checks passing
+- mypy checks passing
+- `git diff --check` passing
+
+---
+
 ## 2026-07-22
 
 ### Retry implementation
@@ -62,16 +100,9 @@ Completed increments:
 - 2.1 client
 - 2.2 cursor pagination
 - 2.3 retry with Tenacity
+- 2.4 asynchronous rate limiting
 
-The next active increment is 2.4 — rate limiting.
-
-The verified quality state at the end of the session is:
-
-- 61 tests passing
-- Ruff checks passing
-- mypy checks passing
-- GitHub synchronized
-- HomeLab mirror synchronized
+The next active increment is 2.5 — provenance.
 
 ---
 
