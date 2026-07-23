@@ -86,14 +86,21 @@ OpenAlex completed increments:
 - 2.2 cursor pagination
 - 2.3 retries implemented with Tenacity
 - 2.4 configurable asynchronous rate limiting
+- 2.5 provenance mapping to canonical publications
 
-The rate limiter applies before every physical HTTP attempt, including retries and cursor-pagination requests. It is instance-local, concurrency-safe, configurable through `requests_per_second`, and can be disabled with `None`.
+OpenAlex now provides:
 
-Retry continues to cover transient connection failures and retryable HTTP statuses, including rate-limit and server errors.
+- an asynchronous HTTP client for the Works API
+- cursor pagination across result pages
+- Tenacity retry for transient request failures and retryable HTTP statuses
+- configurable, instance-local asynchronous rate limiting for every physical HTTP attempt
+- mapping from OpenAlex Works to `Publication` with provenance linked to the source record, search query, search run, rendered query, and retrieval timestamp
 
-Quality status for OpenAlex 2.4:
+Phase 2.5 — OpenAlex Provenance: Completed.
 
-- 73 tests passing
+Quality status for OpenAlex 2.5:
+
+- 78 tests passing
 - Ruff checks passing
 - mypy checks passing
 - `git diff --check` passing
@@ -149,16 +156,16 @@ Every feature must:
 
 # Next milestone
 
-Implement OpenAlex provenance.
+Implement the Crossref search provider.
 
 Next roadmap increment:
 
-- 2.5 provenance
+- Crossref — implementation
 
 After that:
 
-- completion of OpenAlex provider tests
-- next search providers according to the roadmap
+- Semantic Scholar
+- Google Scholar manual import
 
 ---
 

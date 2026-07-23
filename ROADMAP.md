@@ -46,16 +46,16 @@ Canonical publication and review-process model.
 - [x] pagination
 - [x] retries
 - [x] rate limiting
-- [ ] provenance
+- [x] provenance ✅ Completed
 - [x] unit tests for completed increments
-
-Current active increment:
-
-2.5 — provenance.
 
 ### Crossref
 
 - [ ] implementation
+
+Current active increment:
+
+Crossref — implementation.
 
 ### Semantic Scholar
 

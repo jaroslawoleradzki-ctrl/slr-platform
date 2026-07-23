@@ -6,6 +6,25 @@ This document records important project decisions that do not require a full ADR
 
 ## 2026-07-23
 
+### OpenAlex provenance mapping
+
+`OpenAlexProvider` maps OpenAlex Works responses to canonical `Publication` models. `OpenAlexClient` remains a low-level HTTP client responsible only for communication, retry, rate limiting, response validation, and cursor pagination.
+
+Each mapped publication receives a `ProvenanceEntry` containing:
+
+- `source`
+- `source_record_id`
+- `query_id`
+- `run_id`
+- `rendered_query`
+- `retrieved_at`
+
+The search context is passed explicitly through `SearchRun` and `SearchQuery`. The retrieval clock is injectable so provenance timestamps remain deterministic in tests.
+
+Archiving full raw JSON responses and storing publications or provenance are outside the scope of Phase 2.5. They remain responsibilities of later roadmap increments.
+
+---
+
 ### OpenAlex asynchronous rate limiting
 
 The OpenAlex provider uses a small custom asynchronous rate limiter rather than a third-party rate-limiting library.
@@ -101,8 +120,9 @@ Completed increments:
 - 2.2 cursor pagination
 - 2.3 retry with Tenacity
 - 2.4 asynchronous rate limiting
+- 2.5 provenance mapping
 
-The next active increment is 2.5 — provenance.
+The next active increment is the Crossref provider implementation.
 
 ---
 
