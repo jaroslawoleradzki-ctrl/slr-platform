@@ -103,17 +103,23 @@ def test_human_screening_decision_and_ai_recommendation_remain_separate() -> Non
 
 def test_domain_models_reject_unknown_fields() -> None:
     with pytest.raises(ValidationError):
-        Publication(title="Example", unsupported_field="value")
+        Publication.model_validate(
+            {"title": "Example", "unsupported_field": "value"}
+        )
 
     with pytest.raises(ValidationError):
-        SearchTerm(value="lean", unsupported_field="value")
+        SearchTerm.model_validate(
+            {"value": "lean", "unsupported_field": "value"}
+        )
 
     with pytest.raises(ValidationError):
-        AIRecommendation(
-            outcome=ScreeningOutcome.INCLUDE,
-            confidence=0.9,
-            model_name="model",
-            unsupported_field="value",
+        AIRecommendation.model_validate(
+            {
+                "outcome": ScreeningOutcome.INCLUDE,
+                "confidence": 0.9,
+                "model_name": "model",
+                "unsupported_field": "value",
+            }
         )
 
 

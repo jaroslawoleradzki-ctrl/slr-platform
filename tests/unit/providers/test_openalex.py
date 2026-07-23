@@ -1,7 +1,33 @@
+import asyncio
+from typing import TypedDict
+
 import httpx
 import pytest
 
 from app.providers.openalex import OpenAlexClient
+
+
+class RetryConfiguration(TypedDict, total=False):
+    max_attempts: int
+    retry_wait_multiplier: float
+    retry_wait_max: float
+
+
+class FakeTime:
+    def __init__(self) -> None:
+        self.now = 0.0
+        self.sleep_calls: list[float] = []
+
+    def monotonic(self) -> float:
+        return self.now
+
+    def advance(self, seconds: float) -> None:
+        self.now += seconds
+
+    async def sleep(self, seconds: float) -> None:
+        self.sleep_calls.append(seconds)
+        self.advance(seconds)
+        await asyncio.sleep(0)
 
 
 @pytest.fixture
@@ -38,6 +64,226 @@ async def test_search_works_sends_expected_request() -> None:
 
 
 @pytest.mark.anyio
+async def test_rate_limiter_does_not_delay_first_request() -> None:
+    fake_time = FakeTime()
+    transport = httpx.MockTransport(
+        lambda request: httpx.Response(
+            200,
+            json={"meta": {"next_cursor": None}, "results": []},
+            request=request,
+        )
+    )
+
+    async with httpx.AsyncClient(transport=transport) as http_client:
+        client = OpenAlexClient(
+            http_client=http_client,
+            requests_per_second=2,
+            clock=fake_time.monotonic,
+            sleep=fake_time.sleep,
+        )
+        await client.search_works("lean")
+
+    assert fake_time.sleep_calls == []
+
+
+@pytest.mark.anyio
+async def test_rate_limiter_delays_immediate_second_request() -> None:
+    fake_time = FakeTime()
+    request_start_times: list[float] = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        request_start_times.append(fake_time.monotonic())
+        return httpx.Response(
+            200,
+            json={"meta": {"next_cursor": None}, "results": []},
+            request=request,
+        )
+
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(handler)
+    ) as http_client:
+        client = OpenAlexClient(
+            http_client=http_client,
+            requests_per_second=2,
+            clock=fake_time.monotonic,
+            sleep=fake_time.sleep,
+        )
+        await client.search_works("lean")
+        await client.search_works("energy")
+
+    assert fake_time.sleep_calls == [pytest.approx(0.5)]
+    assert request_start_times == [0.0, 0.5]
+
+
+@pytest.mark.anyio
+async def test_rate_limiter_does_not_delay_after_minimum_interval() -> None:
+    fake_time = FakeTime()
+    transport = httpx.MockTransport(
+        lambda request: httpx.Response(
+            200,
+            json={"meta": {"next_cursor": None}, "results": []},
+            request=request,
+        )
+    )
+
+    async with httpx.AsyncClient(transport=transport) as http_client:
+        client = OpenAlexClient(
+            http_client=http_client,
+            requests_per_second=2,
+            clock=fake_time.monotonic,
+            sleep=fake_time.sleep,
+        )
+        await client.search_works("lean")
+        fake_time.advance(0.5)
+        await client.search_works("energy")
+
+    assert fake_time.sleep_calls == []
+
+
+@pytest.mark.anyio
+async def test_rate_limiter_can_be_disabled() -> None:
+    fake_time = FakeTime()
+    request_start_times: list[float] = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        request_start_times.append(fake_time.monotonic())
+        return httpx.Response(
+            200,
+            json={"meta": {"next_cursor": None}, "results": []},
+            request=request,
+        )
+
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(handler)
+    ) as http_client:
+        client = OpenAlexClient(
+            http_client=http_client,
+            requests_per_second=None,
+            clock=fake_time.monotonic,
+            sleep=fake_time.sleep,
+        )
+        await client.search_works("lean")
+        await client.search_works("energy")
+
+    assert fake_time.sleep_calls == []
+    assert request_start_times == [0.0, 0.0]
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("requests_per_second", [0, -1])
+async def test_client_rejects_non_positive_rate_limit(
+    requests_per_second: float,
+) -> None:
+    async with httpx.AsyncClient() as http_client:
+        with pytest.raises(
+            ValueError,
+            match="requests_per_second must be positive or None",
+        ):
+            OpenAlexClient(
+                http_client=http_client,
+                requests_per_second=requests_per_second,
+            )
+
+
+@pytest.mark.anyio
+async def test_retry_attempts_are_rate_limited() -> None:
+    fake_time = FakeTime()
+    request_start_times: list[float] = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        request_start_times.append(fake_time.monotonic())
+        if len(request_start_times) == 1:
+            return httpx.Response(503, request=request)
+        return httpx.Response(
+            200,
+            json={"meta": {"next_cursor": None}, "results": []},
+            request=request,
+        )
+
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(handler)
+    ) as http_client:
+        client = OpenAlexClient(
+            http_client=http_client,
+            max_attempts=2,
+            retry_wait_multiplier=0,
+            requests_per_second=4,
+            clock=fake_time.monotonic,
+            sleep=fake_time.sleep,
+        )
+        await client.search_works("lean")
+
+    assert fake_time.sleep_calls == [pytest.approx(0.25)]
+    assert request_start_times == [0.0, 0.25]
+
+
+@pytest.mark.anyio
+async def test_cursor_pages_are_rate_limited() -> None:
+    fake_time = FakeTime()
+    request_start_times: list[float] = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        request_start_times.append(fake_time.monotonic())
+        next_cursor = (
+            "cursor-2" if request.url.params["cursor"] == "*" else None
+        )
+        return httpx.Response(
+            200,
+            json={"meta": {"next_cursor": next_cursor}, "results": []},
+            request=request,
+        )
+
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(handler)
+    ) as http_client:
+        client = OpenAlexClient(
+            http_client=http_client,
+            requests_per_second=5,
+            clock=fake_time.monotonic,
+            sleep=fake_time.sleep,
+        )
+        _ = [work async for work in client.iterate_works("lean")]
+
+    assert fake_time.sleep_calls == [pytest.approx(0.2)]
+    assert request_start_times == [0.0, 0.2]
+
+
+@pytest.mark.anyio
+async def test_concurrent_requests_reserve_distinct_start_times() -> None:
+    fake_time = FakeTime()
+    request_start_times: list[float] = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        request_start_times.append(fake_time.monotonic())
+        return httpx.Response(
+            200,
+            json={"meta": {"next_cursor": None}, "results": []},
+            request=request,
+        )
+
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(handler)
+    ) as http_client:
+        client = OpenAlexClient(
+            http_client=http_client,
+            requests_per_second=10,
+            clock=fake_time.monotonic,
+            sleep=fake_time.sleep,
+        )
+        await client.search_works("first")
+        await asyncio.gather(
+            client.search_works("second"),
+            client.search_works("third"),
+        )
+
+    assert fake_time.sleep_calls == [
+        pytest.approx(0.1),
+        pytest.approx(0.1),
+    ]
+    assert request_start_times == [0.0, 0.1, 0.2]
+
+
+@pytest.mark.anyio
 async def test_search_works_retries_retryable_status_then_succeeds() -> None:
     request_count = 0
 
@@ -58,6 +304,7 @@ async def test_search_works_retries_retryable_status_then_succeeds() -> None:
             http_client=http_client,
             max_attempts=3,
             retry_wait_multiplier=0,
+            requests_per_second=None,
         )
         payload = await client.search_works("lean")
 
@@ -81,6 +328,7 @@ async def test_search_works_retries_supported_status_codes(status_code: int) -> 
             http_client=http_client,
             max_attempts=3,
             retry_wait_multiplier=0,
+            requests_per_second=None,
         )
         with pytest.raises(httpx.HTTPStatusError):
             await client.search_works("lean")
@@ -131,6 +379,7 @@ async def test_search_works_retries_transport_errors() -> None:
             http_client=http_client,
             max_attempts=2,
             retry_wait_multiplier=0,
+            requests_per_second=None,
         )
         payload = await client.search_works("lean")
 
@@ -176,7 +425,7 @@ async def test_client_rejects_blank_mailto() -> None:
     ],
 )
 async def test_client_rejects_invalid_retry_configuration(
-    kwargs: dict[str, int],
+    kwargs: RetryConfiguration,
     message: str,
 ) -> None:
     async with httpx.AsyncClient() as http_client:
@@ -210,7 +459,10 @@ async def test_iterate_works_follows_cursors_and_preserves_order() -> None:
 
     transport = httpx.MockTransport(handler)
     async with httpx.AsyncClient(transport=transport) as http_client:
-        client = OpenAlexClient(http_client=http_client)
+        client = OpenAlexClient(
+            http_client=http_client,
+            requests_per_second=None,
+        )
         works = [work async for work in client.iterate_works("lean")]
 
     assert requested_cursors == ["*", "cursor-2"]
@@ -257,6 +509,7 @@ async def test_iterate_works_propagates_http_error_from_later_page() -> None:
             http_client=http_client,
             max_attempts=2,
             retry_wait_multiplier=0,
+            requests_per_second=None,
         )
         with pytest.raises(httpx.HTTPStatusError):
             _ = [work async for work in client.iterate_works("lean")]
