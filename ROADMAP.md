@@ -45,13 +45,13 @@ Canonical publication and review-process model.
 - [x] client
 - [x] pagination
 - [x] retries
-- [ ] rate limiting
+- [x] rate limiting
 - [ ] provenance
 - [x] unit tests for completed increments
 
 Current active increment:
 
-2.4 — rate limiting.
+2.5 — provenance.
 
 ### Crossref
 
