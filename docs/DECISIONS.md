@@ -6,6 +6,42 @@ This document records important project decisions that do not require a full ADR
 
 ## 2026-07-23
 
+### Crossref retry and asynchronous rate limiting
+
+`CrossrefClient` uses Tenacity for retries and a small custom asynchronous limiter for request pacing.
+
+Retry covers only physical HTTP attempts and is limited to:
+
+- `httpx.RequestError`
+- HTTP 429
+- HTTP 500
+- HTTP 502
+- HTTP 503
+- HTTP 504
+
+Other client errors, argument validation failures, and response JSON validation failures are not retried. The last original exception is propagated after exhaustion by using `reraise=True`.
+
+Rate limiting is configured per `CrossrefClient` instance with `requests_per_second`:
+
+- `None` disables limiting
+- a finite positive number enables limiting
+- zero, negative values, booleans, `NaN`, and positive or negative infinity are rejected
+
+The limiter enforces a minimum interval between the starts of physical HTTP attempts. It is executed before every attempt, including retry attempts. An instance-local `asyncio.Lock` serializes request-start reservations, but the lock is released before HTTP I/O begins.
+
+The monotonic clock and asynchronous sleep function are injectable, which keeps timing tests deterministic and avoids real waiting.
+
+The Crossref implementation intentionally follows the proven OpenAlex behavior without introducing a shared base class, retry mixin, or shared rate-limiter abstraction at this stage.
+
+Verified quality state:
+
+- 121 tests passing
+- Ruff checks passing
+- mypy checks passing
+- `git diff --check` passing
+
+---
+
 ### OpenAlex provenance mapping
 
 `OpenAlexProvider` maps OpenAlex Works responses to canonical `Publication` models. `OpenAlexClient` remains a low-level HTTP client responsible only for communication, retry, rate limiting, response validation, and cursor pagination.
