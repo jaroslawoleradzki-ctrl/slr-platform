@@ -102,6 +102,12 @@
           "query_id": {
             "type": ["string", "null"]
           },
+          "run_id": {
+            "type": ["string", "null"]
+          },
+          "rendered_query": {
+            "type": ["string", "null"]
+          },
           "raw_file": {
             "type": ["string", "null"]
           }

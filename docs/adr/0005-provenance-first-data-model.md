@@ -8,7 +8,7 @@
 Każdy rekord kanoniczny zachowuje informację o:
 - źródle;
 - identyfikatorze źródłowym;
-- zapytaniu;
+- zapytaniu i uruchomieniu wyszukiwania;
 - czasie pobrania;
 - pliku odpowiedzi surowej;
 - transformacjach;

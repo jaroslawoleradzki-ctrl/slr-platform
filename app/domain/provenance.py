@@ -13,6 +13,8 @@ class ProvenanceEntry(BaseModel):
     source_record_id: str = Field(min_length=1)
     retrieved_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     query_id: UUID | None = None
+    run_id: UUID | None = None
+    rendered_query: str | None = None
     raw_file: str | None = None
     payload_hash: str | None = None
     transformation: str | None = None
@@ -20,6 +22,7 @@ class ProvenanceEntry(BaseModel):
     @field_validator(
         "source",
         "source_record_id",
+        "rendered_query",
         "raw_file",
         "payload_hash",
         "transformation",

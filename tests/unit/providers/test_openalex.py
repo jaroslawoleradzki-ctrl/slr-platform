@@ -1,10 +1,18 @@
 import asyncio
+from datetime import datetime, timezone
 from typing import TypedDict
+from uuid import UUID
 
 import httpx
 import pytest
 
+from app.domain.search import SearchQuery, SearchRun, SearchTerm
 from app.providers.openalex import OpenAlexClient
+from app.providers.search.openalex import OpenAlexProvider
+
+_QUERY_ID = UUID("00000000-0000-0000-0000-000000000001")
+_RUN_ID = UUID("00000000-0000-0000-0000-000000000002")
+_RETRIEVED_AT = datetime(2026, 7, 23, 12, 0, tzinfo=timezone.utc)
 
 
 class RetryConfiguration(TypedDict, total=False):
@@ -28,6 +36,22 @@ class FakeTime:
         self.sleep_calls.append(seconds)
         self.advance(seconds)
         await asyncio.sleep(0)
+
+
+def build_search_context() -> tuple[SearchRun, SearchQuery]:
+    search_query = SearchQuery(
+        query_id=_QUERY_ID,
+        name="Lean and energy",
+        expression=SearchTerm(value="lean energy"),
+    )
+    search_run = SearchRun(
+        run_id=_RUN_ID,
+        query_id=search_query.query_id,
+        query_version=search_query.version,
+        provider="openalex",
+        rendered_query="lean energy",
+    )
+    return search_run, search_query
 
 
 @pytest.fixture
@@ -61,6 +85,183 @@ async def test_search_works_sends_expected_request() -> None:
         )
 
     assert payload["results"] == [{"id": "W1"}]
+
+
+@pytest.mark.anyio
+async def test_provider_attaches_search_provenance_to_publication() -> None:
+    search_run, search_query = build_search_context()
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.params["search"] == search_run.rendered_query
+        return httpx.Response(
+            200,
+            json={
+                "meta": {"next_cursor": None},
+                "results": [
+                    {
+                        "id": "https://openalex.org/W1",
+                        "title": "Lean energy study",
+                    }
+                ],
+            },
+            request=request,
+        )
+
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(handler)
+    ) as http_client:
+        provider = OpenAlexProvider(
+            client=OpenAlexClient(
+                http_client=http_client,
+                requests_per_second=None,
+            ),
+            retrieval_clock=lambda: _RETRIEVED_AT,
+        )
+        publications = await provider.search(
+            search_run=search_run,
+            search_query=search_query,
+        )
+
+    assert len(publications) == 1
+    provenance = publications[0].provenance[0]
+    assert provenance.source == "openalex"
+    assert provenance.source_record_id == "https://openalex.org/W1"
+    assert provenance.retrieved_at == _RETRIEVED_AT
+    assert provenance.run_id == search_run.run_id
+    assert provenance.query_id == search_query.query_id
+    assert provenance.rendered_query == search_run.rendered_query
+
+
+@pytest.mark.anyio
+async def test_provider_gives_each_result_its_own_source_id_and_shared_context() -> None:
+    search_run, search_query = build_search_context()
+    transport = httpx.MockTransport(
+        lambda request: httpx.Response(
+            200,
+            json={
+                "meta": {"next_cursor": None},
+                "results": [
+                    {"id": "https://openalex.org/W1", "title": "First"},
+                    {"id": "https://openalex.org/W2", "title": "Second"},
+                ],
+            },
+            request=request,
+        )
+    )
+
+    async with httpx.AsyncClient(transport=transport) as http_client:
+        provider = OpenAlexProvider(
+            client=OpenAlexClient(
+                http_client=http_client,
+                requests_per_second=None,
+            ),
+            retrieval_clock=lambda: _RETRIEVED_AT,
+        )
+        publications = await provider.search(
+            search_run=search_run,
+            search_query=search_query,
+        )
+
+    provenance_entries = [
+        publication.provenance[0] for publication in publications
+    ]
+    assert [entry.source_record_id for entry in provenance_entries] == [
+        "https://openalex.org/W1",
+        "https://openalex.org/W2",
+    ]
+    assert {entry.run_id for entry in provenance_entries} == {search_run.run_id}
+    assert {entry.query_id for entry in provenance_entries} == {
+        search_query.query_id
+    }
+
+
+@pytest.mark.anyio
+async def test_provider_preserves_provenance_across_cursor_pages() -> None:
+    search_run, search_query = build_search_context()
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.params["cursor"] == "*":
+            return httpx.Response(
+                200,
+                json={
+                    "meta": {"next_cursor": "cursor-2"},
+                    "results": [
+                        {"id": "https://openalex.org/W1", "title": "First"}
+                    ],
+                },
+                request=request,
+            )
+        return httpx.Response(
+            200,
+            json={
+                "meta": {"next_cursor": None},
+                "results": [
+                    {"id": "https://openalex.org/W2", "title": "Second"}
+                ],
+            },
+            request=request,
+        )
+
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(handler)
+    ) as http_client:
+        provider = OpenAlexProvider(
+            client=OpenAlexClient(
+                http_client=http_client,
+                requests_per_second=None,
+            ),
+            retrieval_clock=lambda: _RETRIEVED_AT,
+        )
+        publications = [
+            publication
+            async for publication in provider.iterate(
+                search_run=search_run,
+                search_query=search_query,
+            )
+        ]
+
+    assert [
+        publication.provenance[0].source_record_id
+        for publication in publications
+    ] == ["https://openalex.org/W1", "https://openalex.org/W2"]
+    assert {
+        publication.provenance[0].run_id for publication in publications
+    } == {search_run.run_id}
+    assert {
+        publication.provenance[0].query_id for publication in publications
+    } == {search_query.query_id}
+
+
+@pytest.mark.anyio
+async def test_provider_rejects_work_without_openalex_id() -> None:
+    search_run, search_query = build_search_context()
+    transport = httpx.MockTransport(
+        lambda request: httpx.Response(
+            200,
+            json={
+                "meta": {"next_cursor": None},
+                "results": [{"title": "Missing source id"}],
+            },
+            request=request,
+        )
+    )
+
+    async with httpx.AsyncClient(transport=transport) as http_client:
+        provider = OpenAlexProvider(
+            client=OpenAlexClient(
+                http_client=http_client,
+                requests_per_second=None,
+            ),
+            retrieval_clock=lambda: _RETRIEVED_AT,
+        )
+        with pytest.raises(
+            ValueError,
+            match="OpenAlex work id must be a non-blank string",
+        ):
+            await provider.search(
+                search_run=search_run,
+                search_query=search_query,
+            )
 
 
 @pytest.mark.anyio

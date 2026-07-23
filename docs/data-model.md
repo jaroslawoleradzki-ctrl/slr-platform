@@ -42,7 +42,9 @@ Informacja o pochodzeniu konkretnego pola lub rekordu:
 - źródło;
 - identyfikator źródłowy;
 - data pobrania;
-- zapytanie;
+- identyfikator zapytania;
+- identyfikator uruchomienia wyszukiwania;
+- migawka wykonanego zapytania;
 - ścieżka do surowych danych;
 - zastosowana transformacja.
 
