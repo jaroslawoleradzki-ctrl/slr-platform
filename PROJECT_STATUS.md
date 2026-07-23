@@ -98,9 +98,24 @@ OpenAlex now provides:
 
 Phase 2.5 — OpenAlex Provenance: Completed.
 
-Quality status for OpenAlex 2.5:
+Crossref completed increments:
 
-- 78 tests passing
+- 2.6 asynchronous Works API client
+- 2.7 retry and configurable asynchronous rate limiting
+
+Crossref now provides:
+
+- an asynchronous low-level client for `GET /works`
+- validation of query, rows, cursor, and response structure
+- Tenacity retry for `httpx.RequestError` and HTTP statuses 429, 500, 502, 503, and 504
+- configurable, instance-local asynchronous rate limiting before every physical HTTP attempt, including retries
+- injectable monotonic clock and asynchronous sleep for deterministic tests
+
+Phase 2.7 — Crossref Retry & Rate Limiting: Completed.
+
+Quality status for the current increment:
+
+- 121 tests passing
 - Ruff checks passing
 - mypy checks passing
 - `git diff --check` passing
@@ -156,14 +171,15 @@ Every feature must:
 
 # Next milestone
 
-Implement the Crossref search provider.
+Continue the incremental Crossref implementation.
 
 Next roadmap increment:
 
-- Crossref — implementation
+- Crossref — cursor pagination
 
 After that:
 
+- Crossref provider and provenance
 - Semantic Scholar
 - Google Scholar manual import
 
