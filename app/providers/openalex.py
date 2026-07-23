@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import math
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable
 from typing import Any
@@ -39,8 +40,12 @@ class OpenAlexClient:
             raise ValueError("retry_wait_multiplier must not be negative")
         if retry_wait_max < 0:
             raise ValueError("retry_wait_max must not be negative")
-        if requests_per_second is not None and requests_per_second <= 0:
-            raise ValueError("requests_per_second must be positive or None")
+        if requests_per_second is not None and (
+            not math.isfinite(requests_per_second) or requests_per_second <= 0
+        ):
+            raise ValueError(
+                "requests_per_second must be a finite positive number or None"
+            )
 
         self._http_client = http_client
         self._base_url = base_url.rstrip("/")

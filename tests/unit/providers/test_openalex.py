@@ -170,14 +170,19 @@ async def test_rate_limiter_can_be_disabled() -> None:
 
 
 @pytest.mark.anyio
-@pytest.mark.parametrize("requests_per_second", [0, -1])
-async def test_client_rejects_non_positive_rate_limit(
+@pytest.mark.parametrize(
+    "requests_per_second",
+    [0, -1, float("nan"), float("inf"), float("-inf")],
+)
+async def test_client_rejects_invalid_rate_limit(
     requests_per_second: float,
 ) -> None:
     async with httpx.AsyncClient() as http_client:
         with pytest.raises(
             ValueError,
-            match="requests_per_second must be positive or None",
+            match=(
+                "requests_per_second must be a finite positive number or None"
+            ),
         ):
             OpenAlexClient(
                 http_client=http_client,
