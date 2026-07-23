@@ -51,11 +51,17 @@ Canonical publication and review-process model.
 
 ### Crossref
 
-- [ ] implementation
+- [x] asynchronous Works API client
+- [x] retries
+- [x] rate limiting
+- [ ] cursor pagination
+- [ ] provider mapping to `Publication`
+- [ ] provenance
+- [ ] unit tests for remaining increments
 
 Current active increment:
 
-Crossref — implementation.
+Crossref — cursor pagination.
 
 ### Semantic Scholar
 
