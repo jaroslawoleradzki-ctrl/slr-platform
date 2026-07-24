@@ -123,6 +123,25 @@ Phase 2.10 — Crossref Provenance: Implemented.
 
 Quality verification for Phase 2.10 must be run locally after pulling the GitHub commits because no GitHub Actions workflow is configured for these commits.
 
+Semantic Scholar completed increments:
+
+- 2.11 basic client and single-page search
+
+Semantic Scholar now provides:
+
+- a low-level asynchronous client (`SemanticScholarClient`) for the Graph API paper search endpoint (`/paper/search`)
+- support for optional API key authorization via the `x-api-key` request header
+- validation of query (non-empty), limit (positive integer), offset (non-negative integer), and fields (non-empty list of non-blank strings)
+- single-page search results returned as a list of raw paper records from the response `"data"` field (returning `[]` if missing or empty)
+
+Phase 2.11 — Semantic Scholar Basic Client: Completed.
+
+Quality status:
+- 169 tests passing
+- Ruff checks passing
+- mypy checks passing
+- `git diff --check` passing
+
 ---
 
 # Current architecture
@@ -174,18 +193,12 @@ Every feature must:
 
 # Next milestone
 
-Verify the Crossref provenance increment locally.
+Semantic Scholar — cursor pagination.
 
-Required quality gates:
+After that:
 
-- pytest
-- Ruff
-- mypy
-- `git diff --check`
-
-After successful verification, continue with:
-
-- Semantic Scholar
+- Semantic Scholar provider mapping to Publication
+- Semantic Scholar provenance
 - Google Scholar manual import
 
 Future architectural work:

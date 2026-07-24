@@ -6,6 +6,26 @@ This document records important project decisions that do not require a full ADR
 
 ## 2026-07-24
 
+### Semantic Scholar basic client and single-page search
+
+Added a low-level asynchronous client `SemanticScholarClient` in `app/providers/semantic_scholar.py` to search papers using the Semantic Scholar Graph API.
+
+Key decisions:
+- **Client Configuration**: `SemanticScholarClient` accepts `http_client`, `base_url`, and an optional `api_key`. If an API key is provided, it is sent via the `x-api-key` request header.
+- **Search Suffix**: The API request is sent to the `/paper/search` endpoint relative to the configured `base_url`.
+- **Search Suffix Slashes**: `base_url` trailing slashes are stripped to avoid malformed URL paths.
+- **Validation**: Added validation ensuring query is non-empty, limit is positive, offset is non-negative, and fields is a non-empty list of non-blank strings. If `fields` is `None`, the fields parameter is omitted from the request.
+- **Raw Records**: The `search_papers` method returns raw paper records from the response's `"data"` field as a list of dictionaries, returning `[]` if `"data"` is missing or null, without mapping them to `Publication`.
+- **Error Propagation**: Standard HTTP errors are propagated via `raise_for_status()`.
+
+Verified quality state:
+- 169 tests passing
+- Ruff checks passing
+- mypy checks passing
+- `git diff --check` passing
+
+---
+
 ### Crossref provider mapping to Publication
 
 `CrossrefProvider` now maps raw Crossref Works API records to the canonical `Publication` domain model via `map_work`.
