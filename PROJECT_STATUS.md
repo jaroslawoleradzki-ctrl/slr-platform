@@ -104,6 +104,7 @@ Crossref completed increments:
 - 2.7 retry and configurable asynchronous rate limiting
 - 2.8 cursor pagination
 - 2.9 provider mapping to Publication
+- 2.10 provenance mapping to canonical publications
 
 Crossref now provides:
 
@@ -115,15 +116,12 @@ Crossref now provides:
 - cursor pagination across result pages using the standard starting cursor `*` and returning records as an asynchronous iterator
 - protection against infinite loops by verifying duplicate/repeated cursor values, ending iteration normally on empty result lists or missing/null cursors, and raising a ValueError for malformed/blank cursor values
 - mapping from Crossref Works JSON to the canonical `Publication` domain model
+- one-page and cursor-iterator provider methods that attach provenance linked to the normalized DOI, search query, search run, rendered query, and timezone-aware retrieval timestamp
+- injectable retrieval clock for deterministic provenance tests
 
-Phase 2.9 — Crossref Provider Mapping: Completed.
+Phase 2.10 — Crossref Provenance: Implemented.
 
-Quality status for the current increment:
-
-- 154 tests passing
-- Ruff checks passing
-- mypy checks passing
-- `git diff --check` passing
+Quality verification for Phase 2.10 must be run locally after pulling the GitHub commits because no GitHub Actions workflow is configured for these commits.
 
 ---
 
@@ -176,13 +174,16 @@ Every feature must:
 
 # Next milestone
 
-Continue the incremental Crossref implementation.
+Verify the Crossref provenance increment locally.
 
-Next roadmap increment:
+Required quality gates:
 
-- Crossref — provenance
+- pytest
+- Ruff
+- mypy
+- `git diff --check`
 
-After that:
+After successful verification, continue with:
 
 - Semantic Scholar
 - Google Scholar manual import
