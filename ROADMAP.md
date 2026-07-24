@@ -56,12 +56,12 @@ Canonical publication and review-process model.
 - [x] rate limiting
 - [x] cursor pagination
 - [x] provider mapping to `Publication`
-- [ ] provenance
-- [ ] unit tests for remaining increments
+- [x] provenance
+- [x] unit tests for completed increments
 
 Current active increment:
 
-Crossref — provenance.
+Semantic Scholar — implementation.
 
 ### Semantic Scholar
 
