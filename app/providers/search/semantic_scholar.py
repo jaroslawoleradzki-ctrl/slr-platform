@@ -1,10 +1,12 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 from typing import Any
 
 from app.domain import Author, Identifier, IdentifierType, Venue, VenueType
+from app.domain.provenance import ProvenanceEntry
 from app.domain.publication import DocumentType, Publication
+from app.domain.search import SearchQuery, SearchRun
 
 _DOC_TYPE_MAP = {
     "journalarticle": DocumentType.JOURNAL_ARTICLE,
@@ -45,9 +47,21 @@ class SemanticScholarProvider:
 
     name = "semantic_scholar"
 
-    def map_paper(self, paper: dict[str, Any]) -> Publication:
+    def map_paper(
+        self,
+        paper: dict[str, Any],
+        *,
+        search_run: SearchRun,
+        search_query: SearchQuery,
+        retrieved_at: datetime,
+    ) -> Publication:
         if not isinstance(paper, dict):
             raise TypeError("paper must be a dictionary")
+
+        # 0. Provenance required fields validation
+        paper_id = _clean_str(paper.get("paperId"))
+        if paper_id is None:
+            raise ValueError("Semantic Scholar paper must have a valid paperId for provenance")
 
         # 1. Title
         title = _clean_str(paper.get("title"))
@@ -145,15 +159,13 @@ class SemanticScholarProvider:
         identifiers: list[Identifier] = []
 
         # paperId
-        paper_id = _clean_str(paper.get("paperId"))
-        if paper_id:
-            identifiers.append(
-                Identifier(
-                    type=IdentifierType.OTHER,
-                    value=paper_id,
-                    source="semanticscholar",
-                )
+        identifiers.append(
+            Identifier(
+                type=IdentifierType.OTHER,
+                value=paper_id,
+                source="semanticscholar",
             )
+        )
 
         # externalIds
         ext_ids = paper.get("externalIds")
@@ -185,6 +197,18 @@ class SemanticScholarProvider:
             if s_url.startswith(("http://", "https://")):
                 urls.append(s_url)
 
+        # 9. Provenance
+        provenance = [
+            ProvenanceEntry(
+                source=self.name,
+                source_record_id=paper_id,
+                retrieved_at=retrieved_at,
+                query_id=search_query.query_id,
+                run_id=search_run.run_id,
+                rendered_query=search_run.rendered_query,
+            )
+        ]
+
         return Publication(
             title=title,
             abstract=abstract,
@@ -195,6 +219,7 @@ class SemanticScholarProvider:
             venue=venue_obj,
             document_type=doc_type,
             urls=urls,
+            provenance=provenance,
         )
 
 

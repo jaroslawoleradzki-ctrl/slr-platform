@@ -61,14 +61,14 @@ Canonical publication and review-process model.
 
 Current active increment:
 
-Semantic Scholar — provenance.
+Google Scholar Import — RIS.
 
 ### Semantic Scholar
 
 - [x] basic client and single-page search
 - [x] offset pagination
 - [x] provider mapping to Publication
-- [ ] provenance
+- [x] provenance
 
 ### Google Scholar Import
 

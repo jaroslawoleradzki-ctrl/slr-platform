@@ -6,6 +6,23 @@ This document records important project decisions that do not require a full ADR
 
 ## 2026-07-24
 
+### Semantic Scholar provenance
+
+Implemented provenance mapping support in `SemanticScholarProvider.map_paper` to record search query details in the `provenance` field, mirroring OpenAlex's provenance construction.
+
+Key decisions:
+- **Provenance Context**: The `map_paper` method accepts `search_run`, `search_query`, and `retrieved_at` as required keyword-only arguments.
+- **Mandatory paperId**: `paperId` is required to populate the `source_record_id` field in the `ProvenanceEntry`. If missing or blank (including whitespace-only strings), a `ValueError` is raised.
+- **Provenance Construction**: Creates a single `ProvenanceEntry` with `source="semantic_scholar"`, `source_record_id=paper_id`, and search query metadata.
+
+Verified quality state:
+- 190 tests passing
+- Ruff checks passing
+- mypy checks passing
+- `git diff --check` passing
+
+---
+
 ### Semantic Scholar provider mapping to Publication
 
 Added a mapping layer from Semantic Scholar Graph API paper records to the canonical `Publication` domain model via `SemanticScholarProvider.map_paper`.

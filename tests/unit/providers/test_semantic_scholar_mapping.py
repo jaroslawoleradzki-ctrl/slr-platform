@@ -1,15 +1,38 @@
-from datetime import date
+from datetime import date, datetime, timezone
 from typing import Any, cast
+from uuid import UUID
 
 import pytest
 
 from app.domain import IdentifierType, VenueType
 from app.domain.publication import DocumentType
+from app.domain.search import SearchQuery, SearchRun, SearchTerm
 from app.providers.search.semantic_scholar import SemanticScholarProvider
+
+_QUERY_ID = UUID("00000000-0000-0000-0000-000000000001")
+_RUN_ID = UUID("00000000-0000-0000-0000-000000000002")
+_RETRIEVED_AT = datetime(2026, 7, 24, 12, 0, tzinfo=timezone.utc)
+
+
+def build_search_context() -> tuple[SearchRun, SearchQuery]:
+    search_query = SearchQuery(
+        query_id=_QUERY_ID,
+        name="Lean energy",
+        expression=SearchTerm(value="lean energy"),
+    )
+    search_run = SearchRun(
+        run_id=_RUN_ID,
+        query_id=search_query.query_id,
+        query_version=search_query.version,
+        provider="semantic_scholar",
+        rendered_query="lean energy",
+    )
+    return search_run, search_query
 
 
 def test_map_paper_full_record() -> None:
     provider = SemanticScholarProvider()
+    search_run, search_query = build_search_context()
     paper = {
         "paperId": "abc-123",
         "title": "  Lean Construction  ",
@@ -35,7 +58,12 @@ def test_map_paper_full_record() -> None:
         }
     }
 
-    pub = provider.map_paper(paper)
+    pub = provider.map_paper(
+        paper,
+        search_run=search_run,
+        search_query=search_query,
+        retrieved_at=_RETRIEVED_AT,
+    )
 
     assert pub.title == "Lean Construction"
     assert pub.abstract == "An abstract study on lean manufacturing."
@@ -69,14 +97,29 @@ def test_map_paper_full_record() -> None:
     assert pub.identifiers[2].type == IdentifierType.PMID
     assert pub.identifiers[2].value == "12345"
 
-    assert pub.provenance == []
+    assert len(pub.provenance) == 1
+    prov = pub.provenance[0]
+    assert prov.source == "semantic_scholar"
+    assert prov.source_record_id == "abc-123"
+    assert prov.retrieved_at == _RETRIEVED_AT
+    assert prov.query_id == search_query.query_id
+    assert prov.run_id == search_run.run_id
+    assert prov.rendered_query == search_run.rendered_query
 
 
 def test_map_paper_minimal_record() -> None:
+    provider = SemanticScholarProvider()
+    search_run, search_query = build_search_context()
     paper = {
+        "paperId": "abc-123",
         "title": "Minimal title"
     }
-    pub = SemanticScholarProvider().map_paper(paper)
+    pub = provider.map_paper(
+        paper,
+        search_run=search_run,
+        search_query=search_query,
+        retrieved_at=_RETRIEVED_AT,
+    )
     assert pub.title == "Minimal title"
     assert pub.abstract is None
     assert pub.authors == []
@@ -84,69 +127,127 @@ def test_map_paper_minimal_record() -> None:
     assert pub.publication_date is None
     assert pub.venue is None
     assert pub.document_type is None
-    assert pub.identifiers == []
+    assert len(pub.identifiers) == 1
+    assert pub.identifiers[0].value == "abc-123"
     assert pub.urls == []
 
 
 def test_map_paper_missing_title_raises_value_error() -> None:
     provider = SemanticScholarProvider()
+    search_run, search_query = build_search_context()
     with pytest.raises(ValueError, match="Semantic Scholar paper title is missing or blank"):
-        provider.map_paper({"title": "   "})
+        provider.map_paper(
+            {"paperId": "abc-123", "title": "   "},
+            search_run=search_run,
+            search_query=search_query,
+            retrieved_at=_RETRIEVED_AT,
+        )
     with pytest.raises(ValueError, match="Semantic Scholar paper title is missing or blank"):
-        provider.map_paper({})
+        provider.map_paper(
+            {"paperId": "abc-123"},
+            search_run=search_run,
+            search_query=search_query,
+            retrieved_at=_RETRIEVED_AT,
+        )
 
 
 def test_map_paper_external_ids_handling() -> None:
     provider = SemanticScholarProvider()
+    search_run, search_query = build_search_context()
+
     # externalIds missing
-    pub1 = provider.map_paper({"title": "Test"})
-    assert pub1.identifiers == []
+    pub1 = provider.map_paper(
+        {"paperId": "abc-123", "title": "Test"},
+        search_run=search_run,
+        search_query=search_query,
+        retrieved_at=_RETRIEVED_AT,
+    )
+    assert len(pub1.identifiers) == 1
+    assert pub1.identifiers[0].value == "abc-123"
 
     # externalIds is None
-    pub2 = provider.map_paper({"title": "Test", "externalIds": None})
-    assert pub2.identifiers == []
+    pub2 = provider.map_paper(
+        {"paperId": "abc-123", "title": "Test", "externalIds": None},
+        search_run=search_run,
+        search_query=search_query,
+        retrieved_at=_RETRIEVED_AT,
+    )
+    assert len(pub2.identifiers) == 1
+    assert pub2.identifiers[0].value == "abc-123"
 
     # externalIds empty or missing specific keys
-    pub3 = provider.map_paper({"title": "Test", "externalIds": {"ArXiv": "123"}})
-    assert pub3.identifiers == []
+    pub3 = provider.map_paper(
+        {"paperId": "abc-123", "title": "Test", "externalIds": {"ArXiv": "123"}},
+        search_run=search_run,
+        search_query=search_query,
+        retrieved_at=_RETRIEVED_AT,
+    )
+    assert len(pub3.identifiers) == 1
+    assert pub3.identifiers[0].value == "abc-123"
 
 
 def test_map_paper_authors_handling() -> None:
     provider = SemanticScholarProvider()
+    search_run, search_query = build_search_context()
+
     # empty list
-    pub1 = provider.map_paper({"title": "Test", "authors": []})
+    pub1 = provider.map_paper(
+        {"paperId": "abc-123", "title": "Test", "authors": []},
+        search_run=search_run,
+        search_query=search_query,
+        retrieved_at=_RETRIEVED_AT,
+    )
     assert pub1.authors == []
 
     # authors contains invalid format
-    pub2 = provider.map_paper({
-        "title": "Test",
-        "authors": [
-            "Jane Doe",  # not a dict, should be skipped
-            {"name": "John Smith"}
-        ]
-    })
+    pub2 = provider.map_paper(
+        {
+            "paperId": "abc-123",
+            "title": "Test",
+            "authors": [
+                "Jane Doe",  # not a dict, should be skipped
+                {"name": "John Smith"}
+            ]
+        },
+        search_run=search_run,
+        search_query=search_query,
+        retrieved_at=_RETRIEVED_AT,
+    )
     assert len(pub2.authors) == 1
     assert pub2.authors[0].display_name == "John Smith"
 
 
 def test_map_paper_venue_handling() -> None:
     provider = SemanticScholarProvider()
+    search_run, search_query = build_search_context()
 
     # publicationVenue dict with fallback to venue string
-    pub1 = provider.map_paper({
-        "title": "Test",
-        "publicationVenue": {"type": "journal"},
-        "venue": "Venue String"
-    })
+    pub1 = provider.map_paper(
+        {
+            "paperId": "abc-123",
+            "title": "Test",
+            "publicationVenue": {"type": "journal"},
+            "venue": "Venue String"
+        },
+        search_run=search_run,
+        search_query=search_query,
+        retrieved_at=_RETRIEVED_AT,
+    )
     assert pub1.venue is not None
     assert pub1.venue.name == "Venue String"
     assert pub1.venue.type == VenueType.JOURNAL
 
     # Top-level venue string only
-    pub2 = provider.map_paper({
-        "title": "Test",
-        "venue": "Top-level Venue"
-    })
+    pub2 = provider.map_paper(
+        {
+            "paperId": "abc-123",
+            "title": "Test",
+            "venue": "Top-level Venue"
+        },
+        search_run=search_run,
+        search_query=search_query,
+        retrieved_at=_RETRIEVED_AT,
+    )
     assert pub2.venue is not None
     assert pub2.venue.name == "Top-level Venue"
     assert pub2.venue.type is None
@@ -154,60 +255,125 @@ def test_map_paper_venue_handling() -> None:
 
 def test_map_paper_publication_types() -> None:
     provider = SemanticScholarProvider()
+    search_run, search_query = build_search_context()
 
     # Recognized type
-    pub1 = provider.map_paper({
-        "title": "Test",
-        "publicationTypes": ["Conference", "Book"]
-    })
+    pub1 = provider.map_paper(
+        {
+            "paperId": "abc-123",
+            "title": "Test",
+            "publicationTypes": ["Conference", "Book"]
+        },
+        search_run=search_run,
+        search_query=search_query,
+        retrieved_at=_RETRIEVED_AT,
+    )
     assert pub1.document_type == DocumentType.CONFERENCE_PAPER
 
     # Unrecognized type
-    pub2 = provider.map_paper({
-        "title": "Test",
-        "publicationTypes": ["UnknownType"]
-    })
+    pub2 = provider.map_paper(
+        {
+            "paperId": "abc-123",
+            "title": "Test",
+            "publicationTypes": ["UnknownType"]
+        },
+        search_run=search_run,
+        search_query=search_query,
+        retrieved_at=_RETRIEVED_AT,
+    )
     assert pub2.document_type == DocumentType.OTHER
 
     # Missing types
-    pub3 = provider.map_paper({
-        "title": "Test",
-        "publicationTypes": []
-    })
+    pub3 = provider.map_paper(
+        {
+            "paperId": "abc-123",
+            "title": "Test",
+            "publicationTypes": []
+        },
+        search_run=search_run,
+        search_query=search_query,
+        retrieved_at=_RETRIEVED_AT,
+    )
     assert pub3.document_type is None
 
 
 def test_map_paper_date_alignment() -> None:
     provider = SemanticScholarProvider()
+    search_run, search_query = build_search_context()
 
     # Conflicting date and year: year kept, date cleared
-    pub1 = provider.map_paper({
-        "title": "Test",
-        "year": 2024,
-        "publicationDate": "2023-12-15"
-    })
+    pub1 = provider.map_paper(
+        {
+            "paperId": "abc-123",
+            "title": "Test",
+            "year": 2024,
+            "publicationDate": "2023-12-15"
+        },
+        search_run=search_run,
+        search_query=search_query,
+        retrieved_at=_RETRIEVED_AT,
+    )
     assert pub1.publication_year == 2024
     assert pub1.publication_date is None
 
     # Correct date and year: both kept
-    pub2 = provider.map_paper({
-        "title": "Test",
-        "year": 2024,
-        "publicationDate": "2024-05-12"
-    })
+    pub2 = provider.map_paper(
+        {
+            "paperId": "abc-123",
+            "title": "Test",
+            "year": 2024,
+            "publicationDate": "2024-05-12"
+        },
+        search_run=search_run,
+        search_query=search_query,
+        retrieved_at=_RETRIEVED_AT,
+    )
     assert pub2.publication_year == 2024
     assert pub2.publication_date == date(2024, 5, 12)
 
     # Missing year: inferred from date
-    pub3 = provider.map_paper({
-        "title": "Test",
-        "publicationDate": "2024-05-12"
-    })
+    pub3 = provider.map_paper(
+        {
+            "paperId": "abc-123",
+            "title": "Test",
+            "publicationDate": "2024-05-12"
+        },
+        search_run=search_run,
+        search_query=search_query,
+        retrieved_at=_RETRIEVED_AT,
+    )
     assert pub3.publication_year == 2024
     assert pub3.publication_date == date(2024, 5, 12)
 
 
 def test_map_paper_non_dictionary_raises_type_error() -> None:
     provider = SemanticScholarProvider()
+    search_run, search_query = build_search_context()
     with pytest.raises(TypeError, match="paper must be a dictionary"):
-        provider.map_paper(cast(Any, "not-a-dict"))
+        provider.map_paper(
+            cast(Any, "not-a-dict"),
+            search_run=search_run,
+            search_query=search_query,
+            retrieved_at=_RETRIEVED_AT,
+        )
+
+
+@pytest.mark.parametrize(
+    "paper_data",
+    [
+        {"title": "Test"},  # missing paperId
+        {"paperId": None, "title": "Test"},  # paperId=None
+        {"paperId": "   ", "title": "Test"},  # paperId="   "
+    ],
+    ids=["missing", "none", "blank"]
+)
+def test_map_paper_invalid_paper_id_raises_value_error(paper_data: dict[str, Any]) -> None:
+    provider = SemanticScholarProvider()
+    search_run, search_query = build_search_context()
+    with pytest.raises(ValueError, match="Semantic Scholar paper must have a valid paperId for provenance"):
+        provider.map_paper(
+            paper_data,
+            search_run=search_run,
+            search_query=search_query,
+            retrieved_at=_RETRIEVED_AT,
+        )
