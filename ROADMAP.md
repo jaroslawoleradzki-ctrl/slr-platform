@@ -61,7 +61,7 @@ Canonical publication and review-process model.
 
 Current active increment:
 
-Google Scholar Import — RIS.
+Google Scholar Import — 3.2 RIS -> Publication mapping.
 
 ### Semantic Scholar
 
@@ -72,8 +72,11 @@ Google Scholar Import — RIS.
 
 ### Google Scholar Import
 
-- [ ] RIS
-- [ ] BibTeX
+- [x] 3.1 RIS parser
+- [ ] 3.2 RIS -> Publication mapping
+- [ ] 3.3 Google Scholar RIS import
+- [ ] ImportProvider abstraction — deferred until a second importer
+- [ ] BibTeX — deferred
 
 ### Phase 2.x — Harmonization
 

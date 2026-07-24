@@ -6,6 +6,26 @@ This document records important project decisions that do not require a full ADR
 
 ## 2026-07-24
 
+### RIS Parser implementation
+
+Added a simple, dependency-free sequential line parser for RIS format files via `app/providers/import_file/ris/parser.py`.
+
+Key decisions:
+- **Exposed API**: Exposes exactly one public function `parse_ris(content: str) -> list[dict[str, list[str]]]`.
+- **Parsing Strategy**: Use a sequential line reader with a compiled regex for tag detection rather than a regex-heavy implementation.
+- **Tag-value storage**: Preserve tag casing exactly as it appears in the input. Map every tag to a list of strings (`list[str]`) to natively handle repeating tags (e.g. `AU` for authors, `KW` for keywords) without data loss.
+- **Multiline continuations**: A non-blank, non-tag line inside an open record is treated as a continuation of the most recently parsed field. The trimmed text is appended to the last value of that field, separated by a single space. Continuation lines outside a record or before any field raise `ValueError`.
+- **Structural Validation**: Raise `ValueError` on malformed tag-like lines (lines that resemble a tag but do not match the exact `XX  - value` format), nested `TY` tags, `ER` before `TY`, any field tag before `TY`, and EOF inside an unclosed record.
+- **Blank lines and whitespace**: Blank lines are ignored everywhere. Whitespace around tag values is trimmed. RIS tags are always required at the beginning of the line — no tag inference from indented or continuation lines.
+
+Verified quality state:
+- 206 tests passing
+- Ruff checks passing
+- mypy checks passing
+- `git diff --check` passing
+
+---
+
 ### Semantic Scholar provenance
 
 Implemented provenance mapping support in `SemanticScholarProvider.map_paper` to record search query details in the `provenance` field, mirroring OpenAlex's provenance construction.

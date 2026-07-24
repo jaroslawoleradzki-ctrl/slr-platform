@@ -142,10 +142,18 @@ Semantic Scholar now provides:
 - mapping from Semantic Scholar paper records to the canonical `Publication` domain model
 - search provenance metadata capturing for each mapped publication
 
-Phase 2.14 — Semantic Scholar Provenance: Completed.
+Google Scholar Import completed increments:
+
+- 3.1 RIS parser
+
+Google Scholar Import now provides:
+- a dependency-free sequential RIS file format parser (`parse_ris`) returning dictionaries of tag-to-list-values
+- multiline field continuation: plain-text lines inside a record are folded into the previous field value
+
+Phase 3.1 — RIS Parser: Completed.
 
 Quality status:
-- 190 tests passing
+- 206 tests passing
 - Ruff checks passing
 - mypy checks passing
 - `git diff --check` passing
@@ -201,7 +209,7 @@ Every feature must:
 
 # Next milestone
 
-Google Scholar manual import.
+Google Scholar Import — 3.2 RIS -> Publication mapping.
 
 Future architectural work:
 
