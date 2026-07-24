@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import httpx
 import pytest
@@ -14,7 +14,7 @@ _RETRIEVED_AT = datetime(2026, 7, 24, 8, 30, tzinfo=timezone.utc)
 def _search_context(
     *,
     provider: str = "crossref",
-    run_query_id=None,
+    run_query_id: UUID | None = None,
     query_version: int = 1,
 ) -> tuple[SearchRun, SearchQuery]:
     search_query = SearchQuery(
@@ -194,7 +194,7 @@ async def test_search_rejects_work_without_doi_for_provenance() -> None:
 )
 async def test_search_validates_search_context(
     provider_name: str,
-    run_query_id,
+    run_query_id: UUID | None,
     query_version: int,
     message: str,
 ) -> None:
@@ -203,13 +203,16 @@ async def test_search_validates_search_context(
         run_query_id=run_query_id,
         query_version=query_version,
     )
-    provider = CrossrefProvider()
 
-    with pytest.raises(ValueError, match=message):
-        await provider.search(
-            search_run=search_run,
-            search_query=search_query,
+    async with httpx.AsyncClient() as http_client:
+        provider = CrossrefProvider(
+            client=CrossrefClient(http_client=http_client)
         )
+        with pytest.raises(ValueError, match=message):
+            await provider.search(
+                search_run=search_run,
+                search_query=search_query,
+            )
 
 
 @pytest.mark.anyio
