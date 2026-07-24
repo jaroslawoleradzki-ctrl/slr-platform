@@ -72,6 +72,25 @@ Crossref — provenance.
 - [ ] RIS
 - [ ] BibTeX
 
+### Phase 2.x — Harmonization
+
+Goal:
+
+Bring all search providers to the same canonical mapping quality before starting the review workflow.
+
+Planned work:
+
+- [ ] OpenAlex provider mapping parity
+- [ ] Cross-provider normalization
+- [ ] Shared mapper utilities
+
+Notes:
+
+- Align OpenAlex mapping with the richer Crossref implementation.
+- Extract reusable mapping helpers where appropriate.
+- Keep provider-specific API clients separated from canonical domain mapping.
+- No new functionality; architectural consolidation only.
+
 ---
 
 ## Phase 3 — Search Engine
