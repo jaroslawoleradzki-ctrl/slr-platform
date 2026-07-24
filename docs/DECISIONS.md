@@ -4,6 +4,27 @@ This document records important project decisions that do not require a full ADR
 
 ---
 
+## 2026-07-24
+
+### Crossref cursor pagination
+
+`CrossrefClient` now supports cursor-based pagination via the `iterate_works` asynchronous generator.
+
+Key decisions:
+- **Starting Cursor**: The initial request uses the standard starting cursor `*`.
+- **Response Validation**: Response payloads are validated for `message.items` and `message.next-cursor` structure. A malformed `next-cursor` (present but not a string or blank) raises a `ValueError`.
+- **Termination Conditions**: The iteration terminates normally when `items` is empty, when `next-cursor` is missing or null, or when the returned `next-cursor` equals the current cursor or a previously requested cursor (preventing infinite loops). Malformed cursor values (blank or non-string values) raise a `ValueError` instead of ending the iteration.
+- **Optional Record Limit**: An optional `limit` parameter was introduced. If specified, the generator yields exactly up to the limit and stops without performing any unnecessary further HTTP page requests.
+- **HTTP Reuse**: The pagination relies strictly on the existing `search_works` method, ensuring that rate limiting, retry semantics, and response structural validations are automatically inherited without duplicating HTTP logic.
+
+Verified quality state:
+- 134 tests passing
+- Ruff checks passing
+- mypy checks passing
+- `git diff --check` passing
+
+---
+
 ## 2026-07-23
 
 ### Crossref retry and asynchronous rate limiting

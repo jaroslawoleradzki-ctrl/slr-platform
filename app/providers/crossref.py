@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import math
 import time
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
 from typing import Any
 
 import httpx
@@ -141,4 +141,65 @@ class CrossrefClient:
         if not isinstance(message.get("items"), list):
             raise ValueError("Crossref response message.items must be a list")
 
+        if cursor is not None:
+            if "next-cursor" in message:
+                next_cursor = message["next-cursor"]
+                if next_cursor is not None:
+                    if not isinstance(next_cursor, str):
+                        raise ValueError("Crossref response message.next-cursor must be a string")
+                    if not next_cursor.strip():
+                        raise ValueError("Crossref response message.next-cursor must not be blank")
+
         return payload
+
+    async def iterate_works(
+        self,
+        query: str,
+        *,
+        rows: int = 20,
+        limit: int | None = None,
+    ) -> AsyncIterator[dict[str, Any]]:
+        """Yield all works matching a query by following Crossref cursor pagination."""
+        if limit is not None:
+            if isinstance(limit, bool) or not isinstance(limit, int):
+                raise TypeError("limit must be an integer or None")
+            if limit < 1:
+                raise ValueError("limit must be at least 1")
+
+        cursor = "*"
+        seen_cursors: set[str] = set()
+        yielded = 0
+
+        while True:
+            if limit is not None and yielded >= limit:
+                break
+
+            payload = await self.search_works(
+                query,
+                rows=rows,
+                cursor=cursor,
+            )
+
+            message = payload["message"]
+            items = message["items"]
+
+            if not items:
+                break
+
+            for item in items:
+                if not isinstance(item, dict):
+                    raise ValueError("Crossref work must be a JSON object")
+                yield item
+                yielded += 1
+                if limit is not None and yielded >= limit:
+                    return
+
+            next_cursor = message.get("next-cursor")
+            if next_cursor is None:
+                break
+
+            if next_cursor == cursor or next_cursor in seen_cursors:
+                break
+
+            seen_cursors.add(cursor)
+            cursor = next_cursor

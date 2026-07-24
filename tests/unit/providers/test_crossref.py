@@ -608,3 +608,373 @@ async def test_search_works_rejects_non_list_items() -> None:
             match="Crossref response message.items must be a list",
         ):
             await client.search_works("lean")
+
+
+@pytest.mark.anyio
+async def test_iterate_works_follows_cursors_and_preserves_order() -> None:
+    requested_cursors: list[str] = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        cursor = request.url.params.get("cursor")
+        assert cursor is not None
+        requested_cursors.append(cursor)
+        if cursor == "*":
+            return httpx.Response(
+                200,
+                json={
+                    "message": {
+                        "next-cursor": "cursor-2",
+                        "items": [{"DOI": "10.1000/1"}, {"DOI": "10.1000/2"}],
+                    }
+                },
+                request=request,
+            )
+        assert cursor == "cursor-2"
+        return httpx.Response(
+            200,
+            json={
+                "message": {
+                    "next-cursor": "cursor-3",
+                    "items": [{"DOI": "10.1000/3"}],
+                }
+            },
+            request=request,
+        )
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport) as http_client:
+        client = CrossrefClient(http_client=http_client)
+        works = [work async for work in client.iterate_works("lean", limit=3)]
+
+    assert requested_cursors == ["*", "cursor-2"]
+    assert works == [{"DOI": "10.1000/1"}, {"DOI": "10.1000/2"}, {"DOI": "10.1000/3"}]
+
+
+@pytest.mark.anyio
+async def test_iterate_works_stops_on_empty_items() -> None:
+    request_count = 0
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal request_count
+        request_count += 1
+        return httpx.Response(
+            200,
+            json={
+                "message": {
+                    "next-cursor": "cursor-2",
+                    "items": [],
+                }
+            },
+            request=request,
+        )
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport) as http_client:
+        client = CrossrefClient(http_client=http_client)
+        works = [work async for work in client.iterate_works("lean")]
+
+    assert request_count == 1
+    assert works == []
+
+
+@pytest.mark.anyio
+async def test_iterate_works_stops_on_missing_or_null_next_cursor() -> None:
+    # Test missing next-cursor
+    async def handler_missing(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "message": {
+                    "items": [{"DOI": "10.1000/1"}],
+                }
+            },
+            request=request,
+        )
+
+    transport = httpx.MockTransport(handler_missing)
+    async with httpx.AsyncClient(transport=transport) as http_client:
+        client = CrossrefClient(http_client=http_client)
+        works = [work async for work in client.iterate_works("lean")]
+    assert works == [{"DOI": "10.1000/1"}]
+
+    # Test null next-cursor
+    async def handler_null(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "message": {
+                    "next-cursor": None,
+                    "items": [{"DOI": "10.1000/2"}],
+                }
+            },
+            request=request,
+        )
+
+    transport_null = httpx.MockTransport(handler_null)
+    async with httpx.AsyncClient(transport=transport_null) as http_client:
+        client = CrossrefClient(http_client=http_client)
+        works_null = [work async for work in client.iterate_works("lean")]
+    assert works_null == [{"DOI": "10.1000/2"}]
+
+
+@pytest.mark.anyio
+async def test_iterate_works_prevents_infinite_loop_on_duplicate_cursor() -> None:
+    request_count = 0
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal request_count
+        request_count += 1
+        return httpx.Response(
+            200,
+            json={
+                "message": {
+                    "next-cursor": "same-cursor",
+                    "items": [{"DOI": f"10.1000/{request_count}"}],
+                }
+            },
+            request=request,
+        )
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport) as http_client:
+        client = CrossrefClient(http_client=http_client)
+        works = [work async for work in client.iterate_works("lean")]
+
+    assert request_count == 2
+    assert len(works) == 2
+
+
+@pytest.mark.anyio
+async def test_iterate_works_rejects_invalid_limit() -> None:
+    async with httpx.AsyncClient() as http_client:
+        client = CrossrefClient(http_client=http_client)
+        with pytest.raises(TypeError, match="limit must be an integer or None"):
+            async for _ in client.iterate_works("lean", limit=cast(Any, "ten")):
+                pass
+        with pytest.raises(TypeError, match="limit must be an integer or None"):
+            async for _ in client.iterate_works("lean", limit=cast(Any, True)):
+                pass
+        with pytest.raises(ValueError, match="limit must be at least 1"):
+            async for _ in client.iterate_works("lean", limit=0):
+                pass
+
+
+@pytest.mark.anyio
+async def test_iterate_works_stops_exactly_at_limit_without_fetching_next_page() -> None:
+    request_count = 0
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal request_count
+        request_count += 1
+        return httpx.Response(
+            200,
+            json={
+                "message": {
+                    "next-cursor": f"cursor-{request_count + 1}",
+                    "items": [{"DOI": f"10.1000/{i}"} for i in range(1, 11)],
+                }
+            },
+            request=request,
+        )
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport) as http_client:
+        client = CrossrefClient(http_client=http_client)
+        works = [work async for work in client.iterate_works("lean", rows=10, limit=15)]
+
+    assert request_count == 2
+    assert len(works) == 15
+    assert [w["DOI"] for w in works] == [f"10.1000/{i}" for i in range(1, 11)] + [f"10.1000/{i}" for i in range(1, 6)]
+
+
+@pytest.mark.anyio
+async def test_iterate_works_rate_limiting_between_pages() -> None:
+    fake_time = FakeTime()
+    request_start_times: list[float] = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        request_start_times.append(fake_time.monotonic())
+        cursor = request.url.params.get("cursor")
+        next_cursor = "cursor-2" if cursor == "*" else None
+        return httpx.Response(
+            200,
+            json={
+                "message": {
+                    "next-cursor": next_cursor,
+                    "items": [{"DOI": "10.1000/1"}],
+                }
+            },
+            request=request,
+        )
+
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(handler)
+    ) as http_client:
+        client = CrossrefClient(
+            http_client=http_client,
+            requests_per_second=2,
+            clock=fake_time.monotonic,
+            sleep=fake_time.sleep,
+        )
+        _ = [work async for work in client.iterate_works("lean")]
+
+    assert fake_time.sleep_calls == [pytest.approx(0.5)]
+    assert request_start_times == [0.0, 0.5]
+
+
+@pytest.mark.anyio
+async def test_iterate_works_retries_during_pagination_then_succeeds() -> None:
+    request_events: list[tuple[str, str | None]] = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        cursor = request.url.params.get("cursor")
+        request_events.append((request.method, cursor))
+
+        if cursor == "*":
+            return httpx.Response(
+                200,
+                json={
+                    "message": {
+                        "next-cursor": "cursor-2",
+                        "items": [{"DOI": "10.1000/1"}],
+                    }
+                },
+                request=request,
+            )
+        elif cursor == "cursor-2":
+            cursor_2_count = sum(1 for _, c in request_events if c == "cursor-2")
+            if cursor_2_count == 1:
+                return httpx.Response(503, request=request)
+            else:
+                return httpx.Response(
+                    200,
+                    json={
+                        "message": {
+                            "next-cursor": None,
+                            "items": [{"DOI": "10.1000/2"}],
+                        }
+                    },
+                    request=request,
+                )
+        return httpx.Response(404, request=request)
+
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(handler)
+    ) as http_client:
+        client = CrossrefClient(
+            http_client=http_client,
+            retry_attempts=3,
+        )
+        works = [work async for work in client.iterate_works("lean")]
+
+    assert request_events == [
+        ("GET", "*"),
+        ("GET", "cursor-2"),
+        ("GET", "cursor-2"),
+    ]
+    assert len(request_events) == 3
+    assert works == [{"DOI": "10.1000/1"}, {"DOI": "10.1000/2"}]
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    ("payload", "message"),
+    [
+        (
+            {"message": {"next-cursor": 123, "items": []}},
+            "Crossref response message.next-cursor must be a string",
+        ),
+        (
+            {"message": {"next-cursor": "   ", "items": []}},
+            "Crossref response message.next-cursor must not be blank",
+        ),
+    ],
+)
+async def test_search_works_rejects_malformed_next_cursor(
+    payload: dict[str, Any],
+    message: str,
+) -> None:
+    transport = httpx.MockTransport(
+        lambda request: httpx.Response(200, json=payload, request=request)
+    )
+    async with httpx.AsyncClient(transport=transport) as http_client:
+        client = CrossrefClient(http_client=http_client)
+        with pytest.raises(ValueError, match=message):
+            await client.search_works("lean", cursor="*")
+
+
+@pytest.mark.anyio
+async def test_search_works_ignores_next_cursor_when_cursor_is_none() -> None:
+    transport = httpx.MockTransport(
+        lambda request: httpx.Response(
+            200,
+            json={"message": {"next-cursor": 123, "items": []}},
+            request=request,
+        )
+    )
+    async with httpx.AsyncClient(transport=transport) as http_client:
+        client = CrossrefClient(http_client=http_client)
+        payload = await client.search_works("lean", cursor=None)
+    assert payload["message"]["next-cursor"] == 123
+
+
+@pytest.mark.anyio
+async def test_iterate_works_rejects_non_object_work() -> None:
+    transport = httpx.MockTransport(
+        lambda request: httpx.Response(
+            200,
+            json={
+                "message": {
+                    "next-cursor": "cursor-2",
+                    "items": [{"DOI": "10.1000/1"}, "not-a-dict"],
+                }
+            },
+            request=request,
+        )
+    )
+    async with httpx.AsyncClient(transport=transport) as http_client:
+        client = CrossrefClient(http_client=http_client)
+        with pytest.raises(ValueError, match="Crossref work must be a JSON object"):
+            async for _ in client.iterate_works("lean"):
+                pass
+
+
+@pytest.mark.anyio
+async def test_iterate_works_passes_special_characters_cursor_properly() -> None:
+    special_cursor = "cursor with spaces+and/slashes=="
+    requested_cursors: list[str] = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        cursor = request.url.params.get("cursor")
+        assert cursor is not None
+        requested_cursors.append(cursor)
+        if cursor == "*":
+            return httpx.Response(
+                200,
+                json={
+                    "message": {
+                        "next-cursor": special_cursor,
+                        "items": [{"DOI": "10.1000/1"}],
+                    }
+                },
+                request=request,
+            )
+        assert cursor == special_cursor
+        return httpx.Response(
+            200,
+            json={
+                "message": {
+                    "next-cursor": None,
+                    "items": [{"DOI": "10.1000/2"}],
+                }
+            },
+            request=request,
+        )
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport) as http_client:
+        client = CrossrefClient(http_client=http_client)
+        works = [work async for work in client.iterate_works("lean")]
+
+    assert requested_cursors == ["*", special_cursor]
+    assert works == [{"DOI": "10.1000/1"}, {"DOI": "10.1000/2"}]

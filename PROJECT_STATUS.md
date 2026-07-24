@@ -102,6 +102,7 @@ Crossref completed increments:
 
 - 2.6 asynchronous Works API client
 - 2.7 retry and configurable asynchronous rate limiting
+- 2.8 cursor pagination
 
 Crossref now provides:
 
@@ -110,12 +111,14 @@ Crossref now provides:
 - Tenacity retry for `httpx.RequestError` and HTTP statuses 429, 500, 502, 503, and 504
 - configurable, instance-local asynchronous rate limiting before every physical HTTP attempt, including retries
 - injectable monotonic clock and asynchronous sleep for deterministic tests
+- cursor pagination across result pages using the standard starting cursor `*` and returning records as an asynchronous iterator
+- protection against infinite loops by verifying duplicate/repeated cursor values, ending iteration normally on empty result lists or missing/null cursors, and raising a ValueError for malformed/blank cursor values
 
-Phase 2.7 — Crossref Retry & Rate Limiting: Completed.
+Phase 2.8 — Crossref Cursor Pagination: Completed.
 
 Quality status for the current increment:
 
-- 121 tests passing
+- 134 tests passing
 - Ruff checks passing
 - mypy checks passing
 - `git diff --check` passing
@@ -175,11 +178,11 @@ Continue the incremental Crossref implementation.
 
 Next roadmap increment:
 
-- Crossref — cursor pagination
+- Crossref — provider mapping to Publication
 
 After that:
 
-- Crossref provider and provenance
+- Crossref — provenance
 - Semantic Scholar
 - Google Scholar manual import
 
