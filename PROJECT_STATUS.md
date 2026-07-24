@@ -1,6 +1,6 @@
 # SLR Platform — Project Status
 
-_Last updated: 2026-07-23_
+_Last updated: 2026-07-24_
 
 ## Current status
 
@@ -186,6 +186,13 @@ After that:
 
 - Semantic Scholar
 - Google Scholar manual import
+
+Future architectural work:
+
+- Phase 2.x — Harmonization
+  - OpenAlex provider mapping parity
+  - Cross-provider normalization
+  - Shared mapper utilities
 
 ---
 
