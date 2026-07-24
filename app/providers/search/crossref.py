@@ -2,11 +2,15 @@ from __future__ import annotations
 
 import html
 import re
-from datetime import date
+from collections.abc import AsyncIterator, Callable
+from datetime import date, datetime, timezone
 from typing import Any
 
 from app.domain import Affiliation, Author, Identifier, IdentifierType, Venue
+from app.domain.provenance import ProvenanceEntry
 from app.domain.publication import DocumentType, Publication
+from app.domain.search import SearchQuery, SearchRun
+from app.providers.crossref import CrossrefClient
 
 _TYPE_MAP = {
     "journal-article": DocumentType.JOURNAL_ARTICLE,
@@ -20,6 +24,10 @@ _TYPE_MAP = {
     "posted-content": DocumentType.PREPRINT,
     "dataset": DocumentType.DATASET,
 }
+
+
+def _utc_now() -> datetime:
+    return datetime.now(timezone.utc)
 
 
 def _clean_str(val: Any) -> str | None:
@@ -78,14 +86,71 @@ def _parse_crossref_date(date_dict: Any) -> tuple[int, date | None] | None:
 class CrossrefProvider:
     name = "crossref"
 
-    async def search(self, config):
-        raise NotImplementedError("Moduł Crossref będzie wdrożony w następnym etapie.")
+    def __init__(
+        self,
+        *,
+        client: CrossrefClient | None = None,
+        retrieval_clock: Callable[[], datetime] = _utc_now,
+    ) -> None:
+        self._client = client
+        self._retrieval_clock = retrieval_clock
+
+    async def search(
+        self,
+        *,
+        search_run: SearchRun,
+        search_query: SearchQuery,
+        rows: int = 20,
+        cursor: str | None = None,
+    ) -> list[Publication]:
+        """Fetch and map one Crossref page with explicit search provenance."""
+        client = self._require_client()
+        self._validate_search_context(search_run, search_query)
+        payload = await client.search_works(
+            search_run.rendered_query,
+            rows=rows,
+            cursor=cursor,
+        )
+        message = payload["message"]
+        items = message["items"]
+        retrieved_at = self._retrieval_clock()
+        return [
+            self._map_work_with_provenance(
+                work,
+                search_run=search_run,
+                search_query=search_query,
+                retrieved_at=retrieved_at,
+            )
+            for work in items
+        ]
+
+    async def iterate(
+        self,
+        *,
+        search_run: SearchRun,
+        search_query: SearchQuery,
+        rows: int = 20,
+        limit: int | None = None,
+    ) -> AsyncIterator[Publication]:
+        """Yield mapped Crossref publications across cursor pages."""
+        client = self._require_client()
+        self._validate_search_context(search_run, search_query)
+        async for work in client.iterate_works(
+            search_run.rendered_query,
+            rows=rows,
+            limit=limit,
+        ):
+            yield self._map_work_with_provenance(
+                work,
+                search_run=search_run,
+                search_query=search_query,
+                retrieved_at=self._retrieval_clock(),
+            )
 
     def map_work(self, work: dict[str, Any]) -> Publication:
         if not isinstance(work, dict):
             raise TypeError("work must be a dictionary")
 
-        # 1. Title mapping
         title_list = work.get("title")
         if not isinstance(title_list, list):
             raise ValueError("Crossref work title is missing or not a list")
@@ -99,7 +164,6 @@ class CrossrefProvider:
         if title is None:
             raise ValueError("Crossref work must have a non-blank title")
 
-        # 2. DOI mapping
         identifiers = []
         doi = work.get("DOI")
         if isinstance(doi, str):
@@ -107,7 +171,6 @@ class CrossrefProvider:
             if doi_val:
                 identifiers.append(Identifier(type=IdentifierType.DOI, value=doi_val))
 
-        # 3. Author mapping
         authors = []
         author_list = work.get("author")
         if isinstance(author_list, list):
@@ -115,16 +178,13 @@ class CrossrefProvider:
                 if isinstance(a_dict, dict):
                     given_name = _clean_str(a_dict.get("given"))
                     family_name = _clean_str(a_dict.get("family"))
-
                     parts = []
                     if given_name:
                         parts.append(given_name)
                     if family_name:
                         parts.append(family_name)
-
                     if not parts:
                         continue
-
                     display_name = " ".join(parts)
 
                     author_identifiers = []
@@ -158,7 +218,6 @@ class CrossrefProvider:
                         )
                     )
 
-        # 4. Publication date mapping
         pub_year = None
         pub_date = None
         for date_field in ["published-print", "published-online", "published", "issued"]:
@@ -167,7 +226,6 @@ class CrossrefProvider:
                 pub_year, pub_date = res
                 break
 
-        # 5. Venue mapping
         venue = None
         container_titles = work.get("container-title")
         venue_name = None
@@ -178,7 +236,6 @@ class CrossrefProvider:
                     if s_ct:
                         venue_name = s_ct
                         break
-
         if venue_name:
             venue_identifiers = []
             issns = work.get("ISSN")
@@ -192,10 +249,8 @@ class CrossrefProvider:
                             )
             venue = Venue(name=venue_name, identifiers=venue_identifiers)
 
-        # 6. Publisher mapping
         publisher = _clean_str(work.get("publisher"))
 
-        # 7. Document type mapping
         type_str = work.get("type")
         doc_type = None
         if isinstance(type_str, str):
@@ -203,10 +258,8 @@ class CrossrefProvider:
             if s_type:
                 doc_type = _TYPE_MAP.get(s_type, DocumentType.OTHER)
 
-        # 8. Language mapping
         language = _clean_str(work.get("language"))
 
-        # 9. URL mapping
         urls = []
         raw_url = work.get("URL")
         if isinstance(raw_url, str):
@@ -214,7 +267,6 @@ class CrossrefProvider:
             if s_url.startswith(("http://", "https://")):
                 urls.append(s_url)
 
-        # 10. Abstract mapping
         abstract = None
         raw_abstract = work.get("abstract")
         if isinstance(raw_abstract, str):
@@ -233,3 +285,45 @@ class CrossrefProvider:
             language=language,
             urls=urls,
         )
+
+    def _map_work_with_provenance(
+        self,
+        work: dict[str, Any],
+        *,
+        search_run: SearchRun,
+        search_query: SearchQuery,
+        retrieved_at: datetime,
+    ) -> Publication:
+        source_record_id = _clean_str(work.get("DOI"))
+        if source_record_id is None:
+            raise ValueError("Crossref work DOI must be a non-blank string for provenance")
+
+        publication = self.map_work(work)
+        provenance = ProvenanceEntry(
+            source=self.name,
+            source_record_id=source_record_id.lower(),
+            retrieved_at=retrieved_at,
+            query_id=search_query.query_id,
+            run_id=search_run.run_id,
+            rendered_query=search_run.rendered_query,
+        )
+        return publication.model_copy(update={"provenance": [provenance]})
+
+    def _require_client(self) -> CrossrefClient:
+        if self._client is None:
+            raise RuntimeError("CrossrefProvider requires a client for search operations")
+        return self._client
+
+    def _validate_search_context(
+        self,
+        search_run: SearchRun,
+        search_query: SearchQuery,
+    ) -> None:
+        if search_run.provider.casefold() != self.name:
+            raise ValueError("search_run provider must be crossref")
+        if search_run.query_id != search_query.query_id:
+            raise ValueError("search_run and search_query must have the same query_id")
+        if search_run.query_version != search_query.version:
+            raise ValueError(
+                "search_run query_version must match search_query version"
+            )
