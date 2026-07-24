@@ -61,13 +61,13 @@ Canonical publication and review-process model.
 
 Current active increment:
 
-Semantic Scholar — mapping to Publication.
+Semantic Scholar — provenance.
 
 ### Semantic Scholar
 
 - [x] basic client and single-page search
 - [x] offset pagination
-- [ ] provider mapping to Publication
+- [x] provider mapping to Publication
 - [ ] provenance
 
 ### Google Scholar Import

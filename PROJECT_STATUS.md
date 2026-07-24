@@ -127,6 +127,7 @@ Semantic Scholar completed increments:
 
 - 2.11 basic client and single-page search
 - 2.12 offset pagination
+- 2.13 provider mapping to Publication
 
 Semantic Scholar now provides:
 
@@ -137,11 +138,12 @@ Semantic Scholar now provides:
 - asynchronous pagination over all results pages using offset pagination driven by the API-returned `next` field
 - infinite pagination loop protection raising a `RuntimeError` if a loop is detected
 - limit parameter supporting maximum result bounds (`max_results`)
+- mapping from Semantic Scholar paper records to the canonical `Publication` domain model
 
-Phase 2.12 — Semantic Scholar Offset Pagination: Completed.
+Phase 2.13 — Semantic Scholar Mapping: Completed.
 
 Quality status:
-- 178 tests passing
+- 187 tests passing
 - Ruff checks passing
 - mypy checks passing
 - `git diff --check` passing
@@ -197,11 +199,10 @@ Every feature must:
 
 # Next milestone
 
-Semantic Scholar — mapping to Publication.
+Semantic Scholar — provenance.
 
 After that:
 
-- Semantic Scholar provenance
 - Google Scholar manual import
 
 Future architectural work:

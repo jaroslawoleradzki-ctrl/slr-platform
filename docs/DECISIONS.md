@@ -6,6 +6,27 @@ This document records important project decisions that do not require a full ADR
 
 ## 2026-07-24
 
+### Semantic Scholar provider mapping to Publication
+
+Added a mapping layer from Semantic Scholar Graph API paper records to the canonical `Publication` domain model via `SemanticScholarProvider.map_paper`.
+
+Key decisions:
+- **Title Mapping**: Requires a valid non-blank title string, raising `ValueError` if missing or blank.
+- **Author Mapping**: Extracts author display name (`name` field) and skips records where a non-blank name cannot be formed, preserving the API-returned order.
+- **Date Conflict Resolution**: If `publicationDate` and `year` disagree, `publication_year` is preserved and `publication_date` is omitted to avoid creating an internally inconsistent `Publication`.
+- **Venue and ISSN**: Mapped from `publicationVenue` dict (including name, type, and ISSN list) with fallback to the top-level string `venue` if the name is not set.
+- **Publication Type**: Uses a lookup table to translate `publicationTypes` list entries to canonical `DocumentType` values, falling back to `DocumentType.OTHER` for unrecognized types, and `None` if missing.
+- **Identifiers**: DOI and PMID (from `externalIds.get("PubMed")`) are mapped to canonical identifiers, and `paperId` is stored as `IdentifierType.OTHER` with `source="semanticscholar"`.
+- **Roadmap Boundaries**: Provenance is explicitly left empty (`[]`) for this increment.
+
+Verified quality state:
+- 187 tests passing
+- Ruff checks passing
+- mypy checks passing
+- `git diff --check` passing
+
+---
+
 ### Semantic Scholar offset pagination
 
 `SemanticScholarClient` now supports multi-page result retrieval via `iterate_papers(...)` using offset pagination.
