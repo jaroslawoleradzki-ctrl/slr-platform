@@ -103,6 +103,7 @@ Crossref completed increments:
 - 2.6 asynchronous Works API client
 - 2.7 retry and configurable asynchronous rate limiting
 - 2.8 cursor pagination
+- 2.9 provider mapping to Publication
 
 Crossref now provides:
 
@@ -113,12 +114,13 @@ Crossref now provides:
 - injectable monotonic clock and asynchronous sleep for deterministic tests
 - cursor pagination across result pages using the standard starting cursor `*` and returning records as an asynchronous iterator
 - protection against infinite loops by verifying duplicate/repeated cursor values, ending iteration normally on empty result lists or missing/null cursors, and raising a ValueError for malformed/blank cursor values
+- mapping from Crossref Works JSON to the canonical `Publication` domain model
 
-Phase 2.8 — Crossref Cursor Pagination: Completed.
+Phase 2.9 — Crossref Provider Mapping: Completed.
 
 Quality status for the current increment:
 
-- 134 tests passing
+- 154 tests passing
 - Ruff checks passing
 - mypy checks passing
 - `git diff --check` passing
@@ -178,11 +180,10 @@ Continue the incremental Crossref implementation.
 
 Next roadmap increment:
 
-- Crossref — provider mapping to Publication
+- Crossref — provenance
 
 After that:
 
-- Crossref — provenance
 - Semantic Scholar
 - Google Scholar manual import
 

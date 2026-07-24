@@ -6,6 +6,28 @@ This document records important project decisions that do not require a full ADR
 
 ## 2026-07-24
 
+### Crossref provider mapping to Publication
+
+`CrossrefProvider` now maps raw Crossref Works API records to the canonical `Publication` domain model via `map_work`.
+
+Key decisions:
+- **Title Mapping**: Requires a list of titles; maps the first non-blank string, raising `ValueError` if missing or entirely blank. No fallback fields are used.
+- **DOI Normalization**: Normalizes DOIs to lowercase and strips whitespaces. Kept in `identifiers` list, not exposed as individual fields.
+- **Author Mapping**: Maps given/family names, ORCID (normalized from URLs by extracting the trailing path segment), and institutional affiliations (requires a non-empty name). Skips individual authors if a non-blank `display_name` cannot be formed, without failing the mapping of the entire publication.
+- **Date Resolution**: Falls back through the hierarchy: `published-print` → `published-online` → `published` → `issued`. Parses standard date parts, mapping 3-part dates to both `publication_year` and `publication_date`, and 1/2-part dates to `publication_year` only, without introducing artificial days/months.
+- **Venue and ISSN**: Mapped from the first non-empty `container-title` to `Venue`. ISSN values are mapped to `Venue.identifiers`. ISBN mapping is omitted for this increment.
+- **Document Type Mapping**: Table-based mapping translates Crossref types to canonical `DocumentType` values, falling back to `DocumentType.OTHER` for unknown non-empty types, and `None` for missing ones.
+- **Abstract Cleanup**: Cleans up HTML/XML/JATS tags and entity encodings from `abstract` string without external libraries, normalizing whitespaces.
+- **Strict Boundary (No Provenance)**: The `provenance` field is intentionally left empty (`[]`) for this increment to respect roadmap boundaries.
+
+Verified quality state:
+- 154 tests passing
+- Ruff checks passing
+- mypy checks passing
+- `git diff --check` passing
+
+---
+
 ### Crossref cursor pagination
 
 `CrossrefClient` now supports cursor-based pagination via the `iterate_works` asynchronous generator.

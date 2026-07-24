@@ -55,13 +55,13 @@ Canonical publication and review-process model.
 - [x] retries
 - [x] rate limiting
 - [x] cursor pagination
-- [ ] provider mapping to `Publication`
+- [x] provider mapping to `Publication`
 - [ ] provenance
 - [ ] unit tests for remaining increments
 
 Current active increment:
 
-Crossref — provider mapping to `Publication`.
+Crossref — provenance.
 
 ### Semantic Scholar
 

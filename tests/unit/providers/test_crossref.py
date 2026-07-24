@@ -1,10 +1,14 @@
 import asyncio
+from datetime import date
 from typing import Any, cast
 
 import httpx
 import pytest
 
+from app.domain import IdentifierType
+from app.domain.publication import DocumentType
 from app.providers.crossref import CrossrefClient
+from app.providers.search.crossref import CrossrefProvider
 
 _SUCCESS_PAYLOAD = {
     "status": "ok",
@@ -978,3 +982,203 @@ async def test_iterate_works_passes_special_characters_cursor_properly() -> None
 
     assert requested_cursors == ["*", special_cursor]
     assert works == [{"DOI": "10.1000/1"}, {"DOI": "10.1000/2"}]
+
+
+def test_map_work_full_correct_record() -> None:
+    provider = CrossrefProvider()
+    work = {
+        "title": ["", "  Lean Manufacturing  ", "Another Title"],
+        "DOI": " 10.1000/XYZ-123 ",
+        "author": [
+            {
+                "given": "Jane",
+                "family": "Doe",
+                "ORCID": "https://orcid.org/0000-0002-1825-0097",
+                "affiliation": [{"name": "  Cambridge University  "}, {"name": ""}]
+            },
+            {
+                "family": "Smith",
+                "ORCID": "0000-0003-1234-5678"
+            }
+        ],
+        "published-print": {
+            "date-parts": [[2024, 5, 12]]
+        },
+        "container-title": ["", "Journal of Clean Energy", "Alt Journal"],
+        "ISSN": ["1234-5678", "  "],
+        "publisher": "  Springer  ",
+        "type": "journal-article",
+        "language": "EN",
+        "URL": "https://doi.org/10.1000/xyz-123",
+        "abstract": "<jats:p>Abstract with <italic>italic</italic> text &amp; entities.</jats:p>"
+    }
+
+    publication = provider.map_work(work)
+
+    assert publication.title == "Lean Manufacturing"
+    assert len(publication.identifiers) == 1
+    assert publication.identifiers[0].type == IdentifierType.DOI
+    assert publication.identifiers[0].value == "10.1000/xyz-123"
+
+    assert len(publication.authors) == 2
+    assert publication.authors[0].display_name == "Jane Doe"
+    assert publication.authors[0].given_name == "Jane"
+    assert publication.authors[0].family_name == "Doe"
+    assert len(publication.authors[0].identifiers) == 1
+    assert publication.authors[0].identifiers[0].type == IdentifierType.ORCID
+    assert publication.authors[0].identifiers[0].value == "0000-0002-1825-0097"
+    assert len(publication.authors[0].affiliations) == 1
+    assert publication.authors[0].affiliations[0].name == "Cambridge University"
+
+    assert publication.authors[1].display_name == "Smith"
+    assert publication.authors[1].given_name is None
+    assert publication.authors[1].family_name == "Smith"
+    assert len(publication.authors[1].identifiers) == 1
+    assert publication.authors[1].identifiers[0].value == "0000-0003-1234-5678"
+
+    assert publication.publication_year == 2024
+    assert publication.publication_date == date(2024, 5, 12)
+
+    assert publication.venue is not None
+    assert publication.venue.name == "Journal of Clean Energy"
+    assert len(publication.venue.identifiers) == 1
+    assert publication.venue.identifiers[0].type == IdentifierType.ISSN
+    assert publication.venue.identifiers[0].value == "1234-5678"
+
+    assert publication.publisher == "Springer"
+    assert publication.document_type == DocumentType.JOURNAL_ARTICLE
+    assert publication.language == "en"
+    assert publication.urls == ["https://doi.org/10.1000/xyz-123"]
+    assert publication.abstract == "Abstract with italic text & entities."
+    assert publication.provenance == []
+
+
+def test_map_work_title_is_required() -> None:
+    provider = CrossrefProvider()
+    with pytest.raises(ValueError, match="Crossref work title is missing or not a list"):
+        provider.map_work({"title": "not-a-list"})
+
+    with pytest.raises(ValueError, match="Crossref work must have a non-blank title"):
+        provider.map_work({"title": ["  ", ""]})
+
+
+def test_map_work_missing_doi_allowed() -> None:
+    provider = CrossrefProvider()
+    publication = provider.map_work({"title": ["Test"], "DOI": "  "})
+    assert publication.identifiers == []
+
+
+def test_map_work_author_only_given_or_family() -> None:
+    provider = CrossrefProvider()
+    work = {
+        "title": ["Test"],
+        "author": [
+            {"given": "Jane"},
+            {"family": "Doe"},
+            {"given": " ", "family": " "},  # skipped
+        ]
+    }
+    publication = provider.map_work(work)
+    assert len(publication.authors) == 2
+    assert publication.authors[0].display_name == "Jane"
+    assert publication.authors[1].display_name == "Doe"
+
+
+def test_map_work_date_hierarchy_and_fallbacks() -> None:
+    provider = CrossrefProvider()
+
+    # Fallback when printed is invalid (contains non-int types)
+    work1 = {
+        "title": ["Test"],
+        "published-print": {"date-parts": [[2024.9, 12, 1]]},
+        "published-online": {"date-parts": [[2023, True, 1]]},
+        "published": {"date-parts": [[2022]]}
+    }
+    pub1 = provider.map_work(work1)
+    assert pub1.publication_year == 2022
+    assert pub1.publication_date is None
+
+    # Fallback to issued
+    work2 = {
+        "title": ["Test"],
+        "issued": {"date-parts": [[2021, 12, 25]]}
+    }
+    pub2 = provider.map_work(work2)
+    assert pub2.publication_year == 2021
+    assert pub2.publication_date == date(2021, 12, 25)
+
+    # Partial date year-month
+    work_partial = {
+        "title": ["Test"],
+        "published-print": {"date-parts": [[2024, 5]]}
+    }
+    pub_partial = provider.map_work(work_partial)
+    assert pub_partial.publication_year == 2024
+    assert pub_partial.publication_date is None
+
+    # Fallback when printed has more than 3 elements (rejected because of len > 3)
+    work_len = {
+        "title": ["Test"],
+        "published-print": {"date-parts": [[2024, 5, 12, 99]]},
+        "published-online": {"date-parts": [[2023, 10]]}
+    }
+    pub_len = provider.map_work(work_len)
+    assert pub_len.publication_year == 2023
+    assert pub_len.publication_date is None
+
+
+@pytest.mark.parametrize(
+    ("crossref_type", "expected_doc_type"),
+    [
+        ("journal-article", DocumentType.JOURNAL_ARTICLE),
+        ("proceedings-article", DocumentType.CONFERENCE_PAPER),
+        ("book", DocumentType.BOOK),
+        ("monograph", DocumentType.BOOK),
+        ("book-chapter", DocumentType.BOOK_CHAPTER),
+        ("book-section", DocumentType.BOOK_CHAPTER),
+        ("dissertation", DocumentType.DISSERTATION),
+        ("report", DocumentType.REPORT),
+        ("posted-content", DocumentType.PREPRINT),
+        ("dataset", DocumentType.DATASET),
+    ]
+)
+def test_map_work_document_types_parametrized(crossref_type: str, expected_doc_type: DocumentType) -> None:
+    provider = CrossrefProvider()
+    pub = provider.map_work({"title": ["Test"], "type": crossref_type})
+    assert pub.document_type == expected_doc_type
+
+
+def test_map_work_document_type_unknown() -> None:
+    provider = CrossrefProvider()
+    pub = provider.map_work({"title": ["Test"], "type": "some-weird-type"})
+    assert pub.document_type == DocumentType.OTHER
+
+
+def test_map_work_document_type_missing() -> None:
+    provider = CrossrefProvider()
+    pub = provider.map_work({"title": ["Test"]})
+    assert pub.document_type is None
+
+
+def test_map_work_invalid_optional_url_skipped() -> None:
+    provider = CrossrefProvider()
+    pub = provider.map_work({"title": ["Test"], "URL": "ftp://bad-url"})
+    assert pub.urls == []
+
+
+def test_map_work_unsupported_metadata_fields_ignored() -> None:
+    provider = CrossrefProvider()
+    work = {
+        "title": ["Test"],
+        "score": 10.5,
+        "reference-count": 42,
+        "license": "unsupported",
+    }
+    pub = provider.map_work(work)
+    assert pub.title == "Test"
+
+
+def test_map_work_non_dictionary_rejected() -> None:
+    provider = CrossrefProvider()
+    with pytest.raises(TypeError, match="work must be a dictionary"):
+        provider.map_work(cast(Any, "not-a-dict"))
