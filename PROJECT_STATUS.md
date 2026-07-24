@@ -126,6 +126,7 @@ Quality verification for Phase 2.10 must be run locally after pulling the GitHub
 Semantic Scholar completed increments:
 
 - 2.11 basic client and single-page search
+- 2.12 offset pagination
 
 Semantic Scholar now provides:
 
@@ -133,11 +134,14 @@ Semantic Scholar now provides:
 - support for optional API key authorization via the `x-api-key` request header
 - validation of query (non-empty), limit (positive integer), offset (non-negative integer), and fields (non-empty list of non-blank strings)
 - single-page search results returned as a list of raw paper records from the response `"data"` field (returning `[]` if missing or empty)
+- asynchronous pagination over all results pages using offset pagination driven by the API-returned `next` field
+- infinite pagination loop protection raising a `RuntimeError` if a loop is detected
+- limit parameter supporting maximum result bounds (`max_results`)
 
-Phase 2.11 — Semantic Scholar Basic Client: Completed.
+Phase 2.12 — Semantic Scholar Offset Pagination: Completed.
 
 Quality status:
-- 169 tests passing
+- 178 tests passing
 - Ruff checks passing
 - mypy checks passing
 - `git diff --check` passing
@@ -193,11 +197,10 @@ Every feature must:
 
 # Next milestone
 
-Semantic Scholar — cursor pagination.
+Semantic Scholar — mapping to Publication.
 
 After that:
 
-- Semantic Scholar provider mapping to Publication
 - Semantic Scholar provenance
 - Google Scholar manual import
 

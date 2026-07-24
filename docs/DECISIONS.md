@@ -6,6 +6,26 @@ This document records important project decisions that do not require a full ADR
 
 ## 2026-07-24
 
+### Semantic Scholar offset pagination
+
+`SemanticScholarClient` now supports multi-page result retrieval via `iterate_papers(...)` using offset pagination.
+
+Key decisions:
+- **API Suffix**: Directly query `{base_url}/paper/search` to cleanly capture response envelope pagination metadata fields (such as `next`).
+- **Pagination Source of Truth**: The iterator relies solely on the `next` value returned in the response payload to determine the next page's offset.
+- **Immediate Termination**: If a response's `"data"` field is empty or missing, iteration terminates immediately without processing `next` or firing any further HTTP requests.
+- **Infinite Loop Protection**: If the `next` offset matches the current offset or was already visited in the same pagination sequence, iteration is halted with a `RuntimeError`.
+- **API Error Handling**: Unparseable or non-integer `next` values trigger a `RuntimeError` rather than a `ValueError` (which remains reserved for input parameter validation).
+- **Result Limit**: Supports an optional `max_results` constraint, terminating iteration cleanly after yielding the specified limit.
+
+Verified quality state:
+- 178 tests passing
+- Ruff checks passing
+- mypy checks passing
+- `git diff --check` passing
+
+---
+
 ### Semantic Scholar basic client and single-page search
 
 Added a low-level asynchronous client `SemanticScholarClient` in `app/providers/semantic_scholar.py` to search papers using the Semantic Scholar Graph API.

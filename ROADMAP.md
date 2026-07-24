@@ -61,12 +61,12 @@ Canonical publication and review-process model.
 
 Current active increment:
 
-Semantic Scholar — cursor pagination.
+Semantic Scholar — mapping to Publication.
 
 ### Semantic Scholar
 
 - [x] basic client and single-page search
-- [ ] cursor pagination
+- [x] offset pagination
 - [ ] provider mapping to Publication
 - [ ] provenance
 
