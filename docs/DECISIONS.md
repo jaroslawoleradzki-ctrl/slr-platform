@@ -202,6 +202,31 @@ Key decisions:
 
 ---
 
+### Canonical mapping parity specification
+
+Added `docs/MAPPING_PARITY.md` and a lightweight machine-checked matrix for OpenAlex, Crossref, and Semantic Scholar.
+
+Key decisions:
+- **Specification before implementation**: Mapping parity is defined and tested before any search-provider mapper is changed.
+- **Reference, not monopoly**: Crossref is the richest current implementation and an important reference, but it is not the sole canonical specification.
+- **Required auditability**: Required fields are limited to a valid title and complete source/search-context provenance needed for an auditable canonical search result.
+- **Provider-dependent data**: Missing provider data is not an error for optional fields and must result in `None` or an empty collection rather than fabricated values.
+- **Generated metadata**: `record_id`, `schema_version`, and `created_at` remain canonical model responsibilities.
+- **Deferred title normalization**: `title_normalized` remains part of the later global Normalization phase.
+- **Explicit OpenAlex gaps**: The title-only OpenAlex mapping baseline and its candidate response fields are registered for Phase 5.2 without implementing them.
+- **Sequenced consistency work**: Identifier and boundary normalization remains Phase 5.3; shared helpers remain Phase 5.4 and require demonstrated duplication.
+- **Specification tests**: Tests verify field coverage, uniqueness, classifications, provider baselines, targets, required title/provenance, generated/deferred metadata, OpenAlex gaps, and agreement with the documented matrix.
+- **No expected failures**: The suite contains no xfail or intentionally failing tests.
+- **No production change**: No production code, models, existing provider tests, or dependencies were changed.
+
+Verified quality state:
+- 388 tests passing
+- Ruff checks passing
+- mypy checks passing
+- `git diff --check` passing
+
+---
+
 ### Semantic Scholar provenance
 
 Implemented provenance mapping support in `SemanticScholarProvider.map_paper` to record search query details in the `provenance` field, mirroring OpenAlex's provenance construction.

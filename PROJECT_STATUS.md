@@ -228,7 +228,7 @@ BibTeX Import — Phase 4: Completed.
 
 Quality status:
 
-- 377 tests passing
+- 388 tests passing
 - Ruff checks passing
 - mypy checks passing
 - `git diff --check` passing
@@ -244,6 +244,24 @@ Harmonization plan:
 - extract shared mapper helpers only after real duplication has been identified
 - introduce no new product functionality
 - exclude deduplication, screening, and the later global Normalization phase
+
+Harmonization completed increments:
+
+- 5.1 Canonical mapping parity specification
+
+Canonical mapping parity specification now provides:
+
+- `docs/MAPPING_PARITY.md` as the decision source for provider → canonical `Publication` quality
+- coverage of OpenAlex, Crossref, and Semantic Scholar
+- a 29-row canonical field matrix with required, provider-data-dependent, generated, and deferred classifications
+- a code-confirmed baseline for each provider and an explicit target after Harmonization
+- required title and complete search provenance expectations
+- explicit OpenAlex parity gaps for 5.2
+- normalization decisions deferred to 5.3 and evidence-based helper candidates deferred to 5.4
+- lightweight completeness and consistency tests with no xfail cases
+- no production-code or dependency changes
+
+Phase 5.1 — Canonical Mapping Parity Specification: Completed.
 
 ---
 
@@ -296,7 +314,7 @@ Every feature must:
 
 # Next milestone
 
-Harmonization — Phase 5.1 Canonical mapping parity specification.
+Harmonization — Phase 5.2 OpenAlex provider mapping parity.
 
 Future architectural work:
 

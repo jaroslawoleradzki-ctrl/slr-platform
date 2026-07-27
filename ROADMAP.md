@@ -61,7 +61,7 @@ Canonical publication and review-process model.
 
 Current active increment:
 
-Harmonization — Phase 5.1 Canonical mapping parity specification.
+Harmonization — Phase 5.2 OpenAlex provider mapping parity.
 
 ### Semantic Scholar
 
@@ -92,7 +92,7 @@ Bring all search providers to the same canonical mapping quality before starting
 
 Planned work:
 
-- [ ] 5.1 Canonical mapping parity specification
+- [x] 5.1 Canonical mapping parity specification
 - [ ] 5.2 OpenAlex provider mapping parity
 - [ ] 5.3 Cross-provider normalization consistency
 - [ ] 5.4 Shared mapper utilities
