@@ -184,6 +184,24 @@ Verified quality state:
 
 ---
 
+### Harmonization implementation sequence
+
+Harmonization is divided into five reviewable increments before work proceeds to the Search Engine and review workflow.
+
+Key decisions:
+- **Specification first**: Canonical mapping quality and field expectations are defined before provider production code is changed.
+- **Five increments**: The sequence is canonical mapping parity specification, OpenAlex mapping parity, cross-provider normalization consistency, shared mapper utilities, and cross-provider mapping contract tests.
+- **Crossref as a reference**: Crossref is currently the richest mapping and provides a useful reference, but it is not automatically the sole canonical specification.
+- **OpenAlex before extraction**: OpenAlex parity is implemented before shared utilities are extracted, so abstractions are based on demonstrated duplication.
+- **Evidence-based helpers**: Shared helpers will be introduced only for mapping logic that is genuinely repeated across providers; no general mapper framework or provider base class is planned.
+- **Separated responsibilities**: Provider-specific API clients remain separate from canonical domain mapping.
+- **Provider-boundary normalization**: Harmonization normalization covers only consistency at the provider → canonical model boundary.
+- **Later phases remain separate**: Global Normalization, Deduplication, and Screening retain their own later roadmap phases.
+- **Contract-test closure**: Shared mapping contract tests across OpenAlex, Crossref, and Semantic Scholar close the Harmonization phase while provider-specific cases remain separately tested.
+- **Documentation-only planning**: This increment adds no production code, tests, models, or dependencies.
+
+---
+
 ### Semantic Scholar provenance
 
 Implemented provenance mapping support in `SemanticScholarProvider.map_paper` to record search query details in the `provenance` field, mirroring OpenAlex's provenance construction.

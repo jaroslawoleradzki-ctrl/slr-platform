@@ -61,7 +61,7 @@ Canonical publication and review-process model.
 
 Current active increment:
 
-Harmonization.
+Harmonization — Phase 5.1 Canonical mapping parity specification.
 
 ### Semantic Scholar
 
@@ -92,14 +92,24 @@ Bring all search providers to the same canonical mapping quality before starting
 
 Planned work:
 
-- [ ] OpenAlex provider mapping parity
-- [ ] Cross-provider normalization
-- [ ] Shared mapper utilities
+- [ ] 5.1 Canonical mapping parity specification
+- [ ] 5.2 OpenAlex provider mapping parity
+- [ ] 5.3 Cross-provider normalization consistency
+- [ ] 5.4 Shared mapper utilities
+- [ ] 5.5 Cross-provider mapping contract tests
+
+Increment scope:
+
+- **5.1 Canonical mapping parity specification** — compare OpenAlex, Crossref, and Semantic Scholar mappings and define a canonical `Publication` field matrix covering title, abstract, authors, affiliations, publication year and date, identifiers, venue, publisher, document type, language, URLs, and provenance. Classify fields as required, optional, or provider-data-dependent, and add tests describing current gaps without changing provider production code or creating shared helpers.
+- **5.2 OpenAlex provider mapping parity** — extend OpenAlex mapping to the agreed canonical quality using only fields actually available in OpenAlex responses. Keep its API client separate from domain mapping and change HTTP behavior only where mapping directly requires it.
+- **5.3 Cross-provider normalization consistency** — align provider-boundary handling for trimming, blank values, DOI, ORCID, ISSN, URLs, language, document types, author names, venue, and publisher across OpenAlex, Crossref, and Semantic Scholar. This does not include deduplication or the later global Normalization phase.
+- **5.4 Shared mapper utilities** — extract only demonstrated repeated mapping logic, such as non-blank value selection, identifier normalization, safe URL construction, and basic shared structure mapping. Do not introduce a mapper framework, provider base class, or coupling between HTTP clients and domain mappers.
+- **5.5 Cross-provider mapping contract tests** — add shared canonical mapping regression tests for OpenAlex, Crossref, and Semantic Scholar while retaining provider-specific behavior in focused tests and avoiding HTTP clients in mapping-only tests. Completion closes Harmonization.
 
 Notes:
 
-- Align OpenAlex mapping with the richer Crossref implementation.
-- Extract reusable mapping helpers where appropriate.
+- Use the richer Crossref implementation as a reference, not as the sole automatic specification.
+- Extract reusable mapping helpers only after actual duplication is identified.
 - Keep provider-specific API clients separated from canonical domain mapping.
 - No new functionality; architectural consolidation only.
 

@@ -233,6 +233,18 @@ Quality status:
 - mypy checks passing
 - `git diff --check` passing
 
+Harmonization plan:
+
+- align canonical mapping quality before the Search Engine and review workflow
+- begin with a field-by-field parity specification for OpenAlex, Crossref, and Semantic Scholar
+- use Crossref as the richest current reference without treating it as the sole specification
+- extend OpenAlex mapping for fields actually available from that provider
+- include Semantic Scholar in the cross-provider consistency assessment
+- limit normalization work to the provider → canonical model boundary
+- extract shared mapper helpers only after real duplication has been identified
+- introduce no new product functionality
+- exclude deduplication, screening, and the later global Normalization phase
+
 ---
 
 # Current architecture
@@ -284,14 +296,16 @@ Every feature must:
 
 # Next milestone
 
-Harmonization.
+Harmonization — Phase 5.1 Canonical mapping parity specification.
 
 Future architectural work:
 
 - Harmonization
-  - OpenAlex provider mapping parity
-  - Cross-provider normalization
-  - Shared mapper utilities
+  - 5.1 Canonical mapping parity specification
+  - 5.2 OpenAlex provider mapping parity
+  - 5.3 Cross-provider normalization consistency
+  - 5.4 Shared mapper utilities
+  - 5.5 Cross-provider mapping contract tests
 
 ---
 
