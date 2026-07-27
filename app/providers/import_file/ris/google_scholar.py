@@ -1,10 +1,23 @@
 from __future__ import annotations
 
 from app.domain.publication import Publication
+from app.providers.import_file.base import ImportProvider
 from app.providers.import_file.ris.mapper import map_ris_record
 from app.providers.import_file.ris.parser import parse_ris
 
 _SOURCE = "google_scholar"
+
+
+class GoogleScholarImportProvider:
+    """Import Google Scholar RIS exports into canonical publications."""
+
+    def import_publications(self, content: str) -> list[Publication]:
+        """Parse and map all RIS records in *content*."""
+        records = parse_ris(content)
+        return [map_ris_record(record, source=_SOURCE) for record in records]
+
+
+_PROVIDER: ImportProvider = GoogleScholarImportProvider()
 
 
 def import_ris(content: str) -> list[Publication]:
@@ -32,5 +45,4 @@ def import_ris(content: str) -> list[Publication]:
         malformed, or from :func:`map_ris_record` if a record has no
         resolvable title.
     """
-    records = parse_ris(content)
-    return [map_ris_record(record, source=_SOURCE) for record in records]
+    return _PROVIDER.import_publications(content)
