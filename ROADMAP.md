@@ -61,7 +61,7 @@ Canonical publication and review-process model.
 
 Current active increment:
 
-Google Scholar Import — Phase 3 complete. Next: Phase 2.x harmonisation or 3.4 mapping extensions.
+Google Scholar Import — Phase 3 complete. Next: ImportProvider abstraction.
 
 ### Semantic Scholar
 
@@ -75,10 +75,10 @@ Google Scholar Import — Phase 3 complete. Next: Phase 2.x harmonisation or 3.4
 - [x] 3.1 RIS parser
 - [x] 3.2 RIS -> Publication mapping
 - [x] 3.3 Google Scholar RIS import
-- [ ] ImportProvider abstraction — deferred until a second importer
+- [ ] ImportProvider abstraction
 - [ ] BibTeX — deferred
 
-### Phase 2.x — Harmonization
+### Harmonization
 
 Goal:
 

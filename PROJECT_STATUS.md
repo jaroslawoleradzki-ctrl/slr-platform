@@ -219,11 +219,11 @@ Every feature must:
 
 # Next milestone
 
-Google Scholar Import — 3.2 RIS -> Publication mapping.
+ImportProvider abstraction.
 
 Future architectural work:
 
-- Phase 2.x — Harmonization
+- Harmonization
   - OpenAlex provider mapping parity
   - Cross-provider normalization
   - Shared mapper utilities
