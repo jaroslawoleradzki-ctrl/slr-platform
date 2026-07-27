@@ -41,7 +41,7 @@ async def test_search_maps_crossref_provenance() -> None:
                 "message": {
                     "items": [
                         {
-                            "DOI": " 10.1000/ABC ",
+                            "DOI": " https://doi.org/10.1000/ABC ",
                             "title": ["Lean Energy"],
                         }
                     ]

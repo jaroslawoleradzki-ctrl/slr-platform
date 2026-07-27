@@ -92,7 +92,7 @@ def test_map_work_maps_representative_record_without_provenance() -> None:
         ),
         (
             IdentifierType.ORCID,
-            "https://orcid.org/0000-0001-2345-6789",
+            "0000-0001-2345-6789",
             None,
         ),
     ]
@@ -111,7 +111,7 @@ def test_map_work_maps_representative_record_without_provenance() -> None:
     ] == [
         (
             IdentifierType.DOI,
-            "https://doi.org/10.1000/Example",
+            "10.1000/example",
             None,
         ),
         (
@@ -280,10 +280,10 @@ def test_invalid_publication_date_is_omitted(publication_date: Any) -> None:
         "doi:10.1000/MixedCase",
     ],
 )
-def test_doi_is_preserved_without_phase_5_3_normalization(doi: str) -> None:
+def test_doi_uses_phase_5_3_canonical_normalization(doi: str) -> None:
     publication = build_provider().map_work({"title": "DOI", "doi": f" {doi} "})
 
-    assert publication.identifiers[0].value == doi
+    assert publication.identifiers[0].value == "10.1000/mixedcase"
 
 
 @pytest.mark.parametrize(

@@ -20,9 +20,12 @@ _TYPE_MAP = {
     "book-chapter": DocumentType.BOOK_CHAPTER,
     "book-section": DocumentType.BOOK_CHAPTER,
     "dissertation": DocumentType.DISSERTATION,
+    "thesis": DocumentType.DISSERTATION,
     "report": DocumentType.REPORT,
     "posted-content": DocumentType.PREPRINT,
+    "preprint": DocumentType.PREPRINT,
     "dataset": DocumentType.DATASET,
+    "review": DocumentType.REVIEW,
 }
 
 
@@ -34,6 +37,56 @@ def _clean_str(val: Any) -> str | None:
     if isinstance(val, str):
         s = val.strip()
         return s if s else None
+    return None
+
+
+def _normalize_doi(value: Any) -> str | None:
+    doi = _clean_str(value)
+    if doi is None:
+        return None
+    lowered = doi.casefold()
+    for prefix in (
+        "https://doi.org/",
+        "http://doi.org/",
+        "https://dx.doi.org/",
+        "http://dx.doi.org/",
+        "doi:",
+    ):
+        if lowered.startswith(prefix):
+            doi = doi[len(prefix) :].strip()
+            break
+    return doi.lower() or None
+
+
+def _normalize_orcid(value: Any) -> str | None:
+    orcid = _clean_str(value)
+    if orcid is None:
+        return None
+    lowered = orcid.casefold()
+    for prefix in ("https://orcid.org/", "http://orcid.org/"):
+        if lowered.startswith(prefix):
+            orcid = orcid[len(prefix) :]
+            break
+    orcid = orcid.rstrip("/").strip()
+    return orcid[:-1] + "X" if orcid.casefold().endswith("x") else orcid or None
+
+
+def _normalize_issn(value: Any) -> str | None:
+    issn = _clean_str(value)
+    if issn is None:
+        return None
+    return issn[:-1] + "X" if issn.casefold().endswith("x") else issn
+
+
+def _normalize_url(value: Any) -> str | None:
+    url = _clean_str(value)
+    if url is None:
+        return None
+    lowered = url.casefold()
+    if lowered.startswith("http://"):
+        return f"http://{url[7:]}"
+    if lowered.startswith("https://"):
+        return f"https://{url[8:]}"
     return None
 
 
@@ -165,11 +218,9 @@ class CrossrefProvider:
             raise ValueError("Crossref work must have a non-blank title")
 
         identifiers = []
-        doi = work.get("DOI")
-        if isinstance(doi, str):
-            doi_val = doi.strip().lower()
-            if doi_val:
-                identifiers.append(Identifier(type=IdentifierType.DOI, value=doi_val))
+        doi = _normalize_doi(work.get("DOI"))
+        if doi is not None:
+            identifiers.append(Identifier(type=IdentifierType.DOI, value=doi))
 
         authors = []
         author_list = work.get("author")
@@ -188,16 +239,11 @@ class CrossrefProvider:
                     display_name = " ".join(parts)
 
                     author_identifiers = []
-                    orcid = _clean_str(a_dict.get("ORCID"))
+                    orcid = _normalize_orcid(a_dict.get("ORCID"))
                     if orcid:
-                        orcid_val = orcid
-                        if "/" in orcid_val:
-                            orcid_val = orcid_val.rstrip("/").split("/")[-1]
-                        orcid_val = orcid_val.strip()
-                        if orcid_val:
-                            author_identifiers.append(
-                                Identifier(type=IdentifierType.ORCID, value=orcid_val)
-                            )
+                        author_identifiers.append(
+                            Identifier(type=IdentifierType.ORCID, value=orcid)
+                        )
 
                     affiliations = []
                     aff_list = a_dict.get("affiliation")
@@ -238,15 +284,22 @@ class CrossrefProvider:
                         break
         if venue_name:
             venue_identifiers = []
+            seen_issns: set[str] = set()
             issns = work.get("ISSN")
             if isinstance(issns, list):
                 for issn in issns:
-                    if isinstance(issn, str):
-                        s_issn = issn.strip()
-                        if s_issn:
-                            venue_identifiers.append(
-                                Identifier(type=IdentifierType.ISSN, value=s_issn)
+                    normalized_issn = _normalize_issn(issn)
+                    if (
+                        normalized_issn is not None
+                        and normalized_issn not in seen_issns
+                    ):
+                        seen_issns.add(normalized_issn)
+                        venue_identifiers.append(
+                            Identifier(
+                                type=IdentifierType.ISSN,
+                                value=normalized_issn,
                             )
+                        )
             venue = Venue(name=venue_name, identifiers=venue_identifiers)
 
         publisher = _clean_str(work.get("publisher"))
@@ -256,16 +309,14 @@ class CrossrefProvider:
         if isinstance(type_str, str):
             s_type = type_str.strip()
             if s_type:
-                doc_type = _TYPE_MAP.get(s_type, DocumentType.OTHER)
+                doc_type = _TYPE_MAP.get(s_type.casefold(), DocumentType.OTHER)
 
         language = _clean_str(work.get("language"))
 
         urls = []
-        raw_url = work.get("URL")
-        if isinstance(raw_url, str):
-            s_url = raw_url.strip()
-            if s_url.startswith(("http://", "https://")):
-                urls.append(s_url)
+        url = _normalize_url(work.get("URL"))
+        if url is not None:
+            urls.append(url)
 
         abstract = None
         raw_abstract = work.get("abstract")
@@ -294,14 +345,14 @@ class CrossrefProvider:
         search_query: SearchQuery,
         retrieved_at: datetime,
     ) -> Publication:
-        source_record_id = _clean_str(work.get("DOI"))
+        source_record_id = _normalize_doi(work.get("DOI"))
         if source_record_id is None:
             raise ValueError("Crossref work DOI must be a non-blank string for provenance")
 
         publication = self.map_work(work)
         provenance = ProvenanceEntry(
             source=self.name,
-            source_record_id=source_record_id.lower(),
+            source_record_id=source_record_id,
             retrieved_at=retrieved_at,
             query_id=search_query.query_id,
             run_id=search_run.run_id,

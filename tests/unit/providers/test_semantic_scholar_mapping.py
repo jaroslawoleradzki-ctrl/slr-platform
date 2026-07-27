@@ -89,7 +89,7 @@ def test_map_paper_full_record() -> None:
     # paperId
     assert pub.identifiers[0].type == IdentifierType.OTHER
     assert pub.identifiers[0].value == "abc-123"
-    assert pub.identifiers[0].source == "semanticscholar"
+    assert pub.identifiers[0].source == "semantic_scholar"
     # DOI
     assert pub.identifiers[1].type == IdentifierType.DOI
     assert pub.identifiers[1].value == "10.1000/xyz-123"

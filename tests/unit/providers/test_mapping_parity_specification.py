@@ -162,7 +162,7 @@ MAPPING_CAPABILITIES = (
         R.PROVIDER_DATA_DEPENDENT,
         S.YES,
         S.YES,
-        S.NO,
+        S.YES,
         S.PROVIDER_DEPENDENT,
     ),
     MappingCapability(

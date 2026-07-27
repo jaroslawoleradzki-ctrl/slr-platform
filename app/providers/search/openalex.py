@@ -50,6 +50,56 @@ def _clean_string(value: Any) -> str | None:
     return cleaned or None
 
 
+def _normalize_doi(value: Any) -> str | None:
+    doi = _clean_string(value)
+    if doi is None:
+        return None
+    lowered = doi.casefold()
+    for prefix in (
+        "https://doi.org/",
+        "http://doi.org/",
+        "https://dx.doi.org/",
+        "http://dx.doi.org/",
+        "doi:",
+    ):
+        if lowered.startswith(prefix):
+            doi = doi[len(prefix) :].strip()
+            break
+    return doi.lower() or None
+
+
+def _normalize_orcid(value: Any) -> str | None:
+    orcid = _clean_string(value)
+    if orcid is None:
+        return None
+    lowered = orcid.casefold()
+    for prefix in ("https://orcid.org/", "http://orcid.org/"):
+        if lowered.startswith(prefix):
+            orcid = orcid[len(prefix) :]
+            break
+    orcid = orcid.rstrip("/").strip()
+    return orcid[:-1] + "X" if orcid.casefold().endswith("x") else orcid or None
+
+
+def _normalize_issn(value: Any) -> str | None:
+    issn = _clean_string(value)
+    if issn is None:
+        return None
+    return issn[:-1] + "X" if issn.casefold().endswith("x") else issn
+
+
+def _normalize_url(value: Any) -> str | None:
+    url = _clean_string(value)
+    if url is None:
+        return None
+    lowered = url.casefold()
+    if lowered.startswith("http://"):
+        return f"http://{url[7:]}"
+    if lowered.startswith("https://"):
+        return f"https://{url[8:]}"
+    return None
+
+
 def _reconstruct_abstract(value: Any) -> str | None:
     if not isinstance(value, dict):
         return None
@@ -126,7 +176,10 @@ def _map_authors(value: Any) -> list[Author]:
         )
         if openalex_id is not None:
             identifiers.append(openalex_id)
-        orcid = _identifier(IdentifierType.ORCID, raw_author.get("orcid"))
+        orcid = _identifier(
+            IdentifierType.ORCID,
+            _normalize_orcid(raw_author.get("orcid")),
+        )
         if orcid is not None:
             identifiers.append(orcid)
 
@@ -192,7 +245,7 @@ def _map_venue(value: Any) -> Venue | None:
     if isinstance(source.get("issn"), list):
         raw_issns.extend(source["issn"])
     for raw_issn in raw_issns:
-        issn = _clean_string(raw_issn)
+        issn = _normalize_issn(raw_issn)
         if issn is not None and issn not in seen_issns:
             seen_issns.add(issn)
             identifiers.append(Identifier(type=IdentifierType.ISSN, value=issn))
@@ -208,12 +261,8 @@ def _collect_urls(work: dict[str, Any]) -> list[str]:
         if not isinstance(location, dict):
             continue
         for field_name in ("landing_page_url", "pdf_url"):
-            url = _clean_string(location.get(field_name))
-            if (
-                url is not None
-                and url.startswith(("http://", "https://"))
-                and url not in seen
-            ):
+            url = _normalize_url(location.get(field_name))
+            if url is not None and url not in seen:
                 seen.add(url)
                 urls.append(url)
     return urls
@@ -303,7 +352,10 @@ class OpenAlexProvider:
             raise ValueError("OpenAlex work title must be a non-blank string")
 
         identifiers: list[Identifier] = []
-        doi_identifier = _identifier(IdentifierType.DOI, work.get("doi"))
+        doi_identifier = _identifier(
+            IdentifierType.DOI,
+            _normalize_doi(work.get("doi")),
+        )
         if doi_identifier is not None:
             identifiers.append(doi_identifier)
 
