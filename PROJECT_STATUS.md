@@ -147,8 +147,10 @@ Google Scholar Import completed increments:
 - 3.1 RIS parser
 - 3.2 RIS -> Publication mapping
 - 3.3 Google Scholar RIS import
+- ImportProvider abstraction
 
 Google Scholar Import now provides:
+
 - a dependency-free sequential RIS file format parser (`parse_ris`) returning dictionaries of tag-to-list-values
 - multiline field continuation: plain-text lines inside a record are folded into the previous field value
 - `map_ris_record(record, *, source)` — pure mapping function from one parsed RIS record to a canonical `Publication`
@@ -157,13 +159,21 @@ Google Scholar Import now provides:
   - DOI normalization via project's `normalize_doi` helper
   - provenance with DOI as `source_record_id`, title as fallback when DOI absent
 - `import_ris(content)` — Google Scholar RIS import entry point; composes `parse_ris` + `map_ris_record` with `source="google_scholar"`
+- `ImportProvider` — a structural contract based on `typing.Protocol`
+  - exposes only `import_publications(content: str) -> list[Publication]`
+  - implemented by `GoogleScholarImportProvider`
+  - preserves `import_ris(content)` as a compatibility wrapper
+- unchanged RIS parser and mapper responsibilities
+- a contract test confirming that `GoogleScholarImportProvider` structurally satisfies `ImportProvider`
 
 Phase 3.1 — RIS Parser: Completed.
 Phase 3.2 — RIS → Publication Mapping: Completed.
 Phase 3.3 — Google Scholar RIS Import: Completed.
+ImportProvider abstraction: Completed.
 
 Quality status:
-- 279 tests passing
+
+- 280 tests passing
 - Ruff checks passing
 - mypy checks passing
 - `git diff --check` passing
@@ -219,7 +229,7 @@ Every feature must:
 
 # Next milestone
 
-ImportProvider abstraction.
+Harmonization.
 
 Future architectural work:
 

@@ -56,13 +56,35 @@ Added `import_ris(content: str) -> list[Publication]` in `app/providers/import_f
 
 Key decisions:
 - **Thin integration layer**: Composes `parse_ris()` and `map_ris_record()` with no additional logic. Three lines of implementation.
-- **Source fixed to `"google_scholar"`**: The module is Google Scholar-specific. A different source would use a different module (deferred until a second importer is needed).
+- **Source fixed to `"google_scholar"`**: The module and its provider are Google Scholar-specific, so this source is assigned to `GoogleScholarImportProvider`.
 - **No error suppression**: Parse and mapping errors propagate naturally. The caller decides whether to abort or skip bad records. Strict/lenient mode is explicitly deferred.
 - **Empty input → empty list**: Consistent with `parse_ris("")` returning `[]`.
 - **Record ordering preserved**: Publications are returned in the same order as records appear in the file.
 
 Verified quality state:
 - 279 tests passing
+- Ruff checks passing
+- mypy checks passing
+- `git diff --check` passing
+
+---
+
+### ImportProvider abstraction
+
+Added `ImportProvider` in `app/providers/import_file/base.py` as the common contract for publication importers.
+
+Key decisions:
+- **Structural contract**: `ImportProvider` uses `typing.Protocol`, not an ABC base class. Implementations conform by structure without explicit inheritance.
+- **Minimal API**: The contract contains only `import_publications(content: str) -> list[Publication]`.
+- **Serialized input boundary**: The abstraction accepts already serialized content as `str`. File reading and user-interface concerns remain outside the provider.
+- **First implementation**: `GoogleScholarImportProvider` is the first implementation of the contract.
+- **Compatibility wrapper**: `import_ris(content)` remains public and delegates to the Google Scholar provider.
+- **Preserved responsibilities**: The RIS parser and mapper retain their single responsibilities and were not changed.
+- **Deferred infrastructure and formats**: No provider registry, factory, format autodetection, or BibTeX support was added.
+- **Contract verification**: One contract test confirms the structural compatibility of `GoogleScholarImportProvider` with `ImportProvider`.
+
+Verified quality state:
+- 280 tests passing
 - Ruff checks passing
 - mypy checks passing
 - `git diff --check` passing
