@@ -233,14 +233,23 @@ async def test_provider_preserves_provenance_across_cursor_pages() -> None:
 
 
 @pytest.mark.anyio
-async def test_provider_rejects_work_without_openalex_id() -> None:
+@pytest.mark.parametrize(
+    "work",
+    [
+        {"title": "Missing source id"},
+        {"id": "  ", "title": "Blank source id"},
+    ],
+)
+async def test_provider_rejects_work_without_valid_openalex_id(
+    work: dict[str, str],
+) -> None:
     search_run, search_query = build_search_context()
     transport = httpx.MockTransport(
         lambda request: httpx.Response(
             200,
             json={
                 "meta": {"next_cursor": None},
-                "results": [{"title": "Missing source id"}],
+                "results": [work],
             },
             request=request,
         )

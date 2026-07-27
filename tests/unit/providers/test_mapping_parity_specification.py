@@ -35,12 +35,12 @@ S = MappingSupport
 MAPPING_CAPABILITIES = (
     MappingCapability("title", R.REQUIRED, S.YES, S.YES, S.YES, S.YES),
     MappingCapability(
-        "abstract", R.PROVIDER_DATA_DEPENDENT, S.NO, S.YES, S.YES, S.PROVIDER_DEPENDENT
+        "abstract", R.PROVIDER_DATA_DEPENDENT, S.YES, S.YES, S.YES, S.PROVIDER_DEPENDENT
     ),
     MappingCapability(
         "authors.display_name",
         R.PROVIDER_DATA_DEPENDENT,
-        S.NO,
+        S.YES,
         S.YES,
         S.YES,
         S.PROVIDER_DEPENDENT,
@@ -64,7 +64,7 @@ MAPPING_CAPABILITIES = (
     MappingCapability(
         "authors.identifiers.ORCID",
         R.PROVIDER_DATA_DEPENDENT,
-        S.NO,
+        S.YES,
         S.YES,
         S.NO,
         S.PROVIDER_DEPENDENT,
@@ -72,7 +72,7 @@ MAPPING_CAPABILITIES = (
     MappingCapability(
         "authors.affiliations",
         R.PROVIDER_DATA_DEPENDENT,
-        S.NO,
+        S.YES,
         S.YES,
         S.NO,
         S.PROVIDER_DEPENDENT,
@@ -80,7 +80,7 @@ MAPPING_CAPABILITIES = (
     MappingCapability(
         "publication_year",
         R.PROVIDER_DATA_DEPENDENT,
-        S.NO,
+        S.YES,
         S.YES,
         S.YES,
         S.PROVIDER_DEPENDENT,
@@ -88,7 +88,7 @@ MAPPING_CAPABILITIES = (
     MappingCapability(
         "publication_date",
         R.PROVIDER_DATA_DEPENDENT,
-        S.NO,
+        S.YES,
         S.YES,
         S.YES,
         S.PROVIDER_DEPENDENT,
@@ -96,7 +96,7 @@ MAPPING_CAPABILITIES = (
     MappingCapability(
         "identifiers.DOI",
         R.PROVIDER_DATA_DEPENDENT,
-        S.NO,
+        S.YES,
         S.YES,
         S.YES,
         S.PROVIDER_DEPENDENT,
@@ -112,7 +112,7 @@ MAPPING_CAPABILITIES = (
     MappingCapability(
         "identifiers.provider_native",
         R.PROVIDER_DATA_DEPENDENT,
-        S.NO,
+        S.YES,
         S.NO,
         S.YES,
         S.PROVIDER_DEPENDENT,
@@ -120,7 +120,7 @@ MAPPING_CAPABILITIES = (
     MappingCapability(
         "venue.name",
         R.PROVIDER_DATA_DEPENDENT,
-        S.NO,
+        S.YES,
         S.YES,
         S.YES,
         S.PROVIDER_DEPENDENT,
@@ -128,7 +128,7 @@ MAPPING_CAPABILITIES = (
     MappingCapability(
         "venue.type",
         R.PROVIDER_DATA_DEPENDENT,
-        S.NO,
+        S.YES,
         S.NO,
         S.YES,
         S.PROVIDER_DEPENDENT,
@@ -136,7 +136,7 @@ MAPPING_CAPABILITIES = (
     MappingCapability(
         "venue.identifiers.ISSN",
         R.PROVIDER_DATA_DEPENDENT,
-        S.NO,
+        S.YES,
         S.YES,
         S.YES,
         S.PROVIDER_DEPENDENT,
@@ -152,7 +152,7 @@ MAPPING_CAPABILITIES = (
     MappingCapability(
         "document_type",
         R.PROVIDER_DATA_DEPENDENT,
-        S.NO,
+        S.YES,
         S.YES,
         S.YES,
         S.PROVIDER_DEPENDENT,
@@ -160,7 +160,7 @@ MAPPING_CAPABILITIES = (
     MappingCapability(
         "language",
         R.PROVIDER_DATA_DEPENDENT,
-        S.NO,
+        S.YES,
         S.YES,
         S.NO,
         S.PROVIDER_DEPENDENT,
@@ -168,7 +168,7 @@ MAPPING_CAPABILITIES = (
     MappingCapability(
         "urls",
         R.PROVIDER_DATA_DEPENDENT,
-        S.NO,
+        S.YES,
         S.YES,
         S.YES,
         S.PROVIDER_DEPENDENT,
@@ -184,7 +184,7 @@ MAPPING_CAPABILITIES = (
     MappingCapability(
         "open_access",
         R.PROVIDER_DATA_DEPENDENT,
-        S.NO,
+        S.YES,
         S.NO,
         S.NO,
         S.PROVIDER_DEPENDENT,
@@ -332,26 +332,11 @@ def test_openalex_gaps_are_explicitly_registered() -> None:
         and capability.openalex == S.NO
     }
     assert openalex_gaps == {
-        "abstract",
-        "authors.display_name",
         "authors.given_name",
         "authors.family_name",
-        "authors.identifiers.ORCID",
-        "authors.affiliations",
-        "publication_year",
-        "publication_date",
-        "identifiers.DOI",
         "identifiers.PMID",
-        "identifiers.provider_native",
-        "venue.name",
-        "venue.type",
-        "venue.identifiers.ISSN",
         "publisher",
-        "document_type",
-        "language",
-        "urls",
         "keywords",
-        "open_access",
     }
 
 
