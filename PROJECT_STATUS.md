@@ -229,7 +229,7 @@ Every feature must:
 
 # Next milestone
 
-Harmonization.
+BibTeX Import — Phase 4.1 parser.
 
 Future architectural work:
 

@@ -61,7 +61,7 @@ Canonical publication and review-process model.
 
 Current active increment:
 
-Google Scholar Import, including the ImportProvider abstraction, is complete. Next active area: Harmonization.
+BibTeX Import — Phase 4.1 parser.
 
 ### Semantic Scholar
 
@@ -76,7 +76,13 @@ Google Scholar Import, including the ImportProvider abstraction, is complete. Ne
 - [x] 3.2 RIS -> Publication mapping
 - [x] 3.3 Google Scholar RIS import
 - [x] ImportProvider abstraction
-- [ ] BibTeX — deferred
+
+### BibTeX Import
+
+- [ ] 4.1 BibTeX parser
+- [ ] 4.2 BibTeX -> Publication mapping
+- [ ] 4.3 BibTeX ImportProvider
+- [ ] 4.4 Contract tests
 
 ### Harmonization
 
