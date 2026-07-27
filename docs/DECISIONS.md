@@ -114,6 +114,30 @@ Verified quality state:
 
 ---
 
+### BibTeX to Publication mapping
+
+Added `map_bibtex_record(record, *, source) -> Publication` in `app/providers/import_file/bibtex/mapper.py`.
+
+Key decisions:
+- **Pure mapping boundary**: The mapper accepts one already parsed `BibTeXRecord`; parsing and mapping remain separate, and the mapper performs no file I/O.
+- **Required source**: `source` is a mandatory keyword-only argument and must be non-blank.
+- **Existing domain and normalization**: The mapper uses the canonical `Publication`, `Author`, `Venue`, `Identifier`, and `ProvenanceEntry` models together with the existing `normalize_doi` helper.
+- **Authors**: The word `and` separates authors only outside braces. `Family, Given` and `Given Family` forms populate canonical name parts. A brace-protected corporate author uses `display_name` only. Advanced BibTeX name rules remain outside scope.
+- **Document types**: `article` maps to `JOURNAL_ARTICLE`; `book` to `BOOK`; `inbook` and `incollection` to `BOOK_CHAPTER`; `inproceedings`, `conference`, and `proceedings` to `CONFERENCE_PAPER`; `phdthesis` and `mastersthesis` to `DISSERTATION`; `techreport` to `REPORT`; and `misc` to `OTHER`. Unknown types fall back to `OTHER`.
+- **Venue precedence**: The first non-blank value from `journal`, `booktitle`, and `publisher` becomes the minimal venue representation.
+- **DOI and source record identity**: DOI values use `normalize_doi`. Provenance `source_record_id` prefers normalized DOI, then citation key, then title.
+- **Provenance**: Each publication receives source provenance with a timezone-aware retrieval timestamp and `transformation="bibtex_to_publication"`.
+- **Text preservation**: Titles and other values retain their parsed LaTeX text without decoding.
+- **Deferred scope**: Parser changes, provider integration, compatibility wrappers, advanced names, LaTeX decoding, macros, concatenation, registry, autodetection, and Harmonization remain outside this increment.
+
+Verified quality state:
+- 343 tests passing
+- Ruff checks passing
+- mypy checks passing
+- `git diff --check` passing
+
+---
+
 ### Semantic Scholar provenance
 
 Implemented provenance mapping support in `SemanticScholarProvider.map_paper` to record search query details in the `provenance` field, mirroring OpenAlex's provenance construction.

@@ -174,6 +174,7 @@ ImportProvider abstraction: Completed.
 BibTeX Import completed increments:
 
 - 4.1 BibTeX parser
+- 4.2 BibTeX -> Publication mapping
 
 BibTeX Import now provides:
 
@@ -189,12 +190,23 @@ BibTeX Import now provides:
 - raw value preservation without domain interpretation or LaTeX normalization
 - explicit `ValueError` failures for invalid syntax and unsupported `@string` and `@preamble` constructs
 - no new dependencies and no changes to the RIS parser, domain model, or `ImportProvider`
+- `map_bibtex_record(record, *, source)` — pure mapping function from one `BibTeXRecord` to a canonical `Publication`
+  - required title, optional abstract, and four-digit publication year
+  - personal authors split on `and` outside braces; comma and given-name-first formats supported
+  - corporate authors enclosed in protective braces represented by `display_name` only
+  - BibTeX entry types mapped to existing `DocumentType` values, with unknown types falling back to `OTHER`
+  - DOI normalized by the existing `normalize_doi` helper
+  - venue selected in `journal` → `booktitle` → `publisher` order
+  - provenance records the source and `bibtex_to_publication` transformation
+  - `source_record_id` uses normalized DOI, then citation key, then title
+  - LaTeX text is preserved without decoding
 
 Phase 4.1 — BibTeX Parser: Completed.
+Phase 4.2 — BibTeX -> Publication Mapping: Completed.
 
 Quality status:
 
-- 303 tests passing
+- 343 tests passing
 - Ruff checks passing
 - mypy checks passing
 - `git diff --check` passing
@@ -250,7 +262,7 @@ Every feature must:
 
 # Next milestone
 
-BibTeX Import — Phase 4.2 BibTeX -> Publication mapping.
+BibTeX Import — Phase 4.3 BibTeX ImportProvider.
 
 Future architectural work:
 
