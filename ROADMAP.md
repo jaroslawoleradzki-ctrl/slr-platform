@@ -118,11 +118,126 @@ Notes:
 
 ## Phase 3 — Search Engine
 
-- [ ] execute queries
-- [ ] multiple providers
-- [ ] merge results
-- [ ] raw response archive
-- [ ] provenance tracking
+### Goal
+
+Build a provider-independent search orchestration layer capable of executing literature searches across one or more providers while preserving canonical Publication mapping, complete execution provenance, and raw provider responses.
+
+The Search Engine is responsible for orchestration only. It must not contain provider-specific mapping logic, HTTP implementation details, or deduplication algorithms.
+
+### Phase 3.1 — Execute queries through a single provider
+
+Scope
+
+- [ ] Implement the Search Engine entry point.
+- [ ] Execute a single SearchQuery.
+- [ ] Invoke exactly one configured search provider.
+- [ ] Create a SearchRun.
+- [ ] Return canonical Publication objects.
+- [ ] Add complete unit tests.
+
+Out of scope
+
+* Multiple providers.
+* Result merging.
+* Raw response archive.
+* Deduplication.
+* Search-level provenance aggregation.
+
+### Phase 3.2 — Multi-provider orchestration
+
+Scope
+
+- [ ] Execute the same query against multiple providers.
+- [ ] Configure provider execution order.
+- [ ] Collect provider results independently.
+- [ ] Continue execution when one provider fails.
+- [ ] Aggregate provider outputs without merging records.
+
+Out of scope
+
+* Deduplication.
+* Raw response persistence.
+* Global execution provenance.
+
+### Phase 3.3 — Raw response archive
+
+Scope
+
+- [ ] Archive complete provider responses.
+- [ ] Associate every archive entry with the corresponding SearchRun.
+- [ ] Store provider metadata, execution timestamp, rendered query, and execution status.
+- [ ] Preserve responses for later replay and diagnostics.
+
+Out of scope
+
+* Result merging.
+* Response interpretation.
+* Deduplication.
+
+### Phase 3.4 — Merge provider results
+
+Scope
+
+- [ ] Combine results returned by all successfully executed providers.
+- [ ] Preserve every canonical Publication.
+- [ ] Produce deterministic ordering.
+- [ ] Keep provider provenance intact.
+
+Out of scope
+
+* DOI matching.
+* Title similarity.
+* Duplicate detection.
+* Confidence scoring.
+
+⸻
+
+### Phase 3.5 — Search provenance tracking
+
+Scope
+
+- [ ] Record complete search execution provenance.
+- [ ] Store provider execution status.
+- [ ] Store execution duration.
+- [ ] Store provider result counts.
+- [ ] Associate every result with its originating provider and SearchRun.
+
+Out of scope
+
+* Deduplication.
+* Ranking.
+
+### Phase 3.6 — Search Engine contract tests
+
+Scope
+
+- [ ] End-to-end orchestration tests.
+- [ ] Single-provider execution.
+- [ ] Multi-provider execution.
+- [ ] Partial provider failures.
+- [ ] Raw response archive verification.
+- [ ] Result merge verification.
+- [ ] Search provenance verification.
+- [ ] No real HTTP requests.
+
+Completion of Phase 3.6 closes the Search Engine implementation.
+
+### Architectural rules
+
+The following rules apply throughout Phase 3:
+
+* Search Engine performs orchestration only.
+* Providers remain completely independent.
+* Provider HTTP clients remain isolated.
+* Provider mappers remain isolated.
+* Canonical Publication mapping is not duplicated.
+* No global normalization before Phase 4.
+* No deduplication before Phase 5.
+* Every increment includes:
+    * unit and contract tests,
+    * documentation updates,
+    * implementation commit,
+    * documentation commit.
 
 ---
 
