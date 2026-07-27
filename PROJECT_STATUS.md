@@ -228,7 +228,7 @@ BibTeX Import — Phase 4: Completed.
 
 Quality status:
 
-- 478 tests passing
+- 524 tests passing
 - Ruff checks passing
 - mypy checks passing
 - `git diff --check` passing
@@ -250,6 +250,7 @@ Harmonization completed increments:
 - 5.1 Canonical mapping parity specification
 - 5.2 OpenAlex provider mapping parity
 - 5.3 Cross-provider normalization consistency
+- 5.4 Shared mapper utilities
 
 Canonical mapping parity specification now provides:
 
@@ -303,6 +304,19 @@ Cross-provider normalization consistency now provides:
 
 Phase 5.3 — Cross-provider Normalization Consistency: Completed.
 
+Shared mapper utilities now provide:
+
+- `app/providers/search/mapping_utils.py` as the single implementation source
+- pure `clean_string`, `normalize_doi`, `normalize_orcid`, `normalize_issn`, and `normalize_url` functions
+- direct unit tests for every shared normalization contract
+- unchanged Phase 5.3 canonical values and provider collection ordering
+- unchanged public provider method signatures, provenance, and error messages
+- provider-specific dates, authors, abstracts, venue structures, type maps, and provenance retained locally
+- no mapper framework, base class, HTTP-client coupling, or new dependency
+- no global normalization, record merging, or deduplication
+
+Phase 5.4 — Shared Mapper Utilities: Completed.
+
 ---
 
 # Current architecture
@@ -354,7 +368,7 @@ Every feature must:
 
 # Next milestone
 
-Harmonization — Phase 5.4 Shared mapper utilities.
+Harmonization — Phase 5.5 Cross-provider mapping contract tests.
 
 Future architectural work:
 

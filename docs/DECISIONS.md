@@ -297,6 +297,29 @@ Key decisions:
 
 ---
 
+### Shared provider mapping utilities
+
+Phase 5.4 consolidates only normalization behavior proven identical across
+OpenAlex, Crossref, and Semantic Scholar during Phase 5.3.
+
+Key decisions:
+- **Evidence-based extraction**: Duplication was retained through Phase 5.3 so extraction could follow tested behavior rather than anticipated reuse.
+- **One small module**: `app/providers/search/mapping_utils.py` contains pure functions for string cleaning and DOI, ORCID, ISSN, and HTTP(S) URL normalization.
+- **Functions over framework**: Stateless functions preserve transparent control flow without a base mapper, protocol, strategy hierarchy, registry, or dependency injection.
+- **Provider structures remain local**: Date formats, author and affiliation structures, abstract formats, venue structures, document-type maps, collection ordering, and provenance remain provider-specific.
+- **Transport independence**: The module imports no provider client and performs no I/O or network validation.
+- **Stable behavior**: Provider APIs, canonical values, ordering, error messages, and provenance remain unchanged from Phase 5.3.
+- **Boundary only**: The helpers serve provider → canonical mapping and do not implement global title/entity normalization, record merging, or deduplication.
+- **No dependencies**: No external dependency was added.
+
+Verified quality state:
+- 524 tests passing
+- Ruff checks passing
+- mypy checks passing
+- `git diff --check` passing
+
+---
+
 ### Semantic Scholar provenance
 
 Implemented provenance mapping support in `SemanticScholarProvider.map_paper` to record search query details in the `provenance` field, mirroring OpenAlex's provenance construction.

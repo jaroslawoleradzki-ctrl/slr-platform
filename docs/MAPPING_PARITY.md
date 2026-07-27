@@ -168,22 +168,29 @@ The provider boundary now applies this contract:
 This is provider-boundary normalization only. It does not normalize titles,
 resolve author or organization identities, merge records, deduplicate
 publications, or implement the later global Normalization phase. Similar
-provider-local helpers remain intentionally duplicated until Phase 5.4.
+normalization helpers are consolidated in Phase 5.4 only where their behavior
+was confirmed identical.
 
-### 5.4 Shared mapper utilities
+### 5.4 Shared mapper utilities — completed
 
-The current implementations expose candidates for extraction:
+Provider-boundary rules with confirmed identical implementations now have one
+source in `app/providers/search/mapping_utils.py`:
 
-- `_clean_str`-style non-blank string handling;
-- first-non-blank value selection;
-- DOI normalization;
-- ORCID extraction;
-- safe URL collection;
-- document-type lookup;
-- ISSN collection and deduplication;
-- date parsing.
+- trimming and rejecting blank/non-string values;
+- DOI prefix and casing normalization;
+- ORCID prefix, trailing-slash, and final-`X` normalization;
+- ISSN trimming and final-`X` normalization;
+- safe HTTP(S) URL boundary normalization.
 
-Each candidate must be confirmed as genuine repeated behavior after 5.2 and 5.3. Not every candidate must become shared code.
+Provider response structures remain local: OpenAlex inverted abstracts,
+authorships and locations; Crossref HTML abstracts, `date-parts`, title and
+author lists; Semantic Scholar publication types, external identifiers and
+venues. Identifier ordering and deduplication also remain with the mapper that
+owns each provider collection.
+
+These utilities apply only at the provider → canonical mapping boundary. They
+do not implement title normalization, global Normalization, entity resolution,
+record merging, or deduplication.
 
 ## Harmonization completion criteria
 
