@@ -228,7 +228,7 @@ BibTeX Import — Phase 4: Completed.
 
 Quality status:
 
-- 524 tests passing
+- 540 tests passing
 - Ruff checks passing
 - mypy checks passing
 - `git diff --check` passing
@@ -251,6 +251,7 @@ Harmonization completed increments:
 - 5.2 OpenAlex provider mapping parity
 - 5.3 Cross-provider normalization consistency
 - 5.4 Shared mapper utilities
+- 5.5 Cross-provider mapping contract tests
 
 Canonical mapping parity specification now provides:
 
@@ -317,6 +318,22 @@ Shared mapper utilities now provide:
 
 Phase 5.4 — Shared Mapper Utilities: Completed.
 
+Cross-provider mapping contract tests now provide:
+
+- `tests/unit/providers/test_cross_provider_mapping_contract.py`
+- a test-only adapter for OpenAlex, Crossref, and Semantic Scholar mappers
+- rich provider-native fixtures and stable canonical snapshots
+- shared runtime invariants for title, abstract, authors, dates, identifiers, venue, document type, language, URLs, optional defaults, ordering, and malformed optional data
+- explicit assertions for provider-data-dependent author, identifier, publisher, and venue-type differences
+- complete provider-specific provenance with fixed query, run, retrieval time, rendered query, and normalized source record IDs
+- direct mapping tests without HTTP clients, transport mocks, search, or iteration
+- filtered snapshots that exclude generated `record_id`, `created_at`, and other model-owned metadata
+- no production-code or dependency changes
+
+Phase 5.5 — Cross-provider Mapping Contract Tests: Completed.
+
+Harmonization — Phases 5.1–5.5: Completed.
+
 ---
 
 # Current architecture
@@ -368,7 +385,7 @@ Every feature must:
 
 # Next milestone
 
-Harmonization — Phase 5.5 Cross-provider mapping contract tests.
+Search Engine — execute queries.
 
 Future architectural work:
 

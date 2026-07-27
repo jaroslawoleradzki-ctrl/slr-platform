@@ -320,6 +320,29 @@ Verified quality state:
 
 ---
 
+### Cross-provider runtime mapping contracts
+
+Phase 5.5 closes Harmonization with runtime regression contracts for OpenAlex,
+Crossref, and Semantic Scholar canonical mapping.
+
+Key decisions:
+- **Mapping-only execution**: Contract tests call mapper methods directly and use no HTTP clients, transports, search operations, iteration, or network fixtures.
+- **Test-only adapter**: A small immutable case model supplies each provider's mapper, rich fixture, minimal fixture, malformed fixture, and expected canonical snapshot without introducing production abstractions.
+- **Shared invariants, separate fixtures**: Providers share canonical expectations while retaining response structures and snapshots appropriate to their APIs.
+- **Filtered snapshots**: Assertions cover mapper-owned canonical fields and omit generated `record_id`, `created_at`, and other model-owned metadata.
+- **Explicit provider differences**: Structured Crossref names and publisher, OpenAlex author metadata, Semantic Scholar PMID/provider ID, and differing venue support remain valid provider-data-dependent behavior.
+- **Stable provenance**: Fixed query/run IDs, retrieval timestamp, rendered query, provider source, and source record ID make provenance deterministic without I/O.
+- **Three test layers**: Helper unit tests protect pure normalization functions, cross-provider normalization tests protect boundary use, and runtime mapping contracts protect complete canonical output.
+- **No production change**: Existing Phase 5.4 code satisfied the runtime contract; no mapper, domain model, client, or dependency was changed.
+
+Verified quality state:
+- 540 tests passing
+- Ruff checks passing
+- mypy checks passing
+- `git diff --check` passing
+
+---
+
 ### Semantic Scholar provenance
 
 Implemented provenance mapping support in `SemanticScholarProvider.map_paper` to record search query details in the `provenance` field, mirroring OpenAlex's provenance construction.

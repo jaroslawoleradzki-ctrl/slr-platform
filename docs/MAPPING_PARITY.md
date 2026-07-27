@@ -194,7 +194,22 @@ record merging, or deduplication.
 
 ## Harmonization completion criteria
 
-After Phase 5.5:
+Phase 5.5 is complete. The matrix is protected by both the machine-checked
+capability specification and runtime mapping contracts in
+`tests/unit/providers/test_cross_provider_mapping_contract.py`.
+
+Runtime contracts verify title, abstract, authors, publication year/date, DOI,
+venue name and ISSN, document type, language, URLs, optional defaults,
+collection ordering, malformed optional values, and complete search provenance
+for all three providers where those values are available.
+
+Provider-data-dependent differences remain explicit: structured Crossref author
+names and publisher, OpenAlex author identifiers and affiliations, Semantic
+Scholar PMID and provider-native ID, and the intentionally different venue and
+identifier coverage. Tests use separate provider fixtures and snapshots rather
+than fabricating identical input or output fields.
+
+Completed Harmonization guarantees:
 
 - OpenAlex, Crossref, and Semantic Scholar meet the agreed canonical mapping quality;
 - OpenAlex is no longer a title-only mapper;
@@ -203,3 +218,5 @@ After Phase 5.5:
 - cross-provider mapping contract tests protect the agreed behavior;
 - provider-specific mapping tests remain separate;
 - API clients remain separated from domain mappers.
+
+Harmonization Phases 5.1–5.5 are complete.

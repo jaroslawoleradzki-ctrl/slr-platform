@@ -61,7 +61,7 @@ Canonical publication and review-process model.
 
 Current active increment:
 
-Harmonization — Phase 5.5 Cross-provider mapping contract tests.
+Phase 3 — Search Engine: execute queries.
 
 ### Semantic Scholar
 
@@ -96,7 +96,7 @@ Planned work:
 - [x] 5.2 OpenAlex provider mapping parity
 - [x] 5.3 Cross-provider normalization consistency
 - [x] 5.4 Shared mapper utilities
-- [ ] 5.5 Cross-provider mapping contract tests
+- [x] 5.5 Cross-provider mapping contract tests
 
 Increment scope:
 
@@ -112,6 +112,7 @@ Notes:
 - Extract reusable mapping helpers only after actual duplication is identified.
 - Keep provider-specific API clients separated from canonical domain mapping.
 - No new functionality; architectural consolidation only.
+- Harmonization completed across Phases 5.1–5.5.
 
 ---
 
