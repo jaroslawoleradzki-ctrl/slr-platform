@@ -26,6 +26,49 @@ Verified quality state:
 
 ---
 
+### RIS → Publication mapping
+
+Added `map_ris_record(record, *, source) -> Publication` in `app/providers/import_file/ris/mapper.py`.
+
+Key decisions:
+- **Single pure function**: No class, no state, no I/O. Accepts the dict produced by `parse_ris()` and a caller-supplied `source` string.
+- **Source string**: Identifies the bibliography origin (e.g. `"google_scholar"`, `"zotero"`), not the file format. Blank source raises `ValueError`.
+- **Title precedence**: `TI` → `T1` → `CT`. Raises `ValueError` if all three are absent or blank.
+- **Abstract precedence**: `AB` → `N2`. Absent → `None`.
+- **Authors**: `AU` used exclusively when present; `A1` is the fallback. Names containing `, ` are split into `family_name` and `given_name`. Plain-format names set `display_name` only. Blank entries silently skipped.
+- **Publication year**: `PY` preferred, `Y1` as fallback. Parsed as `int`; malformed or out-of-range values silently ignored (`publication_year=None`).
+- **Document type**: TY tag value mapped via `_TY_TO_DOC_TYPE` dict. Unknown or absent TY → `DocumentType.OTHER` (consistent treatment — no silent `None`).
+- **DOI normalization**: Delegates to the project's existing `app.modules.normalize.service.normalize_doi` helper (strip, lowercase, strip `https?://doi.org/` and `doi:` prefixes).
+- **Provenance `source_record_id`**: Normalized DOI when available; title as deterministic fallback. No `ValueError` is raised for records without a DOI — consistent with the import use case where many records lack one.
+- **Postponed to later increments**: venue, ISSN/ISBN, PMID/PMC, keywords, URLs, language, publisher, `publication_date`, date-consistency logic.
+
+Verified quality state:
+- 259 tests passing
+- Ruff checks passing
+- mypy checks passing
+- `git diff --check` passing
+
+---
+
+### Google Scholar RIS import
+
+Added `import_ris(content: str) -> list[Publication]` in `app/providers/import_file/ris/google_scholar.py`.
+
+Key decisions:
+- **Thin integration layer**: Composes `parse_ris()` and `map_ris_record()` with no additional logic. Three lines of implementation.
+- **Source fixed to `"google_scholar"`**: The module is Google Scholar-specific. A different source would use a different module (deferred until a second importer is needed).
+- **No error suppression**: Parse and mapping errors propagate naturally. The caller decides whether to abort or skip bad records. Strict/lenient mode is explicitly deferred.
+- **Empty input → empty list**: Consistent with `parse_ris("")` returning `[]`.
+- **Record ordering preserved**: Publications are returned in the same order as records appear in the file.
+
+Verified quality state:
+- 279 tests passing
+- Ruff checks passing
+- mypy checks passing
+- `git diff --check` passing
+
+---
+
 ### Semantic Scholar provenance
 
 Implemented provenance mapping support in `SemanticScholarProvider.map_paper` to record search query details in the `provenance` field, mirroring OpenAlex's provenance construction.
