@@ -16,6 +16,13 @@ from app.domain.provenance import ProvenanceEntry
 from app.domain.publication import DocumentType, Publication
 from app.domain.search import SearchQuery, SearchRun
 from app.providers.openalex import OpenAlexClient
+from app.providers.search.mapping_utils import (
+    clean_string,
+    normalize_doi,
+    normalize_issn,
+    normalize_orcid,
+    normalize_url,
+)
 
 _DOCUMENT_TYPE_MAP = {
     "article": DocumentType.JOURNAL_ARTICLE,
@@ -41,63 +48,6 @@ _VENUE_TYPE_MAP = {
 
 def _utc_now() -> datetime:
     return datetime.now(timezone.utc)
-
-
-def _clean_string(value: Any) -> str | None:
-    if not isinstance(value, str):
-        return None
-    cleaned = value.strip()
-    return cleaned or None
-
-
-def _normalize_doi(value: Any) -> str | None:
-    doi = _clean_string(value)
-    if doi is None:
-        return None
-    lowered = doi.casefold()
-    for prefix in (
-        "https://doi.org/",
-        "http://doi.org/",
-        "https://dx.doi.org/",
-        "http://dx.doi.org/",
-        "doi:",
-    ):
-        if lowered.startswith(prefix):
-            doi = doi[len(prefix) :].strip()
-            break
-    return doi.lower() or None
-
-
-def _normalize_orcid(value: Any) -> str | None:
-    orcid = _clean_string(value)
-    if orcid is None:
-        return None
-    lowered = orcid.casefold()
-    for prefix in ("https://orcid.org/", "http://orcid.org/"):
-        if lowered.startswith(prefix):
-            orcid = orcid[len(prefix) :]
-            break
-    orcid = orcid.rstrip("/").strip()
-    return orcid[:-1] + "X" if orcid.casefold().endswith("x") else orcid or None
-
-
-def _normalize_issn(value: Any) -> str | None:
-    issn = _clean_string(value)
-    if issn is None:
-        return None
-    return issn[:-1] + "X" if issn.casefold().endswith("x") else issn
-
-
-def _normalize_url(value: Any) -> str | None:
-    url = _clean_string(value)
-    if url is None:
-        return None
-    lowered = url.casefold()
-    if lowered.startswith("http://"):
-        return f"http://{url[7:]}"
-    if lowered.startswith("https://"):
-        return f"https://{url[8:]}"
-    return None
 
 
 def _reconstruct_abstract(value: Any) -> str | None:
@@ -147,7 +97,7 @@ def _identifier(
     *,
     source: str | None = None,
 ) -> Identifier | None:
-    cleaned = _clean_string(value)
+    cleaned = clean_string(value)
     if cleaned is None:
         return None
     return Identifier(type=identifier_type, value=cleaned, source=source)
@@ -164,7 +114,7 @@ def _map_authors(value: Any) -> list[Author]:
         raw_author = authorship.get("author")
         if not isinstance(raw_author, dict):
             continue
-        display_name = _clean_string(raw_author.get("display_name"))
+        display_name = clean_string(raw_author.get("display_name"))
         if display_name is None:
             continue
 
@@ -178,7 +128,7 @@ def _map_authors(value: Any) -> list[Author]:
             identifiers.append(openalex_id)
         orcid = _identifier(
             IdentifierType.ORCID,
-            _normalize_orcid(raw_author.get("orcid")),
+            normalize_orcid(raw_author.get("orcid")),
         )
         if orcid is not None:
             identifiers.append(orcid)
@@ -189,7 +139,7 @@ def _map_authors(value: Any) -> list[Author]:
             for institution in institutions:
                 if not isinstance(institution, dict):
                     continue
-                institution_name = _clean_string(institution.get("display_name"))
+                institution_name = clean_string(institution.get("display_name"))
                 if institution_name is None:
                     continue
                 affiliation_identifiers: list[Identifier] = []
@@ -230,12 +180,12 @@ def _map_venue(value: Any) -> Venue | None:
     source = value.get("source")
     if not isinstance(source, dict):
         return None
-    name = _clean_string(source.get("display_name"))
+    name = clean_string(source.get("display_name"))
     if name is None:
         return None
 
     venue_type = None
-    raw_type = _clean_string(source.get("type"))
+    raw_type = clean_string(source.get("type"))
     if raw_type is not None:
         venue_type = _VENUE_TYPE_MAP.get(raw_type.casefold(), VenueType.OTHER)
 
@@ -245,7 +195,7 @@ def _map_venue(value: Any) -> Venue | None:
     if isinstance(source.get("issn"), list):
         raw_issns.extend(source["issn"])
     for raw_issn in raw_issns:
-        issn = _normalize_issn(raw_issn)
+        issn = normalize_issn(raw_issn)
         if issn is not None and issn not in seen_issns:
             seen_issns.add(issn)
             identifiers.append(Identifier(type=IdentifierType.ISSN, value=issn))
@@ -261,7 +211,7 @@ def _collect_urls(work: dict[str, Any]) -> list[str]:
         if not isinstance(location, dict):
             continue
         for field_name in ("landing_page_url", "pdf_url"):
-            url = _normalize_url(location.get(field_name))
+            url = normalize_url(location.get(field_name))
             if url is not None and url not in seen:
                 seen.add(url)
                 urls.append(url)
@@ -345,7 +295,7 @@ class OpenAlexProvider:
         if not isinstance(work, dict):
             raise TypeError("OpenAlex work must be a dictionary")
 
-        title = _clean_string(work.get("title")) or _clean_string(
+        title = clean_string(work.get("title")) or clean_string(
             work.get("display_name")
         )
         if title is None:
@@ -354,7 +304,7 @@ class OpenAlexProvider:
         identifiers: list[Identifier] = []
         doi_identifier = _identifier(
             IdentifierType.DOI,
-            _normalize_doi(work.get("doi")),
+            normalize_doi(work.get("doi")),
         )
         if doi_identifier is not None:
             identifiers.append(doi_identifier)
@@ -382,7 +332,7 @@ class OpenAlexProvider:
             elif publication_year != publication_date.year:
                 publication_date = None
 
-        raw_document_type = _clean_string(work.get("type"))
+        raw_document_type = clean_string(work.get("type"))
         document_type = None
         if raw_document_type is not None:
             document_type = _DOCUMENT_TYPE_MAP.get(
@@ -390,7 +340,7 @@ class OpenAlexProvider:
                 DocumentType.OTHER,
             )
 
-        language = _clean_string(work.get("language"))
+        language = clean_string(work.get("language"))
         raw_open_access = work.get("open_access")
         open_access = (
             raw_open_access.get("is_oa")

@@ -7,6 +7,12 @@ from app.domain import Author, Identifier, IdentifierType, Venue, VenueType
 from app.domain.provenance import ProvenanceEntry
 from app.domain.publication import DocumentType, Publication
 from app.domain.search import SearchQuery, SearchRun
+from app.providers.search.mapping_utils import (
+    clean_string,
+    normalize_doi,
+    normalize_issn,
+    normalize_url,
+)
 
 _DOC_TYPE_MAP = {
     "journalarticle": DocumentType.JOURNAL_ARTICLE,
@@ -22,50 +28,6 @@ _DOC_TYPE_MAP = {
     "preprint": DocumentType.PREPRINT,
     "dataset": DocumentType.DATASET,
 }
-
-
-def _clean_str(val: Any) -> str | None:
-    if isinstance(val, str):
-        s = val.strip()
-        return s if s else None
-    return None
-
-
-def _normalize_doi(value: Any) -> str | None:
-    doi = _clean_str(value)
-    if doi is None:
-        return None
-    lowered = doi.casefold()
-    for prefix in (
-        "https://doi.org/",
-        "http://doi.org/",
-        "https://dx.doi.org/",
-        "http://dx.doi.org/",
-        "doi:",
-    ):
-        if lowered.startswith(prefix):
-            doi = doi[len(prefix) :].strip()
-            break
-    return doi.lower() or None
-
-
-def _normalize_issn(value: Any) -> str | None:
-    issn = _clean_str(value)
-    if issn is None:
-        return None
-    return issn[:-1] + "X" if issn.casefold().endswith("x") else issn
-
-
-def _normalize_url(value: Any) -> str | None:
-    url = _clean_str(value)
-    if url is None:
-        return None
-    lowered = url.casefold()
-    if lowered.startswith("http://"):
-        return f"http://{url[7:]}"
-    if lowered.startswith("https://"):
-        return f"https://{url[8:]}"
-    return None
 
 
 def _parse_date(date_str: Any) -> date | None:
@@ -96,17 +58,17 @@ class SemanticScholarProvider:
             raise TypeError("paper must be a dictionary")
 
         # 0. Provenance required fields validation
-        paper_id = _clean_str(paper.get("paperId"))
+        paper_id = clean_string(paper.get("paperId"))
         if paper_id is None:
             raise ValueError("Semantic Scholar paper must have a valid paperId for provenance")
 
         # 1. Title
-        title = _clean_str(paper.get("title"))
+        title = clean_string(paper.get("title"))
         if title is None:
             raise ValueError("Semantic Scholar paper title is missing or blank")
 
         # 2. Abstract
-        abstract = _clean_str(paper.get("abstract"))
+        abstract = clean_string(paper.get("abstract"))
 
         # 3. Authors
         authors: list[Author] = []
@@ -114,7 +76,7 @@ class SemanticScholarProvider:
         if isinstance(author_list, list):
             for auth_dict in author_list:
                 if isinstance(auth_dict, dict):
-                    display_name = _clean_str(auth_dict.get("name"))
+                    display_name = clean_string(auth_dict.get("name"))
                     if display_name:
                         authors.append(Author(display_name=display_name))
 
@@ -142,8 +104,8 @@ class SemanticScholarProvider:
 
         pub_venue = paper.get("publicationVenue")
         if isinstance(pub_venue, dict):
-            venue_name = _clean_str(pub_venue.get("name"))
-            raw_type = _clean_str(pub_venue.get("type"))
+            venue_name = clean_string(pub_venue.get("name"))
+            raw_type = clean_string(pub_venue.get("type"))
             if raw_type:
                 raw_type_lower = raw_type.lower()
                 if raw_type_lower == "journal":
@@ -159,14 +121,14 @@ class SemanticScholarProvider:
 
             # ISSN mapping
             seen_issns: set[str] = set()
-            issn = _normalize_issn(pub_venue.get("issn"))
+            issn = normalize_issn(pub_venue.get("issn"))
             if issn:
                 venue_identifiers.append(Identifier(type=IdentifierType.ISSN, value=issn))
                 seen_issns.add(issn)
             issns = pub_venue.get("issns")
             if isinstance(issns, list):
                 for single_issn in issns:
-                    normalized_issn = _normalize_issn(single_issn)
+                    normalized_issn = normalize_issn(single_issn)
                     if (
                         normalized_issn is not None
                         and normalized_issn not in seen_issns
@@ -180,7 +142,7 @@ class SemanticScholarProvider:
                         )
 
         if not venue_name:
-            venue_name = _clean_str(paper.get("venue"))
+            venue_name = clean_string(paper.get("venue"))
 
         if venue_name:
             venue_obj = Venue(
@@ -222,7 +184,7 @@ class SemanticScholarProvider:
         ext_ids = paper.get("externalIds")
         if isinstance(ext_ids, dict):
             # DOI
-            doi = _normalize_doi(ext_ids.get("DOI"))
+            doi = normalize_doi(ext_ids.get("DOI"))
             if doi:
                 identifiers.append(
                     Identifier(
@@ -231,7 +193,7 @@ class SemanticScholarProvider:
                     )
                 )
             # PMID / PubMed
-            pmid = _clean_str(ext_ids.get("PubMed"))
+            pmid = clean_string(ext_ids.get("PubMed"))
             if pmid:
                 identifiers.append(
                     Identifier(
@@ -242,7 +204,7 @@ class SemanticScholarProvider:
 
         # 8. URL
         urls: list[str] = []
-        url = _normalize_url(paper.get("url"))
+        url = normalize_url(paper.get("url"))
         if url is not None:
             urls.append(url)
 
@@ -267,7 +229,7 @@ class SemanticScholarProvider:
             identifiers=identifiers,
             venue=venue_obj,
             document_type=doc_type,
-            language=_clean_str(paper.get("language")),
+            language=clean_string(paper.get("language")),
             urls=urls,
             provenance=provenance,
         )

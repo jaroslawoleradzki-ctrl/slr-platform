@@ -11,6 +11,13 @@ from app.domain.provenance import ProvenanceEntry
 from app.domain.publication import DocumentType, Publication
 from app.domain.search import SearchQuery, SearchRun
 from app.providers.crossref import CrossrefClient
+from app.providers.search.mapping_utils import (
+    clean_string,
+    normalize_doi,
+    normalize_issn,
+    normalize_orcid,
+    normalize_url,
+)
 
 _TYPE_MAP = {
     "journal-article": DocumentType.JOURNAL_ARTICLE,
@@ -31,63 +38,6 @@ _TYPE_MAP = {
 
 def _utc_now() -> datetime:
     return datetime.now(timezone.utc)
-
-
-def _clean_str(val: Any) -> str | None:
-    if isinstance(val, str):
-        s = val.strip()
-        return s if s else None
-    return None
-
-
-def _normalize_doi(value: Any) -> str | None:
-    doi = _clean_str(value)
-    if doi is None:
-        return None
-    lowered = doi.casefold()
-    for prefix in (
-        "https://doi.org/",
-        "http://doi.org/",
-        "https://dx.doi.org/",
-        "http://dx.doi.org/",
-        "doi:",
-    ):
-        if lowered.startswith(prefix):
-            doi = doi[len(prefix) :].strip()
-            break
-    return doi.lower() or None
-
-
-def _normalize_orcid(value: Any) -> str | None:
-    orcid = _clean_str(value)
-    if orcid is None:
-        return None
-    lowered = orcid.casefold()
-    for prefix in ("https://orcid.org/", "http://orcid.org/"):
-        if lowered.startswith(prefix):
-            orcid = orcid[len(prefix) :]
-            break
-    orcid = orcid.rstrip("/").strip()
-    return orcid[:-1] + "X" if orcid.casefold().endswith("x") else orcid or None
-
-
-def _normalize_issn(value: Any) -> str | None:
-    issn = _clean_str(value)
-    if issn is None:
-        return None
-    return issn[:-1] + "X" if issn.casefold().endswith("x") else issn
-
-
-def _normalize_url(value: Any) -> str | None:
-    url = _clean_str(value)
-    if url is None:
-        return None
-    lowered = url.casefold()
-    if lowered.startswith("http://"):
-        return f"http://{url[7:]}"
-    if lowered.startswith("https://"):
-        return f"https://{url[8:]}"
-    return None
 
 
 def _clean_abstract(abstract: str) -> str | None:
@@ -218,7 +168,7 @@ class CrossrefProvider:
             raise ValueError("Crossref work must have a non-blank title")
 
         identifiers = []
-        doi = _normalize_doi(work.get("DOI"))
+        doi = normalize_doi(work.get("DOI"))
         if doi is not None:
             identifiers.append(Identifier(type=IdentifierType.DOI, value=doi))
 
@@ -227,8 +177,8 @@ class CrossrefProvider:
         if isinstance(author_list, list):
             for a_dict in author_list:
                 if isinstance(a_dict, dict):
-                    given_name = _clean_str(a_dict.get("given"))
-                    family_name = _clean_str(a_dict.get("family"))
+                    given_name = clean_string(a_dict.get("given"))
+                    family_name = clean_string(a_dict.get("family"))
                     parts = []
                     if given_name:
                         parts.append(given_name)
@@ -239,7 +189,7 @@ class CrossrefProvider:
                     display_name = " ".join(parts)
 
                     author_identifiers = []
-                    orcid = _normalize_orcid(a_dict.get("ORCID"))
+                    orcid = normalize_orcid(a_dict.get("ORCID"))
                     if orcid:
                         author_identifiers.append(
                             Identifier(type=IdentifierType.ORCID, value=orcid)
@@ -250,7 +200,7 @@ class CrossrefProvider:
                     if isinstance(aff_list, list):
                         for aff_dict in aff_list:
                             if isinstance(aff_dict, dict):
-                                aff_name = _clean_str(aff_dict.get("name"))
+                                aff_name = clean_string(aff_dict.get("name"))
                                 if aff_name:
                                     affiliations.append(Affiliation(name=aff_name))
 
@@ -288,7 +238,7 @@ class CrossrefProvider:
             issns = work.get("ISSN")
             if isinstance(issns, list):
                 for issn in issns:
-                    normalized_issn = _normalize_issn(issn)
+                    normalized_issn = normalize_issn(issn)
                     if (
                         normalized_issn is not None
                         and normalized_issn not in seen_issns
@@ -302,7 +252,7 @@ class CrossrefProvider:
                         )
             venue = Venue(name=venue_name, identifiers=venue_identifiers)
 
-        publisher = _clean_str(work.get("publisher"))
+        publisher = clean_string(work.get("publisher"))
 
         type_str = work.get("type")
         doc_type = None
@@ -311,10 +261,10 @@ class CrossrefProvider:
             if s_type:
                 doc_type = _TYPE_MAP.get(s_type.casefold(), DocumentType.OTHER)
 
-        language = _clean_str(work.get("language"))
+        language = clean_string(work.get("language"))
 
         urls = []
-        url = _normalize_url(work.get("URL"))
+        url = normalize_url(work.get("URL"))
         if url is not None:
             urls.append(url)
 
@@ -345,7 +295,7 @@ class CrossrefProvider:
         search_query: SearchQuery,
         retrieved_at: datetime,
     ) -> Publication:
-        source_record_id = _normalize_doi(work.get("DOI"))
+        source_record_id = normalize_doi(work.get("DOI"))
         if source_record_id is None:
             raise ValueError("Crossref work DOI must be a non-blank string for provenance")
 
