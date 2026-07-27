@@ -227,6 +227,35 @@ Verified quality state:
 
 ---
 
+### OpenAlex canonical mapping parity
+
+Expanded OpenAlex mapping from title-only output to the canonical fields that
+have stable, semantically unambiguous sources in an OpenAlex work response.
+
+Key decisions:
+- **Transport remains separate**: `OpenAlexClient` continues to own HTTP, retry, rate limiting, and pagination only.
+- **Public pure mapper**: `OpenAlexProvider.map_work()` maps one work without I/O, search context, timestamps, or provenance.
+- **Separate provenance orchestration**: `search()` and `iterate()` validate the OpenAlex source ID, call the pure mapper, and attach complete search provenance through an immutable model copy.
+- **Dual-purpose OpenAlex ID**: The full work ID remains the provenance source record ID and is also retained as a canonical provider-native `OTHER` identifier with `source="openalex"`.
+- **Author names remain faithful**: OpenAlex `display_name` is retained without inventing `given_name` or `family_name`.
+- **Deterministic abstracts**: Abstract text is reconstructed by position from `abstract_inverted_index`; for a position collision, the lexically first token is retained so JSON key order cannot affect the result.
+- **Malformed optional data is omitted**: Invalid optional structures produce `None` or empty collections and do not reject an otherwise auditable publication.
+- **Date conflict policy**: A valid explicit publication year is retained and a conflicting publication date is discarded.
+- **No inferred keywords**: OpenAlex topics and concepts are not assumed to be publication-assigned canonical keywords.
+- **No inferred publisher**: `host_organization_name` is not assumed to identify the publication publisher.
+- **Local helpers only**: OpenAlex-specific parsing and mapping helpers remain in its provider module; shared helpers are deferred to Phase 5.4.
+- **Normalization remains sequenced**: Cross-provider identifier and boundary consistency remains Phase 5.3.
+- **Stable domain boundary**: No canonical domain model, other provider, or HTTP client was changed.
+- **No dependencies**: No external dependency was added.
+
+Verified quality state:
+- 435 tests passing
+- Ruff checks passing
+- mypy checks passing
+- `git diff --check` passing
+
+---
+
 ### Semantic Scholar provenance
 
 Implemented provenance mapping support in `SemanticScholarProvider.map_paper` to record search query details in the `provenance` field, mirroring OpenAlex's provenance construction.

@@ -66,26 +66,26 @@ Support values:
 | Canonical field | Required class | OpenAlex current | Crossref current | Semantic Scholar current | Target after Harmonization | Notes |
 |---|---|---|---|---|---|---|
 | `title` | Required | Yes | Yes | Yes | Yes | Missing or blank title rejects the record. |
-| `abstract` | Provider-data-dependent | No | Yes | Yes | Provider-dependent | OpenAlex abstract reconstruction is a 5.2 gap. |
-| `authors.display_name` | Provider-data-dependent | No | Yes | Yes | Provider-dependent | Preserve provider order. |
-| `authors.given_name` | Provider-data-dependent | No | Yes | No | Provider-dependent | Semantic Scholar currently maps display names only. |
-| `authors.family_name` | Provider-data-dependent | No | Yes | No | Provider-dependent | Semantic Scholar currently maps display names only. |
-| `authors.identifiers.ORCID` | Provider-data-dependent | No | Yes | No | Provider-dependent | Normalize provider URL and bare forms consistently in 5.3. |
-| `authors.affiliations` | Provider-data-dependent | No | Yes | No | Provider-dependent | Map only institutions present in provider data. |
-| `publication_year` | Provider-data-dependent | No | Yes | Yes | Provider-dependent | Invalid optional years are omitted. |
-| `publication_date` | Provider-data-dependent | No | Yes | Yes | Provider-dependent | Date/year conflict policy is a 5.3 decision. |
-| `identifiers.DOI` | Provider-data-dependent | No | Yes | Yes | Provider-dependent | DOI normalization consistency is deferred to 5.3. |
+| `abstract` | Provider-data-dependent | Yes | Yes | Yes | Provider-dependent | OpenAlex reconstructs text deterministically from the inverted index. |
+| `authors.display_name` | Provider-data-dependent | Yes | Yes | Yes | Provider-dependent | Preserve provider order. |
+| `authors.given_name` | Provider-data-dependent | No | Yes | No | Provider-dependent | OpenAlex and Semantic Scholar currently map display names only. |
+| `authors.family_name` | Provider-data-dependent | No | Yes | No | Provider-dependent | OpenAlex and Semantic Scholar currently map display names only. |
+| `authors.identifiers.ORCID` | Provider-data-dependent | Yes | Yes | No | Provider-dependent | Normalize provider URL and bare forms consistently in 5.3. |
+| `authors.affiliations` | Provider-data-dependent | Yes | Yes | No | Provider-dependent | OpenAlex maps valid institutions from authorships. |
+| `publication_year` | Provider-data-dependent | Yes | Yes | Yes | Provider-dependent | Invalid optional years are omitted. |
+| `publication_date` | Provider-data-dependent | Yes | Yes | Yes | Provider-dependent | OpenAlex preserves an explicit valid year and omits a conflicting date. |
+| `identifiers.DOI` | Provider-data-dependent | Yes | Yes | Yes | Provider-dependent | DOI normalization consistency is deferred to 5.3. |
 | `identifiers.PMID` | Provider-data-dependent | No | No | Yes | Provider-dependent | Map only where supplied. |
-| `identifiers.provider_native` | Provider-data-dependent | No | No | Yes | Provider-dependent | OpenAlex ID is currently provenance-only; Semantic Scholar maps `paperId`. |
-| `venue.name` | Provider-data-dependent | No | Yes | Yes | Provider-dependent | OpenAlex primary location/source is a 5.2 gap. |
-| `venue.type` | Provider-data-dependent | No | No | Yes | Provider-dependent | Do not infer unsupported venue types. |
-| `venue.identifiers.ISSN` | Provider-data-dependent | No | Yes | Yes | Provider-dependent | Formatting and deduplication are 5.3 decisions. |
+| `identifiers.provider_native` | Provider-data-dependent | Yes | No | Yes | Provider-dependent | OpenAlex maps the work ID while retaining it independently in provenance. |
+| `venue.name` | Provider-data-dependent | Yes | Yes | Yes | Provider-dependent | OpenAlex uses `primary_location.source`. |
+| `venue.type` | Provider-data-dependent | Yes | No | Yes | Provider-dependent | Unknown non-blank OpenAlex source types map to `OTHER`. |
+| `venue.identifiers.ISSN` | Provider-data-dependent | Yes | Yes | Yes | Provider-dependent | OpenAlex preserves ISSN-L first and removes exact duplicates. |
 | `publisher` | Provider-data-dependent | No | Yes | No | Provider-dependent | Map only from a stable provider structure. |
-| `document_type` | Provider-data-dependent | No | Yes | Yes | Provider-dependent | Fallback consistency is decided in 5.3. |
-| `language` | Provider-data-dependent | No | Yes | No | Provider-dependent | Canonical casing consistency is decided in 5.3. |
-| `urls` | Provider-data-dependent | No | Yes | Yes | Provider-dependent | Only valid supported URLs enter the canonical model. |
+| `document_type` | Provider-data-dependent | Yes | Yes | Yes | Provider-dependent | Fallback consistency is decided in 5.3. |
+| `language` | Provider-data-dependent | Yes | Yes | No | Provider-dependent | Canonical casing consistency is decided in 5.3. |
+| `urls` | Provider-data-dependent | Yes | Yes | Yes | Provider-dependent | Only valid HTTP(S) landing-page and PDF URLs enter the canonical model. |
 | `keywords` | Provider-data-dependent | No | No | No | Provider-dependent | Map topics/keywords only when semantics are unambiguous. |
-| `open_access` | Provider-data-dependent | No | No | No | Provider-dependent | Preserve explicit provider status; do not infer it. |
+| `open_access` | Provider-data-dependent | Yes | No | No | Provider-dependent | OpenAlex maps only an explicit boolean `open_access.is_oa`. |
 | `provenance.source` | Required | Yes | Yes | Yes | Yes | Required for search results. |
 | `provenance.source_record_id` | Required | Yes | Yes | Yes | Yes | Separate from publication identifiers. |
 | `provenance.retrieved_at` | Required | Yes | Yes | Yes | Yes | Must be timezone-aware. |
@@ -114,9 +114,9 @@ The machine-checked representation of this matrix is kept in `tests/unit/provide
 
 ## Explicit gap register
 
-### 5.2 OpenAlex provider mapping parity
+### 5.2 OpenAlex provider mapping parity — completed
 
-Verify the stable OpenAlex response structures and map available values for:
+The stable OpenAlex response structures now map available values for:
 
 - abstract reconstruction;
 - authorships, author display names, and author identifiers;
@@ -124,14 +124,16 @@ Verify the stable OpenAlex response structures and map available values for:
 - publication year and date;
 - DOI and the OpenAlex work ID as a canonical identifier;
 - primary location/source, venue name and type, and ISSN;
-- publisher where exposed through a stable structure;
 - work type to `DocumentType`;
 - language;
 - landing-page and related URLs;
-- open-access status;
-- keywords or topics only where their canonical meaning is unambiguous.
+- explicit open-access status.
 
-No field in this list is implemented by Phase 5.1.
+Publisher remains unmapped because `host_organization_name` does not
+unambiguously identify the publication publisher. Topics and concepts remain
+unmapped because they are not necessarily publication-assigned canonical
+keywords. PMID, structured given/family author names, and other unavailable
+values remain provider-data-dependent gaps rather than invented data.
 
 ### 5.3 Cross-provider normalization consistency
 

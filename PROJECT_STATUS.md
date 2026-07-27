@@ -228,7 +228,7 @@ BibTeX Import — Phase 4: Completed.
 
 Quality status:
 
-- 388 tests passing
+- 435 tests passing
 - Ruff checks passing
 - mypy checks passing
 - `git diff --check` passing
@@ -248,6 +248,7 @@ Harmonization plan:
 Harmonization completed increments:
 
 - 5.1 Canonical mapping parity specification
+- 5.2 OpenAlex provider mapping parity
 
 Canonical mapping parity specification now provides:
 
@@ -262,6 +263,24 @@ Canonical mapping parity specification now provides:
 - no production-code or dependency changes
 
 Phase 5.1 — Canonical Mapping Parity Specification: Completed.
+
+OpenAlex provider mapping parity now provides:
+
+- public, deterministic `OpenAlexProvider.map_work()` mapping without I/O or search context
+- separate provenance orchestration used by `search()` and `iterate()`
+- title mapping with a `display_name` fallback
+- deterministic abstract reconstruction from `abstract_inverted_index`
+- provider-ordered authors, OpenAlex and ORCID author identifiers, and institutional affiliations
+- publication year/date mapping with invalid optional values omitted and explicit-year conflict handling
+- DOI and provider-native OpenAlex work identifiers
+- venue name/type and ordered, deduplicated ISSN-L/ISSN identifiers
+- document type, language, valid HTTP(S) URLs, and explicit open-access status
+- no inferred publisher from host organization and no inferred keywords from topics/concepts
+- malformed optional fields omitted without rejecting an otherwise valid publication
+- OpenAlex-specific helpers kept local, with no shared mapper utilities or new dependencies
+- no domain-model, HTTP-client, Crossref, or Semantic Scholar changes
+
+Phase 5.2 — OpenAlex Provider Mapping Parity: Completed.
 
 ---
 
@@ -314,7 +333,7 @@ Every feature must:
 
 # Next milestone
 
-Harmonization — Phase 5.2 OpenAlex provider mapping parity.
+Harmonization — Phase 5.3 Cross-provider normalization consistency.
 
 Future architectural work:
 
