@@ -61,7 +61,7 @@ Canonical publication and review-process model.
 
 Current active increment:
 
-BibTeX Import — Phase 4.4 Contract tests.
+Harmonization.
 
 ### Semantic Scholar
 
@@ -82,7 +82,7 @@ BibTeX Import — Phase 4.4 Contract tests.
 - [x] 4.1 BibTeX parser
 - [x] 4.2 BibTeX -> Publication mapping
 - [x] 4.3 BibTeX ImportProvider
-- [ ] 4.4 Contract tests
+- [x] 4.4 Contract tests
 
 ### Harmonization
 

@@ -161,6 +161,29 @@ Verified quality state:
 
 ---
 
+### ImportProvider contract tests
+
+Replaced the minimal single-provider contract check with a shared parameterized suite in `tests/unit/providers/import_file/test_import_provider.py`.
+
+Key decisions:
+- **Multi-provider parameterization**: The same contract suite covers `GoogleScholarImportProvider` and `BibTeXImportProvider`.
+- **Public API boundary**: Contract tests call only `provider.import_publications(content)` and do not invoke parsers or mappers directly.
+- **Common behavior**: The suite covers empty and whitespace-only input, single and multiple records, result types, ordering, stateless consecutive calls, error propagation without partial success, and stable repeated-import results.
+- **Stable equivalence**: Repeated results compare title, abstract, authors, publication year, document type, identifiers, venue, and stable provenance fields. Dynamic `retrieved_at`, `created_at`, and generated `record_id` values are excluded.
+- **Format-specific coverage**: RIS, Google Scholar, BibTeX parser, mapper, and provider behaviors remain in their existing focused test modules.
+- **Structural typing**: Both providers are passed through an `ImportProvider`-typed boundary, with mypy confirming compatibility. No inheritance or protocol change was introduced.
+- **No production changes**: Existing providers already satisfied the shared contract, so neither provider required modification.
+- **Deferred infrastructure**: No common base class, registry, factory, or format autodetection was added.
+- **Dependencies**: No new dependencies were added.
+
+Verified quality state:
+- 377 tests passing
+- Ruff checks passing
+- mypy checks passing
+- `git diff --check` passing
+
+---
+
 ### Semantic Scholar provenance
 
 Implemented provenance mapping support in `SemanticScholarProvider.map_paper` to record search query details in the `provenance` field, mirroring OpenAlex's provenance construction.

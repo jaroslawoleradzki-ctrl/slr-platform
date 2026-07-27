@@ -176,6 +176,7 @@ BibTeX Import completed increments:
 - 4.1 BibTeX parser
 - 4.2 BibTeX -> Publication mapping
 - 4.3 BibTeX ImportProvider
+- 4.4 Contract tests
 
 BibTeX Import now provides:
 
@@ -209,14 +210,25 @@ BibTeX Import now provides:
   - propagates parser and mapper errors without wrapping, skipping, or partial success
   - performs no I/O and keeps no per-import state
   - adds no dependencies and changes neither parser, mapper, RIS, domain models, nor `ImportProvider`
+- shared, parameterized `ImportProvider` contract tests covering `GoogleScholarImportProvider` and `BibTeXImportProvider`
+  - structural compatibility through the public `import_publications` API
+  - empty and whitespace-only input
+  - single and multiple records, including ordering and `Publication` result types
+  - stateless consecutive calls
+  - error propagation without partial success
+  - stable domain equivalence across repeated imports, excluding dynamic timestamps and generated record metadata
+  - no production-code, protocol, domain-model, or dependency changes
 
 Phase 4.1 — BibTeX Parser: Completed.
 Phase 4.2 — BibTeX -> Publication Mapping: Completed.
 Phase 4.3 — BibTeX ImportProvider: Completed.
+Phase 4.4 — ImportProvider Contract Tests: Completed.
+
+BibTeX Import — Phase 4: Completed.
 
 Quality status:
 
-- 362 tests passing
+- 377 tests passing
 - Ruff checks passing
 - mypy checks passing
 - `git diff --check` passing
@@ -272,7 +284,7 @@ Every feature must:
 
 # Next milestone
 
-BibTeX Import — Phase 4.4 Contract tests.
+Harmonization.
 
 Future architectural work:
 
