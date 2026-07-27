@@ -61,7 +61,7 @@ Canonical publication and review-process model.
 
 Current active increment:
 
-BibTeX Import — Phase 4.1 parser.
+BibTeX Import — Phase 4.2 BibTeX -> Publication mapping.
 
 ### Semantic Scholar
 
@@ -79,7 +79,7 @@ BibTeX Import — Phase 4.1 parser.
 
 ### BibTeX Import
 
-- [ ] 4.1 BibTeX parser
+- [x] 4.1 BibTeX parser
 - [ ] 4.2 BibTeX -> Publication mapping
 - [ ] 4.3 BibTeX ImportProvider
 - [ ] 4.4 Contract tests

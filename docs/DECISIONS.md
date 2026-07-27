@@ -91,6 +91,29 @@ Verified quality state:
 
 ---
 
+### BibTeX parser
+
+Added a dependency-free BibTeX parser in `app/providers/import_file/bibtex/parser.py`.
+
+Key decisions:
+- **Custom deterministic scanner**: The parser uses no external parsing library and processes serialized BibTeX content character by character.
+- **Raw record model**: `BibTeXRecord` separates entry metadata (`entry_type` and `citation_key`) from its `fields` dictionary.
+- **Identifier normalization**: Entry types and field names are normalized to lowercase, while citation keys remain unchanged.
+- **Value boundaries**: Only external braces or quotes and surrounding whitespace are removed. Nested braces remain part of the value.
+- **No LaTeX interpretation**: Text inside field values is preserved without decoding or normalization.
+- **Comment handling**: `%` starts a comment only outside field values, and `@comment` entries are ignored.
+- **Unsupported constructs**: `@string` and `@preamble` remain outside the supported scope and raise `ValueError`.
+- **Architectural isolation**: The parser has no knowledge of `Publication`, `ImportProvider`, or the RIS parser.
+- **Dependencies**: No new dependencies were added.
+
+Verified quality state:
+- 303 tests passing
+- Ruff checks passing
+- mypy checks passing
+- `git diff --check` passing
+
+---
+
 ### Semantic Scholar provenance
 
 Implemented provenance mapping support in `SemanticScholarProvider.map_paper` to record search query details in the `provenance` field, mirroring OpenAlex's provenance construction.

@@ -171,9 +171,30 @@ Phase 3.2 — RIS → Publication Mapping: Completed.
 Phase 3.3 — Google Scholar RIS Import: Completed.
 ImportProvider abstraction: Completed.
 
+BibTeX Import completed increments:
+
+- 4.1 BibTeX parser
+
+BibTeX Import now provides:
+
+- `BibTeXRecord` — a `TypedDict` separating `entry_type`, `citation_key`, and the `fields` dictionary
+- `parse_bibtex(content: str) -> list[BibTeXRecord]` — public API for parsing serialized BibTeX content into raw records
+- deterministic character-by-character parsing supporting:
+  - multiple records
+  - braced and quoted values
+  - nested braces and multiline values
+  - `%` comments outside values and ignored `@comment` entries
+  - both trailing commas and omitted trailing commas
+- lowercase normalization of entry types and field names while preserving citation keys
+- raw value preservation without domain interpretation or LaTeX normalization
+- explicit `ValueError` failures for invalid syntax and unsupported `@string` and `@preamble` constructs
+- no new dependencies and no changes to the RIS parser, domain model, or `ImportProvider`
+
+Phase 4.1 — BibTeX Parser: Completed.
+
 Quality status:
 
-- 280 tests passing
+- 303 tests passing
 - Ruff checks passing
 - mypy checks passing
 - `git diff --check` passing
@@ -229,7 +250,7 @@ Every feature must:
 
 # Next milestone
 
-BibTeX Import — Phase 4.1 parser.
+BibTeX Import — Phase 4.2 BibTeX -> Publication mapping.
 
 Future architectural work:
 
