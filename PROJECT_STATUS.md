@@ -175,6 +175,7 @@ BibTeX Import completed increments:
 
 - 4.1 BibTeX parser
 - 4.2 BibTeX -> Publication mapping
+- 4.3 BibTeX ImportProvider
 
 BibTeX Import now provides:
 
@@ -200,13 +201,22 @@ BibTeX Import now provides:
   - provenance records the source and `bibtex_to_publication` transformation
   - `source_record_id` uses normalized DOI, then citation key, then title
   - LaTeX text is preserved without decoding
+- `BibTeXImportProvider` — thin orchestration layer implementing `ImportProvider` structurally
+  - exposes `import_publications(content: str) -> list[Publication]`
+  - accepts keyword-only `source`, defaulting to `"bibtex"`
+  - composes `parse_bibtex` → `map_bibtex_record` → `list[Publication]`
+  - preserves input record order and returns `[]` for empty input
+  - propagates parser and mapper errors without wrapping, skipping, or partial success
+  - performs no I/O and keeps no per-import state
+  - adds no dependencies and changes neither parser, mapper, RIS, domain models, nor `ImportProvider`
 
 Phase 4.1 — BibTeX Parser: Completed.
 Phase 4.2 — BibTeX -> Publication Mapping: Completed.
+Phase 4.3 — BibTeX ImportProvider: Completed.
 
 Quality status:
 
-- 343 tests passing
+- 362 tests passing
 - Ruff checks passing
 - mypy checks passing
 - `git diff --check` passing
@@ -262,7 +272,7 @@ Every feature must:
 
 # Next milestone
 
-BibTeX Import — Phase 4.3 BibTeX ImportProvider.
+BibTeX Import — Phase 4.4 Contract tests.
 
 Future architectural work:
 

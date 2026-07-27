@@ -138,6 +138,29 @@ Verified quality state:
 
 ---
 
+### BibTeX ImportProvider
+
+Added `BibTeXImportProvider` in `app/providers/import_file/bibtex/provider.py`.
+
+Key decisions:
+- **Thin orchestration layer**: The provider composes the existing parser and mapper without duplicating either responsibility.
+- **Separated layers**: `parse_bibtex`, `map_bibtex_record`, and `BibTeXImportProvider` remain independent parsing, mapping, and orchestration layers.
+- **Structural contract**: The provider satisfies `ImportProvider` structurally and does not inherit from a base class.
+- **Source configuration**: A keyword-only constructor argument configures `source`, defaulting to `"bibtex"`, and the value is passed unchanged to every mapper call.
+- **Ordering and empty input**: Publications preserve parser record order, while empty content produces an empty list.
+- **Error propagation**: Parser and mapper errors propagate unchanged. Records are not skipped and partial success is not supported.
+- **Stateless imports**: The provider performs no I/O and retains no state between import calls beyond its immutable-by-convention source configuration.
+- **Deferred infrastructure**: No compatibility wrapper, provider registry, factory, or format autodetection was added. Shared contract tests across providers remain Phase 4.4.
+- **Dependencies**: No new dependencies were added.
+
+Verified quality state:
+- 362 tests passing
+- Ruff checks passing
+- mypy checks passing
+- `git diff --check` passing
+
+---
+
 ### Semantic Scholar provenance
 
 Implemented provenance mapping support in `SemanticScholarProvider.map_paper` to record search query details in the `provenance` field, mirroring OpenAlex's provenance construction.
