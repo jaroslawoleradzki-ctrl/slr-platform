@@ -228,7 +228,7 @@ BibTeX Import — Phase 4: Completed.
 
 Quality status:
 
-- 435 tests passing
+- 478 tests passing
 - Ruff checks passing
 - mypy checks passing
 - `git diff --check` passing
@@ -249,6 +249,7 @@ Harmonization completed increments:
 
 - 5.1 Canonical mapping parity specification
 - 5.2 OpenAlex provider mapping parity
+- 5.3 Cross-provider normalization consistency
 
 Canonical mapping parity specification now provides:
 
@@ -281,6 +282,26 @@ OpenAlex provider mapping parity now provides:
 - no domain-model, HTTP-client, Crossref, or Semantic Scholar changes
 
 Phase 5.2 — OpenAlex Provider Mapping Parity: Completed.
+
+Cross-provider normalization consistency now provides:
+
+- one canonical DOI policy across OpenAlex, Crossref, and Semantic Scholar
+- one bare ORCID policy for OpenAlex and Crossref authors
+- consistent ISSN trimming, final-`X` casing, deduplication, and ordering
+- canonical provider-native identifier sources and preserved identifier casing
+- consistent whitespace, blank, malformed optional value, and collection-order behavior
+- case-insensitive HTTP(S) URL handling without network checks or domain rewriting
+- language trimming with lowercase and validation retained by the canonical model
+- consistent known/unknown/missing document-type behavior
+- consistent OpenAlex and Semantic Scholar venue-type behavior
+- faithful provider-ordered author names without entity matching or invented name parts
+- consistent year/date validation, inference, and conflict handling
+- normalized Crossref DOI provenance identifiers
+- provider-local normalization helpers intentionally retained for Phase 5.4
+- no global title/author/organization normalization, record merging, or deduplication
+- no domain-model changes, shared mapper framework, or new dependencies
+
+Phase 5.3 — Cross-provider Normalization Consistency: Completed.
 
 ---
 
@@ -333,7 +354,7 @@ Every feature must:
 
 # Next milestone
 
-Harmonization — Phase 5.3 Cross-provider normalization consistency.
+Harmonization — Phase 5.4 Shared mapper utilities.
 
 Future architectural work:
 

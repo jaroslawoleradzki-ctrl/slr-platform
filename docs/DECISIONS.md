@@ -256,6 +256,47 @@ Verified quality state:
 
 ---
 
+### Cross-provider boundary normalization
+
+OpenAlex, Crossref, and Semantic Scholar now apply the same deterministic
+normalization contract where their APIs expose semantically equivalent data.
+
+Key decisions:
+- **Whitespace and blanks**: Strings are trimmed, blank optional values are omitted, and non-string values are never stringified.
+- **DOI**: HTTP/HTTPS `doi.org` and `dx.doi.org` prefixes plus `doi:` are removed, then DOI values are lowercased. No checksum or syntax regex was added.
+- **Crossref provenance**: Its DOI-based `source_record_id` uses the same canonical DOI value as the publication identifier.
+- **ORCID**: HTTP/HTTPS `orcid.org` prefixes and trailing slashes are removed and a final `X` is uppercased; no checksum validation is performed.
+- **ISSN**: Values are trimmed, a final `X` is uppercased, and exact normalized duplicates are removed in first-seen order without adding punctuation or validating checksums.
+- **Provider-native identifiers**: Values are non-blank and case-preserving `OTHER` identifiers with canonical sources `openalex` and `semantic_scholar`; Crossref does not duplicate DOI as `OTHER`.
+- **URLs**: Only HTTP(S) strings are retained. Scheme matching is case-insensitive, only scheme casing is canonicalized, and the remaining URL is preserved.
+- **Language**: Clean non-blank strings are passed to `Publication`; its existing lowercase and minimum-length validation remain authoritative.
+- **Types**: Known document and venue types map case-insensitively, unknown non-blank strings map to `OTHER`, and missing, blank, or malformed types map to `None`.
+- **Author names**: Provider order and casing are preserved, blank/malformed authors are skipped, full names are not split, and Crossref retains separately supplied given/family names.
+- **Venue and publisher**: Values are trimmed and never inferred from fields with different semantics.
+- **Year and date**: Years exclude booleans and remain within 1000–9999. Valid full dates may infer a missing year; a conflict preserves the explicit year and omits the date. Partial Crossref dates supply only their available year.
+- **Malformed optional data**: Invalid optional values become `None` or empty collections; canonical-owned validation such as malformed non-blank language remains visible.
+- **Boundary only**: This does not set `title_normalized`, resolve entities, merge records, or deduplicate publications and is not the later global Normalization phase.
+
+Verified quality state:
+- 478 tests passing
+- Ruff checks passing
+- mypy checks passing
+- `git diff --check` passing
+
+---
+
+### Temporary provider-local normalization helpers
+
+Similar DOI, identifier, ISSN, URL, and string-cleaning logic intentionally
+remains local to each provider during Phase 5.3.
+
+Key decisions:
+- **Evidence before extraction**: Phase 5.4 will compare the now-tested duplication and extract only genuinely common behavior.
+- **No premature framework**: No mapper framework, base provider class, mixin, registry, or shared helper module was introduced.
+- **Transport stays separate**: Provider API clients remain independent from canonical mapping.
+
+---
+
 ### Semantic Scholar provenance
 
 Implemented provenance mapping support in `SemanticScholarProvider.map_paper` to record search query details in the `provenance` field, mirroring OpenAlex's provenance construction.

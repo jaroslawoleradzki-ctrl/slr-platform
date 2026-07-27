@@ -70,20 +70,20 @@ Support values:
 | `authors.display_name` | Provider-data-dependent | Yes | Yes | Yes | Provider-dependent | Preserve provider order. |
 | `authors.given_name` | Provider-data-dependent | No | Yes | No | Provider-dependent | OpenAlex and Semantic Scholar currently map display names only. |
 | `authors.family_name` | Provider-data-dependent | No | Yes | No | Provider-dependent | OpenAlex and Semantic Scholar currently map display names only. |
-| `authors.identifiers.ORCID` | Provider-data-dependent | Yes | Yes | No | Provider-dependent | Normalize provider URL and bare forms consistently in 5.3. |
+| `authors.identifiers.ORCID` | Provider-data-dependent | Yes | Yes | No | Provider-dependent | OpenAlex and Crossref use the same bare ORCID form. |
 | `authors.affiliations` | Provider-data-dependent | Yes | Yes | No | Provider-dependent | OpenAlex maps valid institutions from authorships. |
 | `publication_year` | Provider-data-dependent | Yes | Yes | Yes | Provider-dependent | Invalid optional years are omitted. |
 | `publication_date` | Provider-data-dependent | Yes | Yes | Yes | Provider-dependent | OpenAlex preserves an explicit valid year and omits a conflicting date. |
-| `identifiers.DOI` | Provider-data-dependent | Yes | Yes | Yes | Provider-dependent | DOI normalization consistency is deferred to 5.3. |
+| `identifiers.DOI` | Provider-data-dependent | Yes | Yes | Yes | Provider-dependent | All providers use a lowercase DOI without URL or `doi:` prefixes. |
 | `identifiers.PMID` | Provider-data-dependent | No | No | Yes | Provider-dependent | Map only where supplied. |
 | `identifiers.provider_native` | Provider-data-dependent | Yes | No | Yes | Provider-dependent | OpenAlex maps the work ID while retaining it independently in provenance. |
 | `venue.name` | Provider-data-dependent | Yes | Yes | Yes | Provider-dependent | OpenAlex uses `primary_location.source`. |
 | `venue.type` | Provider-data-dependent | Yes | No | Yes | Provider-dependent | Unknown non-blank OpenAlex source types map to `OTHER`. |
-| `venue.identifiers.ISSN` | Provider-data-dependent | Yes | Yes | Yes | Provider-dependent | OpenAlex preserves ISSN-L first and removes exact duplicates. |
+| `venue.identifiers.ISSN` | Provider-data-dependent | Yes | Yes | Yes | Provider-dependent | ISSNs are trimmed, normalize a final `X`, and retain first-seen order. |
 | `publisher` | Provider-data-dependent | No | Yes | No | Provider-dependent | Map only from a stable provider structure. |
-| `document_type` | Provider-data-dependent | Yes | Yes | Yes | Provider-dependent | Fallback consistency is decided in 5.3. |
-| `language` | Provider-data-dependent | Yes | Yes | No | Provider-dependent | Canonical casing consistency is decided in 5.3. |
-| `urls` | Provider-data-dependent | Yes | Yes | Yes | Provider-dependent | Only valid HTTP(S) landing-page and PDF URLs enter the canonical model. |
+| `document_type` | Provider-data-dependent | Yes | Yes | Yes | Provider-dependent | Known types map case-insensitively; unknown non-blank types use `OTHER`. |
+| `language` | Provider-data-dependent | Yes | Yes | Yes | Provider-dependent | Values are trimmed and canonical model validation supplies lowercase. |
+| `urls` | Provider-data-dependent | Yes | Yes | Yes | Provider-dependent | HTTP(S) schemes are accepted case-insensitively and exact URLs are deduplicated. |
 | `keywords` | Provider-data-dependent | No | No | No | Provider-dependent | Map topics/keywords only when semantics are unambiguous. |
 | `open_access` | Provider-data-dependent | Yes | No | No | Provider-dependent | OpenAlex maps only an explicit boolean `open_access.is_oa`. |
 | `provenance.source` | Required | Yes | Yes | Yes | Yes | Required for search results. |
@@ -135,24 +135,40 @@ unmapped because they are not necessarily publication-assigned canonical
 keywords. PMID, structured given/family author names, and other unavailable
 values remain provider-data-dependent gaps rather than invented data.
 
-### 5.3 Cross-provider normalization consistency
+### 5.3 Cross-provider normalization consistency — completed
 
-Decide and test consistent provider-boundary rules for:
+The provider boundary now applies this contract:
 
-- DOI casing and prefix handling;
-- ORCID URL and bare-identifier forms;
-- ISSN formatting and deduplication;
-- provider-native identifiers;
-- whitespace and blank handling;
-- URL validation;
-- document-type fallback behavior;
-- language casing;
-- author-name structure;
-- publication date/year conflicts;
-- venue-type handling;
-- malformed optional values.
+- strings are trimmed, blank optional strings are omitted, and non-strings are
+  never coerced with `str()`;
+- DOI values are lowercase and omit `doi:`, `doi.org`, and `dx.doi.org`
+  HTTP/HTTPS prefixes;
+- ORCID values omit HTTP/HTTPS `orcid.org` prefixes and a trailing slash, with
+  a final `X` uppercased;
+- ISSNs are trimmed, a final `X` is uppercased, and exact normalized duplicates
+  are removed while preserving first-seen order;
+- provider-native `OTHER` identifiers preserve casing and use `openalex` or
+  `semantic_scholar` as their canonical source;
+- URLs accept HTTP and HTTPS schemes case-insensitively, normalize only the
+  scheme casing required by the canonical model, preserve the remainder, and
+  retain first-seen order;
+- language values are trimmed and passed to the canonical model, which applies
+  lowercase and its existing minimum-length validation;
+- known document and venue types map case-insensitively, unknown non-blank
+  types use `OTHER`, and missing, blank, or non-string types remain `None`;
+- authors retain provider order and casing; blank or malformed authors are
+  omitted, and only Crossref-provided given/family fields are structured;
+- years must be non-boolean integers from 1000 through 9999; full dates must be
+  valid, may supply a missing year, and are dropped when they conflict with an
+  explicit valid year;
+- malformed optional values become `None` or empty collections without
+  rejecting an otherwise valid record, except validation intentionally owned
+  by the canonical model such as malformed non-blank language.
 
-These decisions do not implement record deduplication or the global Normalization phase.
+This is provider-boundary normalization only. It does not normalize titles,
+resolve author or organization identities, merge records, deduplicate
+publications, or implement the later global Normalization phase. Similar
+provider-local helpers remain intentionally duplicated until Phase 5.4.
 
 ### 5.4 Shared mapper utilities
 

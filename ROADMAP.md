@@ -61,7 +61,7 @@ Canonical publication and review-process model.
 
 Current active increment:
 
-Harmonization — Phase 5.3 Cross-provider normalization consistency.
+Harmonization — Phase 5.4 Shared mapper utilities.
 
 ### Semantic Scholar
 
@@ -94,7 +94,7 @@ Planned work:
 
 - [x] 5.1 Canonical mapping parity specification
 - [x] 5.2 OpenAlex provider mapping parity
-- [ ] 5.3 Cross-provider normalization consistency
+- [x] 5.3 Cross-provider normalization consistency
 - [ ] 5.4 Shared mapper utilities
 - [ ] 5.5 Cross-provider mapping contract tests
 
