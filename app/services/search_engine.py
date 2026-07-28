@@ -2,11 +2,22 @@ from __future__ import annotations
 
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Protocol
 from uuid import UUID, uuid4
 
 from app.domain.publication import Publication
 from app.domain.search import SearchQuery, SearchRun
+from app.providers.search.base import ProviderSearchOutput
+from app.storage.raw_response_archive import (
+    RawResponseArchive,
+    RawResponseArchiveEntry,
+    RawResponseStatus,
+)
+
+
+def _utc_now() -> datetime:
+    return datetime.now(timezone.utc)
 
 
 class SearchProvider(Protocol):
@@ -14,12 +25,12 @@ class SearchProvider(Protocol):
 
     name: str
 
-    async def search(
+    async def search_with_raw(
         self,
         *,
         search_run: SearchRun,
         search_query: SearchQuery,
-    ) -> list[Publication]: ...
+    ) -> ProviderSearchOutput: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -51,10 +62,16 @@ class SearchEngine:
         self,
         *,
         providers: Sequence[SearchProvider],
+        raw_response_archive: RawResponseArchive,
         run_id_factory: Callable[[], UUID] = uuid4,
+        archive_id_factory: Callable[[], UUID] = uuid4,
+        clock: Callable[[], datetime] = _utc_now,
     ) -> None:
         self._providers = tuple(providers)
+        self._raw_response_archive = raw_response_archive
         self._run_id_factory = run_id_factory
+        self._archive_id_factory = archive_id_factory
+        self._clock = clock
 
     async def execute(self, search_query: SearchQuery) -> SearchExecution:
         """Execute providers sequentially and preserve separate result identity."""
@@ -69,11 +86,24 @@ class SearchEngine:
                 rendered_query=search_query.to_boolean_query(),
             )
             try:
-                publications = await provider.search(
+                output = await provider.search_with_raw(
                     search_run=search_run,
                     search_query=search_query,
                 )
             except Exception as error:
+                await self._raw_response_archive.save(
+                    RawResponseArchiveEntry(
+                        archive_id=self._archive_id_factory(),
+                        search_run_id=search_run.run_id,
+                        provider=search_run.provider,
+                        rendered_query=search_run.rendered_query,
+                        captured_at=self._clock(),
+                        status=RawResponseStatus.FAILED,
+                        responses=[],
+                        error_type=type(error).__name__,
+                        error_message=str(error),
+                    )
+                )
                 provider_results.append(
                     ProviderSearchResult(
                         search_run=search_run,
@@ -82,10 +112,21 @@ class SearchEngine:
                     )
                 )
             else:
+                await self._raw_response_archive.save(
+                    RawResponseArchiveEntry(
+                        archive_id=self._archive_id_factory(),
+                        search_run_id=search_run.run_id,
+                        provider=search_run.provider,
+                        rendered_query=search_run.rendered_query,
+                        captured_at=self._clock(),
+                        status=RawResponseStatus.SUCCESS,
+                        responses=output.raw_responses,
+                    )
+                )
                 provider_results.append(
                     ProviderSearchResult(
                         search_run=search_run,
-                        publications=publications,
+                        publications=output.publications,
                         error=None,
                     )
                 )

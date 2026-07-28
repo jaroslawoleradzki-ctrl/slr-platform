@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator, Callable
 from datetime import date, datetime, timezone
-from typing import Any
+from typing import Any, cast
 
 from app.domain import (
     Affiliation,
@@ -16,6 +16,7 @@ from app.domain.provenance import ProvenanceEntry
 from app.domain.publication import DocumentType, Publication
 from app.domain.search import SearchQuery, SearchRun
 from app.providers.openalex import OpenAlexClient
+from app.providers.search.base import JsonObject, ProviderSearchOutput
 from app.providers.search.mapping_utils import (
     clean_string,
     normalize_doi,
@@ -242,6 +243,24 @@ class OpenAlexProvider:
     ) -> list[Publication]:
         """Fetch and map one page using explicit, auditable search context."""
 
+        output = await self.search_with_raw(
+            search_run=search_run,
+            search_query=search_query,
+            per_page=per_page,
+            cursor=cursor,
+        )
+        return output.publications
+
+    async def search_with_raw(
+        self,
+        *,
+        search_run: SearchRun,
+        search_query: SearchQuery,
+        per_page: int = 25,
+        cursor: str = "*",
+    ) -> ProviderSearchOutput:
+        """Fetch one page once, then expose its mapping and original payload."""
+
         self._validate_search_context(search_run, search_query)
         payload = await self._client.search_works(
             search_run.rendered_query,
@@ -266,7 +285,10 @@ class OpenAlexProvider:
                     retrieved_at=retrieved_at,
                 )
             )
-        return publications
+        return ProviderSearchOutput(
+            publications=publications,
+            raw_responses=[cast(JsonObject, payload)],
+        )
 
     async def iterate(
         self,

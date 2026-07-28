@@ -4,13 +4,14 @@ import html
 import re
 from collections.abc import AsyncIterator, Callable
 from datetime import date, datetime, timezone
-from typing import Any
+from typing import Any, cast
 
 from app.domain import Affiliation, Author, Identifier, IdentifierType, Venue
 from app.domain.provenance import ProvenanceEntry
 from app.domain.publication import DocumentType, Publication
 from app.domain.search import SearchQuery, SearchRun
 from app.providers.crossref import CrossrefClient
+from app.providers.search.base import JsonObject, ProviderSearchOutput
 from app.providers.search.mapping_utils import (
     clean_string,
     normalize_doi,
@@ -107,6 +108,25 @@ class CrossrefProvider:
         cursor: str | None = None,
     ) -> list[Publication]:
         """Fetch and map one Crossref page with explicit search provenance."""
+
+        output = await self.search_with_raw(
+            search_run=search_run,
+            search_query=search_query,
+            rows=rows,
+            cursor=cursor,
+        )
+        return output.publications
+
+    async def search_with_raw(
+        self,
+        *,
+        search_run: SearchRun,
+        search_query: SearchQuery,
+        rows: int = 20,
+        cursor: str | None = None,
+    ) -> ProviderSearchOutput:
+        """Fetch one page once, then expose its mapping and original payload."""
+
         client = self._require_client()
         self._validate_search_context(search_run, search_query)
         payload = await client.search_works(
@@ -117,7 +137,7 @@ class CrossrefProvider:
         message = payload["message"]
         items = message["items"]
         retrieved_at = self._retrieval_clock()
-        return [
+        publications = [
             self._map_work_with_provenance(
                 work,
                 search_run=search_run,
@@ -126,6 +146,10 @@ class CrossrefProvider:
             )
             for work in items
         ]
+        return ProviderSearchOutput(
+            publications=publications,
+            raw_responses=[cast(JsonObject, payload)],
+        )
 
     async def iterate(
         self,

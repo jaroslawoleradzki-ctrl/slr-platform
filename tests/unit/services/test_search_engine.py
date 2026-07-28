@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Protocol, runtime_checkable
 from uuid import UUID
 
@@ -7,11 +8,18 @@ import pytest
 
 from app.domain.publication import Publication
 from app.domain.search import SearchQuery, SearchRun, SearchTerm
+from app.providers.search.base import JsonObject, ProviderSearchOutput
 from app.services.search_engine import (
     ProviderSearchResult,
     SearchEngine,
     SearchProvider,
 )
+from app.storage.raw_response_archive import (
+    RawResponseArchiveEntry,
+    RawResponseStatus,
+)
+
+_CAPTURED_AT = datetime(2026, 7, 28, 12, 0, tzinfo=timezone.utc)
 
 
 @runtime_checkable
@@ -24,32 +32,53 @@ class FakeSearchProvider:
         self,
         name: str,
         publications: list[Publication] | None = None,
+        raw_responses: list[JsonObject] | None = None,
         error: Exception | None = None,
         call_order: list[str] | None = None,
     ) -> None:
         self.name = name
         self.publications = publications if publications is not None else []
+        self.raw_responses = raw_responses if raw_responses is not None else []
         self.error = error
         self.call_order = call_order
         self.calls: list[tuple[SearchRun, SearchQuery]] = []
 
-    async def search(
+    async def search_with_raw(
         self,
         *,
         search_run: SearchRun,
         search_query: SearchQuery,
-    ) -> list[Publication]:
+    ) -> ProviderSearchOutput:
         self.calls.append((search_run, search_query))
         if self.call_order is not None:
             self.call_order.append(self.name)
         if self.error is not None:
             raise self.error
-        return self.publications
+        return ProviderSearchOutput(
+            publications=self.publications,
+            raw_responses=self.raw_responses,
+        )
+
+
+class FakeRawResponseArchive:
+    def __init__(self, error: Exception | None = None) -> None:
+        self.entries: list[RawResponseArchiveEntry] = []
+        self.error = error
+
+    async def save(self, entry: RawResponseArchiveEntry) -> None:
+        if self.error is not None:
+            raise self.error
+        self.entries.append(entry)
 
 
 @pytest.fixture
 def anyio_backend() -> str:
     return "asyncio"
+
+
+@pytest.fixture
+def archive() -> FakeRawResponseArchive:
+    return FakeRawResponseArchive()
 
 
 @pytest.fixture
@@ -104,6 +133,7 @@ def test_provider_result_rejects_publications_and_error_together(
 @pytest.mark.anyio
 async def test_execute_calls_all_providers_in_order_with_separate_runs(
     search_query: SearchQuery,
+    archive: FakeRawResponseArchive,
 ) -> None:
     call_order: list[str] = []
     providers = [
@@ -121,12 +151,14 @@ async def test_execute_calls_all_providers_in_order_with_separate_runs(
 
     result = await SearchEngine(
         providers=providers,
+        raw_response_archive=archive,
         run_id_factory=lambda: next(run_ids),
     ).execute(search_query)
 
     assert call_order == ["first", "second", "third"]
     assert [len(provider.calls) for provider in providers] == [1, 1, 1]
     assert len(result.provider_results) == 3
+    assert len(archive.entries) == 3
     assert [
         provider_result.search_run.run_id
         for provider_result in result.provider_results
@@ -134,6 +166,10 @@ async def test_execute_calls_all_providers_in_order_with_separate_runs(
         UUID("22222222-2222-2222-2222-222222222222"),
         UUID("33333333-3333-3333-3333-333333333333"),
         UUID("44444444-4444-4444-4444-444444444444"),
+    ]
+    assert [entry.search_run_id for entry in archive.entries] == [
+        provider_result.search_run.run_id
+        for provider_result in result.provider_results
     ]
     assert len(
         {
@@ -162,6 +198,7 @@ async def test_execute_calls_all_providers_in_order_with_separate_runs(
 @pytest.mark.anyio
 async def test_execute_keeps_provider_results_separate_without_copying(
     search_query: SearchQuery,
+    archive: FakeRawResponseArchive,
 ) -> None:
     first = Publication(title="First")
     second = Publication(title="Second")
@@ -174,6 +211,7 @@ async def test_execute_keeps_provider_results_separate_without_copying(
             FakeSearchProvider("first", first_publications),
             FakeSearchProvider("second", second_publications),
         ],
+        raw_response_archive=archive,
     ).execute(search_query)
 
     assert result.provider_results[0].publications is first_publications
@@ -190,11 +228,13 @@ async def test_execute_keeps_provider_results_separate_without_copying(
 @pytest.mark.anyio
 async def test_execute_preserves_empty_provider_result(
     search_query: SearchQuery,
+    archive: FakeRawResponseArchive,
 ) -> None:
     publications: list[Publication] = []
 
     result = await SearchEngine(
         providers=[FakeSearchProvider("empty", publications)],
+        raw_response_archive=archive,
     ).execute(search_query)
 
     assert result.provider_results[0].publications is publications
@@ -205,6 +245,7 @@ async def test_execute_preserves_empty_provider_result(
 @pytest.mark.anyio
 async def test_execute_continues_after_error_and_preserves_partial_results(
     search_query: SearchQuery,
+    archive: FakeRawResponseArchive,
 ) -> None:
     error = RuntimeError("provider failed")
     call_order: list[str] = []
@@ -213,6 +254,7 @@ async def test_execute_continues_after_error_and_preserves_partial_results(
     first = FakeSearchProvider(
         "first",
         first_publications,
+        raw_responses=[{"page": 1}],
         call_order=call_order,
     )
     second = FakeSearchProvider(
@@ -223,11 +265,13 @@ async def test_execute_continues_after_error_and_preserves_partial_results(
     third = FakeSearchProvider(
         "third",
         third_publications,
+        raw_responses=[{"page": 3}],
         call_order=call_order,
     )
 
     result = await SearchEngine(
         providers=[first, second, third],
+        raw_response_archive=archive,
     ).execute(search_query)
 
     assert call_order == ["first", "second", "third"]
@@ -240,16 +284,93 @@ async def test_execute_continues_after_error_and_preserves_partial_results(
     assert result.provider_results[1].error is error
     assert result.provider_results[2].publications is third_publications
     assert result.provider_results[2].error is None
+    assert [entry.status for entry in archive.entries] == [
+        RawResponseStatus.SUCCESS,
+        RawResponseStatus.FAILED,
+        RawResponseStatus.SUCCESS,
+    ]
+    assert archive.entries[0].responses == [{"page": 1}]
+    assert archive.entries[1].responses == []
+    assert archive.entries[1].error_type == "RuntimeError"
+    assert archive.entries[1].error_message == "provider failed"
+    assert archive.entries[2].responses == [{"page": 3}]
+
+
+@pytest.mark.anyio
+async def test_execute_archives_success_with_deterministic_metadata(
+    search_query: SearchQuery,
+) -> None:
+    archive = FakeRawResponseArchive()
+    publications = [Publication(title="Result")]
+    raw_pages: list[JsonObject] = [
+        {"page": 1, "items": [{"id": "one"}]},
+        {"page": 2, "items": [{"id": "two"}]},
+    ]
+    run_id = UUID("22222222-2222-2222-2222-222222222222")
+    archive_id = UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
+
+    result = await SearchEngine(
+        providers=[
+            FakeSearchProvider(
+                "fake",
+                publications,
+                raw_responses=raw_pages,
+            )
+        ],
+        raw_response_archive=archive,
+        run_id_factory=lambda: run_id,
+        archive_id_factory=lambda: archive_id,
+        clock=lambda: _CAPTURED_AT,
+    ).execute(search_query)
+
+    assert result.provider_results[0].publications is publications
+    assert len(archive.entries) == 1
+    entry = archive.entries[0]
+    assert entry.archive_id == archive_id
+    assert entry.search_run_id == run_id
+    assert entry.provider == "fake"
+    assert entry.rendered_query == '"lean manufacturing"'
+    assert entry.captured_at == _CAPTURED_AT
+    assert entry.status is RawResponseStatus.SUCCESS
+    assert entry.responses is raw_pages
+    assert entry.responses == raw_pages
+    assert entry.error_type is None
+    assert entry.error_message is None
+
+
+@pytest.mark.anyio
+async def test_archive_failure_is_propagated_and_stops_execution(
+    search_query: SearchQuery,
+) -> None:
+    archive_error = RuntimeError("archive unavailable")
+    archive = FakeRawResponseArchive(error=archive_error)
+    first = FakeSearchProvider("first")
+    second = FakeSearchProvider("second")
+
+    with pytest.raises(RuntimeError) as exc_info:
+        await SearchEngine(
+            providers=[first, second],
+            raw_response_archive=archive,
+        ).execute(search_query)
+
+    assert exc_info.value is archive_error
+    assert len(first.calls) == 1
+    assert second.calls == []
+    assert archive.entries == []
 
 
 @pytest.mark.anyio
 async def test_engine_uses_original_provider_sequence_after_list_mutation(
     search_query: SearchQuery,
+    archive: FakeRawResponseArchive,
 ) -> None:
     first = FakeSearchProvider("first")
     second = FakeSearchProvider("second")
     providers = [first]
-    engine = SearchEngine(providers=providers)
+    engine = SearchEngine(
+        providers=providers,
+        raw_response_archive=archive,
+    )
     providers.clear()
     providers.append(second)
 
@@ -264,10 +385,15 @@ async def test_engine_uses_original_provider_sequence_after_list_mutation(
 @pytest.mark.anyio
 async def test_execute_with_no_providers_returns_empty_result(
     search_query: SearchQuery,
+    archive: FakeRawResponseArchive,
 ) -> None:
-    result = await SearchEngine(providers=[]).execute(search_query)
+    result = await SearchEngine(
+        providers=[],
+        raw_response_archive=archive,
+    ).execute(search_query)
 
     assert result.provider_results == []
+    assert archive.entries == []
 
 
 def test_fake_provider_structurally_satisfies_search_provider() -> None:

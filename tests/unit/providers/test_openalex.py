@@ -133,6 +133,48 @@ async def test_provider_attaches_search_provenance_to_publication() -> None:
 
 
 @pytest.mark.anyio
+async def test_provider_search_with_raw_reuses_single_payload() -> None:
+    search_run, search_query = build_search_context()
+    request_count = 0
+    payload = {
+        "meta": {"next_cursor": None},
+        "results": [
+            {
+                "id": "https://openalex.org/W1",
+                "title": "Lean energy study",
+            }
+        ],
+    }
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal request_count
+        request_count += 1
+        return httpx.Response(200, json=payload, request=request)
+
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(handler)
+    ) as http_client:
+        provider = OpenAlexProvider(
+            client=OpenAlexClient(
+                http_client=http_client,
+                requests_per_second=None,
+            ),
+            retrieval_clock=lambda: _RETRIEVED_AT,
+        )
+        output = await provider.search_with_raw(
+            search_run=search_run,
+            search_query=search_query,
+        )
+
+    assert request_count == 1
+    assert output.raw_responses == [payload]
+    assert [publication.title for publication in output.publications] == [
+        "Lean energy study"
+    ]
+    assert output.publications[0].provenance[0].run_id == search_run.run_id
+
+
+@pytest.mark.anyio
 async def test_provider_gives_each_result_its_own_source_id_and_shared_context() -> None:
     search_run, search_query = build_search_context()
     transport = httpx.MockTransport(

@@ -76,6 +76,46 @@ async def test_search_maps_crossref_provenance() -> None:
 
 
 @pytest.mark.anyio
+async def test_search_with_raw_reuses_single_payload() -> None:
+    request_count = 0
+    payload = {
+        "message": {
+            "items": [
+                {
+                    "DOI": "10.1000/abc",
+                    "title": ["Lean Energy"],
+                }
+            ]
+        }
+    }
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal request_count
+        request_count += 1
+        return httpx.Response(200, json=payload, request=request)
+
+    search_run, search_query = _search_context()
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(handler)
+    ) as http_client:
+        provider = CrossrefProvider(
+            client=CrossrefClient(http_client=http_client),
+            retrieval_clock=lambda: _RETRIEVED_AT,
+        )
+        output = await provider.search_with_raw(
+            search_run=search_run,
+            search_query=search_query,
+        )
+
+    assert request_count == 1
+    assert output.raw_responses == [payload]
+    assert [publication.title for publication in output.publications] == [
+        "Lean Energy"
+    ]
+    assert output.publications[0].provenance[0].run_id == search_run.run_id
+
+
+@pytest.mark.anyio
 async def test_search_uses_one_retrieval_timestamp_for_page() -> None:
     clock_values = iter(
         [
