@@ -6,6 +6,30 @@ This document records important project decisions that do not require a full ADR
 
 ## 2026-07-28
 
+### Provider-independent title normalization
+
+Phase 4.3 establishes `app/normalization/title.py` as the single source of
+title-normalization behavior. `TitleNormalizer` implements the structural
+normalization contract, while `normalize_title` provides the public convenience
+function. The implementation is provider-independent, deterministic,
+idempotent, and non-mutating.
+
+The canonical algorithm preserves the legacy sequence: Unicode NFKC
+normalization, case folding, replacement of characters outside `\w` and
+whitespace with spaces, whitespace collapsing, and trimming. Non-string,
+blank, and punctuation-only inputs return `None`.
+
+This normalization produces a stable textual representation only. It performs
+no fuzzy matching, similarity or confidence scoring, transliteration,
+translation, token sorting, stemming, lemmatization, or stop-word removal.
+Author and publication-wide normalization remain later-phase responsibilities.
+
+`app.modules.normalize.service` re-exports the canonical function solely for
+compatibility with its legacy `normalize_record` pipeline; it contains no
+second title-normalization algorithm.
+
+---
+
 ### Provider-independent DOI normalization
 
 Phase 4.2 establishes `app.normalization.doi` as the single source of DOI

@@ -61,7 +61,7 @@ Canonical publication and review-process model.
 
 Current active increment:
 
-Phase 4.3 — Title normalization.
+Phase 4.4 — Author normalization.
 
 ### Semantic Scholar
 
@@ -257,10 +257,10 @@ The following rules apply throughout Phase 3:
 - [x] Add unit and regression tests.
 
 ### 4.3 — Title normalization
-- [ ] Normalize Unicode, casing, whitespace, and punctuation variants.
-- [ ] Preserve semantic content and original title.
-- [ ] Populate title_normalized.
-- [ ] Add idempotence tests.
+- [x] Normalize Unicode, casing, whitespace, and punctuation variants.
+- [x] Preserve semantic content and original title.
+- [x] Populate title_normalized.
+- [x] Add idempotence tests.
 
 ### 4.4 — Author normalization
 - [ ] Normalize author text fields.

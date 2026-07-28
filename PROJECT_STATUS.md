@@ -228,7 +228,7 @@ BibTeX Import — Phase 4: Completed.
 
 Quality status:
 
-- 636 tests passing
+- 671 tests passing
 - Ruff checks passing
 - mypy checks passing
 - `git diff --check` passing
@@ -516,6 +516,26 @@ DOI normalization now provides:
 - no title, author, publication-pipeline, fuzzy-matching, similarity,
   confidence-scoring, or new deduplication behavior
 
+Phase 4.3 — Title normalization: Completed.
+
+Title normalization now provides:
+
+- one provider-independent implementation in `app/normalization/title.py`,
+  exposed through `TitleNormalizer` and the `normalize_title` convenience
+  function
+- preservation of the established algorithm: Unicode NFKC normalization,
+  case folding, punctuation and symbol replacement with spaces, whitespace
+  collapsing, and trimming
+- safe `None` results for non-string, blank, and punctuation-only inputs
+- deterministic, idempotent, and non-mutating behavior without transliteration
+  or language-specific processing
+- a compatibility re-export from `app.modules.normalize.service`, allowing the
+  legacy `normalize_record` pipeline to use the canonical implementation
+- focused unit and regression coverage for normalization behavior, the
+  structural protocol, old API compatibility, and legacy record normalization
+- no author normalization, publication normalization pipeline, fuzzy matching,
+  similarity scoring, stop-word removal, stemming, or lemmatization
+
 ---
 
 # Current architecture
@@ -567,7 +587,7 @@ Every feature must:
 
 # Next milestone
 
-Phase 4.3 — Title normalization.
+Phase 4.4 — Author normalization.
 
 ---
 
