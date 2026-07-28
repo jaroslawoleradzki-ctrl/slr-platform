@@ -6,6 +6,36 @@ This document records important project decisions that do not require a full ADR
 
 ## 2026-07-28
 
+### Normalization layer responsibility boundaries
+
+Phase 4.1 introduces only a structural normalization contract. Provider-boundary
+cleaning continues to operate on raw external values inside provider adapters
+and mapping utilities. It safely reads provider-specific shapes, trims strings,
+handles blanks and invalid external types, and performs the light conversion
+needed to build valid canonical models.
+
+Global normalization operates on canonical values or canonical domain objects.
+Its implementations must be provider-independent, deterministic, idempotent for
+their supported inputs, and non-mutating. A normalizer handles one value or
+object and produces a stable representation while preserving semantic content.
+
+Deduplication remains a separate Phase 5 responsibility. It compares multiple
+records, decides duplicate/not-duplicate relationships, selects or merges
+records, and may later calculate similarity or confidence. The normalization
+API therefore exposes no collection processing, duplicate candidates, match
+scores, winning-record selection, or merge behavior.
+
+The public Phase 4.1 API consists only of the generic structural
+`Normalizer[InputT, OutputT]` protocol. No concrete DOI, title, author,
+identifier, or publication normalizer and no normalization result model is
+introduced.
+
+Existing `normalize_doi`, `normalize_orcid`, `normalize_issn`, `normalize_url`,
+and related provider mapping helpers are not migrated in Phase 4.1.
+Provider-independent DOI normalization and migration begin in Phase 4.2.
+
+---
+
 ### Search Engine public contract suite
 
 Phase 3.6 closes the planned Search Engine layer with contract tests that enter

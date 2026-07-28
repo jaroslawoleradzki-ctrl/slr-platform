@@ -228,7 +228,7 @@ BibTeX Import — Phase 4: Completed.
 
 Quality status:
 
-- 593 tests passing
+- 599 tests passing
 - Ruff checks passing
 - mypy checks passing
 - `git diff --check` passing
@@ -472,6 +472,30 @@ This completion means the planned provider-independent orchestration layer and
 its tests are complete. It does not represent deployment of production runtime
 storage or external infrastructure.
 
+## Phase 4 — Normalization
+
+Phase 4.1 — Normalization contract and architecture: Completed.
+
+The normalization layer now provides:
+
+- a minimal provider-independent `Normalizer[InputT, OutputT]` structural
+  protocol for one canonical value or object
+- a documented behavioral contract requiring deterministic, idempotent, and
+  non-mutating implementations
+- an explicit boundary that excludes record comparison, duplicate decisions,
+  merging, ranking, similarity, and collection filtering
+- specification tests demonstrating `str → str` and immutable
+  `Publication → Publication` implementations
+- preservation of canonical record identity fields, provenance, and timestamps
+  in the test-domain normalization example
+- no concrete production normalizers or additional result models
+
+Existing provider mapping helpers remain in
+`app/providers/search/mapping_utils.py` and continue to clean external data at
+the provider boundary. They have not been migrated, and `ResultMerger` remains
+unchanged. Provider-independent production DOI normalization begins in Phase
+4.2. No deduplication behavior is introduced in Phase 4.1.
+
 ---
 
 # Current architecture
@@ -523,7 +547,7 @@ Every feature must:
 
 # Next milestone
 
-Phase 4 — Normalization: DOI normalization.
+Phase 4.2 — DOI normalization.
 
 ---
 

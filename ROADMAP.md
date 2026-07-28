@@ -61,7 +61,7 @@ Canonical publication and review-process model.
 
 Current active increment:
 
-Phase 4 — Normalization: DOI normalization.
+Phase 4.2 — DOI normalization.
 
 ### Semantic Scholar
 
@@ -244,10 +244,10 @@ The following rules apply throughout Phase 3:
 ## Phase 4 — Normalization
 
 ### 4.1 — Normalization contract and architecture
-- [ ] Define provider-boundary cleaning vs global normalization.
-- [ ] Define immutable normalization contracts.
-- [ ] Define boundaries against Phase 5 deduplication.
-- [ ] Add specification tests.
+- [x] Define provider-boundary cleaning vs global normalization.
+- [x] Define immutable normalization contracts.
+- [x] Define boundaries against Phase 5 deduplication.
+- [x] Add specification tests.
 
 ### 4.2 — DOI normalization
 - [ ] Create provider-independent DOI normalizer.
