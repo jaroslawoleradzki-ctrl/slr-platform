@@ -6,6 +6,35 @@ This document records important project decisions that do not require a full ADR
 
 ## 2026-07-28
 
+### Conservative DOI-only provider result merge
+
+Phase 3.4 adds a separate stateless `ResultMerger`, invoked once after all
+providers have executed sequentially and their required raw responses have been
+archived. `SearchExecution` retains every per-provider result and additionally
+exposes one merged publication list.
+
+Only publications from successful providers enter the merge. Input order is
+provider order followed by each provider's publication order, and the output
+keeps the first occurrence of each normalized DOI. The first matching
+`Publication` object is retained unchanged; later objects with that DOI are
+omitted without merging fields or provenance.
+
+DOI keys use the existing provider-boundary `normalize_doi` behavior, including
+supported URL and `doi:` prefixes and case normalization. If a publication has
+multiple DOI identifiers, the first DOI in identifier order is the deterministic
+key. Other DOI identifiers and all non-DOI identifier types are ignored for
+matching.
+
+Publications without a DOI are never combined, even when other metadata is
+identical. No title, author, year, venue, similarity, ranking, best-record
+selection, or metadata enrichment is performed.
+
+Raw-response archiving and provider failure isolation are unchanged. An archive
+failure still propagates before a final `SearchExecution` or merge result can be
+created.
+
+---
+
 ### Raw provider response archive boundary
 
 Phase 3.3 captures raw responses directly at the provider boundary rather than

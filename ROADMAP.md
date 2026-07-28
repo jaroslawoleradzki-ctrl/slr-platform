@@ -61,7 +61,7 @@ Canonical publication and review-process model.
 
 Current active increment:
 
-Phase 3.4 — Merge provider results.
+Phase 3.5 — Search provenance tracking.
 
 ### Semantic Scholar
 
@@ -178,10 +178,10 @@ Out of scope
 
 Scope
 
-- [ ] Combine results returned by all successfully executed providers.
-- [ ] Preserve every canonical Publication.
-- [ ] Produce deterministic ordering.
-- [ ] Keep provider provenance intact.
+- [x] Combine results returned by all successfully executed providers.
+- [x] Keep every canonical Publication available in its original per-provider result and preserve the first occurrence of each normalized DOI in `merged_publications`.
+- [x] Produce deterministic ordering.
+- [x] Keep provenance intact in per-provider results without merging provenance from DOI duplicates.
 
 Out of scope
 

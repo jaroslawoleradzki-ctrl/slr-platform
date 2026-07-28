@@ -228,7 +228,7 @@ BibTeX Import — Phase 4: Completed.
 
 Quality status:
 
-- 563 tests passing
+- 573 tests passing
 - Ruff checks passing
 - mypy checks passing
 - `git diff --check` passing
@@ -399,6 +399,27 @@ returning `ProviderSearchOutput`, no safe partial-page channel currently exists;
 the failed archive entry therefore stores an empty response list plus error
 diagnostics rather than reconstructing raw data.
 
+Phase 3.4 — Merge provider results: Completed.
+
+Provider result merging now provides:
+
+- a separate, stateless `ResultMerger` invoked once after all sequential
+  provider executions and required raw-response archive writes complete
+- `SearchExecution.merged_publications` alongside unchanged ordered
+  `provider_results`
+- merge input drawn only from successful provider results, in provider order
+  and then publication order
+- conservative duplicate detection using only the first DOI identifier on each
+  publication, normalized with the existing provider-boundary DOI helper
+- preservation of the first publication object encountered for a normalized
+  DOI, without copying it or combining any metadata
+- preservation of every publication without a DOI as a separate result
+- deterministic first-occurrence ordering and a new result list containing the
+  original `Publication` objects
+- unchanged provider error isolation and raw-response archive behavior
+- no title, author, year, venue, PMID, OpenAlex ID, similarity, ranking,
+  metadata-field, or provenance merging
+
 ---
 
 # Current architecture
@@ -450,7 +471,7 @@ Every feature must:
 
 # Next milestone
 
-Phase 3.4 — Merge provider results.
+Phase 3.5 — Search provenance tracking.
 
 ---
 
