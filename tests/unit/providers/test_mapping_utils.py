@@ -2,6 +2,7 @@ from typing import Any
 
 import pytest
 
+from app.normalization import normalize_doi as normalize_canonical_doi
 from app.providers.search.mapping_utils import (
     clean_string,
     normalize_doi,
@@ -46,6 +47,21 @@ def test_clean_string(value: Any, expected: str | None) -> None:
 )
 def test_normalize_doi(value: Any, expected: str | None) -> None:
     assert normalize_doi(value) == expected
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "10.1000/Example",
+        " HTTPS://DOI.ORG/10.1000/Example ",
+        "doi:",
+        "prefix-doi:10.1000/Example",
+        None,
+        123,
+    ],
+)
+def test_provider_normalize_doi_reexport_matches_canonical_api(value: Any) -> None:
+    assert normalize_doi(value) == normalize_canonical_doi(value)
 
 
 @pytest.mark.parametrize(

@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from app.domain import Author, Identifier, IdentifierType
 from app.domain.provenance import ProvenanceEntry
 from app.domain.publication import DocumentType, Publication
-from app.modules.normalize.service import normalize_doi
+from app.normalization import normalize_doi
 
 _TY_TO_DOC_TYPE: dict[str, DocumentType] = {
     "JOUR": DocumentType.JOURNAL_ARTICLE,

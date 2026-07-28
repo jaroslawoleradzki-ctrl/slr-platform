@@ -1,5 +1,7 @@
 from typing import Any
 
+from app.normalization.doi import normalize_doi as normalize_doi
+
 
 def clean_string(value: Any) -> str | None:
     """Return a trimmed non-blank string without coercing other values."""
@@ -8,27 +10,6 @@ def clean_string(value: Any) -> str | None:
         return None
     cleaned = value.strip()
     return cleaned or None
-
-
-def normalize_doi(value: Any) -> str | None:
-    """Normalize supported DOI prefixes and casing at the provider boundary."""
-
-    doi = clean_string(value)
-    if doi is None:
-        return None
-    lowered = doi.casefold()
-    for prefix in (
-        "https://doi.org/",
-        "http://doi.org/",
-        "https://dx.doi.org/",
-        "http://dx.doi.org/",
-        "doi:",
-    ):
-        if lowered.startswith(prefix):
-            doi = doi[len(prefix) :].strip()
-            break
-    return doi.lower() or None
-
 
 def normalize_orcid(value: Any) -> str | None:
     """Normalize supported ORCID prefixes, trailing slash, and final X."""

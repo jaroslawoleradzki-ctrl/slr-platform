@@ -2,7 +2,7 @@ from collections.abc import Iterable
 
 from app.domain.identifiers import IdentifierType
 from app.domain.publication import Publication
-from app.providers.search.mapping_utils import normalize_doi
+from app.normalization import normalize_doi
 
 
 class ResultMerger:

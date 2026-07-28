@@ -6,7 +6,7 @@ from app.domain import Author, Identifier, IdentifierType
 from app.domain.provenance import ProvenanceEntry
 from app.domain.publication import DocumentType, Publication
 from app.domain.venue import Venue
-from app.modules.normalize.service import normalize_doi
+from app.normalization import normalize_doi
 from app.providers.import_file.bibtex.parser import BibTeXRecord
 
 _ENTRY_TYPE_TO_DOCUMENT_TYPE: dict[str, DocumentType] = {
