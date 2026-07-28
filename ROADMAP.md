@@ -61,7 +61,7 @@ Canonical publication and review-process model.
 
 Current active increment:
 
-Phase 4.4 — Author normalization.
+Phase 4.5 — Publication normalization pipeline.
 
 ### Semantic Scholar
 
@@ -263,11 +263,11 @@ The following rules apply throughout Phase 3:
 - [x] Add idempotence tests.
 
 ### 4.4 — Author normalization
-- [ ] Normalize author text fields.
-- [ ] Normalize ORCID.
-- [ ] Preserve author order and original semantic data.
-- [ ] Avoid author identity resolution.
-- [ ] Add unit tests.
+- [x] Normalize author text fields.
+- [x] Normalize ORCID.
+- [x] Preserve author order and original semantic data.
+- [x] Avoid author identity resolution.
+- [x] Add unit tests.
 
 ### 4.5 — Identifier and Publication normalization pipeline
 - [ ] Normalize identifiers by type.

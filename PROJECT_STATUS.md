@@ -228,7 +228,7 @@ BibTeX Import — Phase 4: Completed.
 
 Quality status:
 
-- 671 tests passing
+- 723 tests passing
 - Ruff checks passing
 - mypy checks passing
 - `git diff --check` passing
@@ -536,6 +536,29 @@ Title normalization now provides:
 - no author normalization, publication normalization pipeline, fuzzy matching,
   similarity scoring, stop-word removal, stemming, or lemmatization
 
+Phase 4.4 — Author normalization: Completed.
+
+Author normalization now provides:
+
+- a provider-independent `AuthorNormalizer` in
+  `app/normalization/author.py`, accepting and returning one canonical `Author`
+- normalization limited to collapsing and trimming whitespace in
+  `display_name`, `given_name`, and `family_name`
+- preservation of capitalization, diacritics, punctuation, initials, name
+  order, institutional names, and absent optional name parts
+- a new deeply copied `Author` result without mutation or shared mutable
+  identifier and affiliation lists
+- no parsing or reconstruction of `display_name`, identity resolution,
+  matching, disambiguation, deduplication, or author merging
+- unchanged provider and import-file mapping semantics; those layers remain
+  responsible for source schemas and BibTeX/RIS name-format parsing
+- provider-independent ORCID normalization in `app/normalization/orcid.py`,
+  with the provider mapping utility retained only as a compatibility re-export
+- unchanged ORCID behavior without checksum validation, existence checks, or
+  identity resolution
+- deferred systematic application of author normalization to publications
+  until Phase 4.5
+
 ---
 
 # Current architecture
@@ -587,7 +610,7 @@ Every feature must:
 
 # Next milestone
 
-Phase 4.4 — Author normalization.
+Phase 4.5 — Publication normalization pipeline.
 
 ---
 

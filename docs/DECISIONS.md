@@ -6,6 +6,37 @@ This document records important project decisions that do not require a full ADR
 
 ## 2026-07-28
 
+### Canonical author and ORCID normalization boundaries
+
+Phase 4.4 adds `AuthorNormalizer`, which accepts one already constructed
+canonical `Author` and returns a new deeply copied `Author`. It collapses and
+trims whitespace only in `display_name`, `given_name`, and `family_name`.
+Capitalization, diacritics, punctuation, initials, suffixes, prefixes, name
+order, and absent optional name parts remain unchanged.
+
+The normalizer neither parses nor reconstructs `display_name`. Provider mappers
+remain responsible for source-specific schemas, while BibTeX and RIS mappers
+remain responsible for their format-specific author parsing. Systematic
+normalization of author lists within `Publication` is deferred to Phase 4.5.
+The legacy `app.modules.normalize.service` has no author re-export because its
+`PublicationRecord` stores `authors` as `list[str]`, not canonical `Author`
+objects.
+
+Author normalization performs no matching, identity resolution,
+disambiguation, deduplication, fingerprinting, or merging. Identifier and
+affiliation values are not normalized by `AuthorNormalizer`; they are only
+deeply copied to avoid sharing mutable lists with the input.
+
+`app/normalization/orcid.py` is the single source of ORCID normalization
+behavior. It preserves the former provider-boundary semantics: trimming,
+case-insensitive removal of supported URL prefixes, removal of a trailing
+slash, and uppercasing only a final `x`. The provider mapping utility keeps a
+compatibility re-export, while active providers import the neutral API
+directly. This is value normalization only, without checksum validation,
+existence checks, author matching, or identity resolution.
+
+---
+
 ### Provider-independent title normalization
 
 Phase 4.3 establishes `app/normalization/title.py` as the single source of
