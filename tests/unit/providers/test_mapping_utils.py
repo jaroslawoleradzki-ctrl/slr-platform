@@ -2,7 +2,10 @@ from typing import Any
 
 import pytest
 
-from app.normalization import normalize_doi as normalize_canonical_doi
+from app.normalization import (
+    normalize_doi as normalize_canonical_doi,
+    normalize_orcid as normalize_canonical_orcid,
+)
 from app.providers.search.mapping_utils import (
     clean_string,
     normalize_doi,
@@ -92,6 +95,23 @@ def test_provider_normalize_doi_reexport_matches_canonical_api(value: Any) -> No
 )
 def test_normalize_orcid(value: Any, expected: str | None) -> None:
     assert normalize_orcid(value) == expected
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "0000-0002-1825-0097",
+        " HTTPS://ORCID.ORG/0000-0002-1825-0097/ ",
+        "http://orcid.org/0000-0002-1825-009x/",
+        "https://orcid.org/",
+        None,
+        123,
+    ],
+)
+def test_provider_normalize_orcid_reexport_matches_canonical_api(
+    value: Any,
+) -> None:
+    assert normalize_orcid(value) == normalize_canonical_orcid(value)
 
 
 @pytest.mark.parametrize(

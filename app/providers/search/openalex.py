@@ -15,13 +15,13 @@ from app.domain import (
 from app.domain.provenance import ProvenanceEntry
 from app.domain.publication import DocumentType, Publication
 from app.domain.search import SearchQuery, SearchRun
+from app.normalization import normalize_orcid
 from app.providers.openalex import OpenAlexClient
 from app.providers.search.base import JsonObject, ProviderSearchOutput
 from app.providers.search.mapping_utils import (
     clean_string,
     normalize_doi,
     normalize_issn,
-    normalize_orcid,
     normalize_url,
 )
 

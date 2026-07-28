@@ -1,6 +1,7 @@
 from typing import Any
 
 from app.normalization.doi import normalize_doi as normalize_doi
+from app.normalization.orcid import normalize_orcid as normalize_orcid
 
 
 def clean_string(value: Any) -> str | None:
@@ -10,21 +11,6 @@ def clean_string(value: Any) -> str | None:
         return None
     cleaned = value.strip()
     return cleaned or None
-
-def normalize_orcid(value: Any) -> str | None:
-    """Normalize supported ORCID prefixes, trailing slash, and final X."""
-
-    orcid = clean_string(value)
-    if orcid is None:
-        return None
-    lowered = orcid.casefold()
-    for prefix in ("https://orcid.org/", "http://orcid.org/"):
-        if lowered.startswith(prefix):
-            orcid = orcid[len(prefix) :]
-            break
-    orcid = orcid.rstrip("/").strip()
-    return orcid[:-1] + "X" if orcid.casefold().endswith("x") else orcid or None
-
 
 def normalize_issn(value: Any) -> str | None:
     """Trim an ISSN and uppercase only a final X."""
