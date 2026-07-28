@@ -7,7 +7,11 @@ from typing import Protocol
 from uuid import UUID, uuid4
 
 from app.domain.publication import Publication
-from app.domain.search import SearchQuery, SearchRun
+from app.domain.search import SearchQuery, SearchRun, SearchRunStatus
+from app.domain.search_provenance import (
+    PublicationSearchProvenance,
+    SearchExecutionProvenance,
+)
 from app.providers.search.base import ProviderSearchOutput
 from app.services.result_merger import ResultMerger
 from app.storage.raw_response_archive import (
@@ -48,6 +52,14 @@ class ProviderSearchResult:
                 "ProviderSearchResult must contain either publications or an error"
             )
 
+    @property
+    def duration_seconds(self) -> float:
+        if self.search_run.started_at is None or self.search_run.finished_at is None:
+            raise ValueError("completed provider results require run timestamps")
+        return (
+            self.search_run.finished_at - self.search_run.started_at
+        ).total_seconds()
+
 
 @dataclass(frozen=True, slots=True)
 class SearchExecution:
@@ -55,6 +67,8 @@ class SearchExecution:
 
     provider_results: list[ProviderSearchResult]
     merged_publications: list[Publication]
+    result_provenance: list[PublicationSearchProvenance]
+    execution_provenance: SearchExecutionProvenance
 
 
 class SearchEngine:
@@ -82,14 +96,19 @@ class SearchEngine:
     async def execute(self, search_query: SearchQuery) -> SearchExecution:
         """Execute providers sequentially and preserve separate result identity."""
 
+        execution_started_at = self._clock()
         provider_results: list[ProviderSearchResult] = []
+        result_provenance: list[PublicationSearchProvenance] = []
         for provider in self._providers:
+            provider_started_at = self._clock()
             search_run = SearchRun(
                 run_id=self._run_id_factory(),
                 query_id=search_query.query_id,
                 query_version=search_query.version,
                 provider=provider.name,
                 rendered_query=search_query.to_boolean_query(),
+                status=SearchRunStatus.RUNNING,
+                started_at=provider_started_at,
             )
             try:
                 output = await provider.search_with_raw(
@@ -110,9 +129,16 @@ class SearchEngine:
                         error_message=str(error),
                     )
                 )
+                final_search_run = self._finish_search_run(
+                    search_run,
+                    status=SearchRunStatus.FAILED,
+                    finished_at=self._clock(),
+                    records_retrieved=0,
+                    errors=[f"{type(error).__name__}: {error}"],
+                )
                 provider_results.append(
                     ProviderSearchResult(
-                        search_run=search_run,
+                        search_run=final_search_run,
                         publications=None,
                         error=error,
                     )
@@ -129,12 +155,27 @@ class SearchEngine:
                         responses=output.raw_responses,
                     )
                 )
+                final_search_run = self._finish_search_run(
+                    search_run,
+                    status=SearchRunStatus.COMPLETED,
+                    finished_at=self._clock(),
+                    records_retrieved=len(output.publications),
+                    errors=[],
+                )
                 provider_results.append(
                     ProviderSearchResult(
-                        search_run=search_run,
+                        search_run=final_search_run,
                         publications=output.publications,
                         error=None,
                     )
+                )
+                result_provenance.extend(
+                    PublicationSearchProvenance(
+                        publication=publication,
+                        search_run=final_search_run,
+                        provider=final_search_run.provider,
+                    )
+                    for publication in output.publications
                 )
         merged_publications = self._result_merger.merge(
             publication
@@ -142,7 +183,41 @@ class SearchEngine:
             if provider_result.publications is not None
             for publication in provider_result.publications
         )
+        execution_finished_at = self._clock()
         return SearchExecution(
             provider_results=provider_results,
             merged_publications=merged_publications,
+            result_provenance=result_provenance,
+            execution_provenance=SearchExecutionProvenance(
+                started_at=execution_started_at,
+                finished_at=execution_finished_at,
+                provider_run_ids=tuple(
+                    result.search_run.run_id for result in provider_results
+                ),
+                total_provider_results=sum(
+                    len(result.publications)
+                    for result in provider_results
+                    if result.publications is not None
+                ),
+                merged_result_count=len(merged_publications),
+            ),
         )
+
+    @staticmethod
+    def _finish_search_run(
+        search_run: SearchRun,
+        *,
+        status: SearchRunStatus,
+        finished_at: datetime,
+        records_retrieved: int,
+        errors: list[str],
+    ) -> SearchRun:
+        data = search_run.model_dump()
+        data.update(
+            status=status,
+            finished_at=finished_at,
+            records_retrieved=records_retrieved,
+            error_count=len(errors),
+            errors=errors,
+        )
+        return SearchRun.model_validate(data)

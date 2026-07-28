@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Protocol, runtime_checkable
 from uuid import UUID
 
@@ -9,7 +9,7 @@ import pytest
 
 from app.domain.identifiers import Identifier, IdentifierType
 from app.domain.publication import Publication
-from app.domain.search import SearchQuery, SearchRun, SearchTerm
+from app.domain.search import SearchQuery, SearchRun, SearchRunStatus, SearchTerm
 from app.providers.search.base import JsonObject, ProviderSearchOutput
 from app.services.search_engine import (
     ProviderSearchResult,
@@ -85,6 +85,17 @@ class SpyResultMerger(ResultMerger):
         captured = list(publications)
         self.calls.append(captured)
         return super().merge(captured)
+
+
+class FakeClock:
+    def __init__(self, values: list[datetime]) -> None:
+        self._values = iter(values)
+        self.calls: list[datetime] = []
+
+    def __call__(self) -> datetime:
+        value = next(self._values)
+        self.calls.append(value)
+        return value
 
 
 @pytest.fixture
@@ -205,13 +216,20 @@ async def test_execute_calls_all_providers_in_order_with_separate_runs(
     ):
         called_run, called_query = provider.calls[0]
         assert called_query is search_query
-        assert called_run is provider_result.search_run
+        assert called_run is not provider_result.search_run
+        assert called_run.run_id == provider_result.search_run.run_id
         assert called_run.query_id == search_query.query_id
         assert called_run.query_version == search_query.version
         assert called_run.provider == provider.name
         assert called_run.rendered_query == '"lean manufacturing"'
-        assert called_run.started_at is None
+        assert called_run.status is SearchRunStatus.RUNNING
+        assert called_run.started_at is not None
         assert called_run.finished_at is None
+        assert provider_result.search_run.status is SearchRunStatus.COMPLETED
+        assert provider_result.search_run.finished_at is not None
+        assert provider_result.search_run.records_retrieved == 0
+        assert provider_result.search_run.error_count == 0
+        assert provider_result.search_run.errors == []
         assert provider_result.publications is provider.publications
         assert provider_result.error is None
 
@@ -245,6 +263,14 @@ async def test_execute_keeps_provider_results_separate_without_copying(
     assert result.provider_results[0].publications[1] is second
     assert result.provider_results[1].publications[0] is third
     assert result.merged_publications == [first, second, third]
+    assert [item.publication for item in result.result_provenance] == [
+        first,
+        second,
+        third,
+    ]
+    assert result.result_provenance[0].publication is first
+    assert result.result_provenance[1].publication is second
+    assert result.result_provenance[2].publication is third
 
 
 @pytest.mark.anyio
@@ -263,6 +289,7 @@ async def test_execute_preserves_empty_provider_result(
     assert result.provider_results[0].publications == []
     assert result.provider_results[0].error is None
     assert result.merged_publications == []
+    assert result.result_provenance == []
 
 
 @pytest.mark.anyio
@@ -323,6 +350,38 @@ async def test_execute_continues_after_error_and_preserves_partial_results(
     assert result.merged_publications == [first_result, no_doi]
     assert result.merged_publications[0] is first_result
     assert result.merged_publications[1] is no_doi
+    assert [
+        provider_result.search_run.status
+        for provider_result in result.provider_results
+    ] == [
+        SearchRunStatus.COMPLETED,
+        SearchRunStatus.FAILED,
+        SearchRunStatus.COMPLETED,
+    ]
+    assert [
+        provider_result.search_run.records_retrieved
+        for provider_result in result.provider_results
+    ] == [1, 0, 2]
+    failed_run = result.provider_results[1].search_run
+    assert failed_run.error_count == 1
+    assert failed_run.errors == ["RuntimeError: provider failed"]
+    assert result.provider_results[1].error is error
+    assert [item.publication for item in result.result_provenance] == [
+        first_result,
+        duplicate,
+        no_doi,
+    ]
+    assert result.result_provenance[0].search_run is result.provider_results[
+        0
+    ].search_run
+    assert result.result_provenance[1].search_run is result.provider_results[
+        2
+    ].search_run
+    assert result.result_provenance[2].search_run is result.provider_results[
+        2
+    ].search_run
+    assert result.execution_provenance.total_provider_results == 3
+    assert result.execution_provenance.merged_result_count == 2
     assert [entry.status for entry in archive.entries] == [
         RawResponseStatus.SUCCESS,
         RawResponseStatus.FAILED,
@@ -333,6 +392,49 @@ async def test_execute_continues_after_error_and_preserves_partial_results(
     assert archive.entries[1].error_type == "RuntimeError"
     assert archive.entries[1].error_message == "provider failed"
     assert archive.entries[2].responses == [{"page": 3}]
+
+
+@pytest.mark.anyio
+async def test_execute_records_failed_run_timing_and_diagnostics(
+    search_query: SearchQuery,
+) -> None:
+    error = RuntimeError("provider unavailable")
+    archive = FakeRawResponseArchive()
+    clock_values = [
+        _CAPTURED_AT,
+        _CAPTURED_AT + timedelta(seconds=1),
+        _CAPTURED_AT + timedelta(seconds=2),
+        _CAPTURED_AT + timedelta(seconds=4),
+        _CAPTURED_AT + timedelta(seconds=5),
+    ]
+    clock = FakeClock(clock_values)
+
+    result = await SearchEngine(
+        providers=[FakeSearchProvider("failed", error=error)],
+        raw_response_archive=archive,
+        clock=clock,
+    ).execute(search_query)
+
+    provider_result = result.provider_results[0]
+    assert provider_result.publications is None
+    assert provider_result.error is error
+    assert provider_result.search_run.status is SearchRunStatus.FAILED
+    assert provider_result.search_run.started_at == clock_values[1]
+    assert provider_result.search_run.finished_at == clock_values[3]
+    assert provider_result.duration_seconds == 3
+    assert provider_result.search_run.records_retrieved == 0
+    assert provider_result.search_run.error_count == 1
+    assert provider_result.search_run.errors == [
+        "RuntimeError: provider unavailable"
+    ]
+    assert result.result_provenance == []
+    assert archive.entries[0].status is RawResponseStatus.FAILED
+    assert archive.entries[0].captured_at == clock_values[2]
+    assert archive.entries[0].error_type == "RuntimeError"
+    assert archive.entries[0].error_message == "provider unavailable"
+    assert result.execution_provenance.total_provider_results == 0
+    assert result.execution_provenance.merged_result_count == 0
+    assert clock.calls == clock_values
 
 
 @pytest.mark.anyio
@@ -347,6 +449,14 @@ async def test_execute_archives_success_with_deterministic_metadata(
     ]
     run_id = UUID("22222222-2222-2222-2222-222222222222")
     archive_id = UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
+    clock_values = [
+        _CAPTURED_AT,
+        _CAPTURED_AT + timedelta(seconds=1),
+        _CAPTURED_AT + timedelta(seconds=2),
+        _CAPTURED_AT + timedelta(seconds=4),
+        _CAPTURED_AT + timedelta(seconds=5),
+    ]
+    clock = FakeClock(clock_values)
 
     result = await SearchEngine(
         providers=[
@@ -359,7 +469,7 @@ async def test_execute_archives_success_with_deterministic_metadata(
         raw_response_archive=archive,
         run_id_factory=lambda: run_id,
         archive_id_factory=lambda: archive_id,
-        clock=lambda: _CAPTURED_AT,
+        clock=clock,
     ).execute(search_query)
 
     assert result.provider_results[0].publications is publications
@@ -372,12 +482,30 @@ async def test_execute_archives_success_with_deterministic_metadata(
     assert entry.search_run_id == run_id
     assert entry.provider == "fake"
     assert entry.rendered_query == '"lean manufacturing"'
-    assert entry.captured_at == _CAPTURED_AT
+    assert entry.captured_at == clock_values[2]
     assert entry.status is RawResponseStatus.SUCCESS
     assert entry.responses is raw_pages
     assert entry.responses == raw_pages
     assert entry.error_type is None
     assert entry.error_message is None
+    provider_result = result.provider_results[0]
+    assert provider_result.search_run.status is SearchRunStatus.COMPLETED
+    assert provider_result.search_run.started_at == clock_values[1]
+    assert provider_result.search_run.finished_at == clock_values[3]
+    assert provider_result.duration_seconds == 3
+    assert provider_result.search_run.records_retrieved == 1
+    assert provider_result.search_run.error_count == 0
+    assert provider_result.search_run.errors == []
+    assert result.result_provenance[0].publication is publications[0]
+    assert result.result_provenance[0].search_run is provider_result.search_run
+    assert result.result_provenance[0].provider == "fake"
+    assert result.execution_provenance.started_at == clock_values[0]
+    assert result.execution_provenance.finished_at == clock_values[4]
+    assert result.execution_provenance.duration_seconds == 5
+    assert result.execution_provenance.provider_run_ids == (run_id,)
+    assert result.execution_provenance.total_provider_results == 1
+    assert result.execution_provenance.merged_result_count == 1
+    assert clock.calls == clock_values
 
 
 @pytest.mark.anyio
@@ -433,16 +561,25 @@ async def test_execute_with_no_providers_returns_empty_result(
     archive: FakeRawResponseArchive,
 ) -> None:
     merger = SpyResultMerger()
+    clock_values = [_CAPTURED_AT, _CAPTURED_AT]
+    clock = FakeClock(clock_values)
     result = await SearchEngine(
         providers=[],
         raw_response_archive=archive,
         result_merger=merger,
+        clock=clock,
     ).execute(search_query)
 
     assert result.provider_results == []
     assert result.merged_publications == []
+    assert result.result_provenance == []
+    assert result.execution_provenance.provider_run_ids == ()
+    assert result.execution_provenance.total_provider_results == 0
+    assert result.execution_provenance.merged_result_count == 0
+    assert result.execution_provenance.duration_seconds == 0
     assert archive.entries == []
     assert merger.calls == [[]]
+    assert clock.calls == clock_values
 
 
 def test_fake_provider_structurally_satisfies_search_provider() -> None:
