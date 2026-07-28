@@ -61,7 +61,7 @@ Canonical publication and review-process model.
 
 Current active increment:
 
-Phase 4.2 — DOI normalization.
+Phase 4.3 — Title normalization.
 
 ### Semantic Scholar
 
@@ -250,11 +250,11 @@ The following rules apply throughout Phase 3:
 - [x] Add specification tests.
 
 ### 4.2 — DOI normalization
-- [ ] Create provider-independent DOI normalizer.
-- [ ] Migrate provider mappers.
-- [ ] Migrate ResultMerger.
-- [ ] Verify idempotence and compatibility.
-- [ ] Add unit and regression tests.
+- [x] Create provider-independent DOI normalizer.
+- [x] Migrate provider mappers.
+- [x] Migrate ResultMerger.
+- [x] Verify idempotence and compatibility.
+- [x] Add unit and regression tests.
 
 ### 4.3 — Title normalization
 - [ ] Normalize Unicode, casing, whitespace, and punctuation variants.

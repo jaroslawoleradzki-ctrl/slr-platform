@@ -228,7 +228,7 @@ BibTeX Import — Phase 4: Completed.
 
 Quality status:
 
-- 599 tests passing
+- 636 tests passing
 - Ruff checks passing
 - mypy checks passing
 - `git diff --check` passing
@@ -496,6 +496,26 @@ the provider boundary. They have not been migrated, and `ResultMerger` remains
 unchanged. Provider-independent production DOI normalization begins in Phase
 4.2. No deduplication behavior is introduced in Phase 4.1.
 
+Phase 4.2 — DOI normalization: Completed.
+
+DOI normalization now provides:
+
+- one provider-independent `DoiNormalizer` implementation and `normalize_doi`
+  convenience function as the single source of DOI normalization behavior
+- trimming, blank and non-string handling, lowercase output, and
+  case-insensitive removal of supported DOI prefixes only at the start
+- deterministic and idempotent normalization without strict syntax validation
+  or external DOI existence checks
+- a compatibility re-export from the provider mapping utilities, so existing
+  provider imports keep the same behavior
+- direct use of the provider-independent API by `ResultMerger`, with its
+  existing DOI-only merge behavior unchanged
+- unit and regression coverage for the public normalizer contract, supported
+  prefixes, edge cases, idempotence, determinism, protocol compatibility, and
+  the legacy provider-layer API
+- no title, author, publication-pipeline, fuzzy-matching, similarity,
+  confidence-scoring, or new deduplication behavior
+
 ---
 
 # Current architecture
@@ -547,7 +567,7 @@ Every feature must:
 
 # Next milestone
 
-Phase 4.2 — DOI normalization.
+Phase 4.3 — Title normalization.
 
 ---
 

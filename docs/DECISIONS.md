@@ -6,6 +6,27 @@ This document records important project decisions that do not require a full ADR
 
 ## 2026-07-28
 
+### Provider-independent DOI normalization
+
+Phase 4.2 establishes `app.normalization.doi` as the single source of DOI
+normalization behavior. `DoiNormalizer` implements the structural normalization
+contract, while `normalize_doi` exposes the same behavior as a convenience
+function. The implementation is deterministic, idempotent, non-mutating, and
+provider-independent.
+
+The provider mapping utility re-exports the canonical function to preserve
+existing imports without retaining a second algorithm. `ResultMerger` imports
+the canonical normalization API directly, removing its dependency on the
+provider layer without changing merge behavior.
+
+Normalization trims strings, rejects blanks and non-strings, removes only the
+supported case-insensitive prefix at the beginning, and lowercases the result.
+It deliberately performs neither strict DOI syntax validation nor existence
+checks. Title and author normalization, publication-wide normalization, and
+deduplication decisions remain responsibilities of later phases.
+
+---
+
 ### Normalization layer responsibility boundaries
 
 Phase 4.1 introduces only a structural normalization contract. Provider-boundary
@@ -103,11 +124,11 @@ keeps the first occurrence of each normalized DOI. The first matching
 `Publication` object is retained unchanged; later objects with that DOI are
 omitted without merging fields or provenance.
 
-DOI keys use the existing provider-boundary `normalize_doi` behavior, including
-supported URL and `doi:` prefixes and case normalization. If a publication has
-multiple DOI identifiers, the first DOI in identifier order is the deterministic
-key. Other DOI identifiers and all non-DOI identifier types are ignored for
-matching.
+DOI keys use the canonical provider-independent `normalize_doi` behavior from
+`app/normalization/doi.py`, including supported URL and `doi:` prefixes and case
+normalization. If a publication has multiple DOI identifiers, the first DOI in
+identifier order is the deterministic key. Other DOI identifiers and all
+non-DOI identifier types are ignored for matching.
 
 Publications without a DOI are never combined, even when other metadata is
 identical. No title, author, year, venue, similarity, ranking, best-record
@@ -237,7 +258,7 @@ Key decisions:
 - **Authors**: `AU` used exclusively when present; `A1` is the fallback. Names containing `, ` are split into `family_name` and `given_name`. Plain-format names set `display_name` only. Blank entries silently skipped.
 - **Publication year**: `PY` preferred, `Y1` as fallback. Parsed as `int`; malformed or out-of-range values silently ignored (`publication_year=None`).
 - **Document type**: TY tag value mapped via `_TY_TO_DOC_TYPE` dict. Unknown or absent TY → `DocumentType.OTHER` (consistent treatment — no silent `None`).
-- **DOI normalization**: Delegates to the project's existing `app.modules.normalize.service.normalize_doi` helper (strip, lowercase, strip `https?://doi.org/` and `doi:` prefixes).
+- **DOI normalization**: Delegates to the canonical provider-independent implementation in `app/normalization/doi.py`. The older `app.modules.normalize.service` module retains only a compatibility import for its legacy pipeline.
 - **Provenance `source_record_id`**: Normalized DOI when available; title as deterministic fallback. No `ValueError` is raised for records without a DOI — consistent with the import use case where many records lack one.
 - **Postponed to later increments**: venue, ISSN/ISBN, PMID/PMC, keywords, URLs, language, publisher, `publication_date`, date-consistency logic.
 
