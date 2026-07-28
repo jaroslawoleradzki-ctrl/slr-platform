@@ -243,10 +243,39 @@ The following rules apply throughout Phase 3:
 
 ## Phase 4 — Normalization
 
-- [ ] DOI normalization
-- [ ] title normalization
-- [ ] author normalization
-- [ ] identifier normalization
+### 4.1 — Normalization contract and architecture
+- [ ] Define provider-boundary cleaning vs global normalization.
+- [ ] Define immutable normalization contracts.
+- [ ] Define boundaries against Phase 5 deduplication.
+- [ ] Add specification tests.
+
+### 4.2 — DOI normalization
+- [ ] Create provider-independent DOI normalizer.
+- [ ] Migrate provider mappers.
+- [ ] Migrate ResultMerger.
+- [ ] Verify idempotence and compatibility.
+- [ ] Add unit and regression tests.
+
+### 4.3 — Title normalization
+- [ ] Normalize Unicode, casing, whitespace, and punctuation variants.
+- [ ] Preserve semantic content and original title.
+- [ ] Populate title_normalized.
+- [ ] Add idempotence tests.
+
+### 4.4 — Author normalization
+- [ ] Normalize author text fields.
+- [ ] Normalize ORCID.
+- [ ] Preserve author order and original semantic data.
+- [ ] Avoid author identity resolution.
+- [ ] Add unit tests.
+
+### 4.5 — Identifier and Publication normalization pipeline
+- [ ] Normalize identifiers by type.
+- [ ] Add immutable Publication normalization.
+- [ ] Preserve record identity and provenance.
+- [ ] Remove only exact normalized identifier duplicates within one record.
+- [ ] Add contract tests.
+- [ ] Close Phase 4.
 
 ---
 
