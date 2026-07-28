@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from app.domain.publication import Publication
+from app.normalization import normalize_publication
 from app.providers.import_file.base import ImportProvider
 from app.providers.import_file.ris.mapper import map_ris_record
 from app.providers.import_file.ris.parser import parse_ris
@@ -14,7 +15,10 @@ class GoogleScholarImportProvider:
     def import_publications(self, content: str) -> list[Publication]:
         """Parse and map all RIS records in *content*."""
         records = parse_ris(content)
-        return [map_ris_record(record, source=_SOURCE) for record in records]
+        return [
+            normalize_publication(map_ris_record(record, source=_SOURCE))
+            for record in records
+        ]
 
 
 _PROVIDER: ImportProvider = GoogleScholarImportProvider()

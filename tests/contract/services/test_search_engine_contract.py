@@ -201,11 +201,20 @@ async def test_single_provider_success_contract() -> None:
     assert result.search_run.started_at == times[1]
     assert result.search_run.finished_at == times[3]
     assert result.search_run.records_retrieved == 2
-    assert result.publications is publications
-    assert execution.merged_publications == publications
-    assert execution.merged_publications[0] is with_doi
-    assert execution.merged_publications[1] is without_doi
-    assert [item.publication for item in execution.result_provenance] == publications
+    assert result.publications is not None
+    assert result.publications is not publications
+    assert result.publications[0] is not with_doi
+    assert result.publications[1] is not without_doi
+    assert [publication.title_normalized for publication in result.publications] == [
+        "lean energy study",
+        "lean case study",
+    ]
+    assert execution.merged_publications == result.publications
+    assert execution.merged_publications[0] is result.publications[0]
+    assert execution.merged_publications[1] is result.publications[1]
+    assert [item.publication for item in execution.result_provenance] == (
+        result.publications
+    )
     assert all(
         item.search_run is result.search_run
         for item in execution.result_provenance
@@ -268,8 +277,9 @@ async def test_multi_provider_order_and_association_contract() -> None:
     ] == call_order
     expected_publications = [
         publication
-        for provider_publications in publications
-        for publication in provider_publications
+        for result in execution.provider_results
+        if result.publications is not None
+        for publication in result.publications
     ]
     assert [
         item.publication for item in execution.result_provenance
@@ -345,13 +355,15 @@ async def test_partial_provider_failure_contract() -> None:
     assert failed_entry.responses == []
     assert failed_entry.error_type == "RuntimeError"
     assert failed_entry.error_message == "provider unavailable"
-    assert [
-        item.publication for item in execution.result_provenance
-    ] == [first_publications[0], third_publications[0]]
-    assert execution.merged_publications == [
-        first_publications[0],
-        third_publications[0],
+    first_result = execution.provider_results[0].publications
+    third_result = execution.provider_results[2].publications
+    assert first_result is not None
+    assert third_result is not None
+    assert [item.publication for item in execution.result_provenance] == [
+        first_result[0],
+        third_result[0],
     ]
+    assert execution.merged_publications == [first_result[0], third_result[0]]
     assert execution.execution_provenance.total_provider_results == 2
 
 
@@ -384,21 +396,29 @@ async def test_doi_merge_and_separate_provenance_contract() -> None:
         clock=ContractClock(_clock_values(2)),
     ).execute(_query())
 
-    assert execution.provider_results[0].publications is first_publications
-    assert execution.provider_results[1].publications is second_publications
+    first_result = execution.provider_results[0].publications
+    second_result = execution.provider_results[1].publications
+    assert first_result is not None
+    assert second_result is not None
+    assert first_result is not first_publications
+    assert second_result is not second_publications
     assert [item.publication for item in execution.result_provenance] == [
-        a1,
-        a2,
-        b1,
-        b2,
+        first_result[0],
+        first_result[1],
+        second_result[0],
+        second_result[1],
     ]
     assert execution.result_provenance[0].search_run is not (
         execution.result_provenance[2].search_run
     )
-    assert execution.merged_publications == [a1, a2, b2]
-    assert execution.merged_publications[0] is a1
-    assert execution.merged_publications[1] is a2
-    assert execution.merged_publications[2] is b2
+    assert execution.merged_publications == [
+        first_result[0],
+        first_result[1],
+        second_result[1],
+    ]
+    assert execution.merged_publications[0] is first_result[0]
+    assert execution.merged_publications[1] is first_result[1]
+    assert execution.merged_publications[2] is second_result[1]
     assert execution.execution_provenance.total_provider_results == 4
     assert execution.execution_provenance.merged_result_count == 3
 

@@ -57,6 +57,9 @@ def test_import_ris_two_records_returns_two_publications() -> None:
 def test_import_ris_title_mapped() -> None:
     pubs = import_ris(_SINGLE_RECORD)
     assert pubs[0].title == "Lean Manufacturing in the Automotive Sector"
+    assert pubs[0].title_normalized == (
+        "lean manufacturing in the automotive sector"
+    )
 
 
 def test_import_ris_abstract_mapped() -> None:

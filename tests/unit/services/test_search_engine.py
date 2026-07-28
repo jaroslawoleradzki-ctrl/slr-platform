@@ -230,12 +230,12 @@ async def test_execute_calls_all_providers_in_order_with_separate_runs(
         assert provider_result.search_run.records_retrieved == 0
         assert provider_result.search_run.error_count == 0
         assert provider_result.search_run.errors == []
-        assert provider_result.publications is provider.publications
+        assert provider_result.publications is not provider.publications
         assert provider_result.error is None
 
 
 @pytest.mark.anyio
-async def test_execute_keeps_provider_results_separate_without_copying(
+async def test_execute_keeps_normalized_provider_results_separate(
     search_query: SearchQuery,
     archive: FakeRawResponseArchive,
 ) -> None:
@@ -253,24 +253,35 @@ async def test_execute_keeps_provider_results_separate_without_copying(
         raw_response_archive=archive,
     ).execute(search_query)
 
-    assert result.provider_results[0].publications is first_publications
-    assert result.provider_results[1].publications is second_publications
+    first_results = result.provider_results[0].publications
+    second_results = result.provider_results[1].publications
+    assert first_results is not None
+    assert second_results is not None
+    assert first_results is not first_publications
+    assert second_results is not second_publications
     assert result.provider_results[0].error is None
     assert result.provider_results[1].error is None
-    assert result.provider_results[0].publications == [first, second]
-    assert result.provider_results[1].publications == [third]
-    assert result.provider_results[0].publications[0] is first
-    assert result.provider_results[0].publications[1] is second
-    assert result.provider_results[1].publications[0] is third
-    assert result.merged_publications == [first, second, third]
-    assert [item.publication for item in result.result_provenance] == [
-        first,
-        second,
-        third,
+    assert [publication.title for publication in first_results] == [
+        "First",
+        "Second",
     ]
-    assert result.result_provenance[0].publication is first
-    assert result.result_provenance[1].publication is second
-    assert result.result_provenance[2].publication is third
+    assert [publication.title for publication in second_results] == ["Third"]
+    assert first_results[0] is not first
+    assert first_results[1] is not second
+    assert second_results[0] is not third
+    assert result.merged_publications == [
+        first_results[0],
+        first_results[1],
+        second_results[0],
+    ]
+    assert [item.publication for item in result.result_provenance] == [
+        first_results[0],
+        first_results[1],
+        second_results[0],
+    ]
+    assert result.result_provenance[0].publication is first_results[0]
+    assert result.result_provenance[1].publication is first_results[1]
+    assert result.result_provenance[2].publication is second_results[0]
 
 
 @pytest.mark.anyio
@@ -285,7 +296,7 @@ async def test_execute_preserves_empty_provider_result(
         raw_response_archive=archive,
     ).execute(search_query)
 
-    assert result.provider_results[0].publications is publications
+    assert result.provider_results[0].publications is not publications
     assert result.provider_results[0].publications == []
     assert result.provider_results[0].error is None
     assert result.merged_publications == []
@@ -341,15 +352,19 @@ async def test_execute_continues_after_error_and_preserves_partial_results(
     assert len(first.calls) == 1
     assert len(second.calls) == 1
     assert len(third.calls) == 1
-    assert result.provider_results[0].publications is first_publications
+    first_results = result.provider_results[0].publications
+    third_results = result.provider_results[2].publications
+    assert first_results is not None
+    assert third_results is not None
+    assert first_results is not first_publications
     assert result.provider_results[0].error is None
     assert result.provider_results[1].publications is None
     assert result.provider_results[1].error is error
-    assert result.provider_results[2].publications is third_publications
+    assert third_results is not third_publications
     assert result.provider_results[2].error is None
-    assert result.merged_publications == [first_result, no_doi]
-    assert result.merged_publications[0] is first_result
-    assert result.merged_publications[1] is no_doi
+    assert result.merged_publications == [first_results[0], third_results[1]]
+    assert result.merged_publications[0] is first_results[0]
+    assert result.merged_publications[1] is third_results[1]
     assert [
         provider_result.search_run.status
         for provider_result in result.provider_results
@@ -367,9 +382,9 @@ async def test_execute_continues_after_error_and_preserves_partial_results(
     assert failed_run.errors == ["RuntimeError: provider failed"]
     assert result.provider_results[1].error is error
     assert [item.publication for item in result.result_provenance] == [
-        first_result,
-        duplicate,
-        no_doi,
+        first_results[0],
+        third_results[0],
+        third_results[1],
     ]
     assert result.result_provenance[0].search_run is result.provider_results[
         0
@@ -472,10 +487,12 @@ async def test_execute_archives_success_with_deterministic_metadata(
         clock=clock,
     ).execute(search_query)
 
-    assert result.provider_results[0].publications is publications
-    assert result.merged_publications == publications
+    normalized = result.provider_results[0].publications
+    assert normalized is not None
+    assert normalized is not publications
+    assert result.merged_publications == normalized
     assert result.merged_publications is not publications
-    assert result.merged_publications[0] is publications[0]
+    assert result.merged_publications[0] is normalized[0]
     assert len(archive.entries) == 1
     entry = archive.entries[0]
     assert entry.archive_id == archive_id
@@ -496,7 +513,7 @@ async def test_execute_archives_success_with_deterministic_metadata(
     assert provider_result.search_run.records_retrieved == 1
     assert provider_result.search_run.error_count == 0
     assert provider_result.search_run.errors == []
-    assert result.result_provenance[0].publication is publications[0]
+    assert result.result_provenance[0].publication is normalized[0]
     assert result.result_provenance[0].search_run is provider_result.search_run
     assert result.result_provenance[0].provider == "fake"
     assert result.execution_provenance.started_at == clock_values[0]

@@ -12,6 +12,7 @@ from app.domain.search_provenance import (
     PublicationSearchProvenance,
     SearchExecutionProvenance,
 )
+from app.normalization import normalize_publication
 from app.providers.search.base import ProviderSearchOutput
 from app.services.result_merger import ResultMerger
 from app.storage.raw_response_archive import (
@@ -155,17 +156,21 @@ class SearchEngine:
                         responses=output.raw_responses,
                     )
                 )
+                normalized_publications = [
+                    normalize_publication(publication)
+                    for publication in output.publications
+                ]
                 final_search_run = self._finish_search_run(
                     search_run,
                     status=SearchRunStatus.COMPLETED,
                     finished_at=self._clock(),
-                    records_retrieved=len(output.publications),
+                    records_retrieved=len(normalized_publications),
                     errors=[],
                 )
                 provider_results.append(
                     ProviderSearchResult(
                         search_run=final_search_run,
-                        publications=output.publications,
+                        publications=normalized_publications,
                         error=None,
                     )
                 )
@@ -175,7 +180,7 @@ class SearchEngine:
                         search_run=final_search_run,
                         provider=final_search_run.provider,
                     )
-                    for publication in output.publications
+                    for publication in normalized_publications
                 )
         merged_publications = self._result_merger.merge(
             publication

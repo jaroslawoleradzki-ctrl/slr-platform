@@ -32,6 +32,7 @@ def test_bibtex_provider_imports_single_record() -> None:
 
     assert len(publications) == 1
     assert publications[0].title == "Single Record"
+    assert publications[0].title_normalized == "single record"
 
 
 def test_bibtex_provider_preserves_record_order() -> None:
