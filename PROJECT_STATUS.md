@@ -228,7 +228,7 @@ BibTeX Import — Phase 4: Completed.
 
 Quality status:
 
-- 547 tests passing
+- 563 tests passing
 - Ruff checks passing
 - mypy checks passing
 - `git diff --check` passing
@@ -369,6 +369,36 @@ The provider-independent Search Engine provides:
   parallel execution
 - no provider, mapper, HTTP client, domain model, or dependency changes
 
+Phase 3.3 — Raw response archive: Completed.
+
+Raw response archiving now provides:
+
+- `ProviderSearchOutput` as the minimal provider boundary carrying canonical
+  publications and ordered raw response pages from the same request
+- compatible OpenAlex and Crossref `search()` methods backed by
+  `search_with_raw()`, so each HTTP response is fetched once and used for both
+  mapping and archiving
+- one `RawResponseArchiveEntry` per `SearchRun`, containing archive and run IDs,
+  provider, rendered query, timezone-aware capture timestamp, execution status,
+  and ordered raw responses
+- successful and failed archive entries, with failed entries retaining the
+  exception type and message while the original exception remains isolated in
+  `ProviderSearchResult`
+- an explicit asynchronous `RawResponseArchive` storage protocol injected into
+  `SearchEngine`, without a production persistence implementation
+- deterministic archive ID and clock injection
+- propagation of archive storage failures without wrapping or continuing to a
+  later provider
+- no merge, deduplication, global search provenance, database persistence, or
+  parallel provider execution
+
+Current provider orchestration methods fetch one response page per execution,
+which is archived as one ordered page. Existing multi-page record iterators do
+not expose page payloads to the Search Engine. If a provider fails before
+returning `ProviderSearchOutput`, no safe partial-page channel currently exists;
+the failed archive entry therefore stores an empty response list plus error
+diagnostics rather than reconstructing raw data.
+
 ---
 
 # Current architecture
@@ -420,7 +450,7 @@ Every feature must:
 
 # Next milestone
 
-Phase 3.3 — Raw response archive.
+Phase 3.4 — Merge provider results.
 
 ---
 

@@ -61,7 +61,7 @@ Canonical publication and review-process model.
 
 Current active increment:
 
-Phase 3.3 — Raw response archive.
+Phase 3.4 — Merge provider results.
 
 ### Semantic Scholar
 
@@ -163,10 +163,10 @@ Out of scope
 
 Scope
 
-- [ ] Archive complete provider responses.
-- [ ] Associate every archive entry with the corresponding SearchRun.
-- [ ] Store provider metadata, execution timestamp, rendered query, and execution status.
-- [ ] Preserve responses for later replay and diagnostics.
+- [x] Archive complete provider responses.
+- [x] Associate every archive entry with the corresponding SearchRun.
+- [x] Store provider metadata, execution timestamp, rendered query, and execution status.
+- [x] Preserve responses for later replay and diagnostics.
 
 Out of scope
 

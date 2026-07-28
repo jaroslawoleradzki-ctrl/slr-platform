@@ -6,6 +6,43 @@ This document records important project decisions that do not require a full ADR
 
 ## 2026-07-28
 
+### Raw provider response archive boundary
+
+Phase 3.3 captures raw responses directly at the provider boundary rather than
+reconstructing them from canonical `Publication` objects. A
+`ProviderSearchOutput` carries both the mapped publications and the ordered raw
+response pages produced by the same request.
+
+One `RawResponseArchiveEntry` corresponds to one `SearchRun`. It records the
+provider, rendered query, capture timestamp, success or failure status, raw
+pages, and minimal failure diagnostics. Ordered pages are retained without
+interpretation, merging, or deduplication.
+
+`RawResponseArchive` is an explicit asynchronous dependency of `SearchEngine`.
+Archive IDs and the capture clock are injected for deterministic execution and
+tests. Provider failures are archived and remain isolated so later providers
+can run. An archive storage failure is propagated unchanged and stops execution,
+because silently losing required raw material would make a successful result
+misleading.
+
+OpenAlex and Crossref retain their public publication-only `search()` API and
+add `search_with_raw()` for orchestration. Both paths share the same request and
+mapping operation, so archiving does not issue a second HTTP request. Semantic
+Scholar currently has a raw client and mapper but no public provider `search()`
+method, so Phase 3.3 does not invent a new orchestration API for it.
+
+Current orchestration searches fetch one page. Existing multi-page iterators
+yield mapped records and do not expose raw page boundaries. If a provider fails
+before returning its output, partial pages cannot be archived safely without a
+larger callback mechanism; the failed entry records no responses and retains
+error diagnostics.
+
+No database, file, or object-storage implementation is introduced in this
+phase. Persistence infrastructure, merge behavior, and interpretation of raw
+payloads remain outside Phase 3.3.
+
+---
+
 ### Sequential multi-provider orchestration
 
 Phase 3.2 extends the Search Engine from one provider to an explicitly ordered
