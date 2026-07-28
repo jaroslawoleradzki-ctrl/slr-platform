@@ -4,6 +4,37 @@ This document records important project decisions that do not require a full ADR
 
 ---
 
+## 2026-07-28
+
+### Minimal single-provider Search Engine orchestration
+
+Phase 3.1 introduces a provider-independent Search Engine that accepts one
+canonical `SearchQuery` and invokes exactly one provider supplied explicitly to
+the engine.
+
+The Search Engine creates one `SearchRun` before invoking the provider. The run
+uses the canonical query ID and version, the provider's declared name, the
+generic Boolean query rendering, and an injectable run ID factory. The provider
+receives that same query and run.
+
+Search providers satisfy a minimal structural `SearchProvider` protocol. They
+remain responsible for HTTP, retries, provider-specific response handling, and
+canonical mapping. The Search Engine neither imports concrete providers nor
+duplicates their mapping logic.
+
+The execution result contains the created run and the exact publication list
+returned by the provider. Provider ordering and object identity are preserved,
+including for an empty list. Provider exceptions propagate unchanged.
+
+This increment deliberately excludes multiple-provider orchestration, fallback,
+merge, raw response archive, deduplication, aggregated search provenance,
+persistence, result counts, duration tracking, and failure status recording.
+
+Search Engine tests use a structural fake provider and perform no real or
+transport-mocked HTTP calls.
+
+---
+
 ## 2026-07-24
 
 ### RIS Parser implementation

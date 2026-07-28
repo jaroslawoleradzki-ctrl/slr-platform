@@ -1,6 +1,6 @@
 # SLR Platform — Project Status
 
-_Last updated: 2026-07-24_
+_Last updated: 2026-07-28_
 
 ## Current status
 
@@ -14,7 +14,7 @@ v0.1.0
 
 Current development phase:
 
-Phase 2 — Search Providers.
+Phase 3 — Search Engine.
 
 ---
 
@@ -228,7 +228,7 @@ BibTeX Import — Phase 4: Completed.
 
 Quality status:
 
-- 540 tests passing
+- 545 tests passing
 - Ruff checks passing
 - mypy checks passing
 - `git diff --check` passing
@@ -336,6 +336,31 @@ Harmonization — Phases 5.1–5.5: Completed.
 
 ---
 
+## Phase 3 — Search Engine
+
+Phase 3.1 — Execute queries through a single provider: Completed.
+
+The provider-independent Search Engine now provides:
+
+- `async SearchEngine.execute(search_query: SearchQuery) -> SearchExecution` as its
+  asynchronous public entry point
+- exactly one `SearchProvider`, supplied explicitly to the engine constructor
+- a minimal structural provider contract consisting of `name` and asynchronous
+  `search(*, search_run, search_query) -> list[Publication]`
+- creation of one pending `SearchRun` from the canonical query, provider name,
+  generic Boolean rendering, and an injectable run ID factory
+- a named `SearchExecution` result containing that `SearchRun` and the exact
+  publication list returned by the provider
+- preservation of provider ordering, publication identity, empty results, and
+  provider exceptions without wrapping
+- focused orchestration tests using a fake provider with no HTTP client,
+  transport mock, or concrete search provider
+- no merge, raw response archive, deduplication, aggregated provenance,
+  persistence, fallback, retry, or multi-provider orchestration
+- no provider, mapper, HTTP client, domain model, or dependency changes
+
+---
+
 # Current architecture
 
 FastAPI
@@ -385,16 +410,7 @@ Every feature must:
 
 # Next milestone
 
-Search Engine — execute queries.
-
-Future architectural work:
-
-- Harmonization
-  - 5.1 Canonical mapping parity specification
-  - 5.2 OpenAlex provider mapping parity
-  - 5.3 Cross-provider normalization consistency
-  - 5.4 Shared mapper utilities
-  - 5.5 Cross-provider mapping contract tests
+Phase 3.2 — Multi-provider orchestration.
 
 ---
 

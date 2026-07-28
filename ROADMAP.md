@@ -61,7 +61,7 @@ Canonical publication and review-process model.
 
 Current active increment:
 
-Phase 3 — Search Engine: execute queries.
+Phase 3.2 — Multi-provider orchestration.
 
 ### Semantic Scholar
 
@@ -128,12 +128,12 @@ The Search Engine is responsible for orchestration only. It must not contain pro
 
 Scope
 
-- [ ] Implement the Search Engine entry point.
-- [ ] Execute a single SearchQuery.
-- [ ] Invoke exactly one configured search provider.
-- [ ] Create a SearchRun.
-- [ ] Return canonical Publication objects.
-- [ ] Add complete unit tests.
+- [x] Implement the Search Engine entry point.
+- [x] Execute a single SearchQuery.
+- [x] Invoke exactly one configured search provider.
+- [x] Create a SearchRun.
+- [x] Return canonical Publication objects.
+- [x] Add complete unit tests.
 
 Out of scope
 
