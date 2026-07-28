@@ -9,6 +9,7 @@ from uuid import UUID, uuid4
 from app.domain.publication import Publication
 from app.domain.search import SearchQuery, SearchRun
 from app.providers.search.base import ProviderSearchOutput
+from app.services.result_merger import ResultMerger
 from app.storage.raw_response_archive import (
     RawResponseArchive,
     RawResponseArchiveEntry,
@@ -53,6 +54,7 @@ class SearchExecution:
     """Ordered, separate results from one sequential provider execution."""
 
     provider_results: list[ProviderSearchResult]
+    merged_publications: list[Publication]
 
 
 class SearchEngine:
@@ -66,12 +68,16 @@ class SearchEngine:
         run_id_factory: Callable[[], UUID] = uuid4,
         archive_id_factory: Callable[[], UUID] = uuid4,
         clock: Callable[[], datetime] = _utc_now,
+        result_merger: ResultMerger | None = None,
     ) -> None:
         self._providers = tuple(providers)
         self._raw_response_archive = raw_response_archive
         self._run_id_factory = run_id_factory
         self._archive_id_factory = archive_id_factory
         self._clock = clock
+        self._result_merger = (
+            result_merger if result_merger is not None else ResultMerger()
+        )
 
     async def execute(self, search_query: SearchQuery) -> SearchExecution:
         """Execute providers sequentially and preserve separate result identity."""
@@ -130,4 +136,13 @@ class SearchEngine:
                         error=None,
                     )
                 )
-        return SearchExecution(provider_results=provider_results)
+        merged_publications = self._result_merger.merge(
+            publication
+            for provider_result in provider_results
+            if provider_result.publications is not None
+            for publication in provider_result.publications
+        )
+        return SearchExecution(
+            provider_results=provider_results,
+            merged_publications=merged_publications,
+        )

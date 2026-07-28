@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 from datetime import datetime, timezone
 from typing import Protocol, runtime_checkable
 from uuid import UUID
 
 import pytest
 
+from app.domain.identifiers import Identifier, IdentifierType
 from app.domain.publication import Publication
 from app.domain.search import SearchQuery, SearchRun, SearchTerm
 from app.providers.search.base import JsonObject, ProviderSearchOutput
@@ -14,6 +16,7 @@ from app.services.search_engine import (
     SearchEngine,
     SearchProvider,
 )
+from app.services.result_merger import ResultMerger
 from app.storage.raw_response_archive import (
     RawResponseArchiveEntry,
     RawResponseStatus,
@@ -69,6 +72,19 @@ class FakeRawResponseArchive:
         if self.error is not None:
             raise self.error
         self.entries.append(entry)
+
+
+class SpyResultMerger(ResultMerger):
+    def __init__(self) -> None:
+        self.calls: list[list[Publication]] = []
+
+    def merge(
+        self,
+        publications: Iterable[Publication],
+    ) -> list[Publication]:
+        captured = list(publications)
+        self.calls.append(captured)
+        return super().merge(captured)
 
 
 @pytest.fixture
@@ -159,6 +175,11 @@ async def test_execute_calls_all_providers_in_order_with_separate_runs(
     assert [len(provider.calls) for provider in providers] == [1, 1, 1]
     assert len(result.provider_results) == 3
     assert len(archive.entries) == 3
+    assert result.merged_publications == [
+        provider.publications[0]
+        for provider in providers
+        if provider.publications
+    ]
     assert [
         provider_result.search_run.run_id
         for provider_result in result.provider_results
@@ -223,6 +244,7 @@ async def test_execute_keeps_provider_results_separate_without_copying(
     assert result.provider_results[0].publications[0] is first
     assert result.provider_results[0].publications[1] is second
     assert result.provider_results[1].publications[0] is third
+    assert result.merged_publications == [first, second, third]
 
 
 @pytest.mark.anyio
@@ -240,6 +262,7 @@ async def test_execute_preserves_empty_provider_result(
     assert result.provider_results[0].publications is publications
     assert result.provider_results[0].publications == []
     assert result.provider_results[0].error is None
+    assert result.merged_publications == []
 
 
 @pytest.mark.anyio
@@ -249,8 +272,21 @@ async def test_execute_continues_after_error_and_preserves_partial_results(
 ) -> None:
     error = RuntimeError("provider failed")
     call_order: list[str] = []
-    first_publications = [Publication(title="First result")]
-    third_publications = [Publication(title="Third result")]
+    first_result = Publication(
+        title="First result",
+        identifiers=[
+            Identifier(type=IdentifierType.DOI, value="10.1000/shared")
+        ],
+    )
+    duplicate = Publication(
+        title="Duplicate result",
+        identifiers=[
+            Identifier(type=IdentifierType.DOI, value="10.1000/SHARED")
+        ],
+    )
+    no_doi = Publication(title="Third result without DOI")
+    first_publications = [first_result]
+    third_publications = [duplicate, no_doi]
     first = FakeSearchProvider(
         "first",
         first_publications,
@@ -284,6 +320,9 @@ async def test_execute_continues_after_error_and_preserves_partial_results(
     assert result.provider_results[1].error is error
     assert result.provider_results[2].publications is third_publications
     assert result.provider_results[2].error is None
+    assert result.merged_publications == [first_result, no_doi]
+    assert result.merged_publications[0] is first_result
+    assert result.merged_publications[1] is no_doi
     assert [entry.status for entry in archive.entries] == [
         RawResponseStatus.SUCCESS,
         RawResponseStatus.FAILED,
@@ -324,6 +363,9 @@ async def test_execute_archives_success_with_deterministic_metadata(
     ).execute(search_query)
 
     assert result.provider_results[0].publications is publications
+    assert result.merged_publications == publications
+    assert result.merged_publications is not publications
+    assert result.merged_publications[0] is publications[0]
     assert len(archive.entries) == 1
     entry = archive.entries[0]
     assert entry.archive_id == archive_id
@@ -346,17 +388,20 @@ async def test_archive_failure_is_propagated_and_stops_execution(
     archive = FakeRawResponseArchive(error=archive_error)
     first = FakeSearchProvider("first")
     second = FakeSearchProvider("second")
+    merger = SpyResultMerger()
 
     with pytest.raises(RuntimeError) as exc_info:
         await SearchEngine(
             providers=[first, second],
             raw_response_archive=archive,
+            result_merger=merger,
         ).execute(search_query)
 
     assert exc_info.value is archive_error
     assert len(first.calls) == 1
     assert second.calls == []
     assert archive.entries == []
+    assert merger.calls == []
 
 
 @pytest.mark.anyio
@@ -387,13 +432,17 @@ async def test_execute_with_no_providers_returns_empty_result(
     search_query: SearchQuery,
     archive: FakeRawResponseArchive,
 ) -> None:
+    merger = SpyResultMerger()
     result = await SearchEngine(
         providers=[],
         raw_response_archive=archive,
+        result_merger=merger,
     ).execute(search_query)
 
     assert result.provider_results == []
+    assert result.merged_publications == []
     assert archive.entries == []
+    assert merger.calls == [[]]
 
 
 def test_fake_provider_structurally_satisfies_search_provider() -> None:
