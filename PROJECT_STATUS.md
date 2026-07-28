@@ -228,7 +228,7 @@ BibTeX Import — Phase 4: Completed.
 
 Quality status:
 
-- 545 tests passing
+- 547 tests passing
 - Ruff checks passing
 - mypy checks passing
 - `git diff --check` passing
@@ -340,23 +340,33 @@ Harmonization — Phases 5.1–5.5: Completed.
 
 Phase 3.1 — Execute queries through a single provider: Completed.
 
-The provider-independent Search Engine now provides:
+Phase 3.2 — Multi-provider orchestration: Completed.
+
+The provider-independent Search Engine provides:
 
 - `async SearchEngine.execute(search_query: SearchQuery) -> SearchExecution` as its
   asynchronous public entry point
-- exactly one `SearchProvider`, supplied explicitly to the engine constructor
+- an ordered sequence of `SearchProvider` instances supplied explicitly to the
+  engine constructor
 - a minimal structural provider contract consisting of `name` and asynchronous
   `search(*, search_run, search_query) -> list[Publication]`
-- creation of one pending `SearchRun` from the canonical query, provider name,
-  generic Boolean rendering, and an injectable run ID factory
-- a named `SearchExecution` result containing that `SearchRun` and the exact
-  publication list returned by the provider
-- preservation of provider ordering, publication identity, empty results, and
-  provider exceptions without wrapping
+- sequential provider execution in constructor order
+- creation of one separate pending `SearchRun` per provider from the canonical
+  query, provider name, generic Boolean rendering, and an injectable run ID
+  factory
+- a named `SearchExecution` result containing ordered `ProviderSearchResult`
+  entries, each associating one run with either the exact publication list
+  returned by its provider or the original provider exception
+- preservation of provider and publication ordering, list and publication
+  identity, and empty results
+- isolation of provider errors without wrapping; one failure remains visible in
+  its result and does not prevent later providers from running
 - focused orchestration tests using a fake provider with no HTTP client,
   transport mock, or concrete search provider
-- no merge, raw response archive, deduplication, aggregated provenance,
-  persistence, fallback, retry, or multi-provider orchestration
+- successes and failures kept separate per provider, with no merge or raw
+  response archive
+- no deduplication, aggregated provenance, persistence, fallback, retry, or
+  parallel execution
 - no provider, mapper, HTTP client, domain model, or dependency changes
 
 ---
@@ -410,7 +420,7 @@ Every feature must:
 
 # Next milestone
 
-Phase 3.2 — Multi-provider orchestration.
+Phase 3.3 — Raw response archive.
 
 ---
 

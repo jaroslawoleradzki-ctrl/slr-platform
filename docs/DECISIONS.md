@@ -6,6 +6,24 @@ This document records important project decisions that do not require a full ADR
 
 ## 2026-07-28
 
+### Sequential multi-provider orchestration
+
+Phase 3.2 extends the Search Engine from one provider to an explicitly ordered
+sequence of providers. Providers run sequentially in constructor order, keeping
+execution deterministic and avoiding concurrency policy before the roadmap
+introduces a need for it.
+
+Each provider receives its own `SearchRun`, and its publication list remains in
+a separate `ProviderSearchResult`. A single provider failure is isolated in that
+provider's result as the original exception, while later providers continue to
+run. This keeps partial successes and errors visible in the same deterministic,
+ordered result.
+
+The Search Engine does not merge or deduplicate results because cross-provider
+record combination belongs to later roadmap phases.
+
+---
+
 ### Minimal single-provider Search Engine orchestration
 
 Phase 3.1 introduces a provider-independent Search Engine that accepts one

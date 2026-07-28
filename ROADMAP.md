@@ -61,7 +61,7 @@ Canonical publication and review-process model.
 
 Current active increment:
 
-Phase 3.2 — Multi-provider orchestration.
+Phase 3.3 — Raw response archive.
 
 ### Semantic Scholar
 
@@ -147,11 +147,11 @@ Out of scope
 
 Scope
 
-- [ ] Execute the same query against multiple providers.
-- [ ] Configure provider execution order.
-- [ ] Collect provider results independently.
-- [ ] Continue execution when one provider fails.
-- [ ] Aggregate provider outputs without merging records.
+- [x] Execute the same query against multiple providers.
+- [x] Configure provider execution order.
+- [x] Collect provider results independently.
+- [x] Continue execution when one provider fails.
+- [x] Return provider outputs separately without merging records.
 
 Out of scope
 
