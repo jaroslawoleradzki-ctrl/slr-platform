@@ -6,6 +6,34 @@ This document records important project decisions that do not require a full ADR
 
 ## 2026-07-28
 
+### Post-mapping publication normalization pipeline
+
+Phase 4.5 establishes `app/normalization/publication.py` as the single
+provider-independent pipeline for one complete canonical `Publication`.
+`PublicationNormalizer` composes the existing title, author, DOI, and ORCID
+normalizers and introduces no new value-normalization algorithm.
+
+The pipeline preserves the original title and populates `title_normalized`.
+It normalizes author name whitespace, publication DOI values, and author ORCID
+values. ISSN, ISBN, PMID, OpenAlex, `OTHER`, and all other identifier types
+remain unchanged. It neither removes nor deduplicates any identifiers,
+authors, affiliations, keywords, or other collection elements.
+
+Normalization returns a new deeply copied `Publication` while preserving
+record ID, schema version, creation time, provenance, dates, collection order,
+and every field outside the explicit normalization scope. It performs no
+matching, filtering, merging, identity resolution, or parser heuristics.
+Repeated DOI or ORCID values therefore remain repeated after normalization;
+deduplication is a Phase 5 responsibility.
+
+The pipeline runs exactly once as an explicit post-mapping orchestration step.
+Search Engine applies it to successful provider publications before building
+provider results, result provenance, and merged results. BibTeX and RIS import
+providers apply it after their mappers return. Mapper behavior and
+`ResultMerger` behavior remain unchanged.
+
+---
+
 ### Canonical author and ORCID normalization boundaries
 
 Phase 4.4 adds `AuthorNormalizer`, which accepts one already constructed

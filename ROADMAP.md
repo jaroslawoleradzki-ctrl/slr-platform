@@ -61,7 +61,7 @@ Canonical publication and review-process model.
 
 Current active increment:
 
-Phase 4.5 — Publication normalization pipeline.
+Phase 5 — Deduplication.
 
 ### Semantic Scholar
 
@@ -270,12 +270,12 @@ The following rules apply throughout Phase 3:
 - [x] Add unit tests.
 
 ### 4.5 — Identifier and Publication normalization pipeline
-- [ ] Normalize identifiers by type.
-- [ ] Add immutable Publication normalization.
-- [ ] Preserve record identity and provenance.
-- [ ] Remove only exact normalized identifier duplicates within one record.
-- [ ] Add contract tests.
-- [ ] Close Phase 4.
+- [x] Normalize DOI and ORCID identifier values by type.
+- [x] Add immutable Publication normalization.
+- [x] Preserve record identity and provenance.
+- [x] Preserve all identifier occurrences without deduplication.
+- [x] Add contract tests.
+- [x] Close Phase 4.
 
 ---
 

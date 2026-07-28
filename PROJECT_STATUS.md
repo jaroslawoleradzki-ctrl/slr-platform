@@ -228,7 +228,7 @@ BibTeX Import — Phase 4: Completed.
 
 Quality status:
 
-- 723 tests passing
+- 731 tests passing
 - Ruff checks passing
 - mypy checks passing
 - `git diff --check` passing
@@ -559,6 +559,30 @@ Author normalization now provides:
 - deferred systematic application of author normalization to publications
   until Phase 4.5
 
+Phase 4.5 — Publication normalization pipeline: Completed.
+
+Publication normalization now provides:
+
+- one provider-independent `PublicationNormalizer` in
+  `app/normalization/publication.py`, accepting and returning one complete
+  canonical `Publication`
+- composition of the existing title, author, DOI, and ORCID normalizers
+  without introducing additional normalization algorithms
+- preservation of the original title while populating `title_normalized`
+- normalization of every author, publication DOI value, and author ORCID
+  value while preserving all other identifier types unchanged
+- a new deeply copied publication without input mutation or shared mutable
+  collections
+- preservation of record identity, schema version, timestamps, provenance,
+  collection order, and all fields outside the explicit normalization scope
+- no filtering or deduplication; repeated identifiers remain repeated after
+  normalization, with Phase 5 retaining responsibility for deduplication
+- execution as a separate post-mapping stage in Search Engine and import
+  providers, before downstream result provenance and merge
+- unchanged mapper and `ResultMerger` semantics
+
+Phase 4 — Normalization: Completed.
+
 ---
 
 # Current architecture
@@ -610,7 +634,7 @@ Every feature must:
 
 # Next milestone
 
-Phase 4.5 — Publication normalization pipeline.
+Phase 5 — Deduplication.
 
 ---
 
