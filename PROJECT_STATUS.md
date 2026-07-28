@@ -14,7 +14,7 @@ v0.1.0
 
 Current development phase:
 
-Phase 3 — Search Engine.
+Phase 4 — Normalization.
 
 ---
 
@@ -228,7 +228,7 @@ BibTeX Import — Phase 4: Completed.
 
 Quality status:
 
-- 585 tests passing
+- 593 tests passing
 - Ruff checks passing
 - mypy checks passing
 - `git diff --check` passing
@@ -444,6 +444,34 @@ Search execution provenance now provides:
 - no SearchRun persistence, metadata-field provenance, telemetry framework, or
   provenance merging
 
+Phase 3.6 — Search Engine contract tests: Completed.
+
+The Search Engine contract suite now verifies the complete public
+`SearchEngine.execute()` orchestration path using the real engine, DOI merger,
+domain models, raw archive entry model, and provenance models. Controlled fakes
+replace only providers, archive storage, clocks, and UUID factories.
+
+Contract coverage includes:
+
+- single-provider and ordered multi-provider success
+- isolated partial provider failure with later-provider continuation
+- successful and failed raw-response archive entries
+- propagation of archive failures after provider success and provider failure
+- DOI-only merge across providers with first-object identity
+- separate provenance for every original per-provider publication, including
+  DOI duplicates omitted from the merged list
+- final provider runs and aggregate execution provenance
+- deterministic timestamp and UUID consumption
+- empty successful providers and no configured providers
+- consistent query, run, archive, result, and provenance associations
+- no network clients, local servers, concrete providers, or real HTTP requests
+
+Phase 3 — Search Engine: Completed.
+
+This completion means the planned provider-independent orchestration layer and
+its tests are complete. It does not represent deployment of production runtime
+storage or external infrastructure.
+
 ---
 
 # Current architecture
@@ -495,7 +523,7 @@ Every feature must:
 
 # Next milestone
 
-Phase 3.6 — Search Engine contract tests.
+Phase 4 — Normalization: DOI normalization.
 
 ---
 

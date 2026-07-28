@@ -6,6 +6,30 @@ This document records important project decisions that do not require a full ADR
 
 ## 2026-07-28
 
+### Search Engine public contract suite
+
+Phase 3.6 closes the planned Search Engine layer with contract tests that enter
+only through `SearchEngine.execute()`. The suite uses the real Search Engine,
+ResultMerger, domain objects, raw archive entries, and provenance models.
+
+Only external boundaries are replaced: structural fake providers return
+controlled `ProviderSearchOutput` values, an in-memory fake archive records save
+attempts and successful writes, and deterministic factories supply timestamps,
+SearchRun IDs, and archive IDs. No HTTP client, server, network fixture, or
+concrete provider is used.
+
+The contract scenarios cover single- and multi-provider execution, partial
+provider failures, raw-response archiving, archive-failure propagation,
+DOI-only merge, per-publication provenance, aggregate execution provenance,
+empty results, no providers, deterministic timing, and consistent query/run
+associations.
+
+These tests add no product behavior and require no production-code change.
+Completion of Phase 3 means the roadmap's orchestration layer and verification
+are complete, not that runtime persistence or deployment infrastructure exists.
+
+---
+
 ### Immutable Search Engine execution provenance
 
 Phase 3.5 records final provider runs and an execution-level summary without

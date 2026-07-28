@@ -61,7 +61,7 @@ Canonical publication and review-process model.
 
 Current active increment:
 
-Phase 3.6 — Search Engine contract tests.
+Phase 4 — Normalization: DOI normalization.
 
 ### Semantic Scholar
 
@@ -116,7 +116,7 @@ Notes:
 
 ---
 
-## Phase 3 — Search Engine
+## Phase 3 — Search Engine ✅
 
 ### Goal
 
@@ -211,14 +211,14 @@ Out of scope
 
 Scope
 
-- [ ] End-to-end orchestration tests.
-- [ ] Single-provider execution.
-- [ ] Multi-provider execution.
-- [ ] Partial provider failures.
-- [ ] Raw response archive verification.
-- [ ] Result merge verification.
-- [ ] Search provenance verification.
-- [ ] No real HTTP requests.
+- [x] End-to-end orchestration tests.
+- [x] Single-provider execution.
+- [x] Multi-provider execution.
+- [x] Partial provider failures.
+- [x] Raw response archive verification.
+- [x] Result merge verification.
+- [x] Search provenance verification.
+- [x] No real HTTP requests.
 
 Completion of Phase 3.6 closes the Search Engine implementation.
 
