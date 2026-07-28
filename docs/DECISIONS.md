@@ -6,6 +6,36 @@ This document records important project decisions that do not require a full ADR
 
 ## 2026-07-28
 
+### Immutable Search Engine execution provenance
+
+Phase 3.5 records final provider runs and an execution-level summary without
+mutating canonical `Publication` objects. Each provider receives a validated
+`RUNNING` SearchRun immediately before its request. After the required archive
+write succeeds, a new fully validated SearchRun is created as `COMPLETED` or
+`FAILED`; frozen Pydantic models are not bypassed.
+
+Provider timing covers request processing and the mandatory raw-response
+archive write. Start and finish timestamps come from the injected Search Engine
+clock, and duration is derived from them in seconds. Successful runs record the
+number of canonical publications. Failed runs record zero results, one stable
+`ExceptionType: message` diagnostic, and retain the original exception in
+`ProviderSearchResult`.
+
+`PublicationSearchProvenance` associates each original publication from a
+successful provider with that provider and its completed SearchRun. Provenance
+is produced in provider/publication order. DOI duplicates retain separate
+per-provider provenance entries; merge does not combine provenance.
+
+`SearchExecutionProvenance` indexes ordered provider run IDs and summarizes
+execution timestamps, duration, total canonical results before merge, and the
+merged result count. It references rather than duplicates full SearchRun data.
+
+Archive failures still propagate before a final provider result, merge, or
+execution provenance can be produced. No persistence, repository, tracing,
+telemetry backend, field-level provenance, or Phase 3.6 contract layer is added.
+
+---
+
 ### Conservative DOI-only provider result merge
 
 Phase 3.4 adds a separate stateless `ResultMerger`, invoked once after all

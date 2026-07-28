@@ -61,7 +61,7 @@ Canonical publication and review-process model.
 
 Current active increment:
 
-Phase 3.5 — Search provenance tracking.
+Phase 3.6 — Search Engine contract tests.
 
 ### Semantic Scholar
 
@@ -196,11 +196,11 @@ Out of scope
 
 Scope
 
-- [ ] Record complete search execution provenance.
-- [ ] Store provider execution status.
-- [ ] Store execution duration.
-- [ ] Store provider result counts.
-- [ ] Associate every result with its originating provider and SearchRun.
+- [x] Record complete search execution provenance.
+- [x] Store provider execution status.
+- [x] Store execution duration.
+- [x] Store provider result counts.
+- [x] Associate every result with its originating provider and SearchRun.
 
 Out of scope
 

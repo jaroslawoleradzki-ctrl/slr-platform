@@ -228,7 +228,7 @@ BibTeX Import — Phase 4: Completed.
 
 Quality status:
 
-- 573 tests passing
+- 585 tests passing
 - Ruff checks passing
 - mypy checks passing
 - `git diff --check` passing
@@ -420,6 +420,30 @@ Provider result merging now provides:
 - no title, author, year, venue, PMID, OpenAlex ID, similarity, ranking,
   metadata-field, or provenance merging
 
+Phase 3.5 — Search provenance tracking: Completed.
+
+Search execution provenance now provides:
+
+- final immutable `SearchRun` records with `COMPLETED` or `FAILED` status,
+  timezone-aware start and finish timestamps, canonical result counts, and
+  stable provider error diagnostics
+- provider duration exposed as `ProviderSearchResult.duration_seconds`, derived
+  from the final run timestamps without storing duplicate timing state
+- one immutable `PublicationSearchProvenance` per publication returned by each
+  successful provider, retaining the original publication object and its own
+  completed provider `SearchRun`
+- separate provenance entries for DOI duplicates from different providers,
+  even when DOI-only merge retains only the first publication
+- `SearchExecutionProvenance` with execution start, finish, derived duration,
+  ordered provider run IDs, total canonical results before merge, and merged
+  result count
+- deterministic ordering matching provider order and publication order
+- an injected clock used for all Search Engine timestamps
+- unchanged provider error isolation, required raw-response archiving, DOI-only
+  merge, and archive-failure propagation
+- no SearchRun persistence, metadata-field provenance, telemetry framework, or
+  provenance merging
+
 ---
 
 # Current architecture
@@ -471,7 +495,7 @@ Every feature must:
 
 # Next milestone
 
-Phase 3.5 — Search provenance tracking.
+Phase 3.6 — Search Engine contract tests.
 
 ---
 
