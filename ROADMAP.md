@@ -87,39 +87,124 @@ Goals:
 
 ---
 
-## Phase 6 — Screening Engine
+## Phase 6 — GUI Foundation and Duplicate Review
 
-Support for systematic review screening.
+Establish the reusable graphical application foundation and provide the first functional review workflow for duplicate publications.
 
 Features:
 
-- inclusion/exclusion decisions
+- application shell
+- routing and navigation
+- shared layout
+- API client foundation
+- loading, empty and error states
+- reusable forms and tables
+- frontend module structure
+- duplicate groups view
+- duplicate comparison view
+- merge candidate review
+- provenance visibility
+- user confirmation of duplicate decisions
+
+This phase does not represent the full GUI MVP. Its purpose is to establish the interface foundation and deliver the first complete module supporting deduplication.
+
+---
+
+## Phase 7 — Screening
+
+Support systematic review screening through a backend workflow and a dedicated user interface.
+
+Features:
+
+- inclusion and exclusion decisions
+- screening criteria
+- screening rationale
+- title and abstract screening
+- full-text screening
 - screening history
 - conflict detection
 - multiple reviewers
+- screening queue and progress view
+- screening decision interface
 
 ---
 
-## Phase 7 — GUI MVP
+## Phase 8 — Quality Assessment
 
-First usable graphical application.
+Support methodological quality assessment of included studies.
 
 Features:
 
-- search
-- import
-- results
-- deduplication
-- screening
-- export
-
-Focus:
-
-- functionality over appearance
+- configurable quality criteria
+- assessment forms
+- scoring or rating schemes
+- reviewer attribution
+- assessment rationale
+- assessment history
+- reviewer agreement and disagreement visibility
+- quality assessment interface
+- assessment progress view
 
 ---
 
-## Phase 8 — Reporting & Export
+## Phase 9 — Data Extraction
+
+Support structured extraction of research data from included studies.
+
+Features:
+
+- configurable extraction forms
+- structured extraction fields
+- extracted-value provenance
+- reviewer attribution
+- extraction history
+- validation of extracted data
+- extraction workspace
+- tabular and form-based extraction views
+- exportable structured datasets
+
+---
+
+## Phase 10 — Evidence Synthesis
+
+Support organization, analysis and synthesis of extracted evidence.
+
+Features:
+
+- qualitative synthesis support
+- thematic grouping
+- evidence tables
+- bibliometric analysis support
+- research-gap identification
+- synthesis traceability
+- synthesis workspace
+- comparison and aggregation views
+
+---
+
+## Phase 11 — Integrated GUI MVP
+
+Integrate the previously developed graphical modules into the first complete end-to-end application.
+
+Features:
+
+- unified workflow navigation
+- integrated search and import views
+- integrated deduplication workflow
+- integrated screening workflow
+- integrated quality assessment workflow
+- integrated data extraction workflow
+- integrated evidence synthesis workflow
+- common state management
+- consistent validation and error handling
+- basic settings
+- complete end-to-end user journey
+
+The GUI MVP is not built from scratch. It integrates, unifies and completes the graphical modules developed in earlier phases.
+
+---
+
+## Phase 12 — Reporting & Export
 
 Generate research outputs.
 
@@ -134,7 +219,7 @@ Examples:
 
 ---
 
-## Phase 9 — Project Management
+## Phase 13 — Project Management
 
 Research project management.
 
@@ -148,7 +233,7 @@ Examples:
 
 ---
 
-## Phase 10 — User Experience
+## Phase 14 — User Experience
 
 Application refinement.
 
@@ -162,7 +247,7 @@ Examples:
 
 ---
 
-## Phase 11 — AI Assistance
+## Phase 15 — AI Assistance
 
 AI features built on top of a stable platform.
 
