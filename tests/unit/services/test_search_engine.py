@@ -11,6 +11,8 @@ from app.domain.identifiers import Identifier, IdentifierType
 from app.domain.publication import Publication
 from app.domain.search import SearchQuery, SearchRun, SearchRunStatus, SearchTerm
 from app.providers.search.base import JsonObject, ProviderSearchOutput
+from app.services.duplicate_group_builder import DuplicateGroupBuilder
+from app.services.publication_merge_policy import PublicationMergePolicy
 from app.services.search_engine import (
     ProviderSearchResult,
     SearchEngine,
@@ -85,6 +87,21 @@ class SpyResultMerger(ResultMerger):
         captured = list(publications)
         self.calls.append(captured)
         return super().merge(captured)
+
+
+class SpyDuplicateGroupBuilder(DuplicateGroupBuilder):
+    def __init__(self) -> None:
+        self.calls: list[tuple[list[Publication], datetime | None]] = []
+
+    def build(
+        self,
+        publications: Iterable[Publication],
+        *,
+        created_at: datetime | None = None,
+    ) -> list:
+        captured = list(publications)
+        self.calls.append((captured, created_at))
+        return super().build(captured, created_at=created_at)
 
 
 class FakeClock:
@@ -191,6 +208,7 @@ async def test_execute_calls_all_providers_in_order_with_separate_runs(
         for provider in providers
         if provider.publications
     ]
+    assert result.normalized_publications == result.merged_publications
     assert [
         provider_result.search_run.run_id
         for provider_result in result.provider_results
@@ -274,6 +292,7 @@ async def test_execute_keeps_normalized_provider_results_separate(
         first_results[1],
         second_results[0],
     ]
+    assert result.normalized_publications == result.merged_publications
     assert [item.publication for item in result.result_provenance] == [
         first_results[0],
         first_results[1],
@@ -299,8 +318,153 @@ async def test_execute_preserves_empty_provider_result(
     assert result.provider_results[0].publications is not publications
     assert result.provider_results[0].publications == []
     assert result.provider_results[0].error is None
+    assert result.normalized_publications == []
     assert result.merged_publications == []
+    assert result.duplicate_groups == []
     assert result.result_provenance == []
+
+
+@pytest.mark.anyio
+async def test_execute_returns_duplicate_groups_for_merged_publications(
+    search_query: SearchQuery,
+    archive: FakeRawResponseArchive,
+) -> None:
+    first = Publication(
+        title="First",
+        identifiers=[Identifier(type=IdentifierType.PMID, value="123")],
+    )
+    second = Publication(
+        title="Second",
+        identifiers=[Identifier(type=IdentifierType.PMID, value="123")],
+    )
+
+    result = await SearchEngine(
+        providers=[FakeSearchProvider("provider", [first, second])],
+        raw_response_archive=archive,
+    ).execute(search_query)
+
+    assert [publication.title for publication in result.merged_publications] == [
+        "First",
+        "Second",
+    ]
+    assert result.normalized_publications == result.merged_publications
+    assert len(result.duplicate_groups) == 1
+    assert result.duplicate_groups[0].publication_ids == tuple(
+        sorted((first.record_id, second.record_id))
+    )
+
+
+@pytest.mark.anyio
+async def test_builder_is_called_once_and_merge_policy_is_not_used(
+    search_query: SearchQuery,
+    archive: FakeRawResponseArchive,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    publications = [
+        Publication(
+            title="First",
+            identifiers=[Identifier(type=IdentifierType.DOI, value="10.1000/shared")],
+        ),
+        Publication(
+            title="Alternative metadata",
+            identifiers=[Identifier(type=IdentifierType.DOI, value="10.1000/SHARED")],
+        ),
+    ]
+    builder = SpyDuplicateGroupBuilder()
+
+    def fail_if_called(
+        self: PublicationMergePolicy,
+        first: Publication,
+        second: Publication,
+    ) -> Publication:
+        raise AssertionError("PublicationMergePolicy must not be called")
+
+    monkeypatch.setattr(PublicationMergePolicy, "merge", fail_if_called)
+    result = await SearchEngine(
+        providers=[FakeSearchProvider("provider", publications)],
+        raw_response_archive=archive,
+        duplicate_group_builder=builder,
+    ).execute(search_query)
+
+    assert len(builder.calls) == 1
+    captured, created_at = builder.calls[0]
+    assert captured == result.normalized_publications
+    assert len(captured) == 2
+    assert [publication.title for publication in result.merged_publications] == [
+        "First"
+    ]
+    assert [publication.title for publication in result.normalized_publications] == [
+        "First",
+        "Alternative metadata",
+    ]
+    assert created_at == result.execution_provenance.finished_at
+    assert len(result.duplicate_groups) == 1
+
+
+@pytest.mark.anyio
+async def test_execute_groups_actual_openalex_identifier_format(
+    search_query: SearchQuery,
+    archive: FakeRawResponseArchive,
+) -> None:
+    identifier = Identifier(
+        type=IdentifierType.OTHER,
+        value="https://openalex.org/W123",
+        source="openalex",
+    )
+    first = Publication(title="First", identifiers=[identifier])
+    second = Publication(title="Second", identifiers=[identifier])
+
+    result = await SearchEngine(
+        providers=[FakeSearchProvider("openalex", [first, second])],
+        raw_response_archive=archive,
+    ).execute(search_query)
+
+    assert result.normalized_publications == result.merged_publications
+    assert result.duplicate_groups[0].publication_ids == tuple(
+        sorted((first.record_id, second.record_id))
+    )
+
+
+@pytest.mark.anyio
+async def test_execute_builds_transitive_group_before_doi_reduction(
+    search_query: SearchQuery,
+    archive: FakeRawResponseArchive,
+) -> None:
+    first = Publication(
+        title="First",
+        identifiers=[Identifier(type=IdentifierType.DOI, value="10.1000/shared")],
+    )
+    bridge = Publication(
+        title="Bridge",
+        identifiers=[
+            Identifier(type=IdentifierType.DOI, value="10.1000/SHARED"),
+            Identifier(type=IdentifierType.PMID, value="123"),
+        ],
+    )
+    third = Publication(
+        title="Third",
+        identifiers=[Identifier(type=IdentifierType.PMID, value="123")],
+    )
+
+    result = await SearchEngine(
+        providers=[FakeSearchProvider("provider", [first, bridge, third])],
+        raw_response_archive=archive,
+    ).execute(search_query)
+
+    assert result.normalized_publications == result.provider_results[0].publications
+    assert [publication.title for publication in result.merged_publications] == [
+        "First",
+        "Third",
+    ]
+    assert result.duplicate_groups[0].publication_ids == tuple(
+        sorted((first.record_id, bridge.record_id, third.record_id))
+    )
+    available_ids = [
+        publication.record_id for publication in result.normalized_publications
+    ]
+    for group in result.duplicate_groups:
+        for publication_id in group.publication_ids:
+            assert available_ids.count(publication_id) == 1
 
 
 @pytest.mark.anyio
@@ -363,6 +527,11 @@ async def test_execute_continues_after_error_and_preserves_partial_results(
     assert third_results is not third_publications
     assert result.provider_results[2].error is None
     assert result.merged_publications == [first_results[0], third_results[1]]
+    assert result.normalized_publications == [
+        first_results[0],
+        third_results[0],
+        third_results[1],
+    ]
     assert result.merged_publications[0] is first_results[0]
     assert result.merged_publications[1] is third_results[1]
     assert [
@@ -491,6 +660,7 @@ async def test_execute_archives_success_with_deterministic_metadata(
     assert normalized is not None
     assert normalized is not publications
     assert result.merged_publications == normalized
+    assert result.normalized_publications == normalized
     assert result.merged_publications is not publications
     assert result.merged_publications[0] is normalized[0]
     assert len(archive.entries) == 1
@@ -588,7 +758,9 @@ async def test_execute_with_no_providers_returns_empty_result(
     ).execute(search_query)
 
     assert result.provider_results == []
+    assert result.normalized_publications == []
     assert result.merged_publications == []
+    assert result.duplicate_groups == []
     assert result.result_provenance == []
     assert result.execution_provenance.provider_run_ids == ()
     assert result.execution_provenance.total_provider_results == 0

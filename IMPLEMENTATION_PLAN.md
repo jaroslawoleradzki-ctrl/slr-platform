@@ -60,9 +60,13 @@ Status:
 
 ## 5.4 Search Engine Integration
 
+- duplicate group analysis after ResultMerger
+- SearchExecution duplicate group results
+- no automatic decisions or publication merge
+
 Status:
 
-⬜ Planned
+✅ Completed
 
 ---
 

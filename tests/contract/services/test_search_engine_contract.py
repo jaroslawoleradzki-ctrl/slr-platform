@@ -210,8 +210,10 @@ async def test_single_provider_success_contract() -> None:
         "lean case study",
     ]
     assert execution.merged_publications == result.publications
+    assert execution.normalized_publications == result.publications
     assert execution.merged_publications[0] is result.publications[0]
     assert execution.merged_publications[1] is result.publications[1]
+    assert execution.duplicate_groups == []
     assert [item.publication for item in execution.result_provenance] == (
         result.publications
     )
@@ -416,11 +418,61 @@ async def test_doi_merge_and_separate_provenance_contract() -> None:
         first_result[1],
         second_result[1],
     ]
+    assert execution.normalized_publications == [
+        first_result[0],
+        first_result[1],
+        second_result[0],
+        second_result[1],
+    ]
     assert execution.merged_publications[0] is first_result[0]
     assert execution.merged_publications[1] is first_result[1]
     assert execution.merged_publications[2] is second_result[1]
     assert execution.execution_provenance.total_provider_results == 4
     assert execution.execution_provenance.merged_result_count == 3
+    assert len(execution.duplicate_groups) == 1
+    assert execution.duplicate_groups[0].publication_ids == tuple(
+        sorted((a1.record_id, b1.record_id))
+    )
+    normalized_ids = {
+        publication.record_id
+        for publication in execution.normalized_publications
+    }
+    assert set(execution.duplicate_groups[0].publication_ids) <= normalized_ids
+
+
+@pytest.mark.anyio
+async def test_search_execution_exposes_strong_identifier_candidate_groups() -> None:
+    first = Publication(
+        title="First",
+        identifiers=[Identifier(type=IdentifierType.PMID, value="123")],
+    )
+    second = Publication(
+        title="Second",
+        identifiers=[Identifier(type=IdentifierType.PMID, value="123")],
+    )
+    execution = await SearchEngine(
+        providers=[
+            ContractProvider(
+                "provider",
+                publications=[first, second],
+                raw_responses=[{"provider": "provider"}],
+            )
+        ],
+        raw_response_archive=ContractArchive(),
+        run_id_factory=_uuid_factory([_uuid(101)]),
+        archive_id_factory=_uuid_factory([_uuid(201)]),
+        clock=ContractClock(_clock_values(1)),
+    ).execute(_query())
+
+    assert [item.title for item in execution.merged_publications] == [
+        "First",
+        "Second",
+    ]
+    assert execution.normalized_publications == execution.merged_publications
+    assert len(execution.duplicate_groups) == 1
+    assert execution.duplicate_groups[0].publication_ids == tuple(
+        sorted((first.record_id, second.record_id))
+    )
 
 
 @pytest.mark.anyio
@@ -448,6 +500,7 @@ async def test_empty_successful_provider_contract() -> None:
     assert result.publications == []
     assert archive.saved_entries[0].responses is raw_pages
     assert execution.result_provenance == []
+    assert execution.normalized_publications == []
     assert execution.merged_publications == []
     assert execution.execution_provenance.provider_run_ids == (run_id,)
     assert execution.execution_provenance.total_provider_results == 0
@@ -468,6 +521,7 @@ async def test_no_configured_providers_contract() -> None:
 
     assert archive.attempted_entries == []
     assert execution.provider_results == []
+    assert execution.normalized_publications == []
     assert execution.merged_publications == []
     assert execution.result_provenance == []
     assert execution.execution_provenance.provider_run_ids == ()

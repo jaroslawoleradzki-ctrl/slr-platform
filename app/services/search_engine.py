@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from typing import Protocol
 from uuid import UUID, uuid4
 
+from app.domain.deduplication import DuplicateGroup
 from app.domain.publication import Publication
 from app.domain.search import SearchQuery, SearchRun, SearchRunStatus
 from app.domain.search_provenance import (
@@ -14,6 +15,7 @@ from app.domain.search_provenance import (
 )
 from app.normalization import normalize_publication
 from app.providers.search.base import ProviderSearchOutput
+from app.services.duplicate_group_builder import DuplicateGroupBuilder
 from app.services.result_merger import ResultMerger
 from app.storage.raw_response_archive import (
     RawResponseArchive,
@@ -67,7 +69,9 @@ class SearchExecution:
     """Ordered, separate results from one sequential provider execution."""
 
     provider_results: list[ProviderSearchResult]
+    normalized_publications: list[Publication]
     merged_publications: list[Publication]
+    duplicate_groups: list[DuplicateGroup]
     result_provenance: list[PublicationSearchProvenance]
     execution_provenance: SearchExecutionProvenance
 
@@ -84,6 +88,7 @@ class SearchEngine:
         archive_id_factory: Callable[[], UUID] = uuid4,
         clock: Callable[[], datetime] = _utc_now,
         result_merger: ResultMerger | None = None,
+        duplicate_group_builder: DuplicateGroupBuilder | None = None,
     ) -> None:
         self._providers = tuple(providers)
         self._raw_response_archive = raw_response_archive
@@ -92,6 +97,11 @@ class SearchEngine:
         self._clock = clock
         self._result_merger = (
             result_merger if result_merger is not None else ResultMerger()
+        )
+        self._duplicate_group_builder = (
+            duplicate_group_builder
+            if duplicate_group_builder is not None
+            else DuplicateGroupBuilder()
         )
 
     async def execute(self, search_query: SearchQuery) -> SearchExecution:
@@ -182,16 +192,23 @@ class SearchEngine:
                     )
                     for publication in normalized_publications
                 )
-        merged_publications = self._result_merger.merge(
+        normalized_publications = [
             publication
             for provider_result in provider_results
             if provider_result.publications is not None
             for publication in provider_result.publications
-        )
+        ]
+        merged_publications = self._result_merger.merge(normalized_publications)
         execution_finished_at = self._clock()
+        duplicate_groups = self._duplicate_group_builder.build(
+            normalized_publications,
+            created_at=execution_finished_at,
+        )
         return SearchExecution(
             provider_results=provider_results,
+            normalized_publications=normalized_publications,
             merged_publications=merged_publications,
+            duplicate_groups=duplicate_groups,
             result_provenance=result_provenance,
             execution_provenance=SearchExecutionProvenance(
                 started_at=execution_started_at,

@@ -6,6 +6,31 @@ This document records important project decisions that do not require a full ADR
 
 ## 2026-07-29
 
+### Search Engine duplicate-group analysis stage
+
+Phase 5.4 exposes three related Search Engine outputs:
+`normalized_publications`, `merged_publications`, and candidate
+`duplicate_groups`. The pipeline branches after normalization:
+
+Providers → Normalization → `normalized_publications`
+
+- `DuplicateGroupBuilder` → `duplicate_groups`
+- unchanged `ResultMerger` → `merged_publications`
+
+Search Engine invokes the builder exactly once on the complete ordered
+normalized collection, using the execution finish time as the explicit group
+creation time. Candidate groups are therefore built before ResultMerger removes
+later records sharing a DOI. Every group member remains available through
+`normalized_publications`, while `merged_publications` retains the existing
+DOI-only, first-record-wins result.
+
+Duplicate grouping is an analysis stage only. It does not confirm or reject a
+group, persist it, or merge publication metadata. `PublicationMergePolicy`
+remains a separate operation that may only be used after an explicit duplicate
+decision; Search Engine does not invoke it.
+
+---
+
 ### Strong-identifier duplicate candidate groups
 
 Phase 5.3 introduces `DuplicateGroupBuilder` as an application service that
@@ -31,7 +56,8 @@ representations of one `record_id` differ, their strong identifier keys are
 combined deterministically, while all other metadata is ignored rather than
 selected or reconciled.
 
-The builder neither merges publications nor integrates with Search Engine.
+The builder itself does not merge publications. Its Search Engine orchestration
+is defined separately by Phase 5.4.
 
 ---
 

@@ -642,6 +642,24 @@ The duplicate group builder now provides:
 - no title matching, fuzzy matching, scoring, Search Engine integration,
   repository, API, database, or GUI behavior
 
+Phase 5.4 — Search Engine Integration: Completed.
+
+`DuplicateGroupBuilder` is now invoked once by Search Engine on the complete
+ordered `normalized_publications` collection before records are removed by
+`ResultMerger`. `SearchExecution` exposes that complete collection, candidate
+`duplicate_groups`, and the existing `merged_publications`.
+
+Every publication referenced by a duplicate group therefore remains available
+in `normalized_publications`. ResultMerger still produces
+`merged_publications` with its conservative DOI-only, first-record-wins
+behavior and unchanged ordering.
+
+No group is confirmed or rejected automatically, and no publication metadata is
+merged. `PublicationMergePolicy` remains available only as an explicit,
+separate operation and is not invoked by Search Engine.
+
+Phase 5.5 remains planned.
+
 Phase 5 remains in progress.
 
 ---
