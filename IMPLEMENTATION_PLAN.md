@@ -47,12 +47,14 @@ Status:
 ## 5.3 Duplicate Groups
 
 - grouping
-- merge candidates
+- candidates based on DOI, PMID and OpenAlex identifiers
+- transitive connected groups
 - stable ordering
+- deterministic group identity
 
 Status:
 
-⬜ Planned
+✅ Completed
 
 ---
 

@@ -627,6 +627,21 @@ The existing DOI-only `ResultMerger` remains unchanged and continues to retain
 the first search result for compatibility. It does not invoke the new merge
 policy in this increment.
 
+Phase 5.3 — Duplicate Groups: Completed.
+
+The duplicate group builder now provides:
+
+- deterministic candidate groups based only on shared DOI, PMID, and OpenAlex
+  identifiers
+- DOI normalization and exact PMID/OpenAlex value comparison
+- transitive connected groups with stable publication ordering
+- deterministic group identifiers and explicit group creation timestamps
+- pending groups without decisions or automatic merge
+- omission of unmatched publications and groups with fewer than two distinct
+  publication IDs
+- no title matching, fuzzy matching, scoring, Search Engine integration,
+  repository, API, database, or GUI behavior
+
 Phase 5 remains in progress.
 
 ---

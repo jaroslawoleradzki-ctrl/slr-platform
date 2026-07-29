@@ -6,6 +6,35 @@ This document records important project decisions that do not require a full ADR
 
 ## 2026-07-29
 
+### Strong-identifier duplicate candidate groups
+
+Phase 5.3 introduces `DuplicateGroupBuilder` as an application service that
+creates candidate groups only from shared DOI, PMID, and OpenAlex identifiers.
+DOI uses the canonical DOI normalizer. PMID and OpenAlex values use exact
+comparison because the domain model defines no broader normalizer. The OpenAlex
+provider currently stores work identifiers as `IdentifierType.OTHER` with
+`source="openalex"` and a full `https://openalex.org/W...` value; the builder
+recognizes that representation as an OpenAlex work identifier. Compact and URL
+forms are not implicitly equated. No title, author, fuzzy, similarity, or
+scoring rule participates in grouping.
+
+Groups are connected components of publications and strong identifier values.
+This makes transitive matches one non-overlapping group. Publication UUIDs and
+groups are stably ordered. A group's UUID is deterministically derived from its
+ordered member UUIDs. Group creation time is an explicit builder input, or the
+current timezone-aware UTC time when omitted; it is not synthesized from member
+metadata, UUIDs, or hashes. New groups remain pending with an empty decision
+history.
+
+Repeated inputs are deduplicated by publication `record_id`. When repeated
+representations of one `record_id` differ, their strong identifier keys are
+combined deterministically, while all other metadata is ignored rather than
+selected or reconciled.
+
+The builder neither merges publications nor integrates with Search Engine.
+
+---
+
 ### Deterministic publication merge policy
 
 Phase 5.2 introduces an infrastructure-independent `PublicationMergePolicy`
