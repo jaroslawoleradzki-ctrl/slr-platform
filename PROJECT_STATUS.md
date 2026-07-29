@@ -14,7 +14,7 @@ v0.1.0
 
 Current development phase:
 
-Phase 5 — Deduplication completed. Phase 6 has not started.
+Phase 5 — Deduplication completed. Phase 6.1 — GUI Foundation completed on feature branch `feat/phase-6-1-gui-foundation`. Phase 6.2 Duplicate Review Backend Integration pending.
 
 ---
 

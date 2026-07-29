@@ -1,0 +1,300 @@
+import { SLRProject } from '../types';
+
+export const MOCK_PROJECTS: SLRProject[] = [
+  {
+    id: 'lean_energy',
+    title: 'Lean Management and Energy Efficiency in Industrial Manufacturing',
+    description: 'Systematic review investigating operational lean principles (TPS, Kaizen, JIT) and their quantitative impact on industrial energy performance and consumption reduction.',
+    protocolVersion: '0.6',
+    createdAt: '2026-07-01T10:00:00Z',
+    updatedAt: '2026-07-28T16:45:00Z',
+    nextAction: {
+      title: 'Ocena Grup Duplikatów (Deduplikacja)',
+      description: 'Techniczny ResultMerger wykonał wstępne scalenie identyfikatorów. Wykryto 45 candidate duplicate groups (identifier-linked duplicate groups awaiting human review).',
+      targetStageId: 'dedup',
+      actionLabel: 'Przejdź do Oceny Duplikatów',
+      severity: 'urgent',
+    },
+    conceptGroups: [
+      {
+        id: 'cg-1',
+        name: 'Lean Management Terms',
+        terms: [
+          'Lean Management',
+          'Lean Manufacturing',
+          'Lean Production',
+          'Toyota Production System',
+          'Kaizen',
+          'Continuous Improvement',
+          'Just-in-Time'
+        ]
+      },
+      {
+        id: 'cg-2',
+        name: 'Energy Efficiency Terms',
+        terms: [
+          'Energy Efficiency',
+          'Energy Consumption',
+          'Energy Performance',
+          'Energy Saving',
+          'Energy Management',
+          'Energy Use'
+        ]
+      },
+      {
+        id: 'cg-3',
+        name: 'Manufacturing Terms',
+        terms: [
+          'Manufacturing',
+          'Production',
+          'Industrial',
+          'Factory'
+        ]
+      }
+    ],
+    searchFilters: {
+      publicationYearFrom: 2015,
+      publicationYearTo: 2026,
+      languages: ['en', 'pl'],
+      publicationTypes: ['article', 'review', 'conference_paper'],
+      fullTextOnly: false,
+    },
+    providers: [
+      {
+        id: 'openalex',
+        name: 'OpenAlex Works API',
+        type: 'live_api',
+        connected: true,
+        status: 'completed',
+        resultsCount: 840,
+        lastRunTimestamp: '2026-07-28T14:20:00Z'
+      },
+      {
+        id: 'crossref',
+        name: 'Crossref REST API',
+        type: 'live_api',
+        connected: true,
+        status: 'completed',
+        resultsCount: 620,
+        lastRunTimestamp: '2026-07-28T14:22:00Z'
+      },
+      {
+        id: 'semantic_scholar',
+        name: 'Semantic Scholar Graph API',
+        type: 'live_api',
+        connected: true,
+        status: 'completed',
+        resultsCount: 410,
+        lastRunTimestamp: '2026-07-28T14:25:00Z'
+      }
+    ],
+    imports: [
+      {
+        id: 'imp-1',
+        filename: 'google_scholar_export_2026.ris',
+        format: 'RIS',
+        recordsCount: 150,
+        importedAt: '2026-07-28T15:00:00Z',
+        status: 'success'
+      },
+      {
+        id: 'imp-2',
+        filename: 'scopus_supplement.bib',
+        format: 'BibTeX',
+        recordsCount: 85,
+        importedAt: '2026-07-28T15:10:00Z',
+        status: 'warning',
+        warnings: ['3 rekordy zawierały brakujące pola rocznika — ustawiono wartośc domyślną']
+      }
+    ],
+    normalization: [
+      {
+        completed: true,
+        totalRecordsProcessed: 2105,
+        cleanRecordsCount: 2042,
+        warningsCount: 63,
+        errorsCount: 0,
+        warningsLog: [
+          'Normalizacja DOI: sprowadzono 1,410 adresów URL do postaci canonical bare DOI',
+          'Sformatowano nazwy 320 autorów do postaci Lastname, Firstname',
+          'Pomijanie 63 nieprawidłowych opcjonalnych identyfikatorów ISSN'
+        ]
+      }
+    ],
+    deduplication: {
+      recordsBeforeDedup: 2105,
+      identifierLinkedGroupsCount: 380,
+      recordsAfterResultMerger: 1725,
+      candidateGroupsPendingUserReview: 45,
+      status: 'pending_action'
+    },
+    duplicateGroups: [
+      {
+        groupId: 'grp-001',
+        similarityScore: 1.0,
+        reason: 'Zgodność identyfikatorów DOI & OpenAlex ID (Identifier-linked)',
+        records: [
+          {
+            id: 'rec-101',
+            title: 'Energy reduction through lean production in auto manufacturing: A systematic review',
+            authors: 'Smith, J., Kowalski, P.',
+            year: 2021,
+            source: 'OpenAlex',
+            doi: '10.1016/j.jclepro.2021.102834'
+          },
+          {
+            id: 'rec-102',
+            title: 'Energy reduction through lean production in automotive manufacturing: Systematic Review',
+            authors: 'Smith, John, Kowalski, Piotr',
+            year: 2021,
+            source: 'Crossref'
+          }
+        ]
+      },
+      {
+        groupId: 'grp-002',
+        similarityScore: 1.0,
+        reason: 'Zgodność identyfikatora DOI i PMID (Identifier-linked)',
+        records: [
+          {
+            id: 'rec-201',
+            title: 'Applying Kaizen principles to lower electricity consumption in foundry operations',
+            authors: 'Müller, H., Schmidt, A.',
+            year: 2019,
+            source: 'Semantic Scholar',
+            doi: '10.1007/s00170-019-04122-z'
+          },
+          {
+            id: 'rec-202',
+            title: 'Applying Kaizen principles to lower electricity consumption in foundry operations.',
+            authors: 'Muller, H., Schmidt, A.',
+            year: 2019,
+            source: 'RIS file (Google Scholar export)'
+          }
+        ]
+      }
+    ],
+    screening: {
+      titleAbstract: {
+        pending: 425,
+        included: 340,
+        excluded: 960,
+        unresolved: 0,
+        total: 1725
+      },
+      fullText: {
+        pending: 340,
+        included: 0,
+        excluded: 0,
+        unresolved: 0,
+        total: 340
+      },
+      status: 'in_progress'
+    },
+    qualityAssessment: {
+      totalToAssess: 340,
+      completedAssessments: 0,
+      reviewerConflictsCount: 0,
+      status: 'pending'
+    },
+    prismaMetrics: {
+      recordsIdentifiedProviders: 1870,
+      recordsIdentifiedImports: 235,
+      totalIdentified: 2105,
+      recordsAfterNormalization: 2105,
+      recordsBeforeDedup: 2105,
+      recordsAfterTechnicalMerger: 1725,
+      duplicateGroupsPendingReview: 45,
+      recordsScreenedTitleAbstract: 1300,
+      recordsScreenedFullText: 0,
+      studiesIncludedSynthesis: 0
+    }
+  },
+  {
+    id: 'ai_architecture',
+    title: 'Architectural Tactics for LLM Integration in Enterprise Systems',
+    description: 'Systematic literature review on software architecture patterns, latency mitigation, and cost-optimization tactics when embedding LLMs into critical backend services.',
+    protocolVersion: '0.2',
+    createdAt: '2026-07-15T09:00:00Z',
+    updatedAt: '2026-07-27T11:20:00Z',
+    nextAction: {
+      title: 'Uruchomienie Wyszukiwania w Providerach',
+      description: 'Zdefiniowano grupy pojęć i zapytania search strategy. Następnym krokiem jest uruchomienie zapytań w API OpenAlex i Crossref.',
+      targetStageId: 'sources',
+      actionLabel: 'Uruchom Live Search',
+      severity: 'normal'
+    },
+    conceptGroups: [
+      {
+        id: 'cg-10',
+        name: 'LLM & Generative AI',
+        terms: ['Large Language Models', 'LLM', 'Generative AI', 'Foundation Models']
+      },
+      {
+        id: 'cg-11',
+        name: 'Software Architecture',
+        terms: ['Software Architecture', 'Architectural Tactics', 'Design Patterns', 'Microservices']
+      }
+    ],
+    searchFilters: {
+      publicationYearFrom: 2022,
+      publicationYearTo: 2026,
+      languages: ['en'],
+      publicationTypes: ['article', 'conference_paper'],
+      fullTextOnly: true,
+    },
+    providers: [
+      {
+        id: 'openalex',
+        name: 'OpenAlex Works API',
+        type: 'live_api',
+        connected: true,
+        status: 'idle',
+        resultsCount: 0,
+        lastRunTimestamp: null
+      },
+      {
+        id: 'crossref',
+        name: 'Crossref REST API',
+        type: 'live_api',
+        connected: true,
+        status: 'idle',
+        resultsCount: 0,
+        lastRunTimestamp: null
+      }
+    ],
+    imports: [],
+    normalization: [],
+    deduplication: {
+      recordsBeforeDedup: 0,
+      identifierLinkedGroupsCount: 0,
+      recordsAfterResultMerger: 0,
+      candidateGroupsPendingUserReview: 0,
+      status: 'pending'
+    },
+    duplicateGroups: [],
+    screening: {
+      titleAbstract: { pending: 0, included: 0, excluded: 0, unresolved: 0, total: 0 },
+      fullText: { pending: 0, included: 0, excluded: 0, unresolved: 0, total: 0 },
+      status: 'pending'
+    },
+    qualityAssessment: {
+      totalToAssess: 0,
+      completedAssessments: 0,
+      reviewerConflictsCount: 0,
+      status: 'pending'
+    },
+    prismaMetrics: {
+      recordsIdentifiedProviders: 0,
+      recordsIdentifiedImports: 0,
+      totalIdentified: 0,
+      recordsAfterNormalization: 0,
+      recordsBeforeDedup: 0,
+      recordsAfterTechnicalMerger: 0,
+      duplicateGroupsPendingReview: 0,
+      recordsScreenedTitleAbstract: 0,
+      recordsScreenedFullText: 0,
+      studiesIncludedSynthesis: 0
+    }
+  }
+];
