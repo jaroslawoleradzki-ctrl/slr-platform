@@ -9,7 +9,7 @@ interface SearchLimitsFormProps {
 }
 
 export const SearchLimitsForm: React.FC<SearchLimitsFormProps> = ({ filters, onFiltersChange }) => {
-  const handleChange = (key: keyof SearchFilters, value: any) => {
+  const handleChange = <K extends keyof SearchFilters>(key: K, value: SearchFilters[K]) => {
     if (onFiltersChange) {
       onFiltersChange({ ...filters, [key]: value });
     }
@@ -36,6 +36,7 @@ export const SearchLimitsForm: React.FC<SearchLimitsFormProps> = ({ filters, onF
               type="number"
               placeholder="Od (np. 2015)"
               value={filters.publicationYearFrom || ''}
+              aria-label="Rok początkowy"
               onChange={(e) => handleChange('publicationYearFrom', e.target.value ? parseInt(e.target.value) : null)}
               style={{
                 width: '100%',
@@ -51,6 +52,7 @@ export const SearchLimitsForm: React.FC<SearchLimitsFormProps> = ({ filters, onF
               type="number"
               placeholder="Do (np. 2026)"
               value={filters.publicationYearTo || ''}
+              aria-label="Rok końcowy"
               onChange={(e) => handleChange('publicationYearTo', e.target.value ? parseInt(e.target.value) : null)}
               style={{
                 width: '100%',

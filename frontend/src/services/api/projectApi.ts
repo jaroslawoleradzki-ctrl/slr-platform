@@ -3,9 +3,46 @@ import {
   ApiDuplicateGroupListResponse,
   ApiDuplicateGroupDecisionResponse,
   DuplicateDecisionType,
+  EditableSearchStrategy,
+  SearchExecutionResult,
 } from '../../types';
 import { MOCK_PROJECTS } from '../../mocks/projectData';
 import { API_BASE_URL } from '../../config/api';
+
+interface FastApiValidationError {
+  loc?: unknown;
+  msg?: unknown;
+}
+
+const formatFastApiError = async (response: Response): Promise<string> => {
+  const fallback = `Nie udało się wykonać strategii (HTTP ${response.status}).`;
+  let payload: unknown;
+  try {
+    payload = await response.json();
+  } catch {
+    return fallback;
+  }
+  if (!payload || typeof payload !== 'object' || !('detail' in payload)) return fallback;
+  const detail = (payload as { detail?: unknown }).detail;
+  if (typeof detail === 'string' && detail.trim()) {
+    return `${detail.trim()} (HTTP ${response.status}).`;
+  }
+  if (Array.isArray(detail)) {
+    const messages = detail.flatMap((item) => {
+      if (!item || typeof item !== 'object') return [];
+      const validationError = item as FastApiValidationError;
+      if (typeof validationError.msg !== 'string' || !validationError.msg.trim()) return [];
+      const location = Array.isArray(validationError.loc)
+        ? validationError.loc.filter((part) => part !== 'body').map(String).join(' → ')
+        : '';
+      return [`${location ? `${location}: ` : ''}${validationError.msg.trim()}`];
+    });
+    if (messages.length) {
+      return `Niepoprawne dane strategii: ${messages.join('; ')} (HTTP ${response.status}).`;
+    }
+  }
+  return fallback;
+};
 
 export interface ProjectApiService {
   getProjects(): Promise<SLRProject[]>;
@@ -22,6 +59,7 @@ export interface ProjectApiService {
     projectId: string,
     groupId: string
   ): Promise<ApiDuplicateGroupDecisionResponse>;
+  executeSearchStrategy(projectId: string, strategy: EditableSearchStrategy): Promise<SearchExecutionResult>;
 }
 
 class MixedProjectApiService implements ProjectApiService {
@@ -29,6 +67,34 @@ class MixedProjectApiService implements ProjectApiService {
 
   async getProjects(): Promise<SLRProject[]> {
     return [...this.projects];
+  }
+
+  async executeSearchStrategy(
+    projectId: string,
+    strategy: EditableSearchStrategy
+  ): Promise<SearchExecutionResult> {
+    let response: Response;
+    try {
+      response = await fetch(
+        `${API_BASE_URL}/projects/${projectId}/search-strategy/executions`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify({
+            publication_year_from: strategy.filters.publicationYearFrom,
+            publication_year_to: strategy.filters.publicationYearTo,
+            providers: strategy.providers,
+            concept_groups: strategy.conceptGroups,
+          }),
+        }
+      );
+    } catch {
+      throw new Error('Nie udało się połączyć z backendem. Sprawdź połączenie i spróbuj ponownie.');
+    }
+    if (!response.ok) {
+      throw new Error(await formatFastApiError(response));
+    }
+    return response.json() as Promise<SearchExecutionResult>;
   }
 
   async getProjectById(id: string): Promise<SLRProject | null> {

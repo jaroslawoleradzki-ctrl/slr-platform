@@ -20,5 +20,13 @@ describe('Navigation Routing', () => {
     );
 
     expect(await screen.findByText(/Definicja Strategii Wyszukiwania/i)).toBeInTheDocument();
+    const actionBar = screen.getByTestId('search-strategy-action-bar');
+    expect(actionBar).toBeVisible();
+    expect(actionBar).toContainElement(screen.getByRole('button', { name: 'Wykonaj' }));
+    expect(actionBar).toContainElement(screen.getByRole('button', { name: 'Powtórz' }));
+    expect(screen.getAllByLabelText(/Nazwa grupy/).length).toBeGreaterThan(1);
+    expect(screen.getAllByTestId('concept-term-tag').length).toBeGreaterThan(1);
+    expect(screen.getAllByTestId('group-operator-separator').length).toBeGreaterThan(0);
+    expect(screen.getByTestId('boolean-query-preview')).toHaveTextContent('Lean Management');
   });
 });

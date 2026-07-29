@@ -14,6 +14,22 @@ export interface SearchFilters {
   fullTextOnly: boolean;
 }
 
+export interface EditableSearchStrategy {
+  filters: SearchFilters;
+  providers: string[];
+  conceptGroups: ConceptGroup[];
+}
+
+export interface SearchExecutionResult {
+  project_id: string;
+  status: 'validated';
+  rendered_query: string;
+  providers: string[];
+  publication_year_from: number;
+  publication_year_to: number;
+  executed_at: string;
+}
+
 export interface SearchProviderStatus {
   id: string;
   name: string;

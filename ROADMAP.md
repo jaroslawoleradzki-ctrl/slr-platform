@@ -104,6 +104,22 @@ This phase does not represent the full GUI MVP. Its purpose is to establish the 
 
 ---
 
+## Phase 6.7 — Functional Workflow for Modules 1–4 🚧
+
+Before extending the SLR workflow with additional product phases, the existing
+user-facing workflow must become fully functional and manually verifiable.
+
+- **6.7.1 Functional Search Strategy** ✅ — Editable years, selectable supported
+  providers, fully editable concept groups, validation, Execute and Repeat
+  actions, runtime application state, backend validation, and browser acceptance.
+- **6.7.2 Search Results and Bibliographic Import** ⬜ — Search result
+  presentation, bibliographic import, provider/import distinction, combined
+  working collection, and manual browser acceptance. Module 2 does not currently
+  need to repeat the complete search query; bibliographic import belongs to
+  Module 2. Modules 3 and 4 will be specified after acceptance of Modules 1 and 2.
+
+---
+
 ## Phase 7 — Screening
 
 Support systematic review screening through a backend workflow and a dedicated user interface.

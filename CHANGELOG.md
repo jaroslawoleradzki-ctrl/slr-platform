@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.1.5] — Unreleased
+
+### Added
+
+- **Functional Search Strategy (Phase 6.7.1)**: Editable year limits, supported
+  provider selection, complete concept-group and term editing, client UX
+  validation, backend-authoritative validation, and explicit Execute/Repeat
+  semantics backed by runtime application state.
+- **Search Strategy API**: Added the stateless Module 1 execution-validation
+  endpoint `POST /projects/{project_id}/search-strategy/executions`.
+
 ## [0.1.4] — Unreleased
 
 ### Added

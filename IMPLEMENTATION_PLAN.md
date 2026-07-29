@@ -207,6 +207,51 @@ Status:
 
 ---
 
+# Phase 6.7 — Functional Workflow for Modules 1–4 🚧
+
+Before extending the SLR workflow with additional product phases, the existing
+user-facing workflow must become fully functional and manually verifiable.
+
+## 6.7.1 Functional Search Strategy
+
+Zakres:
+
+- editable year range
+- selectable providers
+- editable concept groups
+- validation
+- Execute action
+- Repeat action
+- application state
+- backend integration
+- manual browser acceptance test
+
+Status:
+
+✅ Completed
+
+## 6.7.2 Search Results and Bibliographic Import
+
+Zakres:
+
+- search result presentation
+- bibliographic import
+- provider/import distinction
+- combined working collection
+- manual browser acceptance
+
+Notes:
+
+- Module 2 currently does not need to repeat the complete search query.
+- Bibliographic import belongs to Module 2.
+- Modules 3 and 4 will be specified after acceptance of Modules 1 and 2.
+
+Status:
+
+⬜ Planned
+
+---
+
 # Phase 7 — Screening
 
 ## 7.1 Screening Domain and Workflow

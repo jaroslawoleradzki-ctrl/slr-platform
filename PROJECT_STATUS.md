@@ -14,11 +14,16 @@ development
 
 Current version (working tree):
 
-v0.1.4 (Unreleased)
+v0.1.5 (Unreleased)
 
 Current development phase:
 
-Phase 6 — GUI Foundation and Duplicate Review (completed on branch `development`). All increments (6.1 GUI Foundation, 6.2 Application Versioning, 6.3 Duplicate Review Read API, 6.4 Duplicate Review Decisions, 6.5 Duplicate Comparison UI, and 6.6 Integration and Contract Tests) are fully implemented, tested, and verified. Next planned increment: Phase 7.1 — Screening Domain and Workflow. Stable main branch remains at v0.1.0.
+Phase 6.7 — Functional Workflow for Modules 1–4 is in progress on branch
+`development`. Phase 6.7.1 Functional Search Strategy is implemented: Module 1
+keeps its editable strategy and last successful execution in runtime application
+state and validates execution through the backend. Phase 6.7.2 Search Results and
+Bibliographic Import is the next planned increment. Screening and later modules
+remain deferred. Stable main branch remains at v0.1.0.
 
 ---
 

@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { SLRProject } from '../types';
+import { EditableSearchStrategy, SearchExecutionResult, SLRProject } from '../types';
 import { projectApiService } from '../services/api/projectApi';
 import { MOCK_PROJECTS } from '../mocks/projectData';
 
@@ -11,6 +11,11 @@ interface ProjectContextType {
   setActiveProjectId: (id: string) => void;
   createNewProject: (title: string, description: string, protocolVersion: string) => Promise<SLRProject>;
   refreshProjects: () => Promise<void>;
+  currentSearchStrategy: EditableSearchStrategy | null;
+  lastExecutedSearchStrategy: EditableSearchStrategy | null;
+  searchExecutionResult: SearchExecutionResult | null;
+  setCurrentSearchStrategy: (strategy: EditableSearchStrategy) => void;
+  executeSearchStrategy: (strategy: EditableSearchStrategy) => Promise<SearchExecutionResult>;
 }
 
 const ProjectContext = createContext<ProjectContextType | undefined>(undefined);
@@ -20,6 +25,17 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [activeProjectId, setActiveProjectIdState] = useState<string>('lean_energy');
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [currentSearchStrategy, setCurrentSearchStrategy] = useState<EditableSearchStrategy | null>(null);
+  const [lastExecutedSearchStrategy, setLastExecutedSearchStrategy] = useState<EditableSearchStrategy | null>(null);
+  const [searchExecutionResult, setSearchExecutionResult] = useState<SearchExecutionResult | null>(null);
+
+  const changeActiveProject = (id: string) => {
+    if (id === activeProjectId) return;
+    setCurrentSearchStrategy(null);
+    setLastExecutedSearchStrategy(null);
+    setSearchExecutionResult(null);
+    setActiveProjectIdState(id);
+  };
 
   const refreshProjects = async () => {
     try {
@@ -28,7 +44,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
       const data = await projectApiService.getProjects();
       setProjects(data);
       if (data.length > 0 && !data.some((p) => p.id === activeProjectId)) {
-        setActiveProjectIdState(data[0].id);
+        changeActiveProject(data[0].id);
       }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Nie udało się pobrać listy projektów');
@@ -45,15 +61,24 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const setActiveProjectId = (id: string) => {
     if (projects.some((p) => p.id === id)) {
-      setActiveProjectIdState(id);
+      changeActiveProject(id);
     }
   };
 
   const createNewProject = async (title: string, description: string, protocolVersion: string) => {
     const created = await projectApiService.createProject(title, description, protocolVersion);
     await refreshProjects();
-    setActiveProjectIdState(created.id);
+    changeActiveProject(created.id);
     return created;
+  };
+
+  const executeSearchStrategy = async (strategy: EditableSearchStrategy) => {
+    if (!activeProject) throw new Error('Brak aktywnego projektu.');
+    const executionStrategy = structuredClone(strategy);
+    const result = await projectApiService.executeSearchStrategy(activeProject.id, executionStrategy);
+    setLastExecutedSearchStrategy(executionStrategy);
+    setSearchExecutionResult(result);
+    return result;
   };
 
   return (
@@ -65,7 +90,12 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
         error,
         setActiveProjectId,
         createNewProject,
-        refreshProjects
+        refreshProjects,
+        currentSearchStrategy,
+        lastExecutedSearchStrategy,
+        searchExecutionResult,
+        setCurrentSearchStrategy,
+        executeSearchStrategy,
       }}
     >
       {children}
