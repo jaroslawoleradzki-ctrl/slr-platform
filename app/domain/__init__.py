@@ -1,4 +1,11 @@
 from app.domain.author import Affiliation, Author
+from app.domain.deduplication import (
+    DuplicateDecision,
+    DuplicateDecisionType,
+    DuplicateGroup,
+    DuplicateGroupStatus,
+    InvalidDuplicateGroupTransition,
+)
 from app.domain.identifiers import Identifier, IdentifierType
 from app.domain.provenance import ProvenanceEntry
 from app.domain.publication import DocumentType, Publication
@@ -27,8 +34,13 @@ __all__ = [
     "Author",
     "BooleanOperator",
     "DocumentType",
+    "DuplicateDecision",
+    "DuplicateDecisionType",
+    "DuplicateGroup",
+    "DuplicateGroupStatus",
     "Identifier",
     "IdentifierType",
+    "InvalidDuplicateGroupTransition",
     "ProvenanceEntry",
     "Publication",
     "ScreeningDecision",

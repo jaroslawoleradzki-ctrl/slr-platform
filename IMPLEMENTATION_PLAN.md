@@ -16,15 +16,17 @@ Phase 5 — Deduplication
 
 # Phase 5 — Deduplication
 
-## 5.1 Duplicate Detection
+## 5.1 Deduplication Domain Model
 
-- duplicate keys
-- comparison strategy
-- canonical identifiers
+- duplicate group and publication membership
+- explicit group status
+- immutable decision history
+- controlled status transitions
+- infrastructure-independent domain invariants
 
 Status:
 
-⬜ Planned
+✅ Completed
 
 ---
 

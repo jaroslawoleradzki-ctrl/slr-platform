@@ -1,6 +1,6 @@
 # SLR Platform — Project Status
 
-_Last updated: 2026-07-28_
+_Last updated: 2026-07-29_
 
 ## Current status
 
@@ -14,7 +14,7 @@ v0.1.0
 
 Current development phase:
 
-Phase 4 — Normalization.
+Phase 5 — Deduplication.
 
 ---
 
@@ -582,6 +582,31 @@ Publication normalization now provides:
 - unchanged mapper and `ResultMerger` semantics
 
 Phase 4 — Normalization: Completed.
+
+---
+
+## Phase 5 — Deduplication
+
+Phase 5.1 — Deduplication Domain Model: Completed.
+
+The deduplication domain model now provides:
+
+- infrastructure-independent potential duplicate groups containing at least
+  two distinct publication identifiers
+- explicit pending, confirmed, rejected, and merged group statuses
+- immutable confirm, reject, and mark-merged decision records with optional
+  reviewer attribution and rationale
+- controlled pending → confirmed, pending → rejected, and confirmed → merged
+  transitions
+- immutable chronological decision history and timezone-aware audit timestamps
+- terminal rejected and merged states
+- no duplicate detection, similarity scoring, merge policy, repository, API,
+  database, or GUI behavior
+
+Cross-group publication membership remains a later repository or domain-service
+invariant and is not falsely enforced by an individual duplicate group.
+
+Phase 5 remains in progress.
 
 ---
 
