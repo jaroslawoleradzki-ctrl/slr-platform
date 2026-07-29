@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { EditableSearchStrategy, SearchExecutionResult, SLRProject } from '../types';
 import { projectApiService } from '../services/api/projectApi';
 import { MOCK_PROJECTS } from '../mocks/projectData';
@@ -14,7 +14,9 @@ interface ProjectContextType {
   currentSearchStrategy: EditableSearchStrategy | null;
   lastExecutedSearchStrategy: EditableSearchStrategy | null;
   searchExecutionResult: SearchExecutionResult | null;
+  selectedSearchResultIds: string[];
   setCurrentSearchStrategy: (strategy: EditableSearchStrategy) => void;
+  setSelectedSearchResultIds: (ids: string[]) => void;
   executeSearchStrategy: (strategy: EditableSearchStrategy) => Promise<SearchExecutionResult>;
 }
 
@@ -23,17 +25,21 @@ const ProjectContext = createContext<ProjectContextType | undefined>(undefined);
 export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [projects, setProjects] = useState<SLRProject[]>(MOCK_PROJECTS);
   const [activeProjectId, setActiveProjectIdState] = useState<string>('lean_energy');
+  const activeProjectIdRef = useRef(activeProjectId);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [currentSearchStrategy, setCurrentSearchStrategy] = useState<EditableSearchStrategy | null>(null);
   const [lastExecutedSearchStrategy, setLastExecutedSearchStrategy] = useState<EditableSearchStrategy | null>(null);
   const [searchExecutionResult, setSearchExecutionResult] = useState<SearchExecutionResult | null>(null);
+  const [selectedSearchResultIds, setSelectedSearchResultIds] = useState<string[]>([]);
 
   const changeActiveProject = (id: string) => {
     if (id === activeProjectId) return;
     setCurrentSearchStrategy(null);
     setLastExecutedSearchStrategy(null);
     setSearchExecutionResult(null);
+    setSelectedSearchResultIds([]);
+    activeProjectIdRef.current = id;
     setActiveProjectIdState(id);
   };
 
@@ -74,8 +80,12 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const executeSearchStrategy = async (strategy: EditableSearchStrategy) => {
     if (!activeProject) throw new Error('Brak aktywnego projektu.');
+    const targetProjectId = activeProjectIdRef.current;
     const executionStrategy = structuredClone(strategy);
-    const result = await projectApiService.executeSearchStrategy(activeProject.id, executionStrategy);
+    setSearchExecutionResult(null);
+    setSelectedSearchResultIds([]);
+    const result = await projectApiService.executeSearchStrategy(targetProjectId, executionStrategy);
+    if (activeProjectIdRef.current !== targetProjectId) return result;
     setLastExecutedSearchStrategy(executionStrategy);
     setSearchExecutionResult(result);
     return result;
@@ -94,7 +104,9 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
         currentSearchStrategy,
         lastExecutedSearchStrategy,
         searchExecutionResult,
+        selectedSearchResultIds,
         setCurrentSearchStrategy,
+        setSelectedSearchResultIds,
         executeSearchStrategy,
       }}
     >

@@ -18,6 +18,7 @@ const initialStrategy: EditableSearchStrategy = {
 let currentStrategy: EditableSearchStrategy | null;
 let lastStrategy: EditableSearchStrategy | null;
 let result: SearchExecutionResult | null;
+let selectedIds: string[];
 const execute = vi.fn();
 
 vi.mock('../src/context/ProjectContext', () => ({
@@ -35,7 +36,9 @@ vi.mock('../src/context/ProjectContext', () => ({
     currentSearchStrategy: currentStrategy,
     lastExecutedSearchStrategy: lastStrategy,
     searchExecutionResult: result,
+    selectedSearchResultIds: selectedIds,
     setCurrentSearchStrategy: (strategy: EditableSearchStrategy) => { currentStrategy = strategy; },
+    setSelectedSearchResultIds: (ids: string[]) => { selectedIds = ids; },
     executeSearchStrategy: execute,
   }),
 }));
@@ -45,6 +48,7 @@ describe('functional Search Strategy', () => {
     currentStrategy = structuredClone(initialStrategy);
     lastStrategy = null;
     result = null;
+    selectedIds = [];
     execute.mockReset();
     execute.mockResolvedValue({});
   });

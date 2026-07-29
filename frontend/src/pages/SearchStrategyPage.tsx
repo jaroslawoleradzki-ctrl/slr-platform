@@ -6,6 +6,7 @@ import { EditableSearchStrategy } from '../types';
 import { CheckCircle2, Database, LoaderCircle, Play, RotateCcw } from 'lucide-react';
 import { Card } from '../components/common/Card';
 import { ErrorAlert } from '../components/common/ErrorAlert';
+import { SearchResultsSection } from '../components/search/SearchResultsSection';
 
 const validate = (strategy: EditableSearchStrategy): string[] => {
   const errors: string[] = [];
@@ -36,7 +37,9 @@ export const SearchStrategyPage: React.FC = () => {
     currentSearchStrategy,
     lastExecutedSearchStrategy,
     searchExecutionResult,
+    selectedSearchResultIds,
     setCurrentSearchStrategy,
+    setSelectedSearchResultIds,
     executeSearchStrategy,
   } = useProject();
   const [submitting, setSubmitting] = useState(false);
@@ -239,6 +242,12 @@ export const SearchStrategyPage: React.FC = () => {
           })}
         </div>
       </Card>
+      <SearchResultsSection
+        result={searchExecutionResult}
+        loading={submitting}
+        selectedIds={selectedSearchResultIds}
+        onSelectionChange={setSelectedSearchResultIds}
+      />
     </div>
   );
 };

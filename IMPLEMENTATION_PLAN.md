@@ -230,25 +230,46 @@ Status:
 
 ✅ Completed
 
-## 6.7.2 Search Results and Bibliographic Import
+## 6.7.2a Search Results Workflow
 
 Zakres:
 
 - search result presentation
-- bibliographic import
-- provider/import distinction
-- combined working collection
+- controlled deterministic result data
+- backend response contract
+- record selection
+- project-scoped result state
+- loading, success, empty and error states
 - manual browser acceptance
+- no live OpenAlex or Crossref calls
+- no persistent project import
 
-Notes:
+Status:
 
-- Module 2 currently does not need to repeat the complete search query.
-- Bibliographic import belongs to Module 2.
-- Modules 3 and 4 will be specified after acceptance of Modules 1 and 2.
+✅ Completed
+
+## 6.7.2b Live Search Providers & Import
+
+Zakres:
+
+- live OpenAlex and Crossref execution
+- existing retry and rate limiting
+- mapping provider records to the common publication model
+- partial provider errors and provider attribution
+- bibliographic import
+- import of selected records into one project collection
+- integration tests with mocked providers
+- manual verification against live APIs
 
 Status:
 
 ⬜ Planned
+
+Notes:
+
+- Module 2 currently does not need to repeat the complete search query.
+- Bibliographic import belongs to Phase 6.7.2b.
+- Modules 3 and 4 will be specified after acceptance of Modules 1 and 2.
 
 ---
 

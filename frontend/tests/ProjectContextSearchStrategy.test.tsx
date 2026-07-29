@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ProjectProvider, useProject } from '../src/context/ProjectContext';
 import { SearchStrategyPage } from '../src/pages/SearchStrategyPage';
@@ -24,6 +24,7 @@ const Probe: React.FC = () => {
       <output data-testid="current-strategy">{context.currentSearchStrategy ? 'set' : 'null'}</output>
       <output data-testid="last-strategy">{context.lastExecutedSearchStrategy ? 'set' : 'null'}</output>
       <output data-testid="execution-result">{context.searchExecutionResult ? 'set' : 'null'}</output>
+      <output data-testid="selected-results">{context.selectedSearchResultIds.join(',') || 'none'}</output>
       <button onClick={initializeAndExecute}>Execute A</button>
       <button onClick={() => context.setActiveProjectId('ai_architecture')}>Switch to B</button>
       <button onClick={() => context.setActiveProjectId('lean_energy')}>Set same project</button>
@@ -41,6 +42,15 @@ describe('ProjectContext search strategy isolation', () => {
       publication_year_from: 2015,
       publication_year_to: 2026,
       executed_at: '2026-07-29T15:00:00Z',
+      result_count: 1,
+      results: [{
+        id: 'result-1',
+        title: 'Controlled result',
+        authors: ['Author One'],
+        year: 2021,
+        provider: 'openalex',
+        doi: null,
+      }],
     });
   });
 
@@ -58,6 +68,7 @@ describe('ProjectContext search strategy isolation', () => {
     expect(screen.getByTestId('current-strategy')).toHaveTextContent('null');
     expect(screen.getByTestId('last-strategy')).toHaveTextContent('null');
     expect(screen.getByTestId('execution-result')).toHaveTextContent('null');
+    expect(screen.getByTestId('selected-results')).toHaveTextContent('none');
   });
 
   it('initializes project B without exposing or repeating project A state', async () => {
@@ -71,6 +82,10 @@ describe('ProjectContext search strategy isolation', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Wykonaj' }));
     await waitFor(() => expect(screen.getByRole('button', { name: 'Powtórz' })).toBeEnabled());
     expect(screen.getByText(/Strategia została poprawnie zweryfikowana/)).toBeInTheDocument();
+    fireEvent.click(screen.getByLabelText('Wybierz rekord Controlled result'));
+    expect(screen.getByTestId('selected-results')).toHaveTextContent('result-1');
+    fireEvent.click(screen.getByRole('button', { name: 'Wykonaj' }));
+    await waitFor(() => expect(screen.getByLabelText('Wybierz rekord Controlled result')).not.toBeChecked());
 
     fireEvent.click(screen.getByRole('button', { name: 'Switch to B' }));
     await waitFor(() => expect(screen.getByTestId('active-project')).toHaveTextContent('ai_architecture'));
@@ -79,12 +94,61 @@ describe('ProjectContext search strategy isolation', () => {
     expect(screen.getByLabelText('Nazwa grupy 1')).toHaveValue('LLM & Generative AI');
 
     fireEvent.click(screen.getByRole('button', { name: 'Powtórz' }));
-    expect(projectApiService.executeSearchStrategy).toHaveBeenCalledTimes(1);
+    expect(projectApiService.executeSearchStrategy).toHaveBeenCalledTimes(2);
     expect(projectApiService.executeSearchStrategy).not.toHaveBeenCalledWith(
       'ai_architecture',
       expect.objectContaining({ conceptGroups: expect.arrayContaining([
         expect.objectContaining({ name: 'Lean Management Terms' }),
       ]) })
     );
+  });
+
+  it('ignores a late project A response after switching to project B', async () => {
+    let resolveRequest: ((value: Awaited<ReturnType<typeof projectApiService.executeSearchStrategy>>) => void) | undefined;
+    vi.mocked(projectApiService.executeSearchStrategy).mockReturnValue(
+      new Promise((resolve) => {
+        resolveRequest = resolve;
+      })
+    );
+    render(
+      <ProjectProvider>
+        <Probe />
+        <SearchStrategyPage />
+      </ProjectProvider>
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Execute A' }));
+    await waitFor(() => expect(projectApiService.executeSearchStrategy).toHaveBeenCalledWith(
+      'lean_energy',
+      expect.any(Object)
+    ));
+    fireEvent.click(screen.getByRole('button', { name: 'Switch to B' }));
+    await waitFor(() => expect(screen.getByTestId('active-project')).toHaveTextContent('ai_architecture'));
+
+    await act(async () => {
+      resolveRequest?.({
+        project_id: 'lean_energy',
+        status: 'validated',
+        rendered_query: '("Late result")',
+        providers: ['openalex'],
+        publication_year_from: 2015,
+        publication_year_to: 2026,
+        executed_at: '2026-07-29T15:00:00Z',
+        result_count: 1,
+        results: [{
+          id: 'late-a-result',
+          title: 'Late project A result',
+          authors: ['Author A'],
+          year: 2021,
+          provider: 'openalex',
+          doi: null,
+        }],
+      });
+    });
+
+    expect(screen.getByTestId('execution-result')).toHaveTextContent('null');
+    expect(screen.getByTestId('last-strategy')).toHaveTextContent('null');
+    expect(screen.queryByText('Late project A result')).not.toBeInTheDocument();
+    expect(screen.getByText('Brak wykonanych wyszukiwań.')).toBeInTheDocument();
   });
 });

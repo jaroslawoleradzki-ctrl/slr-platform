@@ -28,5 +28,7 @@ describe('Navigation Routing', () => {
     expect(screen.getAllByTestId('concept-term-tag').length).toBeGreaterThan(1);
     expect(screen.getAllByTestId('group-operator-separator').length).toBeGreaterThan(0);
     expect(screen.getByTestId('boolean-query-preview')).toHaveTextContent('Lean Management');
+    expect(screen.getByText('Wyniki wyszukiwania')).toBeInTheDocument();
+    expect(screen.getByText('Brak wykonanych wyszukiwań.')).toBeInTheDocument();
   });
 });

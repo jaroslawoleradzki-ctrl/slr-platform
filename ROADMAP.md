@@ -112,11 +112,17 @@ user-facing workflow must become fully functional and manually verifiable.
 - **6.7.1 Functional Search Strategy** ✅ — Editable years, selectable supported
   providers, fully editable concept groups, validation, Execute and Repeat
   actions, runtime application state, backend validation, and browser acceptance.
-- **6.7.2 Search Results and Bibliographic Import** ⬜ — Search result
-  presentation, bibliographic import, provider/import distinction, combined
-  working collection, and manual browser acceptance. Module 2 does not currently
-  need to repeat the complete search query; bibliographic import belongs to
-  Module 2. Modules 3 and 4 will be specified after acceptance of Modules 1 and 2.
+- **6.7.2a Search Results Workflow** ✅ — Controlled deterministic backend
+  results, response contract, result presentation, record selection, project
+  isolation, and loading/empty/error states without live provider calls or
+  persistent import.
+- **6.7.2b Live Search Providers & Import** ⬜ — Live OpenAlex and Crossref
+  execution with existing retry/rate limiting, common publication mapping,
+  partial provider errors, provider attribution, bibliographic import, and
+  importing selected records into the project collection.
+
+Phase 6.7.2a establishes the frontend/API workflow in v0.1.6. Phase 6.7.2b is
+the next planned increment and will receive its own version.
 
 ---
 

@@ -14,16 +14,17 @@ development
 
 Current version (working tree):
 
-v0.1.5 (Unreleased)
+v0.1.6 (Unreleased)
 
 Current development phase:
 
 Phase 6.7 — Functional Workflow for Modules 1–4 is in progress on branch
-`development`. Phase 6.7.1 Functional Search Strategy is implemented: Module 1
-keeps its editable strategy and last successful execution in runtime application
-state and validates execution through the backend. Phase 6.7.2 Search Results and
-Bibliographic Import is the next planned increment. Screening and later modules
-remain deferred. Stable main branch remains at v0.1.0.
+`development`. Phase 6.7.2a Search Results Workflow is implemented in v0.1.6:
+the backend returns controlled deterministic records and the frontend presents
+project-isolated selectable results with loading, empty and error states. Phase
+6.7.2b Live Search Providers & Import is the next planned increment; live
+OpenAlex/Crossref calls and persistent import are not part of 6.7.2a. Screening
+and later modules remain deferred. Stable main branch remains at v0.1.0.
 
 ---
 

@@ -55,3 +55,19 @@ class SearchStrategyExecutionResponse(BaseModel):
     publication_year_from: int
     publication_year_to: int
     executed_at: datetime
+    result_count: int
+    results: list["SearchResultRecordResponse"]
+
+
+class SearchResultRecordResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    id: str
+    title: str
+    authors: list[str]
+    year: int
+    provider: Literal["openalex", "crossref"]
+    doi: str | None = None
+
+
+SearchStrategyExecutionResponse.model_rebuild()

@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.1.6] — Unreleased
+
+### Added
+
+- **Search Results Workflow (Phase 6.7.2a)**: Deterministic controlled search
+  result responses, project-scoped result state, result cards, record selection,
+  select-all behavior, and initial/loading/success/empty/error states.
+- Formal split of Phase 6.7.2 into Search Results Workflow (6.7.2a) and the
+  separately planned Live Search Providers & Import increment (6.7.2b).
+
 ## [0.1.5] — Unreleased
 
 ### Added

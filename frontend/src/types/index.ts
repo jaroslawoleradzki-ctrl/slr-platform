@@ -28,6 +28,17 @@ export interface SearchExecutionResult {
   publication_year_from: number;
   publication_year_to: number;
   executed_at: string;
+  result_count: number;
+  results: SearchResultRecord[];
+}
+
+export interface SearchResultRecord {
+  id: string;
+  title: string;
+  authors: string[];
+  year: number;
+  provider: 'openalex' | 'crossref';
+  doi: string | null;
 }
 
 export interface SearchProviderStatus {

@@ -25,6 +25,15 @@ describe('Search Strategy frontend-backend contract', () => {
       publication_year_from: 2020,
       publication_year_to: 2024,
       executed_at: '2026-07-29T15:00:00Z',
+      result_count: 1,
+      results: [{
+        id: 'result-1',
+        title: 'Controlled result',
+        authors: ['Author One'],
+        year: 2021,
+        provider: 'openalex' as const,
+        doi: null,
+      }],
     };
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       new Response(JSON.stringify(backendResponse), {
