@@ -75,7 +75,7 @@ Completed:
 
 ---
 
-## Phase 5 — Deduplication
+## Phase 5 — Deduplication ✅
 
 Deterministic publication deduplication.
 

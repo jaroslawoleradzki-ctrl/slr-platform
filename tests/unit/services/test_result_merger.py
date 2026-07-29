@@ -1,5 +1,10 @@
+from copy import deepcopy
+
+import pytest
+
 from app.domain.identifiers import Identifier, IdentifierType
 from app.domain.publication import Publication
+from app.services.publication_merge_policy import PublicationMergePolicy
 from app.services.result_merger import ResultMerger
 
 
@@ -131,3 +136,48 @@ def test_merge_uses_first_doi_and_ignores_other_identifier_types() -> None:
     result = ResultMerger().merge([first, duplicate, matches_ignored_doi])
 
     assert result == [first, matches_ignored_doi]
+
+
+@pytest.mark.parametrize(
+    "identifier_type",
+    [IdentifierType.PMID, IdentifierType.OPENALEX],
+)
+def test_merge_does_not_deduplicate_non_doi_identifiers(
+    identifier_type: IdentifierType,
+) -> None:
+    first = _publication(
+        "First",
+        identifiers=[Identifier(type=identifier_type, value="shared")],
+    )
+    second = _publication(
+        "Second",
+        identifiers=[Identifier(type=identifier_type, value="shared")],
+    )
+
+    assert ResultMerger().merge([first, second]) == [first, second]
+
+
+def test_merge_does_not_mutate_inputs_or_merge_metadata(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    first = _publication("First", identifiers=[_doi("10.1000/shared")])
+    second = _publication(
+        "Richer metadata",
+        identifiers=[_doi("10.1000/shared")],
+    )
+    publications = [first, second]
+    before = deepcopy(publications)
+
+    def fail_if_called(
+        self: PublicationMergePolicy,
+        first: Publication,
+        second: Publication,
+    ) -> Publication:
+        raise AssertionError("PublicationMergePolicy must not be called")
+
+    monkeypatch.setattr(PublicationMergePolicy, "merge", fail_if_called)
+    result = ResultMerger().merge(publications)
+
+    assert result == [first]
+    assert result[0] is first
+    assert publications == before

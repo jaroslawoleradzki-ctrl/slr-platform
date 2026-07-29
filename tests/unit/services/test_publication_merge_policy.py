@@ -381,3 +381,34 @@ def test_result_merger_keeps_existing_doi_only_first_record_behavior() -> None:
 
     assert result == [first, same_title_different_doi]
     assert result[0] is first
+
+
+def test_repeated_merge_does_not_accumulate_collection_duplicates() -> None:
+    first = _publication(
+        authors=[Author(display_name="Jane Doe")],
+        identifiers=[_doi("10.1000/example")],
+        provenance=[_provenance("openalex", "W1")],
+        keywords=["Lean"],
+    )
+    second = _publication(
+        record_id=_LATE_ID,
+        authors=[
+            Author(display_name="Jane Doe"),
+            Author(display_name="John Smith"),
+        ],
+        identifiers=[
+            _doi("10.1000/example"),
+            Identifier(type=IdentifierType.PMID, value="123"),
+        ],
+        provenance=[_provenance("crossref", "C1")],
+        keywords=["Energy"],
+    )
+    policy = PublicationMergePolicy()
+
+    merged = policy.merge(first, second)
+    repeated = policy.merge(merged, second)
+
+    assert repeated == merged
+    assert len(repeated.identifiers) == 2
+    assert len(repeated.authors) == 2
+    assert len(repeated.provenance) == 2

@@ -4,9 +4,11 @@ from uuid import UUID
 
 import pytest
 
+from app.domain.author import Author
 from app.domain.deduplication import DuplicateGroupStatus
 from app.domain.identifiers import Identifier, IdentifierType
 from app.domain.publication import Publication
+from app.domain.venue import Venue
 from app.services.duplicate_group_builder import DuplicateGroupBuilder
 
 _TIME = datetime(2026, 7, 29, 8, 0, tzinfo=timezone.utc)
@@ -321,3 +323,68 @@ def test_pmid_uses_exact_identifier_value() -> None:
     lowercase = _publication(2, (IdentifierType.PMID, "pmid-1"))
 
     assert DuplicateGroupBuilder().build([uppercase, lowercase]) == []
+
+
+def test_shared_weak_metadata_does_not_build_group() -> None:
+    first = _publication(1).model_copy(
+        update={
+            "title": "Same title",
+            "abstract": "Same abstract",
+            "authors": [Author(display_name="Same Author")],
+            "publication_year": 2024,
+            "venue": Venue(name="Same Venue"),
+        },
+        deep=True,
+    )
+    second = _publication(2).model_copy(
+        update={
+            "title": "Same title",
+            "abstract": "Same abstract",
+            "authors": [Author(display_name="Same Author")],
+            "publication_year": 2024,
+            "venue": Venue(name="Same Venue"),
+        },
+        deep=True,
+    )
+
+    assert DuplicateGroupBuilder().build([first, second]) == []
+
+
+def test_four_record_transitive_chain_builds_one_group() -> None:
+    first = _publication(1, (IdentifierType.DOI, "10.1000/a"))
+    second = _publication(
+        2,
+        (IdentifierType.DOI, "10.1000/a"),
+        (IdentifierType.PMID, "123"),
+    )
+    third = _publication(
+        3,
+        (IdentifierType.PMID, "123"),
+        (IdentifierType.OPENALEX, "W4"),
+    )
+    fourth = _publication(4, (IdentifierType.OPENALEX, "W4"))
+
+    groups = DuplicateGroupBuilder().build(
+        [fourth, second, first, third],
+        created_at=_TIME,
+    )
+
+    assert [group.publication_ids for group in groups] == [
+        (first.record_id, second.record_id, third.record_id, fourth.record_id)
+    ]
+
+
+def test_default_build_uses_one_utc_timestamp_for_all_groups() -> None:
+    publications = [
+        _publication(1, (IdentifierType.DOI, "10.1000/a")),
+        _publication(2, (IdentifierType.DOI, "10.1000/a")),
+        _publication(3, (IdentifierType.PMID, "123")),
+        _publication(4, (IdentifierType.PMID, "123")),
+    ]
+
+    groups = DuplicateGroupBuilder().build(publications)
+
+    assert len({group.created_at for group in groups}) == 1
+    assert all(group.updated_at == group.created_at for group in groups)
+    assert groups[0].created_at.tzinfo is not None
+    assert groups[0].created_at.utcoffset() is not None

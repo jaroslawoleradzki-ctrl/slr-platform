@@ -14,7 +14,7 @@ v0.1.0
 
 Current development phase:
 
-Phase 5 — Deduplication.
+Phase 5 — Deduplication completed. Phase 6 has not started.
 
 ---
 
@@ -658,9 +658,29 @@ No group is confirmed or rejected automatically, and no publication metadata is
 merged. `PublicationMergePolicy` remains available only as an explicit,
 separate operation and is not invoked by Search Engine.
 
-Phase 5.5 remains planned.
+Phase 5.5 — Tests: Completed.
 
-Phase 5 remains in progress.
+The Phase 5 regression suite now verifies:
+
+- duplicate-group invariants, legal and illegal transitions, append-only
+  decision history, chronology, timestamps, and immutability
+- publication merge determinism, commutativity, idempotence, conflicts,
+  collection stability, and provenance preservation
+- duplicate-builder strong-identifier behavior, transitive and disjoint
+  groups, repeated record IDs, weak-metadata exclusions, stable UUID5 identity,
+  and timestamp contracts
+- unchanged ResultMerger DOI-only, first-record-wins behavior without automatic
+  metadata merge
+- SearchEngine and SearchExecution contracts for normalized publications,
+  merged publications, candidate groups, provenance, empty results, and partial
+  provider failures
+
+No duplicate decision or publication merge is performed automatically.
+
+Phase 5 — Deduplication: Completed.
+
+The next planned increment is Phase 6.1 — Frontend Architecture and Application
+Shell. It has not started.
 
 ---
 
@@ -713,7 +733,7 @@ Every feature must:
 
 # Next milestone
 
-Phase 5 — Deduplication.
+Phase 6.1 — Frontend Architecture and Application Shell. Not started.
 
 ---
 

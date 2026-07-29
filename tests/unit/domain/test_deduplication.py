@@ -257,3 +257,21 @@ def test_updated_at_must_equal_latest_decision_time() -> None:
             updated_at=_MERGED_AT,
             decision_history=(decision,),
         )
+
+
+def test_later_decision_appends_without_changing_earlier_state() -> None:
+    pending = _group()
+    confirmed = pending.confirm(
+        decided_at=_DECIDED_AT,
+        reviewer_id="reviewer-1",
+        rationale="Same work.",
+    )
+    original_decision = confirmed.decision_history[0]
+
+    merged = confirmed.mark_merged(decided_at=_MERGED_AT)
+
+    assert pending.decision_history == ()
+    assert confirmed.decision_history == (original_decision,)
+    assert merged.decision_history[0] == original_decision
+    assert merged.decision_history[0].rationale == "Same work."
+    assert len(merged.decision_history) == 2

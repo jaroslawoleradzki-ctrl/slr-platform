@@ -7,6 +7,7 @@ from uuid import UUID
 import pytest
 
 from app.domain.identifiers import Identifier, IdentifierType
+from app.domain.deduplication import DuplicateGroupStatus
 from app.domain.publication import Publication
 from app.domain.search import (
     BooleanOperator,
@@ -18,6 +19,7 @@ from app.domain.search import (
 )
 from app.providers.search.base import JsonObject, ProviderSearchOutput
 from app.services.search_engine import SearchEngine
+from app.services.publication_merge_policy import PublicationMergePolicy
 from app.storage.raw_response_archive import (
     RawResponseArchiveEntry,
     RawResponseStatus,
@@ -366,11 +368,18 @@ async def test_partial_provider_failure_contract() -> None:
         third_result[0],
     ]
     assert execution.merged_publications == [first_result[0], third_result[0]]
+    assert execution.normalized_publications == [
+        first_result[0],
+        third_result[0],
+    ]
+    assert execution.duplicate_groups == []
     assert execution.execution_provenance.total_provider_results == 2
 
 
 @pytest.mark.anyio
-async def test_doi_merge_and_separate_provenance_contract() -> None:
+async def test_doi_merge_and_separate_provenance_contract(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     a1 = _publication("A1", doi="10.1000/example")
     a2 = _publication("A2")
     b1 = _publication("B1", doi="https://doi.org/10.1000/EXAMPLE")
@@ -378,6 +387,15 @@ async def test_doi_merge_and_separate_provenance_contract() -> None:
     first_publications = [a1, a2]
     second_publications = [b1, b2]
     archive = ContractArchive()
+
+    def fail_if_called(
+        self: PublicationMergePolicy,
+        first: Publication,
+        second: Publication,
+    ) -> Publication:
+        raise AssertionError("PublicationMergePolicy must not be called")
+
+    monkeypatch.setattr(PublicationMergePolicy, "merge", fail_if_called)
 
     execution = await SearchEngine(
         providers=[
@@ -438,6 +456,14 @@ async def test_doi_merge_and_separate_provenance_contract() -> None:
         for publication in execution.normalized_publications
     }
     assert set(execution.duplicate_groups[0].publication_ids) <= normalized_ids
+    assert execution.duplicate_groups[0].status is DuplicateGroupStatus.PENDING
+    assert execution.duplicate_groups[0].decision_history == ()
+    assert [item.title for item in execution.normalized_publications] == [
+        "A1",
+        "A2",
+        "B1",
+        "B2",
+    ]
 
 
 @pytest.mark.anyio

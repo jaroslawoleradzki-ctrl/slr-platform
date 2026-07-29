@@ -10,11 +10,11 @@ Unlike ROADMAP.md, this file is intentionally technical and may change frequentl
 
 Current milestone:
 
-Phase 5 — Deduplication
+Phase 5 — Deduplication (completed)
 
 ---
 
-# Phase 5 — Deduplication
+# Phase 5 — Deduplication ✅
 
 ## 5.1 Deduplication Domain Model
 
@@ -60,7 +60,7 @@ Status:
 
 ## 5.4 Search Engine Integration
 
-- duplicate group analysis after ResultMerger
+- duplicate group analysis on normalized publications before ResultMerger
 - SearchExecution duplicate group results
 - no automatic decisions or publication merge
 
@@ -72,9 +72,16 @@ Status:
 
 ## 5.5 Tests
 
+- domain invariants and transitions
+- merge policy determinism and conflicts
+- duplicate grouping edge cases
+- ResultMerger regression behavior
+- SearchEngine integration and contracts
+- complete Phase 5 regression suite
+
 Status:
 
-⬜ Planned
+✅ Completed
 
 ---
 
