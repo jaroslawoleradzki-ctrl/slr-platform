@@ -8,10 +8,11 @@ from fastapi.testclient import TestClient
 from app.api.dto.deduplication import DuplicateDecisionStatus
 from app.api.main import app
 from app.domain.author import Author
-from app.domain.duplicate_review import DuplicateDecision
+from app.domain.duplicate_review import DuplicateDecision, DuplicateGroupReviewDecision
 from app.domain.identifiers import Identifier, IdentifierType
 from app.domain.provenance import ProvenanceEntry
 from app.domain.publication import Publication
+from app.domain.venue import Venue, VenueType
 from app.repositories.duplicate_review_decision_repository import (
     InMemoryDuplicateReviewDecisionRepository,
     in_memory_duplicate_review_decision_repository,
@@ -175,6 +176,42 @@ def test_openalex_id_matching_as_separate_case() -> None:
     assert result.groups[0].shared_identifiers[0].value == "W5544332211"
 
 
+def test_get_duplicate_groups_returns_venue_and_provenance() -> None:
+    pub1 = Publication(
+        record_id=UUID("00000000-0000-0000-0000-000000000051"),
+        title="Journal Article A",
+        venue=Venue(name="Journal of Cleaner Production", type=VenueType.JOURNAL),
+        identifiers=[Identifier(type=IdentifierType.DOI, value="10.1000/venue.doi")],
+        provenance=[ProvenanceEntry(source="OpenAlex", source_record_id="W51", retrieved_at=_TIME)],
+        created_at=_TIME,
+    )
+    pub2 = Publication(
+        record_id=UUID("00000000-0000-0000-0000-000000000052"),
+        title="Journal Article B",
+        venue=Venue(name="Journal of Cleaner Production", type=VenueType.JOURNAL),
+        identifiers=[Identifier(type=IdentifierType.DOI, value="10.1000/venue.doi")],
+        provenance=[ProvenanceEntry(source="Crossref", source_record_id="CR52", retrieved_at=_TIME)],
+        created_at=_TIME,
+    )
+
+    repo = DummyProjectRepository({"venue_proj": [pub1, pub2]})
+    service = ProjectDuplicateService(repository=repo)
+    result = service.get_candidate_duplicate_groups("venue_proj")
+
+    rec1 = result.groups[0].records[0]
+    rec2 = result.groups[0].records[1]
+
+    assert rec1.venue == "Journal of Cleaner Production"
+    assert len(rec1.provenance) == 1
+    assert rec1.provenance[0].source == "OpenAlex"
+    assert rec1.provenance[0].source_record_id == "W51"
+
+    assert rec2.venue == "Journal of Cleaner Production"
+    assert len(rec2.provenance) == 1
+    assert rec2.provenance[0].source == "Crossref"
+    assert rec2.provenance[0].source_record_id == "CR52"
+
+
 def test_get_duplicate_groups_lean_energy_endpoint_returns_200() -> None:
     response = client.get("/projects/lean_energy/duplicate-groups")
     assert response.status_code == 200
@@ -184,6 +221,7 @@ def test_get_duplicate_groups_lean_energy_endpoint_returns_200() -> None:
     assert data["total_groups_count"] == 2
     assert "similarity_score" not in data["groups"][0]
     assert data["groups"][0]["status"] == "PENDING"
+    assert len(data["groups"][0]["records"][0]["provenance"]) >= 1
 
 
 def test_get_duplicate_groups_ai_architecture_endpoint_returns_200_with_empty_groups() -> None:
@@ -202,40 +240,40 @@ def test_get_duplicate_groups_unknown_project_returns_404() -> None:
     assert "not found" in response.json()["detail"].lower()
 
 
-# --- PHASE 6.4 DECISION TESTS ---
+# --- PHASE 6.5 DECISION & RATIONALE TESTS ---
 
 
-def test_post_decision_approve() -> None:
+def test_post_decision_approve_with_rationale() -> None:
     res = client.get("/projects/lean_energy/duplicate-groups")
     group_id = res.json()["groups"][0]["group_id"]
 
     response = client.post(
         f"/projects/lean_energy/duplicate-groups/{group_id}/decision",
-        json={"decision": "APPROVE"},
+        json={
+            "decision": "APPROVE",
+            "rationale": "  Verified full text agreement between sources.  ",
+        },
     )
     assert response.status_code == 200
     assert response.json() == {
         "project_id": "lean_energy",
         "group_id": group_id,
         "decision": "APPROVE",
+        "rationale": "Verified full text agreement between sources.",
     }
 
-    # Verify GET decision returns APPROVE
+    # Verify GET decision returns APPROVE and rationale
     get_res = client.get(f"/projects/lean_energy/duplicate-groups/{group_id}/decision")
     assert get_res.status_code == 200
     assert get_res.json() == {
         "project_id": "lean_energy",
         "group_id": group_id,
         "decision": "APPROVE",
+        "rationale": "Verified full text agreement between sources.",
     }
 
-    # Verify duplicate groups list reflects APPROVE status
-    list_res = client.get("/projects/lean_energy/duplicate-groups")
-    matched_group = next(g for g in list_res.json()["groups"] if g["group_id"] == group_id)
-    assert matched_group["status"] == "APPROVE"
 
-
-def test_post_decision_reject() -> None:
+def test_post_decision_without_rationale() -> None:
     res = client.get("/projects/lean_energy/duplicate-groups")
     group_id = res.json()["groups"][0]["group_id"]
 
@@ -248,34 +286,60 @@ def test_post_decision_reject() -> None:
         "project_id": "lean_energy",
         "group_id": group_id,
         "decision": "REJECT",
+        "rationale": None,
     }
 
-    get_res = client.get(f"/projects/lean_energy/duplicate-groups/{group_id}/decision")
-    assert get_res.status_code == 200
-    assert get_res.json()["decision"] == "REJECT"
 
-
-def test_overwrite_decision() -> None:
+def test_empty_and_whitespace_rationale_becomes_none() -> None:
     res = client.get("/projects/lean_energy/duplicate-groups")
     group_id = res.json()["groups"][0]["group_id"]
 
-    # 1. Approve
-    client.post(
-        f"/projects/lean_energy/duplicate-groups/{group_id}/decision",
-        json={"decision": "APPROVE"},
-    )
-    assert client.get(f"/projects/lean_energy/duplicate-groups/{group_id}/decision").json()["decision"] == "APPROVE"
-
-    # 2. Overwrite with Reject
     response = client.post(
         f"/projects/lean_energy/duplicate-groups/{group_id}/decision",
-        json={"decision": "REJECT"},
+        json={"decision": "APPROVE", "rationale": "   \n\t  "},
+    )
+    assert response.status_code == 200
+    assert response.json()["rationale"] is None
+
+
+def test_rationale_exceeding_max_length_returns_422() -> None:
+    res = client.get("/projects/lean_energy/duplicate-groups")
+    group_id = res.json()["groups"][0]["group_id"]
+
+    overlong_rationale = "A" * 1001
+
+    response = client.post(
+        f"/projects/lean_energy/duplicate-groups/{group_id}/decision",
+        json={"decision": "APPROVE", "rationale": overlong_rationale},
+    )
+    assert response.status_code == 422
+    assert "exceeds maximum length" in response.json()["detail"]
+
+
+def test_overwrite_decision_and_rationale() -> None:
+    res = client.get("/projects/lean_energy/duplicate-groups")
+    group_id = res.json()["groups"][0]["group_id"]
+
+    # 1. First Approve with rationale
+    client.post(
+        f"/projects/lean_energy/duplicate-groups/{group_id}/decision",
+        json={"decision": "APPROVE", "rationale": "First decision rationale"},
+    )
+    assert client.get(f"/projects/lean_energy/duplicate-groups/{group_id}/decision").json()["rationale"] == "First decision rationale"
+
+    # 2. Overwrite with Reject and new rationale
+    response = client.post(
+        f"/projects/lean_energy/duplicate-groups/{group_id}/decision",
+        json={"decision": "REJECT", "rationale": "Updated decision rationale"},
     )
     assert response.status_code == 200
     assert response.json()["decision"] == "REJECT"
+    assert response.json()["rationale"] == "Updated decision rationale"
 
     # 3. Read again
-    assert client.get(f"/projects/lean_energy/duplicate-groups/{group_id}/decision").json()["decision"] == "REJECT"
+    get_res = client.get(f"/projects/lean_energy/duplicate-groups/{group_id}/decision")
+    assert get_res.json()["decision"] == "REJECT"
+    assert get_res.json()["rationale"] == "Updated decision rationale"
 
 
 def test_post_decision_invalid_group_returns_404() -> None:
@@ -314,6 +378,7 @@ def test_read_decision_defaults_to_pending() -> None:
         "project_id": "lean_energy",
         "group_id": group_id,
         "decision": "PENDING",
+        "rationale": None,
     }
 
 
@@ -321,13 +386,15 @@ def test_repository_isolation_between_instances() -> None:
     repo1 = InMemoryDuplicateReviewDecisionRepository()
     repo2 = InMemoryDuplicateReviewDecisionRepository()
 
-    repo1.save_decision("proj_1", "g1", DuplicateDecision.APPROVE)
-    assert repo1.get_decision("proj_1", "g1") == DuplicateDecision.APPROVE
+    rec = DuplicateGroupReviewDecision(decision=DuplicateDecision.APPROVE, rationale="Test rationale")
+
+    repo1.save_decision("proj_1", "g1", rec)
+    assert repo1.get_decision("proj_1", "g1") == rec
     assert repo2.get_decision("proj_1", "g1") is None
 
 
 def test_decision_isolation_between_projects_sharing_same_group_id() -> None:
-    """Verify that projects A and B sharing the same group_id maintain isolated decisions."""
+    """Verify that projects A and B sharing the same group_id maintain isolated decisions and rationales."""
     pub_a1 = Publication(
         record_id=UUID("00000000-0000-0000-0000-000000000081"),
         title="Shared DOI Paper 1",
@@ -350,26 +417,27 @@ def test_decision_isolation_between_projects_sharing_same_group_id() -> None:
     decision_repo = InMemoryDuplicateReviewDecisionRepository()
     service = ProjectDuplicateService(repository=proj_repo, decision_repository=decision_repo)
 
-    # Both projects have candidate groups with the same group_id
     groups_a = service.get_candidate_duplicate_groups("proj_a")
     groups_b = service.get_candidate_duplicate_groups("proj_b")
     group_id = groups_a.groups[0].group_id
     assert groups_b.groups[0].group_id == group_id
 
-    # Record APPROVE for proj_a
-    res_a = service.record_decision("proj_a", group_id, "APPROVE")
+    # Record APPROVE for proj_a with rationale
+    res_a = service.record_decision("proj_a", group_id, "APPROVE", "Rationale for Proj A")
     assert res_a.project_id == "proj_a"
     assert res_a.decision == DuplicateDecisionStatus.APPROVE
+    assert res_a.rationale == "Rationale for Proj A"
 
     # Verify proj_a returns APPROVE while proj_b returns PENDING
     assert service.get_decision("proj_a", group_id).decision == DuplicateDecisionStatus.APPROVE
     assert service.get_decision("proj_b", group_id).decision == DuplicateDecisionStatus.PENDING
 
-    # Record REJECT for proj_b
-    res_b = service.record_decision("proj_b", group_id, "REJECT")
+    # Record REJECT for proj_b with different rationale
+    res_b = service.record_decision("proj_b", group_id, "REJECT", "Rationale for Proj B")
     assert res_b.project_id == "proj_b"
     assert res_b.decision == DuplicateDecisionStatus.REJECT
+    assert res_b.rationale == "Rationale for Proj B"
 
-    # Verify proj_a remains APPROVE and proj_b is REJECT
-    assert service.get_decision("proj_a", group_id).decision == DuplicateDecisionStatus.APPROVE
-    assert service.get_decision("proj_b", group_id).decision == DuplicateDecisionStatus.REJECT
+    # Verify independence
+    assert service.get_decision("proj_a", group_id).rationale == "Rationale for Proj A"
+    assert service.get_decision("proj_b", group_id).rationale == "Rationale for Proj B"

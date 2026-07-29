@@ -15,7 +15,8 @@ export interface ProjectApiService {
   postDuplicateGroupDecision(
     projectId: string,
     groupId: string,
-    decision: DuplicateDecisionType
+    decision: DuplicateDecisionType,
+    rationale?: string
   ): Promise<ApiDuplicateGroupDecisionResponse>;
   getDuplicateGroupDecision(
     projectId: string,
@@ -56,7 +57,8 @@ class MixedProjectApiService implements ProjectApiService {
   async postDuplicateGroupDecision(
     projectId: string,
     groupId: string,
-    decision: DuplicateDecisionType
+    decision: DuplicateDecisionType,
+    rationale?: string
   ): Promise<ApiDuplicateGroupDecisionResponse> {
     const response = await fetch(
       `${API_BASE_URL}/projects/${projectId}/duplicate-groups/${groupId}/decision`,
@@ -66,7 +68,7 @@ class MixedProjectApiService implements ProjectApiService {
           'Content-Type': 'application/json',
           Accept: 'application/json',
         },
-        body: JSON.stringify({ decision }),
+        body: JSON.stringify({ decision, rationale: rationale || null }),
       }
     );
 

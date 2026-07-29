@@ -97,6 +97,8 @@ Increments:
 - **6.2 Application Versioning** ✅ — Application-wide version single source of truth in root `VERSION` file, build-time Vite injection, GUI release identity, and About dialog.
 - **6.3 Duplicate Review Read API** ✅ — Backend DTO contracts, read-only REST endpoint `GET /projects/{id}/duplicate-groups`, frontend API adapter, loading/empty/error states, and hybrid data mode.
 - **6.4 Duplicate Review Decisions** ✅ — In-memory decision repository (`InMemoryDuplicateReviewDecisionRepository`) with `(project_id, group_id)` composite key isolation, REST endpoints `POST` & `GET` for `APPROVE` and `REJECT` decisions, and interactive decision controls in GUI.
+- **6.5 Duplicate Comparison and Review UI** ✅ — Detailed side-by-side publication comparison view, deterministic field state matching, provenance tracing, optional decision rationale with length validation, and accessible controls.
+- **6.6 Persistent Project & Duplicate Storage** ⬜ — Database entities, project repository, persistent decisions, publication merge application.
 
 This phase does not represent the full GUI MVP. Its purpose is to establish the interface foundation and deliver the complete module supporting deduplication review.
 

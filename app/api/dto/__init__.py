@@ -6,6 +6,7 @@ from app.api.dto.deduplication import (
     DuplicateGroupListResponse,
     DuplicateGroupResponse,
     DuplicateRecordPreviewResponse,
+    ProvenanceEntryResponse,
     SharedIdentifierResponse,
 )
 
@@ -17,5 +18,6 @@ __all__ = [
     "DuplicateGroupListResponse",
     "DuplicateGroupResponse",
     "DuplicateRecordPreviewResponse",
+    "ProvenanceEntryResponse",
     "SharedIdentifierResponse",
 ]

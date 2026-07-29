@@ -163,7 +163,7 @@ Status:
 
 Zakres:
 
-- in-memory decision repository (`InMemoryDuplicateReviewDecisionRepository`)
+- in-memory decision repository (`InMemoryDuplicateReviewDecisionRepository`) with `(project_id, group_id)` composite key isolation
 - REST endpoints for recording (`POST`) and reading (`GET`) reviewer duplicate decisions (`APPROVE`, `REJECT`)
 - service validation (checking project and group existence, invalid enum handling, decision overwrite support)
 - interactive frontend decision controls (Approve, Reject, Saving..., Saved, Error, Retry)
@@ -179,16 +179,15 @@ Status:
 
 Zakres:
 
-- side-by-side publication comparison
-- identifier and metadata differences
-- provenance visibility
-- duplicate confirmation
-- merge candidate review
-- decision rationale where required
+- side-by-side publication comparison view for candidate group members
+- deterministic field matching and difference calculation (MATCH, DIFFERENT, PARTIAL, UNAVAILABLE)
+- provenance tracing per publication record
+- optional reviewer decision rationale (`rationale`) with trimming and length validation (max 1000 chars)
+- accessibility attributes (`aria-expanded`) and clear visual/text badge states
 
 Status:
 
-⬜ Planned
+✅ Completed
 
 ---
 

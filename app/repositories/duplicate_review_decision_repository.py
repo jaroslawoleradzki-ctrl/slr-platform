@@ -1,6 +1,6 @@
 from typing import Protocol
 
-from app.domain.duplicate_review import DuplicateDecision
+from app.domain.duplicate_review import DuplicateGroupReviewDecision
 
 
 class GroupNotFoundError(Exception):
@@ -21,14 +21,14 @@ class DuplicateReviewDecisionRepository(Protocol):
     """Interface for storing and retrieving duplicate review decisions keyed by (project_id, group_id)."""
 
     def save_decision(
-        self, project_id: str, group_id: str, decision: DuplicateDecision
+        self, project_id: str, group_id: str, decision: DuplicateGroupReviewDecision
     ) -> None:
         """Store or update a decision for a duplicate group within a specific project."""
         ...
 
     def get_decision(
         self, project_id: str, group_id: str
-    ) -> DuplicateDecision | None:
+    ) -> DuplicateGroupReviewDecision | None:
         """Retrieve the stored decision for a (project_id, group_id), or None if undecided."""
         ...
 
@@ -42,16 +42,16 @@ class InMemoryDuplicateReviewDecisionRepository:
     """
 
     def __init__(self) -> None:
-        self._decisions: dict[tuple[str, str], DuplicateDecision] = {}
+        self._decisions: dict[tuple[str, str], DuplicateGroupReviewDecision] = {}
 
     def save_decision(
-        self, project_id: str, group_id: str, decision: DuplicateDecision
+        self, project_id: str, group_id: str, decision: DuplicateGroupReviewDecision
     ) -> None:
         self._decisions[(project_id, group_id)] = decision
 
     def get_decision(
         self, project_id: str, group_id: str
-    ) -> DuplicateDecision | None:
+    ) -> DuplicateGroupReviewDecision | None:
         return self._decisions.get((project_id, group_id))
 
     def clear(self) -> None:

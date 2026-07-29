@@ -64,7 +64,12 @@ def record_duplicate_group_decision(
     service: ProjectDuplicateService = Depends(get_duplicate_service),
 ) -> DuplicateGroupDecisionResponse:
     try:
-        return service.record_decision(project_id, group_id, payload.decision.value)
+        return service.record_decision(
+            project_id=project_id,
+            group_id=group_id,
+            decision=payload.decision.value,
+            rationale=payload.rationale,
+        )
     except ProjectNotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -74,6 +79,11 @@ def record_duplicate_group_decision(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Duplicate group '{group_id}' not found in project '{project_id}'.",
+        ) from exc
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
         ) from exc
     except Exception as exc:
         raise HTTPException(

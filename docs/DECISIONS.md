@@ -6,6 +6,18 @@ This document records important project decisions that do not require a full ADR
 
 ## 2026-07-29
 
+### Duplicate Comparison and Review UI (Phase 6.5)
+
+Phase 6.5 introduces a detailed side-by-side comparison interface for candidate duplicate publication groups.
+
+Key decisions:
+- **Deterministic Field Matching**: Field similarity across titles, authors, years, venues, identifiers, and provenance is computed using 4 deterministic states (`MATCH`, `DIFFERENT`, `PARTIAL`, `UNAVAILABLE`) with distinct text badges and icons to avoid relying solely on color.
+- **Decision Rationale (`rationale`)**: `DuplicateGroupReviewDecision` domain model encapsulates `decision: DuplicateDecision` and `rationale: str | None`. Validation trims rationale and enforces a 1000-character limit at the service/domain layer.
+- **Provenance & Venue API Enrichment**: `DuplicateRecordPreviewResponse` DTO is enriched with `venue: str | None` and `provenance: list[ProvenanceEntryResponse]` without adding new HTTP endpoints.
+- **Accessibility**: Comparison view controls utilize `aria-expanded` and explicit button labels.
+
+---
+
 ### Candidate Duplicate Review Decisions (Phase 6.4)
 
 Phase 6.4 introduces the capability to record and read human reviewer decisions (`APPROVE` or `REJECT`) for candidate duplicate groups.

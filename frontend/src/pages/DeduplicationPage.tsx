@@ -59,11 +59,11 @@ export const DeduplicationPage: React.FC = () => {
               fontWeight: 600,
             }}
           >
-            Review Decisions API (Phase 6.4)
+            Duplicate Comparison & Review UI (Phase 6.5)
           </div>
         </div>
         <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
-          Przeglądaj candidate duplicate groups wykryte przez backend. Podejmuj decyzje (Approve / Reject) zapisywane w in-memory API backendu.
+          Porównuj publikacje w grupach kandydatów obok siebie, weryfikuj zgodność pól i pochodzenie (provenance) oraz zapisuj decyzje badacza z opcjonalnym uzasadnieniem (rationale).
         </p>
       </div>
 

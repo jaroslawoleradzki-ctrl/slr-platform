@@ -1,12 +1,14 @@
 from app.api.dto.deduplication import (
     DuplicateDecisionStatus,
+    DuplicateDecisionType,
     DuplicateGroupDecisionResponse,
     DuplicateGroupListResponse,
     DuplicateGroupResponse,
     DuplicateRecordPreviewResponse,
+    ProvenanceEntryResponse,
     SharedIdentifierResponse,
 )
-from app.domain.duplicate_review import DuplicateDecision
+from app.domain.duplicate_review import DuplicateDecision, DuplicateGroupReviewDecision
 from app.domain.identifiers import IdentifierType
 from app.domain.publication import Publication
 from app.normalization.doi import normalize_doi
@@ -43,6 +45,7 @@ def _extract_shared_identifiers(records: list[Publication]) -> list[SharedIdenti
 def _map_publication_to_preview(pub: Publication) -> DuplicateRecordPreviewResponse:
     author_names = ", ".join(a.display_name for a in pub.authors) if pub.authors else "Unknown Authors"
     source = pub.provenance[0].source if pub.provenance else "Unknown Source"
+    venue_str = pub.venue.name if pub.venue else None
 
     doi: str | None = None
     pmid: str | None = None
@@ -58,15 +61,26 @@ def _map_publication_to_preview(pub: Publication) -> DuplicateRecordPreviewRespo
         ):
             openalex_id = ident.value
 
+    provenance_responses = [
+        ProvenanceEntryResponse(
+            source=p.source,
+            source_record_id=p.source_record_id,
+            retrieved_at=p.retrieved_at.isoformat() if p.retrieved_at else None,
+        )
+        for p in pub.provenance
+    ]
+
     return DuplicateRecordPreviewResponse(
         id=str(pub.record_id),
         title=pub.title,
         authors=author_names,
         year=pub.publication_year,
         source=source,
+        venue=venue_str,
         doi=doi,
         pmid=pmid,
         openalex_id=openalex_id,
+        provenance=provenance_responses,
     )
 
 
@@ -114,10 +128,10 @@ class ProjectDuplicateService:
                 else "Identical strong identifier match"
             )
 
-            raw_decision = self._decision_repository.get_decision(project_id, group_id_str)
+            domain_decision = self._decision_repository.get_decision(project_id, group_id_str)
             status_enum = (
-                DuplicateDecisionStatus(raw_decision.value)
-                if raw_decision
+                DuplicateDecisionStatus(domain_decision.decision.value)
+                if domain_decision
                 else DuplicateDecisionStatus.PENDING
             )
 
@@ -146,33 +160,45 @@ class ProjectDuplicateService:
             raise GroupNotFoundError(group_id, project_id)
 
     def record_decision(
-        self, project_id: str, group_id: str, decision: DuplicateDecision | str
+        self,
+        project_id: str,
+        group_id: str,
+        decision: DuplicateDecisionType | str,
+        rationale: str | None = None,
     ) -> DuplicateGroupDecisionResponse:
         self._ensure_group_exists(project_id, group_id)
-        domain_decision = (
+        domain_decision_enum = (
             decision
             if isinstance(decision, DuplicateDecision)
-            else DuplicateDecision(decision.upper())
+            else DuplicateDecision(decision if isinstance(decision, str) else decision.value)
         )
-        self._decision_repository.save_decision(project_id, group_id, domain_decision)
+        domain_record = DuplicateGroupReviewDecision(
+            decision=domain_decision_enum,
+            rationale=rationale,
+        )
+        self._decision_repository.save_decision(project_id, group_id, domain_record)
         return DuplicateGroupDecisionResponse(
             project_id=project_id,
             group_id=group_id,
-            decision=DuplicateDecisionStatus(domain_decision.value),
+            decision=DuplicateDecisionStatus(domain_record.decision.value),
+            rationale=domain_record.rationale,
         )
 
     def get_decision(self, project_id: str, group_id: str) -> DuplicateGroupDecisionResponse:
         self._ensure_group_exists(project_id, group_id)
-        domain_decision = self._decision_repository.get_decision(project_id, group_id)
-        status_enum = (
-            DuplicateDecisionStatus(domain_decision.value)
-            if domain_decision
-            else DuplicateDecisionStatus.PENDING
-        )
+        domain_record = self._decision_repository.get_decision(project_id, group_id)
+        if domain_record is None:
+            return DuplicateGroupDecisionResponse(
+                project_id=project_id,
+                group_id=group_id,
+                decision=DuplicateDecisionStatus.PENDING,
+                rationale=None,
+            )
         return DuplicateGroupDecisionResponse(
             project_id=project_id,
             group_id=group_id,
-            decision=status_enum,
+            decision=DuplicateDecisionStatus(domain_record.decision.value),
+            rationale=domain_record.rationale,
         )
 
 

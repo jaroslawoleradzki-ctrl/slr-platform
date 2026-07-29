@@ -26,6 +26,16 @@ class SharedIdentifierResponse(BaseModel):
     value: str
 
 
+class ProvenanceEntryResponse(BaseModel):
+    """API representation of a publication record provenance entry."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    source: str
+    source_record_id: str
+    retrieved_at: str | None = None
+
+
 class DuplicateRecordPreviewResponse(BaseModel):
     """Clean API preview of one publication within a candidate duplicate group."""
 
@@ -36,9 +46,11 @@ class DuplicateRecordPreviewResponse(BaseModel):
     authors: str
     year: int | None = None
     source: str
+    venue: str | None = None
     doi: str | None = None
     pmid: str | None = None
     openalex_id: str | None = None
+    provenance: list[ProvenanceEntryResponse] = Field(default_factory=list)
 
 
 class DuplicateGroupResponse(BaseModel):
@@ -65,18 +77,20 @@ class DuplicateGroupListResponse(BaseModel):
 
 
 class DuplicateGroupDecisionRequest(BaseModel):
-    """Request payload for recording a reviewer duplicate decision."""
+    """Request payload for recording a reviewer duplicate decision with optional rationale."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     decision: DuplicateDecisionType
+    rationale: str | None = None
 
 
 class DuplicateGroupDecisionResponse(BaseModel):
-    """Response returning current decision state for a duplicate group in a project."""
+    """Response returning current decision state and optional rationale for a duplicate group."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     project_id: str
     group_id: str
     decision: DuplicateDecisionStatus
+    rationale: str | None = None

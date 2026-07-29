@@ -1,6 +1,17 @@
 # Changelog
 
-## [0.1.2] — Unreleased
+## [0.1.3] — Unreleased
+
+### Added
+
+- **Duplicate Comparison & Review UI (Phase 6.5)**:
+  - Detailed side-by-side comparison view for candidate duplicate group records.
+  - Deterministic field matching and difference indicators across title, authors, year, venue, identifiers (DOI, PMID, OpenAlex), and provenance.
+  - Provenance details display per publication record.
+  - Optional decision rationale support (`rationale`) with trimming and length validation (max 1000 characters).
+  - Accessibility enhancements with `aria-expanded` and clear text/badge state indicators.
+
+## [0.1.2] — 2026-07-29
 
 ### Added
 

@@ -14,11 +14,11 @@ development
 
 Current version (working tree):
 
-v0.1.2 (Unreleased)
+v0.1.3 (Unreleased)
 
 Current development phase:
 
-Phase 6.1 — GUI Foundation (completed), Phase 6.2 — Application Versioning (completed), Phase 6.3 — Duplicate Review Read API (completed), Phase 6.4 — Duplicate Review Decisions completed on branch `development`. In-memory decision storage (`InMemoryDuplicateReviewDecisionRepository`) with composite `(project_id, group_id)` keys, REST API `POST` & `GET` decision endpoints, and interactive frontend decision controls with Saving/Saved/Error/Retry states are fully verified. Stable main branch remains at v0.1.0.
+Phase 6.1 — GUI Foundation (completed), Phase 6.2 — Application Versioning (completed), Phase 6.3 — Duplicate Review Read API (completed), Phase 6.4 — Duplicate Review Decisions (completed), Phase 6.5 — Duplicate Comparison and Review UI completed on branch `development`. Side-by-side publication comparison, deterministic field matching, provenance display, optional rationale validation & storage, and accessible review controls are fully implemented and verified. Next planned increment: Phase 6.6 — Integration and Contract Tests. Stable main branch remains at v0.1.0.
 
 ---
 

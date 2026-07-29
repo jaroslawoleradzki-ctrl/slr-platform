@@ -66,15 +66,23 @@ export interface DuplicateGroupPreview {
   }[];
 }
 
+export interface ApiProvenanceEntry {
+  source: string;
+  source_record_id: string;
+  retrieved_at?: string | null;
+}
+
 export interface ApiDuplicateRecordPreview {
   id: string;
   title: string;
   authors: string;
   year: number | null;
   source: string;
+  venue?: string | null;
   doi?: string | null;
   pmid?: string | null;
   openalex_id?: string | null;
+  provenance?: ApiProvenanceEntry[];
 }
 
 export interface ApiSharedIdentifier {
@@ -89,6 +97,7 @@ export interface ApiDuplicateGroupDecisionResponse {
   project_id: string;
   group_id: string;
   decision: DuplicateDecisionStatus;
+  rationale?: string | null;
 }
 
 export interface ApiDuplicateGroup {
