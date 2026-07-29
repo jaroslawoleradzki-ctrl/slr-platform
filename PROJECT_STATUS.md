@@ -8,13 +8,17 @@ Project is in active development.
 
 Infrastructure and project architecture are considered stable.
 
-Current version:
+Current branch:
 
-v0.1.0
+development
+
+Current version (working tree):
+
+v0.1.1 (Unreleased)
 
 Current development phase:
 
-Phase 6.1 — GUI Foundation completed. Phase 6.2 — Application Versioning and GUI Release Identity implemented on feature branch `feat/phase-6-2-application-versioning`. Application versioning uses root `VERSION` file as master source of truth. Automated GitHub Releases and Git tagging are deferred to future infrastructure phases.
+Phase 6.1 — GUI Foundation (completed), Phase 6.2 — Application Versioning (completed), Phase 6.3 — Duplicate Review Read API implemented on branch `development`. Read-only REST endpoint `GET /projects/{id}/duplicate-groups` connected to React frontend with loading, success, empty and error states. Next planned increment: Phase 6.4 — Duplicate Review Decisions. Stable main branch remains at v0.1.0.
 
 ---
 

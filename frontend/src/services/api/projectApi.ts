@@ -1,13 +1,15 @@
-import { SLRProject } from '../../types';
+import { SLRProject, ApiDuplicateGroupListResponse } from '../../types';
 import { MOCK_PROJECTS } from '../../mocks/projectData';
+import { API_BASE_URL } from '../../config/api';
 
 export interface ProjectApiService {
   getProjects(): Promise<SLRProject[]>;
   getProjectById(id: string): Promise<SLRProject | null>;
   createProject(title: string, description: string, protocolVersion: string): Promise<SLRProject>;
+  getDuplicateGroups(projectId: string): Promise<ApiDuplicateGroupListResponse>;
 }
 
-class MockProjectApiService implements ProjectApiService {
+class MixedProjectApiService implements ProjectApiService {
   private projects: SLRProject[] = [...MOCK_PROJECTS];
 
   async getProjects(): Promise<SLRProject[]> {
@@ -19,8 +21,26 @@ class MockProjectApiService implements ProjectApiService {
     return project ? { ...project } : null;
   }
 
+  async getDuplicateGroups(projectId: string): Promise<ApiDuplicateGroupListResponse> {
+    const response = await fetch(`${API_BASE_URL}/projects/${projectId}/duplicate-groups`, {
+      headers: {
+        Accept: 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      if (response.status === 404) {
+        throw new Error(`Projekt '${projectId}' nie został odnaleziony w API backendu.`);
+      }
+      throw new Error(`Błąd serwera API backend (HTTP ${response.status}): Nie udało się pobrać grup duplikatów.`);
+    }
+
+    const data: ApiDuplicateGroupListResponse = await response.json();
+    return data;
+  }
+
   async createProject(title: string, description: string, protocolVersion: string): Promise<SLRProject> {
-    await new Promise((resolve) => setTimeout(resolve, 200));
+    await new Promise((resolve) => setTimeout(resolve, 100));
     const newId = title.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || `proj_${Date.now()}`;
     const newProject: SLRProject = {
       id: newId,
@@ -34,14 +54,14 @@ class MockProjectApiService implements ProjectApiService {
         description: 'Nowy projekt został utworzony. Przejdź do edytora zapytań i zdefiniuj grupy pojęć dla przeglądu.',
         targetStageId: 'search',
         actionLabel: 'Konfiguruj Strategię Wyszukiwania',
-        severity: 'normal'
+        severity: 'normal',
       },
       conceptGroups: [
         {
           id: `cg-${Date.now()}-1`,
           name: 'Main Domain Terms',
-          terms: ['Systematic Review', 'Literature Analysis']
-        }
+          terms: ['Systematic Review', 'Literature Analysis'],
+        },
       ],
       searchFilters: {
         publicationYearFrom: 2018,
@@ -58,7 +78,7 @@ class MockProjectApiService implements ProjectApiService {
           connected: true,
           status: 'idle',
           resultsCount: 0,
-          lastRunTimestamp: null
+          lastRunTimestamp: null,
         },
         {
           id: 'crossref',
@@ -67,8 +87,8 @@ class MockProjectApiService implements ProjectApiService {
           connected: true,
           status: 'idle',
           resultsCount: 0,
-          lastRunTimestamp: null
-        }
+          lastRunTimestamp: null,
+        },
       ],
       imports: [],
       normalization: [],
@@ -77,19 +97,19 @@ class MockProjectApiService implements ProjectApiService {
         identifierLinkedGroupsCount: 0,
         recordsAfterResultMerger: 0,
         candidateGroupsPendingUserReview: 0,
-        status: 'pending'
+        status: 'pending',
       },
       duplicateGroups: [],
       screening: {
         titleAbstract: { pending: 0, included: 0, excluded: 0, unresolved: 0, total: 0 },
         fullText: { pending: 0, included: 0, excluded: 0, unresolved: 0, total: 0 },
-        status: 'pending'
+        status: 'pending',
       },
       qualityAssessment: {
         totalToAssess: 0,
         completedAssessments: 0,
         reviewerConflictsCount: 0,
-        status: 'pending'
+        status: 'pending',
       },
       prismaMetrics: {
         recordsIdentifiedProviders: 0,
@@ -101,8 +121,8 @@ class MockProjectApiService implements ProjectApiService {
         duplicateGroupsPendingReview: 0,
         recordsScreenedTitleAbstract: 0,
         recordsScreenedFullText: 0,
-        studiesIncludedSynthesis: 0
-      }
+        studiesIncludedSynthesis: 0,
+      },
     };
 
     this.projects.unshift(newProject);
@@ -110,4 +130,4 @@ class MockProjectApiService implements ProjectApiService {
   }
 }
 
-export const projectApiService: ProjectApiService = new MockProjectApiService();
+export const projectApiService: ProjectApiService = new MixedProjectApiService();

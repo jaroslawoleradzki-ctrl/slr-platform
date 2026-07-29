@@ -78,11 +78,12 @@ frontend/
 
 ---
 
-## Planned API Boundary & Mock Data Strategy
+## Hybrid API Integration & Read-Only Duplicate Review (Phase 6.3)
 
-- **Mock Data Layer**: Implemented in `src/mocks/projectData.ts`, loading real config schema matching `projects/lean_energy/config.yaml`. Status badge in Header indicates `Mock API / Demo Data` status explicitly until Phase 6.2.
-- **API Boundary**: Abstracted in `src/services/api/projectApi.ts` (`ProjectApiService`).
-- **Backend as Source of Truth**: Candidate duplicate groups are detected based on strong identifiers (DOI, PMID, OpenAlex ID). The frontend performs zero domain merging or automated decision writing. Buttons are set to preview mode (`disabled`).
+- **Read-Only API Endpoint**: Candidate duplicate groups are fetched directly from FastAPI backend (`GET /projects/{project_id}/duplicate-groups`).
+- **Hybrid Data Mode**: Header and About modal reflect `Hybrid Data Mode (Deduplication API + Demo Data)` to indicate live backend connectivity for Duplicate Review alongside demo data for other views.
+- **State Management**: `DeduplicationPage` handles `loading`, `success`, `empty` (0 candidate groups), and `error` (with retry button).
+- **Backend as Source of Truth**: Candidate duplicate groups are detected based on strong identifiers (DOI, PMID, OpenAlex ID). The frontend performs zero domain merging or automated decision writing. Buttons remain in preview mode (`disabled`) with tooltips indicating decision persistence is planned for Phase 6.4.
 
 ---
 

@@ -55,9 +55,9 @@ export const Card: React.FC<CardProps> = ({
               </h3>
             )}
             {subtitle && (
-              <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
+              <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
                 {subtitle}
-              </p>
+              </div>
             )}
           </div>
           {action && <div>{action}</div>}

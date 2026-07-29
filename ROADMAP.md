@@ -95,8 +95,8 @@ Increments:
 
 - **6.1 GUI Foundation** ✅ — Application shell, routing, Information Architecture, SLR process funnel, Concept Group strategy builder, and state placeholders.
 - **6.2 Application Versioning** ✅ — Application-wide version single source of truth in root `VERSION` file, build-time Vite injection, GUI release identity, and About dialog.
-- **6.3 Duplicate Review Read API** 🚧 — Backend DTO contracts, read-only REST endpoints, frontend API adapter, replacing mock candidate duplicate groups with real backend candidate groups (without decision writing).
-- **6.4 Duplicate Review Decisions** — API endpoints and UI flow for recording user duplicate review approvals and rejections.
+- **6.3 Duplicate Review Read API** ✅ — Backend DTO contracts, read-only REST endpoint `GET /projects/{id}/duplicate-groups`, frontend API adapter, loading/empty/error states, and hybrid data mode.
+- **6.4 Duplicate Review Decisions** 🚧 — API endpoints and UI flow for recording user duplicate review approvals and rejections.
 
 This phase does not represent the full GUI MVP. Its purpose is to establish the interface foundation and deliver the complete module supporting deduplication review.
 

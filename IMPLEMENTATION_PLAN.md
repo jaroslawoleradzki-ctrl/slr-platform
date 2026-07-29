@@ -146,14 +146,16 @@ Status:
 
 Zakres:
 
-- backend DTO contracts for duplicate groups
-- read-only REST endpoints exposing candidate duplicate groups
-- frontend API client adapter
-- replacing mock duplicate groups with real backend data (without decision writing)
+- backend DTO contracts (`DuplicateGroupListResponse`, `DuplicateGroupResponse`, `DuplicateRecordPreviewResponse`)
+- read-only REST endpoint `GET /projects/{project_id}/duplicate-groups`
+- application service (`ProjectDuplicateService`) mapping `DuplicateGroupBuilder` results to DTOs
+- frontend API client adapter with CORS and `VITE_API_BASE_URL` config
+- handling loading, success, empty and error states in `DeduplicationPage`
+- hybrid data mode indicator in GUI
 
 Status:
 
-🚧 Planned (Next Increment)
+✅ Completed
 
 ---
 
@@ -167,7 +169,7 @@ Zakres:
 
 Status:
 
-⬜ Planned
+🚧 Planned (Next Increment)
 
 ---
 

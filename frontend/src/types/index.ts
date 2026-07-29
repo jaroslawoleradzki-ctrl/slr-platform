@@ -66,6 +66,36 @@ export interface DuplicateGroupPreview {
   }[];
 }
 
+export interface ApiDuplicateRecordPreview {
+  id: string;
+  title: string;
+  authors: string;
+  year: number | null;
+  source: string;
+  doi?: string | null;
+  pmid?: string | null;
+  openalex_id?: string | null;
+}
+
+export interface ApiSharedIdentifier {
+  identifier_type: string;
+  value: string;
+}
+
+export interface ApiDuplicateGroup {
+  group_id: string;
+  reason: string;
+  records_count: number;
+  shared_identifiers: ApiSharedIdentifier[];
+  records: ApiDuplicateRecordPreview[];
+}
+
+export interface ApiDuplicateGroupListResponse {
+  project_id: string;
+  total_groups_count: number;
+  groups: ApiDuplicateGroup[];
+}
+
 export interface ScreeningStatus {
   titleAbstract: {
     pending: number;

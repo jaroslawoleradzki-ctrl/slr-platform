@@ -6,6 +6,19 @@ This document records important project decisions that do not require a full ADR
 
 ## 2026-07-29
 
+### Candidate Duplicate Review Read API (Phase 6.3)
+
+Phase 6.3 introduces a read-only REST API endpoint `GET /projects/{project_id}/duplicate-groups` in FastAPI.
+
+Key decisions:
+- **Read-Only Boundary**: The endpoint is strictly read-only and does not accept or write user review decisions, alter duplicate group statuses, or trigger publication merges. Decision persistence is deferred to Phase 6.4.
+- **Single Source of Truth**: Candidate duplicate groups are constructed on-the-fly by invoking `DuplicateGroupBuilder` on project publications. The backend domain model remains the sole authority for grouping rules and strong-identifier matching (DOI, PMID, OpenAlex ID).
+- **Deterministic Group Keys**: `DuplicateGroup.group_id` UUID values (generated via UUID5 on sorted member record IDs) serve as deterministic string keys in API responses and React component keys.
+- **DTO Isolation**: API contracts (`DuplicateGroupListResponse`, `DuplicateGroupResponse`, `DuplicateRecordPreviewResponse`) expose only the minimal preview data required by the GUI without exposing internal domain structures.
+- **Hybrid Data Mode**: The global GUI status indicator reflects `Hybrid Data Mode (Deduplication API + Demo Data)` to clearly indicate that Duplicate Review connects to live backend API while other modules present mock data.
+
+---
+
 ### Search Engine duplicate-group analysis stage
 
 Phase 5.4 exposes three related Search Engine outputs:
