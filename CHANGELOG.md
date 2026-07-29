@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.1.7] — Unreleased
+
+### Added
+
+- **Live Search Providers & Import (Phase 6.7.2b)**: Connected the Search
+  Strategy execution endpoint to the existing OpenAlex and Crossref providers
+  through `SearchEngine`.
+- Partial provider failure reporting while preserving results returned by
+  healthy providers.
+- Provider and source-record attribution in the common search-result contract.
+- Import of explicitly selected search records into the project's in-memory
+  Working Collection, with refreshed collection count and cleared selection.
+- Deterministic UUID5 result identifiers scoped by provider and source record.
+- Idempotent source-record import scoped by project, provider, and `source_id`,
+  reporting `imported_count`, `skipped_count`, and `total_requested`.
+
+The demonstrator Working Collection is stored only in backend process memory
+and does not survive a server restart.
+
 ## [0.1.6] — Unreleased
 
 ### Added

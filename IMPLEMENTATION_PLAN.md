@@ -263,12 +263,20 @@ Zakres:
 
 Status:
 
-⬜ Planned
+✅ Completed
 
 Notes:
 
 - Module 2 currently does not need to repeat the complete search query.
-- Bibliographic import belongs to Phase 6.7.2b.
+- Selected live search records can be imported into the in-memory project
+  Working Collection.
+- OpenAlex and Crossref failures are isolated and reported as partial errors.
+- Live result IDs use deterministic UUID5 identity based on provider and
+  `source_id`.
+- Re-importing the same `(project_id, provider, source_id)` is skipped and the
+  response reports `imported_count`, `skipped_count`, and `total_requested`.
+- The demonstrator Working Collection exists only in backend process memory
+  and is reset when the server restarts.
 - Modules 3 and 4 will be specified after acceptance of Modules 1 and 2.
 
 ---

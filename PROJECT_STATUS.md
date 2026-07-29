@@ -14,17 +14,21 @@ development
 
 Current version (working tree):
 
-v0.1.6 (Unreleased)
+v0.1.7 (Unreleased)
 
 Current development phase:
 
 Phase 6.7 — Functional Workflow for Modules 1–4 is in progress on branch
-`development`. Phase 6.7.2a Search Results Workflow is implemented in v0.1.6:
-the backend returns controlled deterministic records and the frontend presents
-project-isolated selectable results with loading, empty and error states. Phase
-6.7.2b Live Search Providers & Import is the next planned increment; live
-OpenAlex/Crossref calls and persistent import are not part of 6.7.2a. Screening
-and later modules remain deferred. Stable main branch remains at v0.1.0.
+`development`. Phase 6.7.2b Live Search Providers & Import is implemented in
+v0.1.7: the SearchEngine executes selected OpenAlex and Crossref providers,
+preserves results when one provider fails, reports partial errors, and imports
+selected records into the in-memory project Working Collection. Search result
+IDs are deterministic UUID5 values scoped by provider and `source_id`.
+Re-imports of the same project/provider/source record are skipped, with
+`imported_count`, `skipped_count`, and `total_requested` reported by the API.
+The demonstrator collection does not survive a backend restart. No
+deduplication or automatic merge is performed by this workflow. Screening and
+later modules remain deferred. Stable main branch remains at v0.1.0.
 
 ---
 

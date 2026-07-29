@@ -1,5 +1,10 @@
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
-import { EditableSearchStrategy, SearchExecutionResult, SLRProject } from '../types';
+import {
+  EditableSearchStrategy,
+  SearchExecutionResult,
+  SearchResultsImportResponse,
+  SLRProject,
+} from '../types';
 import { projectApiService } from '../services/api/projectApi';
 import { MOCK_PROJECTS } from '../mocks/projectData';
 
@@ -18,6 +23,8 @@ interface ProjectContextType {
   setCurrentSearchStrategy: (strategy: EditableSearchStrategy) => void;
   setSelectedSearchResultIds: (ids: string[]) => void;
   executeSearchStrategy: (strategy: EditableSearchStrategy) => Promise<SearchExecutionResult>;
+  importSelectedSearchResults: () => Promise<SearchResultsImportResponse | null>;
+  lastSearchImportResult: SearchResultsImportResponse | null;
 }
 
 const ProjectContext = createContext<ProjectContextType | undefined>(undefined);
@@ -32,6 +39,8 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [lastExecutedSearchStrategy, setLastExecutedSearchStrategy] = useState<EditableSearchStrategy | null>(null);
   const [searchExecutionResult, setSearchExecutionResult] = useState<SearchExecutionResult | null>(null);
   const [selectedSearchResultIds, setSelectedSearchResultIds] = useState<string[]>([]);
+  const [lastSearchImportResult, setLastSearchImportResult] =
+    useState<SearchResultsImportResponse | null>(null);
 
   const changeActiveProject = (id: string) => {
     if (id === activeProjectId) return;
@@ -39,6 +48,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setLastExecutedSearchStrategy(null);
     setSearchExecutionResult(null);
     setSelectedSearchResultIds([]);
+    setLastSearchImportResult(null);
     activeProjectIdRef.current = id;
     setActiveProjectIdState(id);
   };
@@ -91,6 +101,24 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return result;
   };
 
+  const importSelectedSearchResults = async () => {
+    if (!activeProject || !searchExecutionResult) return null;
+    const targetProjectId = activeProjectIdRef.current;
+    const selected = searchExecutionResult.results.filter((record) =>
+      selectedSearchResultIds.includes(record.id)
+    );
+    if (selected.length === 0) return null;
+    const result = await projectApiService.importSearchResults(
+      targetProjectId,
+      selected
+    );
+    if (activeProjectIdRef.current !== targetProjectId) return result;
+    setSelectedSearchResultIds([]);
+    setLastSearchImportResult(result);
+    await refreshProjects();
+    return result;
+  };
+
   return (
     <ProjectContext.Provider
       value={{
@@ -108,6 +136,8 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
         setCurrentSearchStrategy,
         setSelectedSearchResultIds,
         executeSearchStrategy,
+        importSelectedSearchResults,
+        lastSearchImportResult,
       }}
     >
       {children}

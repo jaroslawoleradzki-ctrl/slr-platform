@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from dataclasses import dataclass
 from typing import Protocol
 from uuid import UUID
 
@@ -8,6 +9,13 @@ from app.domain.provenance import ProvenanceEntry
 from app.domain.publication import Publication
 
 _TIME = datetime(2026, 7, 1, 10, 0, tzinfo=timezone.utc)
+
+
+@dataclass(frozen=True, slots=True)
+class PublicationImportResult:
+    imported_count: int
+    skipped_count: int
+    working_collection_count: int
 
 
 class ProjectNotFoundError(Exception):
@@ -23,6 +31,22 @@ class ProjectPublicationRepository(Protocol):
 
     def get_publications(self, project_id: str) -> list[Publication]:
         """Retrieve publications for a project or raise ProjectNotFoundError."""
+        ...
+
+    def add_publications(
+        self,
+        project_id: str,
+        publications: list[Publication],
+    ) -> int:
+        """Append publications to a project's Working Collection."""
+        ...
+
+    def import_source_publications(
+        self,
+        project_id: str,
+        publications: list[Publication],
+    ) -> PublicationImportResult:
+        """Atomically import publications unique by provider and source id."""
         ...
 
 
@@ -104,6 +128,56 @@ class DemoProjectPublicationRepository:
         if project_id not in self._projects_data:
             raise ProjectNotFoundError(project_id)
         return list(self._projects_data[project_id])
+
+    def add_publications(
+        self,
+        project_id: str,
+        publications: list[Publication],
+    ) -> int:
+        if project_id not in self._projects_data:
+            raise ProjectNotFoundError(project_id)
+        self._projects_data[project_id].extend(publications)
+        return len(self._projects_data[project_id])
+
+    def import_source_publications(
+        self,
+        project_id: str,
+        publications: list[Publication],
+    ) -> PublicationImportResult:
+        if project_id not in self._projects_data:
+            raise ProjectNotFoundError(project_id)
+
+        existing_keys = {
+            self._source_key(publication)
+            for publication in self._projects_data[project_id]
+            if publication.provenance
+        }
+        new_publications: list[Publication] = []
+        skipped_count = 0
+        for publication in publications:
+            key = self._source_key(publication)
+            if key in existing_keys:
+                skipped_count += 1
+                continue
+            existing_keys.add(key)
+            new_publications.append(publication)
+
+        self._projects_data[project_id].extend(new_publications)
+        return PublicationImportResult(
+            imported_count=len(new_publications),
+            skipped_count=skipped_count,
+            working_collection_count=len(self._projects_data[project_id]),
+        )
+
+    @staticmethod
+    def _source_key(publication: Publication) -> tuple[str, str]:
+        if not publication.provenance:
+            raise ValueError("source publication requires provenance")
+        provenance = publication.provenance[0]
+        return (
+            provenance.source.strip().casefold(),
+            provenance.source_record_id.strip(),
+        )
 
 
 demo_project_publication_repository = DemoProjectPublicationRepository()

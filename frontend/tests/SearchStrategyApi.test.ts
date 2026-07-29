@@ -32,6 +32,7 @@ describe('Search Strategy frontend-backend contract', () => {
         authors: ['Author One'],
         year: 2021,
         provider: 'openalex' as const,
+        source_id: 'W1',
         doi: null,
       }],
     };
@@ -103,5 +104,44 @@ describe('Search Strategy frontend-backend contract', () => {
 
     await expect(projectApiService.executeSearchStrategy('lean_energy', strategy))
       .rejects.toThrow('Nie udało się połączyć z backendem');
+  });
+
+  it('imports exactly the selected search records', async () => {
+    const record = {
+      id: 'result-1',
+      title: 'Selected result',
+      authors: ['Author One'],
+      year: 2021,
+      provider: 'openalex' as const,
+      source_id: 'W1',
+      doi: null,
+    };
+    const backendResponse = {
+      project_id: 'lean_energy',
+      imported_count: 1,
+      skipped_count: 0,
+      total_requested: 1,
+      working_collection_count: 6,
+    };
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify(backendResponse), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    );
+
+    const result = await projectApiService.importSearchResults(
+      'lean_energy',
+      [record]
+    );
+
+    expect(result).toEqual(backendResponse);
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://localhost:8000/projects/lean_energy/search-results/imports',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ records: [record] }),
+      })
+    );
   });
 });

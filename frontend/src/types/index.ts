@@ -30,6 +30,7 @@ export interface SearchExecutionResult {
   executed_at: string;
   result_count: number;
   results: SearchResultRecord[];
+  provider_errors?: SearchProviderError[];
 }
 
 export interface SearchResultRecord {
@@ -38,7 +39,21 @@ export interface SearchResultRecord {
   authors: string[];
   year: number;
   provider: 'openalex' | 'crossref';
+  source_id: string;
   doi: string | null;
+}
+
+export interface SearchProviderError {
+  provider: 'openalex' | 'crossref';
+  message: string;
+}
+
+export interface SearchResultsImportResponse {
+  project_id: string;
+  imported_count: number;
+  skipped_count: number;
+  total_requested: number;
+  working_collection_count: number;
 }
 
 export interface SearchProviderStatus {

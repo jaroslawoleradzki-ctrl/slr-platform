@@ -121,8 +121,13 @@ async def test_provider_attaches_search_provenance_to_publication() -> None:
             search_run=search_run,
             search_query=search_query,
         )
+        repeated_publications = await provider.search(
+            search_run=search_run,
+            search_query=search_query,
+        )
 
     assert len(publications) == 1
+    assert publications[0].record_id == repeated_publications[0].record_id
     provenance = publications[0].provenance[0]
     assert provenance.source == "openalex"
     assert provenance.source_record_id == "https://openalex.org/W1"
@@ -130,6 +135,55 @@ async def test_provider_attaches_search_provenance_to_publication() -> None:
     assert provenance.run_id == search_run.run_id
     assert provenance.query_id == search_query.query_id
     assert provenance.rendered_query == search_run.rendered_query
+
+
+@pytest.mark.anyio
+async def test_live_provider_mode_collects_cursor_pages_with_a_bound() -> None:
+    search_run, search_query = build_search_context()
+    requested_cursors: list[str] = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        cursor = request.url.params["cursor"]
+        requested_cursors.append(cursor)
+        index = len(requested_cursors)
+        return httpx.Response(
+            200,
+            json={
+                "meta": {
+                    "next_cursor": "page-2" if index == 1 else "page-3"
+                },
+                "results": [
+                    {
+                        "id": f"https://openalex.org/W{index}",
+                        "title": f"Result {index}",
+                    }
+                ],
+            },
+            request=request,
+        )
+
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(handler)
+    ) as http_client:
+        provider = OpenAlexProvider(
+            client=OpenAlexClient(
+                http_client=http_client,
+                requests_per_second=None,
+            ),
+            paginate=True,
+            max_results=2,
+        )
+        output = await provider.search_with_raw(
+            search_run=search_run,
+            search_query=search_query,
+        )
+
+    assert requested_cursors == ["*", "page-2"]
+    assert [publication.title for publication in output.publications] == [
+        "Result 1",
+        "Result 2",
+    ]
+    assert len(output.raw_responses) == 2
 
 
 @pytest.mark.anyio

@@ -34,6 +34,13 @@ const Probe: React.FC = () => {
 
 describe('ProjectContext search strategy isolation', () => {
   beforeEach(() => {
+    vi.spyOn(projectApiService, 'importSearchResults').mockResolvedValue({
+      project_id: 'lean_energy',
+      imported_count: 1,
+      skipped_count: 0,
+      total_requested: 1,
+      working_collection_count: 6,
+    });
     vi.spyOn(projectApiService, 'executeSearchStrategy').mockResolvedValue({
       project_id: 'lean_energy',
       status: 'validated',
@@ -49,6 +56,7 @@ describe('ProjectContext search strategy isolation', () => {
         authors: ['Author One'],
         year: 2021,
         provider: 'openalex',
+        source_id: 'W1',
         doi: null,
       }],
     });
@@ -141,6 +149,7 @@ describe('ProjectContext search strategy isolation', () => {
           authors: ['Author A'],
           year: 2021,
           provider: 'openalex',
+          source_id: 'W-late',
           doi: null,
         }],
       });
@@ -149,6 +158,69 @@ describe('ProjectContext search strategy isolation', () => {
     expect(screen.getByTestId('execution-result')).toHaveTextContent('null');
     expect(screen.getByTestId('last-strategy')).toHaveTextContent('null');
     expect(screen.queryByText('Late project A result')).not.toBeInTheDocument();
+    expect(screen.getByText('Brak wykonanych wyszukiwań.')).toBeInTheDocument();
+  });
+
+  it('imports the selected record, refreshes the collection and clears selection', async () => {
+    const getProjects = vi.spyOn(projectApiService, 'getProjects');
+    render(
+      <ProjectProvider>
+        <Probe />
+        <SearchStrategyPage />
+      </ProjectProvider>
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Execute A' }));
+    await screen.findByLabelText('Wybierz rekord Controlled result');
+    fireEvent.click(screen.getByLabelText('Wybierz rekord Controlled result'));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Importuj zaznaczone' }));
+
+    await waitFor(() => expect(projectApiService.importSearchResults).toHaveBeenCalledWith(
+      'lean_energy',
+      [expect.objectContaining({ id: 'result-1', source_id: 'W1' })]
+    ));
+    await waitFor(() => expect(screen.getByTestId('selected-results')).toHaveTextContent('none'));
+    expect(await screen.findByText(
+      'Zaimportowano: 1. Pominięto istniejące: 0. Working Collection: 6.'
+    )).toBeInTheDocument();
+    expect(getProjects).toHaveBeenCalled();
+    expect(screen.getByText('Controlled result')).toBeInTheDocument();
+  });
+
+  it('ignores a late import response after switching projects', async () => {
+    let resolveImport:
+      | ((value: Awaited<ReturnType<typeof projectApiService.importSearchResults>>) => void)
+      | undefined;
+    vi.mocked(projectApiService.importSearchResults).mockReturnValue(
+      new Promise((resolve) => {
+        resolveImport = resolve;
+      })
+    );
+    render(
+      <ProjectProvider>
+        <Probe />
+        <SearchStrategyPage />
+      </ProjectProvider>
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Execute A' }));
+    await screen.findByLabelText('Wybierz rekord Controlled result');
+    fireEvent.click(screen.getByLabelText('Wybierz rekord Controlled result'));
+    fireEvent.click(screen.getByRole('button', { name: 'Importuj zaznaczone' }));
+    await waitFor(() => expect(projectApiService.importSearchResults).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole('button', { name: 'Switch to B' }));
+
+    await act(async () => {
+      resolveImport?.({
+        project_id: 'lean_energy',
+        imported_count: 0,
+        skipped_count: 1,
+        total_requested: 1,
+        working_collection_count: 6,
+      });
+    });
+
+    expect(screen.getByTestId('active-project')).toHaveTextContent('ai_architecture');
+    expect(screen.queryByText(/Zaimportowano:/)).not.toBeInTheDocument();
     expect(screen.getByText('Brak wykonanych wyszukiwań.')).toBeInTheDocument();
   });
 });

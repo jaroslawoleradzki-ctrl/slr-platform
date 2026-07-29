@@ -5,6 +5,8 @@ import {
   DuplicateDecisionType,
   EditableSearchStrategy,
   SearchExecutionResult,
+  SearchResultRecord,
+  SearchResultsImportResponse,
 } from '../../types';
 import { MOCK_PROJECTS } from '../../mocks/projectData';
 import { API_BASE_URL } from '../../config/api';
@@ -60,6 +62,10 @@ export interface ProjectApiService {
     groupId: string
   ): Promise<ApiDuplicateGroupDecisionResponse>;
   executeSearchStrategy(projectId: string, strategy: EditableSearchStrategy): Promise<SearchExecutionResult>;
+  importSearchResults(
+    projectId: string,
+    records: SearchResultRecord[]
+  ): Promise<SearchResultsImportResponse>;
 }
 
 class MixedProjectApiService implements ProjectApiService {
@@ -95,6 +101,24 @@ class MixedProjectApiService implements ProjectApiService {
       throw new Error(await formatFastApiError(response));
     }
     return response.json() as Promise<SearchExecutionResult>;
+  }
+
+  async importSearchResults(
+    projectId: string,
+    records: SearchResultRecord[]
+  ): Promise<SearchResultsImportResponse> {
+    const response = await fetch(
+      `${API_BASE_URL}/projects/${projectId}/search-results/imports`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ records }),
+      }
+    );
+    if (!response.ok) {
+      throw new Error(await formatFastApiError(response));
+    }
+    return response.json() as Promise<SearchResultsImportResponse>;
   }
 
   async getProjectById(id: string): Promise<SLRProject | null> {

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { SearchResultsSection } from '../src/components/search/SearchResultsSection';
 import { SearchExecutionResult } from '../src/types';
 
@@ -20,6 +20,7 @@ const result: SearchExecutionResult = {
       authors: ['Anna Kowalska', 'Michael Smith'],
       year: 2021,
       provider: 'openalex',
+      source_id: 'W1',
       doi: '10.1000/lean',
     },
     {
@@ -28,6 +29,7 @@ const result: SearchExecutionResult = {
       authors: ['Laura Chen'],
       year: 2023,
       provider: 'crossref',
+      source_id: '10.1000/two',
       doi: null,
     },
   ],
@@ -70,7 +72,7 @@ describe('SearchResultsSection', () => {
     render(<SelectableResults />);
     expect(screen.getByText('Znaleziono 2 rekordów. Wybrano 0.')).toBeInTheDocument();
     expect(screen.getByText('Lean energy result')).toBeInTheDocument();
-    expect(screen.getByText(/Anna Kowalska, Michael Smith · 2021 · openalex/)).toBeInTheDocument();
+    expect(screen.getByText(/Anna Kowalska, Michael Smith · 2021 · Provider: openalex/)).toBeInTheDocument();
     expect(screen.getByText('DOI: 10.1000/lean')).toBeInTheDocument();
     expect(screen.getByText('Result without DOI')).toBeInTheDocument();
     expect(screen.queryByText('DOI:', { exact: true })).not.toBeInTheDocument();
@@ -90,5 +92,71 @@ describe('SearchResultsSection', () => {
     fireEvent.click(all);
     expect(first).not.toBeChecked();
     expect(second).not.toBeChecked();
+  });
+
+  it('renders a partial provider warning', () => {
+    render(
+      <SearchResultsSection
+        result={{
+          ...result,
+          provider_errors: [{ provider: 'crossref', message: 'Timeout' }],
+        }}
+        loading={false}
+        selectedIds={[]}
+        onSelectionChange={() => undefined}
+      />
+    );
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Część providerów nie odpowiedziała: crossref'
+    );
+  });
+
+  it('imports selected records and disables import without a selection', () => {
+    const onImport = vi.fn();
+    const { rerender } = render(
+      <SearchResultsSection
+        result={result}
+        loading={false}
+        selectedIds={[]}
+        onSelectionChange={() => undefined}
+        onImport={onImport}
+      />
+    );
+    expect(screen.getByRole('button', { name: 'Importuj zaznaczone' })).toBeDisabled();
+    rerender(
+      <SearchResultsSection
+        result={result}
+        loading={false}
+        selectedIds={['one']}
+        onSelectionChange={() => undefined}
+        onImport={onImport}
+      />
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Importuj zaznaczone' }));
+    expect(onImport).toHaveBeenCalledOnce();
+  });
+
+  it('shows imported, skipped and Working Collection counts for a mixed import', () => {
+    render(
+      <SearchResultsSection
+        result={result}
+        loading={false}
+        selectedIds={[]}
+        onSelectionChange={() => undefined}
+        onImport={() => undefined}
+        importResult={{
+          project_id: 'lean_energy',
+          imported_count: 2,
+          skipped_count: 1,
+          total_requested: 3,
+          working_collection_count: 8,
+        }}
+      />
+    );
+
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'Zaimportowano: 2. Pominięto istniejące: 1. Working Collection: 8.'
+    );
+    expect(screen.getByText('Lean energy result')).toBeInTheDocument();
   });
 });

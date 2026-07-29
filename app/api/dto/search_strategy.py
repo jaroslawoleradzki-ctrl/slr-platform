@@ -57,6 +57,7 @@ class SearchStrategyExecutionResponse(BaseModel):
     executed_at: datetime
     result_count: int
     results: list["SearchResultRecordResponse"]
+    provider_errors: list["SearchProviderErrorResponse"] = Field(default_factory=list)
 
 
 class SearchResultRecordResponse(BaseModel):
@@ -67,7 +68,31 @@ class SearchResultRecordResponse(BaseModel):
     authors: list[str]
     year: int
     provider: Literal["openalex", "crossref"]
+    source_id: str
     doi: str | None = None
+
+
+class SearchProviderErrorResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    provider: Literal["openalex", "crossref"]
+    message: str
+
+
+class SearchResultsImportRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    records: list[SearchResultRecordResponse]
+
+
+class SearchResultsImportResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    project_id: str
+    imported_count: int
+    skipped_count: int
+    total_requested: int
+    working_collection_count: int
 
 
 SearchStrategyExecutionResponse.model_rebuild()

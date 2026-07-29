@@ -98,6 +98,7 @@ class ControlledSearchResultSource:
                 authors=list(record.authors),
                 year=record.year,
                 provider=record.provider,
+                source_id=record.key,
                 doi=record.doi,
             )
             for record in records

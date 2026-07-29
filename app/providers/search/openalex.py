@@ -20,6 +20,7 @@ from app.providers.openalex import OpenAlexClient
 from app.providers.search.base import JsonObject, ProviderSearchOutput
 from app.providers.search.mapping_utils import (
     clean_string,
+    deterministic_search_record_id,
     normalize_doi,
     normalize_issn,
     normalize_url,
@@ -102,6 +103,13 @@ def _identifier(
     if cleaned is None:
         return None
     return Identifier(type=identifier_type, value=cleaned, source=source)
+
+
+def _doi_value(publication: Publication) -> str | None:
+    for identifier in publication.identifiers:
+        if identifier.type is IdentifierType.DOI:
+            return identifier.value
+    return None
 
 
 def _map_authors(value: Any) -> list[Author]:
@@ -229,9 +237,15 @@ class OpenAlexProvider:
         *,
         client: OpenAlexClient,
         retrieval_clock: Callable[[], datetime] = _utc_now,
+        paginate: bool = False,
+        max_results: int = 100,
     ) -> None:
+        if max_results < 1:
+            raise ValueError("max_results must be at least 1")
         self._client = client
         self._retrieval_clock = retrieval_clock
+        self._paginate = paginate
+        self._max_results = max_results
 
     async def search(
         self,
@@ -262,6 +276,13 @@ class OpenAlexProvider:
         """Fetch one page once, then expose its mapping and original payload."""
 
         self._validate_search_context(search_run, search_query)
+        if self._paginate:
+            return await self._search_paginated_with_raw(
+                search_run=search_run,
+                search_query=search_query,
+                per_page=per_page,
+                cursor=cursor,
+            )
         payload = await self._client.search_works(
             search_run.rendered_query,
             per_page=per_page,
@@ -288,6 +309,60 @@ class OpenAlexProvider:
         return ProviderSearchOutput(
             publications=publications,
             raw_responses=[cast(JsonObject, payload)],
+        )
+
+    async def _search_paginated_with_raw(
+        self,
+        *,
+        search_run: SearchRun,
+        search_query: SearchQuery,
+        per_page: int,
+        cursor: str,
+    ) -> ProviderSearchOutput:
+        publications: list[Publication] = []
+        raw_responses: list[JsonObject] = []
+        seen_cursors: set[str] = set()
+        while len(publications) < self._max_results:
+            payload = await self._client.search_works(
+                search_run.rendered_query,
+                per_page=min(per_page, self._max_results - len(publications)),
+                cursor=cursor,
+            )
+            raw_responses.append(cast(JsonObject, payload))
+            results = payload.get("results")
+            if not isinstance(results, list):
+                raise ValueError("OpenAlex response results must be a list")
+            retrieved_at = self._retrieval_clock()
+            for work in results:
+                if not isinstance(work, dict):
+                    raise ValueError("OpenAlex work must be a JSON object")
+                publications.append(
+                    self._map_work_with_provenance(
+                        work,
+                        search_run=search_run,
+                        search_query=search_query,
+                        retrieved_at=retrieved_at,
+                    )
+                )
+                if len(publications) >= self._max_results:
+                    break
+            meta = payload.get("meta")
+            if not isinstance(meta, dict):
+                raise ValueError("OpenAlex response meta must be a JSON object")
+            next_cursor = meta.get("next_cursor")
+            if next_cursor is None or not results:
+                break
+            if not isinstance(next_cursor, str) or not next_cursor.strip():
+                raise ValueError(
+                    "OpenAlex next_cursor must be a non-blank string or null"
+                )
+            if next_cursor == cursor or next_cursor in seen_cursors:
+                break
+            seen_cursors.add(cursor)
+            cursor = next_cursor
+        return ProviderSearchOutput(
+            publications=publications,
+            raw_responses=raw_responses,
         )
 
     async def iterate(
@@ -400,6 +475,13 @@ class OpenAlexProvider:
         publication = self.map_work(work)
         return publication.model_copy(
             update={
+                "record_id": deterministic_search_record_id(
+                    provider=self.name,
+                    source_id=source_record_id,
+                    doi=_doi_value(publication),
+                    title=publication.title,
+                    publication_year=publication.publication_year,
+                ),
                 "provenance": [
                     ProvenanceEntry(
                         source=self.name,

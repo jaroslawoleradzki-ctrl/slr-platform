@@ -62,8 +62,13 @@ async def test_search_maps_crossref_provenance() -> None:
             search_run=search_run,
             search_query=search_query,
         )
+        repeated_publications = await provider.search(
+            search_run=search_run,
+            search_query=search_query,
+        )
 
     assert len(publications) == 1
+    assert publications[0].record_id == repeated_publications[0].record_id
     assert publications[0].title == "Lean Energy"
     assert len(publications[0].provenance) == 1
     provenance = publications[0].provenance[0]
@@ -113,6 +118,54 @@ async def test_search_with_raw_reuses_single_payload() -> None:
         "Lean Energy"
     ]
     assert output.publications[0].provenance[0].run_id == search_run.run_id
+
+
+@pytest.mark.anyio
+async def test_live_provider_mode_collects_cursor_pages_with_a_bound() -> None:
+    search_run, search_query = _search_context()
+    requested_cursors: list[str] = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        cursor = request.url.params["cursor"]
+        requested_cursors.append(cursor)
+        index = len(requested_cursors)
+        return httpx.Response(
+            200,
+            json={
+                "message": {
+                    "items": [
+                        {
+                            "DOI": f"10.1000/result-{index}",
+                            "title": [f"Result {index}"],
+                        }
+                    ],
+                    "next-cursor": (
+                        "page-2" if index == 1 else "page-3"
+                    ),
+                }
+            },
+            request=request,
+        )
+
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(handler)
+    ) as http_client:
+        provider = CrossrefProvider(
+            client=CrossrefClient(http_client=http_client),
+            paginate=True,
+            max_results=2,
+        )
+        output = await provider.search_with_raw(
+            search_run=search_run,
+            search_query=search_query,
+        )
+
+    assert requested_cursors == ["*", "page-2"]
+    assert [publication.title for publication in output.publications] == [
+        "Result 1",
+        "Result 2",
+    ]
+    assert len(output.raw_responses) == 2
 
 
 @pytest.mark.anyio

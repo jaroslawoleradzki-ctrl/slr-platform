@@ -41,10 +41,13 @@ export const SearchStrategyPage: React.FC = () => {
     setCurrentSearchStrategy,
     setSelectedSearchResultIds,
     executeSearchStrategy,
+    importSelectedSearchResults,
+    lastSearchImportResult,
   } = useProject();
   const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState<string[]>([]);
   const [apiError, setApiError] = useState<string | null>(null);
+  const [importing, setImporting] = useState(false);
 
   useEffect(() => {
     if (activeProject && !currentSearchStrategy) {
@@ -247,6 +250,19 @@ export const SearchStrategyPage: React.FC = () => {
         loading={submitting}
         selectedIds={selectedSearchResultIds}
         onSelectionChange={setSelectedSearchResultIds}
+        importing={importing}
+        importResult={lastSearchImportResult}
+        onImport={async () => {
+          setImporting(true);
+          setApiError(null);
+          try {
+            await importSelectedSearchResults();
+          } catch (error) {
+            setApiError(error instanceof Error ? error.message : 'Nie udało się zaimportować rekordów.');
+          } finally {
+            setImporting(false);
+          }
+        }}
       />
     </div>
   );

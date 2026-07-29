@@ -15,6 +15,7 @@ from app.providers.crossref import CrossrefClient
 from app.providers.search.base import JsonObject, ProviderSearchOutput
 from app.providers.search.mapping_utils import (
     clean_string,
+    deterministic_search_record_id,
     normalize_doi,
     normalize_issn,
     normalize_url,
@@ -95,9 +96,15 @@ class CrossrefProvider:
         *,
         client: CrossrefClient | None = None,
         retrieval_clock: Callable[[], datetime] = _utc_now,
+        paginate: bool = False,
+        max_results: int = 100,
     ) -> None:
+        if max_results < 1:
+            raise ValueError("max_results must be at least 1")
         self._client = client
         self._retrieval_clock = retrieval_clock
+        self._paginate = paginate
+        self._max_results = max_results
 
     async def search(
         self,
@@ -129,6 +136,14 @@ class CrossrefProvider:
 
         client = self._require_client()
         self._validate_search_context(search_run, search_query)
+        if self._paginate:
+            return await self._search_paginated_with_raw(
+                client=client,
+                search_run=search_run,
+                search_query=search_query,
+                rows=rows,
+                cursor=cursor or "*",
+            )
         payload = await client.search_works(
             search_run.rendered_query,
             rows=rows,
@@ -149,6 +164,57 @@ class CrossrefProvider:
         return ProviderSearchOutput(
             publications=publications,
             raw_responses=[cast(JsonObject, payload)],
+        )
+
+    async def _search_paginated_with_raw(
+        self,
+        *,
+        client: CrossrefClient,
+        search_run: SearchRun,
+        search_query: SearchQuery,
+        rows: int,
+        cursor: str,
+    ) -> ProviderSearchOutput:
+        publications: list[Publication] = []
+        raw_responses: list[JsonObject] = []
+        seen_cursors: set[str] = set()
+        while len(publications) < self._max_results:
+            payload = await client.search_works(
+                search_run.rendered_query,
+                rows=min(rows, self._max_results - len(publications)),
+                cursor=cursor,
+            )
+            raw_responses.append(cast(JsonObject, payload))
+            message = payload["message"]
+            items = message["items"]
+            retrieved_at = self._retrieval_clock()
+            for work in items:
+                if not isinstance(work, dict):
+                    raise ValueError("Crossref work must be a JSON object")
+                publications.append(
+                    self._map_work_with_provenance(
+                        work,
+                        search_run=search_run,
+                        search_query=search_query,
+                        retrieved_at=retrieved_at,
+                    )
+                )
+                if len(publications) >= self._max_results:
+                    break
+            next_cursor = message.get("next-cursor")
+            if next_cursor is None or not items:
+                break
+            if not isinstance(next_cursor, str) or not next_cursor.strip():
+                raise ValueError(
+                    "Crossref response message.next-cursor must be a non-blank string"
+                )
+            if next_cursor == cursor or next_cursor in seen_cursors:
+                break
+            seen_cursors.add(cursor)
+            cursor = next_cursor
+        return ProviderSearchOutput(
+            publications=publications,
+            raw_responses=raw_responses,
         )
 
     async def iterate(
@@ -332,7 +398,18 @@ class CrossrefProvider:
             run_id=search_run.run_id,
             rendered_query=search_run.rendered_query,
         )
-        return publication.model_copy(update={"provenance": [provenance]})
+        return publication.model_copy(
+            update={
+                "record_id": deterministic_search_record_id(
+                    provider=self.name,
+                    source_id=source_record_id,
+                    doi=source_record_id,
+                    title=publication.title,
+                    publication_year=publication.publication_year,
+                ),
+                "provenance": [provenance],
+            }
+        )
 
     def _require_client(self) -> CrossrefClient:
         if self._client is None:
