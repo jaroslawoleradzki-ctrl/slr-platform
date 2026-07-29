@@ -1,12 +1,20 @@
 from app.api.dto.deduplication import (
+    DuplicateDecisionStatus,
+    DuplicateGroupDecisionResponse,
     DuplicateGroupListResponse,
     DuplicateGroupResponse,
     DuplicateRecordPreviewResponse,
     SharedIdentifierResponse,
 )
+from app.domain.duplicate_review import DuplicateDecision
 from app.domain.identifiers import IdentifierType
 from app.domain.publication import Publication
 from app.normalization.doi import normalize_doi
+from app.repositories.duplicate_review_decision_repository import (
+    DuplicateReviewDecisionRepository,
+    GroupNotFoundError,
+    in_memory_duplicate_review_decision_repository,
+)
 from app.repositories.project_publication_repository import (
     ProjectPublicationRepository,
     demo_project_publication_repository,
@@ -63,21 +71,24 @@ def _map_publication_to_preview(pub: Publication) -> DuplicateRecordPreviewRespo
 
 
 class ProjectDuplicateService:
-    """Application service for building candidate duplicate groups for an SLR project.
+    """Application service for building candidate duplicate groups and managing reviewer decisions.
 
-    Service responsibility:
+    Service responsibilities:
     - Retrieve project publications from the injected ProjectPublicationRepository.
     - Invoke DuplicateGroupBuilder domain service.
     - Map domain duplicate groups and member publications to DTO responses.
-    - Does not contain hardcoded project_id conditionals or persistence logic.
+    - Record and retrieve duplicate review decisions via DuplicateReviewDecisionRepository (keyed by project_id and group_id).
+    - Does not modify Publication objects or execute merges.
     """
 
     def __init__(
         self,
         repository: ProjectPublicationRepository = demo_project_publication_repository,
+        decision_repository: DuplicateReviewDecisionRepository = in_memory_duplicate_review_decision_repository,
         builder: DuplicateGroupBuilder = duplicate_group_builder,
     ) -> None:
         self._repository = repository
+        self._decision_repository = decision_repository
         self._builder = builder
 
     def get_candidate_duplicate_groups(self, project_id: str) -> DuplicateGroupListResponse:
@@ -92,6 +103,7 @@ class ProjectDuplicateService:
             if len(member_pubs) < 2:
                 continue
 
+            group_id_str = str(domain_group.group_id)
             record_previews = [_map_publication_to_preview(pub) for pub in member_pubs]
             shared_idents = _extract_shared_identifiers(member_pubs)
 
@@ -102,11 +114,19 @@ class ProjectDuplicateService:
                 else "Identical strong identifier match"
             )
 
+            raw_decision = self._decision_repository.get_decision(project_id, group_id_str)
+            status_enum = (
+                DuplicateDecisionStatus(raw_decision.value)
+                if raw_decision
+                else DuplicateDecisionStatus.PENDING
+            )
+
             group_responses.append(
                 DuplicateGroupResponse(
-                    group_id=str(domain_group.group_id),
+                    group_id=group_id_str,
                     reason=reason_str,
                     records_count=len(record_previews),
+                    status=status_enum,
                     shared_identifiers=shared_idents,
                     records=record_previews,
                 )
@@ -116,6 +136,43 @@ class ProjectDuplicateService:
             project_id=project_id,
             total_groups_count=len(group_responses),
             groups=group_responses,
+        )
+
+    def _ensure_group_exists(self, project_id: str, group_id: str) -> None:
+        publications = self._repository.get_publications(project_id)
+        domain_groups = self._builder.build(publications)
+        group_ids = {str(dg.group_id) for dg in domain_groups}
+        if group_id not in group_ids:
+            raise GroupNotFoundError(group_id, project_id)
+
+    def record_decision(
+        self, project_id: str, group_id: str, decision: DuplicateDecision | str
+    ) -> DuplicateGroupDecisionResponse:
+        self._ensure_group_exists(project_id, group_id)
+        domain_decision = (
+            decision
+            if isinstance(decision, DuplicateDecision)
+            else DuplicateDecision(decision.upper())
+        )
+        self._decision_repository.save_decision(project_id, group_id, domain_decision)
+        return DuplicateGroupDecisionResponse(
+            project_id=project_id,
+            group_id=group_id,
+            decision=DuplicateDecisionStatus(domain_decision.value),
+        )
+
+    def get_decision(self, project_id: str, group_id: str) -> DuplicateGroupDecisionResponse:
+        self._ensure_group_exists(project_id, group_id)
+        domain_decision = self._decision_repository.get_decision(project_id, group_id)
+        status_enum = (
+            DuplicateDecisionStatus(domain_decision.value)
+            if domain_decision
+            else DuplicateDecisionStatus.PENDING
+        )
+        return DuplicateGroupDecisionResponse(
+            project_id=project_id,
+            group_id=group_id,
+            decision=status_enum,
         )
 
 

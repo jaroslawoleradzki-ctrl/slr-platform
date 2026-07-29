@@ -1,4 +1,9 @@
-import { SLRProject, ApiDuplicateGroupListResponse } from '../../types';
+import {
+  SLRProject,
+  ApiDuplicateGroupListResponse,
+  ApiDuplicateGroupDecisionResponse,
+  DuplicateDecisionType,
+} from '../../types';
 import { MOCK_PROJECTS } from '../../mocks/projectData';
 import { API_BASE_URL } from '../../config/api';
 
@@ -7,6 +12,15 @@ export interface ProjectApiService {
   getProjectById(id: string): Promise<SLRProject | null>;
   createProject(title: string, description: string, protocolVersion: string): Promise<SLRProject>;
   getDuplicateGroups(projectId: string): Promise<ApiDuplicateGroupListResponse>;
+  postDuplicateGroupDecision(
+    projectId: string,
+    groupId: string,
+    decision: DuplicateDecisionType
+  ): Promise<ApiDuplicateGroupDecisionResponse>;
+  getDuplicateGroupDecision(
+    projectId: string,
+    groupId: string
+  ): Promise<ApiDuplicateGroupDecisionResponse>;
 }
 
 class MixedProjectApiService implements ProjectApiService {
@@ -36,6 +50,58 @@ class MixedProjectApiService implements ProjectApiService {
     }
 
     const data: ApiDuplicateGroupListResponse = await response.json();
+    return data;
+  }
+
+  async postDuplicateGroupDecision(
+    projectId: string,
+    groupId: string,
+    decision: DuplicateDecisionType
+  ): Promise<ApiDuplicateGroupDecisionResponse> {
+    const response = await fetch(
+      `${API_BASE_URL}/projects/${projectId}/duplicate-groups/${groupId}/decision`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify({ decision }),
+      }
+    );
+
+    if (!response.ok) {
+      if (response.status === 404) {
+        throw new Error(`Grupa lub projekt nie zostały odnalezione (HTTP 404).`);
+      }
+      if (response.status === 422) {
+        throw new Error(`Niepoprawny format decyzji w żądaniu (HTTP 422).`);
+      }
+      throw new Error(`Nie udało się zapisać decyzji w API backendu (HTTP ${response.status}).`);
+    }
+
+    const data: ApiDuplicateGroupDecisionResponse = await response.json();
+    return data;
+  }
+
+  async getDuplicateGroupDecision(
+    projectId: string,
+    groupId: string
+  ): Promise<ApiDuplicateGroupDecisionResponse> {
+    const response = await fetch(
+      `${API_BASE_URL}/projects/${projectId}/duplicate-groups/${groupId}/decision`,
+      {
+        headers: {
+          Accept: 'application/json',
+        },
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(`Błąd pobierania decyzji dla grupy ${groupId} (HTTP ${response.status}).`);
+    }
+
+    const data: ApiDuplicateGroupDecisionResponse = await response.json();
     return data;
   }
 

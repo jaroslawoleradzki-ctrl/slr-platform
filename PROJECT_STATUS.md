@@ -14,11 +14,11 @@ development
 
 Current version (working tree):
 
-v0.1.1 (Unreleased)
+v0.1.2 (Unreleased)
 
 Current development phase:
 
-Phase 6.1 — GUI Foundation (completed), Phase 6.2 — Application Versioning (completed), Phase 6.3 — Duplicate Review Read API implemented on branch `development`. Read-only REST endpoint `GET /projects/{id}/duplicate-groups` connected to React frontend with loading, success, empty and error states. Next planned increment: Phase 6.4 — Duplicate Review Decisions. Stable main branch remains at v0.1.0.
+Phase 6.1 — GUI Foundation (completed), Phase 6.2 — Application Versioning (completed), Phase 6.3 — Duplicate Review Read API (completed), Phase 6.4 — Duplicate Review Decisions implemented on branch `development` (under review). In-memory decision storage (`InMemoryDuplicateReviewDecisionRepository`) with composite `(project_id, group_id)` keys, REST API `POST` & `GET` decision endpoints, and interactive frontend decision controls with Saving/Saved/Error/Retry states are fully verified. Stable main branch remains at v0.1.0.
 
 ---
 

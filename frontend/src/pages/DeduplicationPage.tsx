@@ -7,7 +7,7 @@ import { DuplicateGroupCardPreview } from '../components/deduplication/Duplicate
 import { LoadingSpinner } from '../components/common/LoadingSpinner';
 import { ErrorAlert } from '../components/common/ErrorAlert';
 import { EmptyState } from '../components/common/EmptyState';
-import { Layers, ShieldAlert } from 'lucide-react';
+import { Layers, ShieldCheck } from 'lucide-react';
 
 export const DeduplicationPage: React.FC = () => {
   const { activeProject } = useProject();
@@ -59,11 +59,11 @@ export const DeduplicationPage: React.FC = () => {
               fontWeight: 600,
             }}
           >
-            Read-Only API (Phase 6.3)
+            Review Decisions API (Phase 6.4)
           </div>
         </div>
         <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
-          Backend wykrywa candidate duplicate groups na podstawie silnych identyfikatorów (DOI, PMID, OpenAlex ID). Wczytano dane z produkcyjnego endpointu read-only backendu.
+          Przeglądaj candidate duplicate groups wykryte przez backend. Podejmuj decyzje (Approve / Reject) zapisywane w in-memory API backendu.
         </p>
       </div>
 
@@ -100,13 +100,18 @@ export const DeduplicationPage: React.FC = () => {
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             {duplicateData.groups.map((group, idx) => (
-              <DuplicateGroupCardPreview key={group.group_id} group={group} index={idx} />
+              <DuplicateGroupCardPreview
+                key={group.group_id}
+                group={group}
+                index={idx}
+                projectId={activeProject.id}
+              />
             ))}
           </div>
         </div>
       ) : null}
 
-      {/* Read-Only Notice */}
+      {/* Decision Recording Notice */}
       <div
         style={{
           padding: '12px 16px',
@@ -120,9 +125,9 @@ export const DeduplicationPage: React.FC = () => {
           gap: '10px',
         }}
       >
-        <ShieldAlert size={16} style={{ color: 'var(--status-info-text)', flexShrink: 0 }} />
+        <ShieldCheck size={16} style={{ color: 'var(--status-success-text)', flexShrink: 0 }} />
         <span>
-          <strong>Tryb Podglądu (Read-Only Preview):</strong> Akcje zatwierdzania i odrzucania scalenia pozostają obecnie wyłączone. Zapisywanie decyzji badacza oraz integracja decyzji zostaną wdrożone w <strong>Phase 6.4</strong>.
+          <strong>Tryb Decyzji Badacza (Phase 6.4):</strong> Kliknięcie <em>Approve</em> lub <em>Reject</em> wysyła żądanie <code>POST</code> do API backendu i zapisuje stan decyzji w pamięci runtime serwera.
         </span>
       </div>
     </div>

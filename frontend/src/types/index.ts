@@ -82,10 +82,20 @@ export interface ApiSharedIdentifier {
   value: string;
 }
 
+export type DuplicateDecisionType = 'APPROVE' | 'REJECT';
+export type DuplicateDecisionStatus = 'PENDING' | 'APPROVE' | 'REJECT';
+
+export interface ApiDuplicateGroupDecisionResponse {
+  project_id: string;
+  group_id: string;
+  decision: DuplicateDecisionStatus;
+}
+
 export interface ApiDuplicateGroup {
   group_id: string;
   reason: string;
   records_count: number;
+  status: DuplicateDecisionStatus;
   shared_identifiers: ApiSharedIdentifier[];
   records: ApiDuplicateRecordPreview[];
 }

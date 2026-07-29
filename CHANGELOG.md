@@ -1,6 +1,15 @@
 # Changelog
 
-## [0.1.1] — Unreleased
+## [0.1.2] — Unreleased
+
+### Added
+
+- In-memory duplicate review decision repository (`InMemoryDuplicateReviewDecisionRepository`) with `(project_id, group_id)` composite key isolation.
+- REST endpoints for recording (`POST`) and fetching (`GET`) duplicate review decisions (`APPROVE` / `REJECT`).
+- Strict typing with `DuplicateDecisionType` and `DuplicateDecisionStatus` enums.
+- Interactive decision controls in duplicate review GUI (Approve, Reject, Saving, Saved, Error, Retry, Status Badges).
+
+## [0.1.1] — 2026-07-29
 
 ### Added
 

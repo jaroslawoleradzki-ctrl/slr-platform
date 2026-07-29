@@ -1,4 +1,20 @@
+from enum import Enum
 from pydantic import BaseModel, ConfigDict, Field
+
+
+class DuplicateDecisionType(str, Enum):
+    """Allowed input decision types from reviewer."""
+
+    APPROVE = "APPROVE"
+    REJECT = "REJECT"
+
+
+class DuplicateDecisionStatus(str, Enum):
+    """Response decision status enum including initial PENDING state."""
+
+    PENDING = "PENDING"
+    APPROVE = "APPROVE"
+    REJECT = "REJECT"
 
 
 class SharedIdentifierResponse(BaseModel):
@@ -33,6 +49,7 @@ class DuplicateGroupResponse(BaseModel):
     group_id: str
     reason: str
     records_count: int
+    status: DuplicateDecisionStatus = DuplicateDecisionStatus.PENDING
     shared_identifiers: list[SharedIdentifierResponse] = Field(default_factory=list)
     records: list[DuplicateRecordPreviewResponse]
 
@@ -45,3 +62,21 @@ class DuplicateGroupListResponse(BaseModel):
     project_id: str
     total_groups_count: int
     groups: list[DuplicateGroupResponse]
+
+
+class DuplicateGroupDecisionRequest(BaseModel):
+    """Request payload for recording a reviewer duplicate decision."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    decision: DuplicateDecisionType
+
+
+class DuplicateGroupDecisionResponse(BaseModel):
+    """Response returning current decision state for a duplicate group in a project."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    project_id: str
+    group_id: str
+    decision: DuplicateDecisionStatus

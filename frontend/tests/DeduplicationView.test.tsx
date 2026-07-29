@@ -1,12 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { ProjectProvider } from '../src/context/ProjectContext';
 import { DeduplicationPage } from '../src/pages/DeduplicationPage';
 import { projectApiService } from '../src/services/api/projectApi';
 import { ApiDuplicateGroupListResponse } from '../src/types';
 
-describe('DeduplicationPage Read-Only API Integration', () => {
+describe('DeduplicationPage Read-Only API Integration & Review Decisions', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
   });
@@ -34,6 +34,7 @@ describe('DeduplicationPage Read-Only API Integration', () => {
           group_id: 'grp-test-101',
           reason: 'Zgodność identyfikatorów (DOI: 10.1016/j.jclepro.2021.102834)',
           records_count: 2,
+          status: 'PENDING',
           shared_identifiers: [{ identifier_type: 'doi', value: '10.1016/j.jclepro.2021.102834' }],
           records: [
             {
@@ -70,6 +71,7 @@ describe('DeduplicationPage Read-Only API Integration', () => {
     expect(await screen.findByText(/Lean Energy Management in Automotive Manufacturing/i)).toBeInTheDocument();
     expect(screen.getAllByText(/10.1016\/j.jclepro.2021.102834/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/Duplicate Groups Awaiting Human Review \(1\)/i)).toBeInTheDocument();
+    expect(screen.getByText(/Pending/i)).toBeInTheDocument();
   });
 
   it('renders empty state when backend API returns 0 candidate duplicate groups', async () => {
@@ -92,44 +94,31 @@ describe('DeduplicationPage Read-Only API Integration', () => {
     expect(await screen.findByText(/Brak grup kandydatów na duplikaty/i)).toBeInTheDocument();
   });
 
-  it('renders error alert and retry button on API failure without mock fallback', async () => {
-    vi.spyOn(projectApiService, 'getDuplicateGroups').mockRejectedValue(new Error('Błąd serwera API backend (HTTP 500)'));
-
-    render(
-      <ProjectProvider>
-        <MemoryRouter initialEntries={['/projects/lean_energy/dedup']}>
-          <DeduplicationPage />
-        </MemoryRouter>
-      </ProjectProvider>
-    );
-
-    expect(await screen.findByText(/Błąd połączenia z API Deduplikacji/i)).toBeInTheDocument();
-    expect(screen.getByText(/Błąd serwera API backend \(HTTP 500\)/i)).toBeInTheDocument();
-    expect(screen.queryByText(/Candidate Duplicate Group #1/i)).not.toBeInTheDocument();
-
-    const retryBtn = screen.getByRole('button', { name: /Spróbuj ponownie/i });
-    expect(retryBtn).toBeInTheDocument();
-  });
-
-  it('displays disabled action buttons with Phase 6.4 notice', async () => {
+  it('handles approve click, saving state, success state and badge update', async () => {
     const mockResponse: ApiDuplicateGroupListResponse = {
       project_id: 'lean_energy',
       total_groups_count: 1,
       groups: [
         {
-          group_id: 'grp-test-202',
-          reason: 'Zgodność identyfikatora PMID',
+          group_id: 'grp-test-303',
+          reason: 'Zgodność identyfikatorów',
           records_count: 2,
-          shared_identifiers: [{ identifier_type: 'pmid', value: '31204912' }],
+          status: 'PENDING',
+          shared_identifiers: [{ identifier_type: 'doi', value: '10.1000/test' }],
           records: [
-            { id: 'r1', title: 'Kaizen electricity reduction', authors: 'Müller, H.', year: 2019, source: 'Semantic Scholar', pmid: '31204912' },
-            { id: 'r2', title: 'Kaizen electricity reduction', authors: 'Muller, H.', year: 2019, source: 'RIS file', pmid: '31204912' },
+            { id: 'r1', title: 'Test Paper A', authors: 'A', year: 2020, source: 'Crossref' },
+            { id: 'r2', title: 'Test Paper B', authors: 'B', year: 2020, source: 'OpenAlex' },
           ],
         },
       ],
     };
 
     vi.spyOn(projectApiService, 'getDuplicateGroups').mockResolvedValue(mockResponse);
+    const postSpy = vi.spyOn(projectApiService, 'postDuplicateGroupDecision').mockResolvedValue({
+      project_id: 'lean_energy',
+      group_id: 'grp-test-303',
+      decision: 'APPROVE',
+    });
 
     render(
       <ProjectProvider>
@@ -139,11 +128,64 @@ describe('DeduplicationPage Read-Only API Integration', () => {
       </ProjectProvider>
     );
 
-    expect(await screen.findByText(/Zatwierdź \(Podgląd API\)/i)).toBeInTheDocument();
-    const approveBtn = screen.getByRole('button', { name: /Zatwierdź \(Podgląd API\)/i });
-    expect(approveBtn).toBeDisabled();
+    expect(await screen.findByText(/Test Paper A/i)).toBeInTheDocument();
 
-    expect(screen.getByText(/Tryb Podglądu \(Read-Only Preview\):/i)).toBeInTheDocument();
-    expect(screen.getByText(/Phase 6.4/i)).toBeInTheDocument();
+    const approveBtn = screen.getByRole('button', { name: /Approve/i });
+    expect(approveBtn).not.toBeDisabled();
+
+    fireEvent.click(approveBtn);
+
+    expect(postSpy).toHaveBeenCalledWith('lean_energy', 'grp-test-303', 'APPROVE');
+    expect(await screen.findByText(/Approved/i)).toBeInTheDocument();
+    expect(screen.getByText(/Saved/i)).toBeInTheDocument();
+  });
+
+  it('handles reject click, error state, and retry action', async () => {
+    const mockResponse: ApiDuplicateGroupListResponse = {
+      project_id: 'lean_energy',
+      total_groups_count: 1,
+      groups: [
+        {
+          group_id: 'grp-test-404',
+          reason: 'Zgodność PMID',
+          records_count: 2,
+          status: 'PENDING',
+          shared_identifiers: [{ identifier_type: 'pmid', value: '12345' }],
+          records: [
+            { id: 'r1', title: 'Reject Test Paper A', authors: 'A', year: 2021, source: 'PubMed' },
+            { id: 'r2', title: 'Reject Test Paper B', authors: 'B', year: 2021, source: 'S2' },
+          ],
+        },
+      ],
+    };
+
+    vi.spyOn(projectApiService, 'getDuplicateGroups').mockResolvedValue(mockResponse);
+    const postSpy = vi
+      .spyOn(projectApiService, 'postDuplicateGroupDecision')
+      .mockRejectedValueOnce(new Error('Błąd połączenia z serwerem'))
+      .mockResolvedValueOnce({ project_id: 'lean_energy', group_id: 'grp-test-404', decision: 'REJECT' });
+
+    render(
+      <ProjectProvider>
+        <MemoryRouter initialEntries={['/projects/lean_energy/dedup']}>
+          <DeduplicationPage />
+        </MemoryRouter>
+      </ProjectProvider>
+    );
+
+    expect(await screen.findByText(/Reject Test Paper A/i)).toBeInTheDocument();
+
+    const rejectBtn = screen.getByRole('button', { name: /Reject/i });
+    fireEvent.click(rejectBtn);
+
+    expect(await screen.findByText(/Error: Błąd połączenia z serwerem/i)).toBeInTheDocument();
+
+    const retryBtn = screen.getByRole('button', { name: /Retry/i });
+    expect(retryBtn).toBeInTheDocument();
+
+    fireEvent.click(retryBtn);
+
+    expect(await screen.findByText(/Rejected/i)).toBeInTheDocument();
+    expect(postSpy).toHaveBeenCalledTimes(2);
   });
 });

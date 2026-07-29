@@ -163,13 +163,15 @@ Status:
 
 Zakres:
 
-- API endpoints for recording user duplicate review decisions (approval / rejection)
-- decision persistence and publication merge application
-- frontend review queue workflow and decision controls
+- in-memory decision repository (`InMemoryDuplicateReviewDecisionRepository`)
+- REST endpoints for recording (`POST`) and reading (`GET`) reviewer duplicate decisions (`APPROVE`, `REJECT`)
+- service validation (checking project and group existence, invalid enum handling, decision overwrite support)
+- interactive frontend decision controls (Approve, Reject, Saving..., Saved, Error, Retry)
+- status badges in card header (Approved, Rejected, Pending)
 
 Status:
 
-🚧 Planned (Next Increment)
+🚧 Planned (Under Review)
 
 ---
 

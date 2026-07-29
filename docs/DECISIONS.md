@@ -6,6 +6,20 @@ This document records important project decisions that do not require a full ADR
 
 ## 2026-07-29
 
+### Candidate Duplicate Review Decisions (Phase 6.4)
+
+Phase 6.4 introduces the capability to record and read human reviewer decisions (`APPROVE` or `REJECT`) for candidate duplicate groups.
+
+Key decisions:
+- **In-Memory Decision Storage**: Decisions are stored in runtime memory via `InMemoryDuplicateReviewDecisionRepository`. No database, file persistence, or disc mutations are performed.
+- **REST Endpoints**:
+  - `POST /projects/{project_id}/duplicate-groups/{group_id}/decision`: Records or overwrites a reviewer decision (`APPROVE` or `REJECT`). Returns 200 OK on success, 404 for unknown project/group, 422 for invalid decision enum.
+  - `GET /projects/{project_id}/duplicate-groups/{group_id}/decision`: Reads current stored decision status (`APPROVE`, `REJECT`, or `PENDING`).
+- **No Publication Mutation / Merge**: Recording a decision does not merge publications, alter publication records, or delete candidate group records.
+- **Interactive GUI State Management**: `DuplicateGroupCardPreview` provides active decision controls (*Approve*, *Reject*), feedback states (*Saving...*, *Saved*, *Error*, *Retry*), and status badges (*Approved*, *Rejected*, *Pending*).
+
+---
+
 ### Candidate Duplicate Review Read API (Phase 6.3)
 
 Phase 6.3 introduces a read-only REST API endpoint `GET /projects/{project_id}/duplicate-groups` in FastAPI.
