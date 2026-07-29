@@ -171,7 +171,7 @@ Zakres:
 
 Status:
 
-🚧 Planned (Under Review)
+✅ Completed
 
 ---
 
