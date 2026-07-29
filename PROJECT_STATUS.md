@@ -14,7 +14,7 @@ v0.1.0
 
 Current development phase:
 
-Phase 5 — Deduplication completed. Phase 6.1 — GUI Foundation completed on feature branch `feat/phase-6-1-gui-foundation`. Phase 6.2 Duplicate Review Backend Integration pending.
+Phase 6.1 — GUI Foundation completed. Phase 6.2 — Application Versioning and GUI Release Identity implemented on feature branch `feat/phase-6-2-application-versioning`. Application versioning uses root `VERSION` file as master source of truth. Automated GitHub Releases and Git tagging are deferred to future infrastructure phases.
 
 ---
 

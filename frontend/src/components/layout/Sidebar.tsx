@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { useProject } from '../../context/ProjectContext';
 import { Badge } from '../common/Badge';
+import { APP_VERSION } from '../../config/version';
 
 export const Sidebar: React.FC = () => {
   const { projectId } = useParams<{ projectId?: string }>();
@@ -164,6 +165,12 @@ export const Sidebar: React.FC = () => {
           </NavLink>
         );
       })}
+
+      <div style={{ marginTop: 'auto', paddingTop: '16px', borderTop: '1px solid var(--border-subtle)', textAlign: 'center' }}>
+        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+          SLR Platform v{APP_VERSION}
+        </span>
+      </div>
     </aside>
   );
 };

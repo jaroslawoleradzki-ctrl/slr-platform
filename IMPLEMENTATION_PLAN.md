@@ -109,68 +109,61 @@ Each functional phase should end with a usable backend capability and a correspo
 
 ---
 
-# Phase 6 — GUI Foundation and Duplicate Review
+# Phase 6 — GUI Foundation and Duplicate Review 🚧
 
-## 6.1 Frontend Architecture and Application Shell
+## 6.1 GUI Foundation
 
 Zakres:
 
 - frontend technology and project structure
-- application shell
-- routing
-- navigation
-- common layout
-- shared component conventions
-- configuration handling
+- application shell and responsive navigation
+- Information Architecture and SLR process funnel
+- Concept Group strategy builder
+- state placeholders for downstream phases
 
 Status:
 
-⬜ Planned
+✅ Completed
 
 ---
 
-## 6.2 API Client and Shared UI States
+## 6.2 Application Versioning and GUI Release Identity
 
 Zakres:
 
-- API client boundary
-- request and response handling
-- loading states
-- empty states
-- error states
-- validation feedback
-- reusable table and form patterns
+- application-wide single source of truth in root `VERSION` file
+- build-time Vite injection of `__APP_VERSION__` constant with regex validation & fallback
+- GUI release identity (Header caption, Sidebar footer, About modal)
+- versioning policy documentation (`docs/VERSIONING.md`) and CHANGELOG
 
 Status:
 
-⬜ Planned
+✅ Completed
 
 ---
 
-## 6.3 Deduplication Backend Integration
+## 6.3 Duplicate Review Read API
 
 Zakres:
 
-- expose completed deduplication capabilities through an application or API boundary
-- preserve duplicate groups, comparison data and provenance
-- provide deterministic contracts for the frontend
-- no new deduplication logic beyond Phase 5
+- backend DTO contracts for duplicate groups
+- read-only REST endpoints exposing candidate duplicate groups
+- frontend API client adapter
+- replacing mock duplicate groups with real backend data (without decision writing)
 
 Status:
 
-⬜ Planned
+🚧 Planned (Next Increment)
 
 ---
 
-## 6.4 Duplicate Groups UI
+## 6.4 Duplicate Review Decisions
 
 Zakres:
 
-- duplicate group list
-- group status
-- record counts
-- filtering and navigation
-- provenance summary
+- API endpoints for recording user duplicate review decisions (approval / rejection)
+- decision persistence and publication merge application
+- frontend review queue workflow and decision controls
 
 Status:
 

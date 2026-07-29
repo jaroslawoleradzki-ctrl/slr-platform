@@ -1,11 +1,14 @@
 import React, { useState } from 'react';
-import { Database, Plus, ChevronDown } from 'lucide-react';
+import { Database, Plus, ChevronDown, Info } from 'lucide-react';
 import { useProject } from '../../context/ProjectContext';
 import { Modal } from '../common/Modal';
+import { AboutModal } from '../common/AboutModal';
+import { APP_VERSION } from '../../config/version';
 
 export const Header: React.FC = () => {
   const { projects, activeProject, setActiveProjectId, createNewProject } = useProject();
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isAboutOpen, setIsAboutOpen] = useState(false);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [protocolVersion, setProtocolVersion] = useState('0.1');
@@ -64,7 +67,7 @@ export const Header: React.FC = () => {
               SLR PLATFORM
             </h1>
             <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
-              Systematic Review Workbench
+              v{APP_VERSION} • Systematic Review Workbench
             </span>
           </div>
         </div>
@@ -129,8 +132,8 @@ export const Header: React.FC = () => {
         </div>
       </div>
 
-      {/* Backend System Status Indicator */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+      {/* Right Side: Runtime Status & About App */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
         <div
           style={{
             display: 'flex',
@@ -145,8 +148,28 @@ export const Header: React.FC = () => {
           }}
         >
           <Database size={12} />
-          <span>Mock API / Demo Data (Backend API in Phase 6.2)</span>
+          <span>Mock API / Demo Data</span>
         </div>
+
+        <button
+          onClick={() => setIsAboutOpen(true)}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '4px',
+            padding: '4px 10px',
+            borderRadius: 'var(--radius-full)',
+            backgroundColor: 'var(--bg-surface-elevated)',
+            color: 'var(--text-secondary)',
+            fontSize: '0.75rem',
+            border: '1px solid var(--border-strong)',
+            fontWeight: 500,
+          }}
+          title="Informacje o aplikacji"
+        >
+          <Info size={12} />
+          <span>O aplikacji</span>
+        </button>
       </div>
 
       {/* Create Project Modal */}
@@ -242,6 +265,9 @@ export const Header: React.FC = () => {
           </div>
         </form>
       </Modal>
+
+      {/* About Application Modal */}
+      <AboutModal isOpen={isAboutOpen} onClose={() => setIsAboutOpen(false)} />
     </header>
   );
 };

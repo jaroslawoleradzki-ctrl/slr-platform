@@ -15,7 +15,7 @@ The `frontend/` application provides the modern, scientific graphical user inter
 - **Styling**: Scientific Design System Tokens (`src/index.css`) with CSS custom properties
 - **Icons**: Lucide React (`lucide-react`)
 - **Testing**: Vitest + React Testing Library + JSDOM
-- **Build Tool**: Vite (`npm run build`)
+- **Build Tool**: Vite (`npm run build`), injecting root `VERSION` via `__APP_VERSION__` constant
 
 ---
 
