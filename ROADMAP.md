@@ -87,7 +87,7 @@ Goals:
 
 ---
 
-## Phase 6 — GUI Foundation and Duplicate Review 🚧
+## Phase 6 — GUI Foundation and Duplicate Review ✅
 
 Establish the reusable graphical application foundation and provide the first functional review workflow for duplicate publications.
 
@@ -98,7 +98,7 @@ Increments:
 - **6.3 Duplicate Review Read API** ✅ — Backend DTO contracts, read-only REST endpoint `GET /projects/{id}/duplicate-groups`, frontend API adapter, loading/empty/error states, and hybrid data mode.
 - **6.4 Duplicate Review Decisions** ✅ — In-memory decision repository (`InMemoryDuplicateReviewDecisionRepository`) with `(project_id, group_id)` composite key isolation, REST endpoints `POST` & `GET` for `APPROVE` and `REJECT` decisions, and interactive decision controls in GUI.
 - **6.5 Duplicate Comparison and Review UI** ✅ — Detailed side-by-side publication comparison view, deterministic field state matching, provenance tracing, optional decision rationale with length validation, and accessible controls.
-- **6.6 Persistent Project & Duplicate Storage** ⬜ — Database entities, project repository, persistent decisions, publication merge application.
+- **6.6 Integration and Contract Tests** ✅ — Backend contract tests for OpenAPI/DTO schemas, full duplicate review workflow integration, frontend integration & regression suite, determinism checks, and documentation reconciliation.
 
 This phase does not represent the full GUI MVP. Its purpose is to establish the interface foundation and deliver the complete module supporting deduplication review.
 

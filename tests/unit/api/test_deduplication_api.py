@@ -313,7 +313,7 @@ def test_rationale_exceeding_max_length_returns_422() -> None:
         json={"decision": "APPROVE", "rationale": overlong_rationale},
     )
     assert response.status_code == 422
-    assert "exceeds maximum length" in response.json()["detail"]
+    assert "1000" in str(response.json()["detail"])
 
 
 def test_overwrite_decision_and_rationale() -> None:

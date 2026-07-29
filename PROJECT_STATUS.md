@@ -14,11 +14,11 @@ development
 
 Current version (working tree):
 
-v0.1.3 (Unreleased)
+v0.1.4 (Unreleased)
 
 Current development phase:
 
-Phase 6.1 — GUI Foundation (completed), Phase 6.2 — Application Versioning (completed), Phase 6.3 — Duplicate Review Read API (completed), Phase 6.4 — Duplicate Review Decisions (completed), Phase 6.5 — Duplicate Comparison and Review UI completed on branch `development`. Side-by-side publication comparison, deterministic field matching, provenance display, optional rationale validation & storage, and accessible review controls are fully implemented and verified. Next planned increment: Phase 6.6 — Integration and Contract Tests. Stable main branch remains at v0.1.0.
+Phase 6 — GUI Foundation and Duplicate Review (completed on branch `development`). All increments (6.1 GUI Foundation, 6.2 Application Versioning, 6.3 Duplicate Review Read API, 6.4 Duplicate Review Decisions, 6.5 Duplicate Comparison UI, and 6.6 Integration and Contract Tests) are fully implemented, tested, and verified. Next planned increment: Phase 7.1 — Screening Domain and Workflow. Stable main branch remains at v0.1.0.
 
 ---
 

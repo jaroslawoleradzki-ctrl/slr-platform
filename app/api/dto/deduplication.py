@@ -82,7 +82,7 @@ class DuplicateGroupDecisionRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     decision: DuplicateDecisionType
-    rationale: str | None = None
+    rationale: str | None = Field(default=None, max_length=1000)
 
 
 class DuplicateGroupDecisionResponse(BaseModel):

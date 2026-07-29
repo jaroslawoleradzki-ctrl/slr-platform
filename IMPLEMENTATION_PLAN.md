@@ -195,14 +195,15 @@ Status:
 
 Zakres:
 
-- backend–frontend contract verification
-- duplicate workflow integration
-- loading, empty and failure cases
-- deterministic review behavior
+- backend contract tests for OpenAPI / DTO schemas and HTTP endpoints (`tests/contract/api/test_deduplication_contract.py`)
+- full duplicate review workflow integration tests (`tests/integration/api/test_deduplication_workflow_integration.py`)
+- frontend integration and regression test suite (`frontend/tests/DeduplicationIntegration.test.tsx`)
+- automated Python DTO ↔ TypeScript types parity verification
+- determinism verification and edge case handling (rationale limit, project isolation, null venue/provenance)
 
 Status:
 
-⬜ Planned
+✅ Completed
 
 ---
 
