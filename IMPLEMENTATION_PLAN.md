@@ -35,10 +35,12 @@ Status:
 - deterministic merge
 - provenance preservation
 - metadata priority
+- explicit identifier conflicts
+- commutative and idempotent behavior
 
 Status:
 
-⬜ Planned
+✅ Completed
 
 ---
 

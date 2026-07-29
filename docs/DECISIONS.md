@@ -4,6 +4,43 @@ This document records important project decisions that do not require a full ADR
 
 ---
 
+## 2026-07-29
+
+### Deterministic publication merge policy
+
+Phase 5.2 introduces an infrastructure-independent `PublicationMergePolicy`
+for two publications that have already been identified as the same work. The
+policy does not detect duplicates and is not integrated into Search Engine.
+The existing `ResultMerger` retains its conservative first-normalized-DOI,
+first-record behavior.
+
+Merge output is independent of argument order. The lowest technical record UUID
+and earliest creation time are retained. Different publication schema versions
+raise an explicit conflict; equal versions are preserved. Longer non-empty
+title, abstract, and publisher values win, with a stable lexical tie-break.
+The selected title is normalized again. Two different explicit language values
+raise a conflict; otherwise the available language is retained. The more
+complete ordered author list and venue win as whole values; author identity
+resolution and list interleaving are excluded. A full publication date wins
+over a year-only value. When both records contain different full dates, the
+later full date and its matching year win deterministically. Keywords and URLs
+are deduplicated and stably ordered.
+
+Identifier values are deduplicated and stably ordered. DOI values use canonical
+DOI normalization. DOI, PMID, and OpenAlex identifiers are treated as unique
+work identifiers, so distinct values of one of those types raise an explicit
+merge conflict. Multiple ISSN, ISBN, ORCID, and `OTHER` values may coexist.
+Conflicting explicit open-access values also raise rather than being silently
+prioritized.
+
+All distinct existing `ProvenanceEntry` records from both inputs are preserved
+in stable order. Because the current provenance model is record-oriented rather
+than field-oriented, it cannot retain an explicit association between every
+discarded alternative scalar value and its source. Phase 5.2 does not introduce
+a parallel provenance system.
+
+---
+
 ## 2026-07-28
 
 ### Post-mapping publication normalization pipeline

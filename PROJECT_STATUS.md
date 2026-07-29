@@ -606,6 +606,27 @@ The deduplication domain model now provides:
 Cross-group publication membership remains a later repository or domain-service
 invariant and is not falsely enforced by an individual duplicate group.
 
+Phase 5.2 — Merge Policy: Completed.
+
+The publication merge policy now provides:
+
+- deterministic and commutative merging of two publications already known to
+  represent the same work
+- stable technical identity and collection ordering independent of argument
+  order
+- explicit metadata selection rules for scalar values, ordered authors,
+  bibliographic dates, and venues
+- complete, deduplicated identifier and provenance collections
+- explicit conflicts for incompatible DOI, PMID, OpenAlex, and open-access
+  values
+- a new validated `Publication` without mutating either input
+- no candidate detection, grouping, similarity scoring, repository, API,
+  database, or GUI behavior
+
+The existing DOI-only `ResultMerger` remains unchanged and continues to retain
+the first search result for compatibility. It does not invoke the new merge
+policy in this increment.
+
 Phase 5 remains in progress.
 
 ---
