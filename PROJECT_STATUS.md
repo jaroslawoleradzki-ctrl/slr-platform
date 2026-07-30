@@ -50,12 +50,20 @@ Normalization now has project-scoped `POST`/`GET` endpoints using the existing
 `PublicationNormalizer`. The GUI no longer consumes the demo 2105/2042/63
 summary and displays live processed/clean/warning counts and audit entries
 after execution. Version 0.2.0 stores the latest execution summary and audit
-trail durably in SQLite and restores it after backend restart. Only the latest
-run is retained.
+trail durably in SQLite (`SqliteNormalizationExecutionRepository`) and restores
+it after backend restart. Only the latest run is retained.
 
-Version 0.2.0 also replaces the runtime demo publication repository with the
-project-scoped SQLite Working Collection. File and selected OpenAlex imports,
-normalization reads and normalization writes now use the same durable records.
+Version 0.2.0 also completely replaces the runtime demo publication repository
+(`DemoProjectPublicationRepository`) with the durable project-scoped SQLite Working
+Collection (`SqliteProjectPublicationRepository`). All project publications are
+persisted in SQLite (`project_publications` table).
+
+The single, unified `ProjectPublicationRepository` boundary is now shared across
+these platform operations:
+- import of selected live search results,
+- import of RIS and BibTeX files (`POST /projects/{project_id}/imports`),
+- normalization execution reads and canonical record updates (`POST/GET /projects/{project_id}/normalization`),
+- duplicate candidate generation and preview service (`GET /projects/{project_id}/duplicate-groups`).
 
 ---
 
@@ -104,6 +112,17 @@ normalization reads and normalization writes now use the same durable records.
 - Sources reloads history from the backend after project changes and uploads
 - provider cards use neutral states because provider executions are not
   persisted for Sources
+
+## Version 0.2.0 — Durable Working Collection & Normalization
+
+- runtime demo repository (`DemoProjectPublicationRepository`) is completely replaced by SQLite Working Collection (`SqliteProjectPublicationRepository`)
+- project publications are stored durably in SQLite in `project_publications` table and persist across backend restarts
+- shared `ProjectPublicationRepository` boundary connects:
+  - import of selected live search results
+  - import of RIS and BibTeX files (`POST /projects/{project_id}/imports`)
+  - normalization execution reads and canonical updates (`POST/GET /projects/{project_id}/normalization`)
+  - duplicate candidate generation and preview service (`GET /projects/{project_id}/duplicate-groups`)
+- latest normalization execution summary and audit trail are persisted in SQLite (`SqliteNormalizationExecutionRepository`)
 
 ### Known limitations
 

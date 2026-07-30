@@ -2,9 +2,11 @@
 
 Data audytu: 2026-07-30  
 Branch: `development`  
-Wersja: `0.1.8` (working tree)
+Wersja: `0.1.8` (historyczna baza audytu)
 
-## 1. Obecny stan modułu
+> **Uwaga dotycząca wersji i trwałości:** Sekcje 1–14 poniżej przedstawiają historyczny stan bazowy z wersji **0.1.8**. W wersjach **0.1.9** oraz **0.2.0** wdrożono trwały upload plików RIS/BibTeX, trwałą historię importów oraz trwałą kolekcję roboczą w SQLite (`SqliteProjectPublicationRepository`). Szczegóły tych aktualizacji znajdują się w sekcjach na końcu dokumentu.
+
+## 1. Obecny stan modułu (Historyczny — v0.1.8)
 
 Ekran jest dostępny pod `/projects/:projectId/sources` i renderuje karty providerów oraz historię importów. Jest to obecnie ekran oparty na danych `MOCK_PROJECTS`, a nie na backendowym zasobie Sources/Ingestion.
 
@@ -35,7 +37,7 @@ Parsery RIS i BibTeX istnieją jako moduły backendowe i są testowane jednostko
 | Status importu | `FileDropzone.tsx` | brak | brak | brak | `success/warning` w mocku | demo/staticzny |
 | Powiązanie importu z projektem | `SourcesIngestionPage.tsx` | brak uploadu z `project_id` | brak | brak | aktywny projekt + mock | nie jest realizowane dla plików |
 
-## 3. Elementy działające end-to-end
+## 3. Elementy działające end-to-end (Historyczne — v0.1.8)
 
 - `GET/PUT /projects/{project_id}/search-strategy` działa z backendem.
 - `POST /projects/{project_id}/search-strategy/executions` wykonuje rzeczywiste wyszukiwanie OpenAlex; Crossref jest podłączony w warstwie Search Strategy.
@@ -79,7 +81,7 @@ Użyto lokalnego, nietrwałego tekstu testowego: 2 poprawne rekordy BibTeX dały
 
 Parser i mapper działają, ale nie ma workflowu UI/API.
 
-## 10. Problemy znalezione
+## 10. Problemy znalezione (Historyczny stan v0.1.8)
 
 1. Ekran deklaruje status połączeń z live API, lecz wszystkie wartości kart są statycznymi danymi projektu.
 2. Semantic Scholar jest prezentowany jako połączony i zakończony mimo braku integracji w `LiveSearchService`.
@@ -87,7 +89,7 @@ Parser i mapper działają, ale nie ma workflowu UI/API.
 4. Dowolne rozszerzenie inne niż `.bib` jest klasyfikowane jako RIS; brak odrzucenia `.pdf`, pustych plików i uszkodzonych treści na granicy UI/API.
 5. Historia importów i liczby rekordów są wyłącznie danymi mock.
 6. Import plików nie ma powiązania z `project_id`; istniejące powiązanie dotyczy tylko importu wybranych wyników wyszukiwania.
-7. In-memory Working Collection nie jest trwała i znika po restarcie backendu.
+7. [Historyczne v0.1.8 — rozwiązane w v0.2.0] In-memory Working Collection nie jest trwała i znika po restarcie backendu.
 
 ## 11. Minimalne naprawy wykonane
 
@@ -143,15 +145,20 @@ zrealizowany kolejny przyrost:
 Nadal nie istnieją: trwałe wykonania/statusy providerów, provider health-checki,
 pełny moduł Sources, background jobs i masowy import.
 
-## Aktualizacja — trwała Working Collection
+## Aktualizacja — trwała Working Collection (0.2.0)
 
-W kolejnym przyroście `SqliteProjectPublicationRepository` zastąpiło
-`DemoProjectPublicationRepository` w runtime dla importów i Search Strategy.
-Importy RIS/BibTeX oraz selected OpenAlex zapisują publikacje do wspólnej,
-project-scoped tabeli `project_publications`. Normalizacja czyta i zastępuje
-rekordy w tej samej kolekcji, a publikacje oraz summary normalizacji przetrwają
-restart backendu. Deduplikacja, Crossref i Semantic Scholar pozostają poza tym
-przyrostem.
+W wersji 0.2.0 `SqliteProjectPublicationRepository` zastąpiło `DemoProjectPublicationRepository`
+w runtime. Wszystkie publikacje są odtąd przechowywane trwale w tabeli `project_publications` w bazie SQLite.
+
+Wspólne repozytorium `ProjectPublicationRepository` obsługuje te operacje systemu:
+- import zaznaczonych wyników wyszukiwania na żywo (live search results),
+- import plików RIS i BibTeX (`POST /projects/{project_id}/imports`),
+- normalizację danych kanonicznych (`POST/GET /projects/{project_id}/normalization`),
+- serwis generowania i podglądu kandydujących grup duplikatów (`GET /projects/{project_id}/duplicate-groups`).
+
+Zarówno publikacje w Working Collection, jak i wynik ostatniego wykonania normalizacji
+oraz historia importów przetrwają restart backendu i odświeżenie aplikacji.
+Deduplikacja złożona, Crossref i Semantic Scholar w kartach Sources pozostają poza tym przyrostem.
 
 ## Aktualizacja audytu — integracja importu selected OpenAlex
 

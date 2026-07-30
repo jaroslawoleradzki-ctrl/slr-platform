@@ -6,6 +6,25 @@ This document records important project decisions that do not require a full ADR
 
 ## 2026-07-30
 
+### Durable project-scoped Working Collection (0.2.0)
+
+Version 0.2.0 completely replaces the runtime demonstration publication repository
+(`DemoProjectPublicationRepository`) with `SqliteProjectPublicationRepository`.
+All project publications are stored durably in SQLite within a project-scoped
+Working Collection (`project_publications` table).
+
+Key decisions:
+- **Shared Persistence Boundary**: `ProjectPublicationRepository` is used as the single unified persistence boundary across these operations:
+  - import of selected live search results,
+  - import of RIS and BibTeX files (`POST /projects/{project_id}/imports`),
+  - normalization execution reads and canonical publication updates (`POST/GET /projects/{project_id}/normalization`),
+  - duplicate candidate generation and preview service (`GET /projects/{project_id}/duplicate-groups`).
+- **Durable Working Collection**: Project publications persist in SQLite (`project_publications` table) across backend restarts and page reloads.
+- **Separate Durable Resources**: Import history (`SqliteImportHistoryRepository`) and normalization execution summaries (`SqliteNormalizationExecutionRepository`) are distinct durable resources stored in SQLite. They operate alongside the Working Collection without sharing a single atomic database transaction or hidden cross-resource locks.
+- **Excluded Reviewer Decisions**: Duplicate review decisions (`APPROVE`/`REJECT`) remain a separate mechanism in `InMemoryDuplicateReviewDecisionRepository` and are not part of `ProjectPublicationRepository`.
+
+---
+
 ### Durable latest normalization execution (0.2.0)
 
 Normalization execution summaries use a project-keyed SQLite table with one

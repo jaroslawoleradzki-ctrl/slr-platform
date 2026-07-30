@@ -123,9 +123,10 @@ user-facing workflow must become fully functional and manually verifiable.
   collection.
 
 Phase 6.7.2a established the frontend/API workflow in v0.1.6. Phase 6.7.2b
-connects the workflow to live providers and the project Working Collection in
-v0.1.7. The demonstrator collection is process-local and does not survive a
-backend restart.
+connected the workflow to live providers and the project Working Collection in
+v0.1.7 (historically using a process-local demonstrator collection). As of v0.2.0,
+the Working Collection is fully durable in SQLite (`SqliteProjectPublicationRepository`)
+and survives backend restarts.
 
 ---
 
@@ -167,7 +168,7 @@ work before Phase 2 focuses on result completeness and presentation quality.
 The first project-scoped bibliographic upload is implemented: the Sources
 upload control sends one `.ris` or `.bib` file to
 `POST /projects/{project_id}/imports`, reuses the existing parsers, and stores
-the parsed publications through the existing repository. This is an initial
+the parsed publications through the existing repository. This initial
 upload slice now includes durable project-scoped import history returned
 newest-first by `GET /projects/{project_id}/imports`. Selected OpenAlex result
 imports also create provider history records, which are shown on Sources
@@ -184,12 +185,21 @@ background execution remain future work.
 
 ### Version 0.2.0 increment
 
-The existing `PublicationNormalizer` is now backed by durable latest-run
-storage. Summary fields and audit trail remain available after backend restart.
-Deduplication, screening, background jobs and full provenance remain open.
+The 0.2.0 increment completely replaces the runtime demonstration publication
+repository (`DemoProjectPublicationRepository`) with `SqliteProjectPublicationRepository`,
+storing all project publications durably in SQLite (`project_publications` table).
 
-The 0.2.0 increment also makes the Working Collection durable in SQLite and
-connects file/provider imports with the normalization input collection.
+The single, unified `ProjectPublicationRepository` persistence boundary connects:
+- import of selected live search results,
+- import of RIS and BibTeX files (`POST /projects/{project_id}/imports`),
+- normalization execution reads and canonical record updates (`POST/GET /projects/{project_id}/normalization`),
+- duplicate candidate generation and preview service (`GET /projects/{project_id}/duplicate-groups`).
+
+The existing `PublicationNormalizer` is backed by durable latest-run
+storage in SQLite (`SqliteNormalizationExecutionRepository`). Summary fields and
+audit trail remain available after backend restart.
+
+Deduplication, screening, background jobs and full provenance remain open.
 
 ### Polish before Phase 2
 
