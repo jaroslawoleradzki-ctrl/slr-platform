@@ -281,6 +281,112 @@ Notes:
 
 ---
 
+# Phase 6.8 — End-to-End Literature Search Workflow 🚧
+
+Cel:
+
+- pełny proces Search Strategy i Sources Ingestion dostępny z GUI
+- zastępowanie danych demonstracyjnych trwałymi kontraktami backendowymi
+- wstrzymanie rozwoju kolejnych ekranów opartych o mocki
+
+## 6.8.1 Search Strategy Backend
+
+Zakres:
+
+- trwały, projektowy model Search Strategy
+- istniejący provider-independent Search Query jako wersjonowane drzewo Boolean
+- pytania badawcze, grupy pojęć, terminy i operatory logiczne
+- ograniczenia lat, języków, typów publikacji i dodatkowych limitów
+- wybór OpenAlex, Crossref i Semantic Scholar
+- migracja SQLite
+- `GET /projects/{project_id}/search-strategy`
+- `PUT /projects/{project_id}/search-strategy`
+- walidacja i pełna serializacja
+- testy domeny, repozytorium i API
+
+Poza zakresem:
+
+- wykonywanie wyszukiwania
+- renderowanie zapytań providerów
+- orkiestracja, GUI, import i deduplikacja
+
+Status:
+
+✅ Completed
+
+## 6.8.2 Query Rendering
+
+- OpenAlex Query Renderer
+- Crossref Query Renderer
+- Semantic Scholar Query Renderer
+
+Status: ⬜ Planned
+
+## 6.8.3 Search Orchestrator
+
+- uruchamianie wielu providerów
+- agregacja wyników
+- partial failures
+- provenance
+- SearchRun
+
+Status: ⬜ Planned
+
+## 6.8.4 Search Execution API
+
+- execute search
+- search status
+- search results
+
+Status: ⬜ Planned
+
+## 6.8.5 Persistence
+
+- SearchRun
+- Publications
+- provenance
+- search history
+
+Status: ⬜ Planned
+
+## 6.8.6 Search Strategy GUI Integration
+
+- Search Strategy uses backend `GET` and `PUT` as its only source of truth
+- empty state for projects without a strategy
+- complete editing of research questions, concepts, Boolean operators,
+  constraints and provider selection
+- generic, provider-independent Boolean preview
+- loading, dirty, saving, saved, validation and failure states
+- `Szukaj` saves the current strategy before navigating to Sources Ingestion
+- no provider execution and no provider-specific renderer
+
+Status: ✅ Completed
+
+## 6.8.7 Sources Ingestion GUI Integration
+
+- uruchomienie wyszukiwania
+- progress i liczba rekordów
+- błędy providerów
+
+Status: ⬜ Planned
+
+## 6.8.8 GUI Import Integration
+
+- RIS
+- BibTeX
+- wykorzystanie istniejących importerów
+
+Status: ⬜ Planned
+
+## 6.8.9 Publication Intake Summary
+
+- podsumowanie wszystkich źródeł
+- przejście do kolejnych etapów workflow
+
+Status: ⬜ Planned
+
+---
+
 # Phase 7 — Screening
 
 ## 7.1 Screening Domain and Workflow

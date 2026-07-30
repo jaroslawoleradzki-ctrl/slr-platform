@@ -1,10 +1,16 @@
+from pathlib import Path
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routers import deduplication, search_strategy
 from app.core.config import load_project_config
 
-app = FastAPI(title="SLR Platform", version="0.1.7")
+def _application_version() -> str:
+    return (Path(__file__).parents[2] / "VERSION").read_text(encoding="utf-8").strip()
+
+
+app = FastAPI(title="SLR Platform", version=_application_version())
 
 # Configure CORS for local development
 origins = [
@@ -18,7 +24,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_methods=["GET", "POST", "PUT", "OPTIONS"],
     allow_headers=["*"],
 )
 
@@ -28,7 +34,7 @@ app.include_router(search_strategy.router)
 
 @app.get("/")
 def root():
-    return {"name": "SLR Platform", "version": "0.1.7"}
+    return {"name": "SLR Platform", "version": _application_version()}
 
 
 @app.get("/health")

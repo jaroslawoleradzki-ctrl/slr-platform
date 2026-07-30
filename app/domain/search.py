@@ -121,18 +121,89 @@ class SearchQuery(BaseModel):
         return self.expression.to_boolean_query()
 
 
+class SearchConceptGroup(BaseModel):
+    """A named set of concepts retained independently from rendered queries."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    group_id: str = Field(min_length=1)
+    name: str = Field(min_length=1)
+    terms: list[str] = Field(min_length=1)
+    operator: Literal[BooleanOperator.AND, BooleanOperator.OR] = BooleanOperator.OR
+
+    @field_validator("group_id", "name")
+    @classmethod
+    def strip_required_text(cls, value: str) -> str:
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("text fields must not be blank")
+        return stripped
+
+    @field_validator("terms")
+    @classmethod
+    def strip_terms(cls, values: list[str]) -> list[str]:
+        stripped = [value.strip() for value in values]
+        if any(not value for value in stripped):
+            raise ValueError("terms must not contain blank values")
+        if len(set(stripped)) != len(stripped):
+            raise ValueError("terms must be unique within a concept group")
+        return stripped
+
+
+class SearchConstraints(BaseModel):
+    """Provider-independent limits stored with a search strategy."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    publication_year_from: int | None = Field(default=None, ge=1000, le=9999)
+    publication_year_to: int | None = Field(default=None, ge=1000, le=9999)
+    languages: list[str] = Field(default_factory=list)
+    publication_types: list[str] = Field(default_factory=list)
+    additional_limits: dict[str, str | int | bool] = Field(default_factory=dict)
+
+    @field_validator("languages", "publication_types")
+    @classmethod
+    def normalize_string_lists(cls, values: list[str]) -> list[str]:
+        stripped = [value.strip() for value in values]
+        if any(not value for value in stripped):
+            raise ValueError("constraints must not contain blank values")
+        if len(set(stripped)) != len(stripped):
+            raise ValueError("constraint values must be unique")
+        return stripped
+
+    @model_validator(mode="after")
+    def validate_year_range(self) -> SearchConstraints:
+        if (
+            self.publication_year_from is not None
+            and self.publication_year_to is not None
+            and self.publication_year_from > self.publication_year_to
+        ):
+            raise ValueError(
+                "publication_year_from must not be later than publication_year_to"
+            )
+        return self
+
+
 class SearchStrategy(BaseModel):
     """Named collection of versioned queries used in one review strategy."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     strategy_id: UUID = Field(default_factory=uuid4)
-    project_id: UUID | None = None
+    project_id: str | UUID | None = None
     name: str = Field(min_length=1)
     description: str | None = None
     queries: list[SearchQuery] = Field(min_length=1)
+    research_questions: list[str] = Field(default_factory=list)
+    concept_groups: list[SearchConceptGroup] = Field(default_factory=list)
+    group_operator: Literal[BooleanOperator.AND, BooleanOperator.OR] = (
+        BooleanOperator.AND
+    )
+    constraints: SearchConstraints = Field(default_factory=SearchConstraints)
+    providers: list[str] = Field(default_factory=list)
     version: int = Field(default=1, ge=1)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     @field_validator("name", "description")
     @classmethod
@@ -156,7 +227,29 @@ class SearchStrategy(BaseModel):
         query_ids = [query.query_id for query in self.queries]
         if len(query_ids) != len(set(query_ids)):
             raise ValueError("queries must have unique query_id values")
+        group_ids = [group.group_id for group in self.concept_groups]
+        if len(group_ids) != len(set(group_ids)):
+            raise ValueError("concept_groups must have unique group_id values")
+        if self.updated_at < self.created_at:
+            raise ValueError("updated_at must not be earlier than created_at")
         return self
+
+    @field_validator("research_questions", "providers")
+    @classmethod
+    def normalize_required_lists(cls, values: list[str]) -> list[str]:
+        stripped = [value.strip() for value in values]
+        if any(not value for value in stripped):
+            raise ValueError("list values must not be blank")
+        if len(set(stripped)) != len(stripped):
+            raise ValueError("list values must be unique")
+        return stripped
+
+    @field_validator("updated_at")
+    @classmethod
+    def require_updated_timezone(cls, value: datetime) -> datetime:
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("updated_at must be timezone-aware")
+        return value
 
 
 class SearchRunStatus(StrEnum):

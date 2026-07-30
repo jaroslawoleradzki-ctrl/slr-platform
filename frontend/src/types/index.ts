@@ -20,6 +20,76 @@ export interface EditableSearchStrategy {
   conceptGroups: ConceptGroup[];
 }
 
+export type BooleanOperator = 'and' | 'or';
+export type SearchProviderId = 'openalex' | 'crossref' | 'semantic_scholar';
+
+export interface SearchStrategyConceptGroup {
+  group_id: string;
+  name: string;
+  terms: string[];
+  operator: BooleanOperator;
+}
+
+export interface SearchStrategyConstraints {
+  publication_year_from: number | null;
+  publication_year_to: number | null;
+  languages: string[];
+  publication_types: string[];
+  additional_limits: Record<string, string | number | boolean>;
+}
+
+export interface SearchTermExpression {
+  node_type: 'term';
+  value: string;
+  field?: 'any' | 'title' | 'abstract' | 'keywords' | 'author' | 'venue';
+  exact_phrase?: boolean;
+}
+
+export interface SearchGroupExpression {
+  node_type: 'group';
+  operator: 'and' | 'or' | 'not';
+  children: SearchExpression[];
+}
+
+export type SearchExpression = SearchTermExpression | SearchGroupExpression;
+
+export interface SearchQueryWrite {
+  name: string;
+  expression: SearchExpression;
+  version?: number;
+  description?: string | null;
+}
+
+export interface SearchQuery extends SearchQueryWrite {
+  query_id: string;
+  version: number;
+  created_by: string | null;
+  notes: string | null;
+  created_at: string;
+}
+
+export interface SearchStrategyWriteRequest {
+  strategy_id?: string;
+  name: string;
+  description?: string | null;
+  research_questions: string[];
+  concept_groups: SearchStrategyConceptGroup[];
+  group_operator: BooleanOperator;
+  constraints: SearchStrategyConstraints;
+  providers: SearchProviderId[];
+  queries: SearchQueryWrite[];
+  version: number;
+  created_at?: string;
+}
+
+export interface SearchStrategy extends Omit<SearchStrategyWriteRequest, 'queries'> {
+  strategy_id: string;
+  project_id: string;
+  queries: SearchQuery[];
+  created_at: string;
+  updated_at: string;
+}
+
 export interface SearchExecutionResult {
   project_id: string;
   status: 'validated';

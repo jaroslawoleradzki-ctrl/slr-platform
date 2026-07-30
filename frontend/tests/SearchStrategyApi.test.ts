@@ -16,6 +16,90 @@ const strategy = {
 describe('Search Strategy frontend-backend contract', () => {
   afterEach(() => vi.restoreAllMocks());
 
+  it('gets a persisted strategy with the backend field names unchanged', async () => {
+    const backendResponse = {
+      strategy_id: '10000000-0000-0000-0000-000000000001',
+      project_id: 'lean_energy',
+      name: 'Stored strategy',
+      description: null,
+      research_questions: ['RQ'],
+      concept_groups: [{ group_id: 'g1', name: 'Lean', terms: ['Kaizen'], operator: 'or' }],
+      group_operator: 'and',
+      constraints: {
+        publication_year_from: 2020,
+        publication_year_to: 2024,
+        languages: ['en'],
+        publication_types: ['article'],
+        additional_limits: {},
+      },
+      providers: ['openalex'],
+      queries: [],
+      version: 1,
+      created_at: '2026-07-30T10:00:00Z',
+      updated_at: '2026-07-30T10:00:00Z',
+    };
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify(backendResponse), { status: 200 })
+    );
+
+    await expect(projectApiService.getSearchStrategy('lean_energy')).resolves.toEqual(backendResponse);
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://localhost:8000/projects/lean_energy/search-strategy',
+      { headers: { Accept: 'application/json' } },
+    );
+  });
+
+  it('maps a missing persisted strategy to null', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, { status: 404 }));
+
+    await expect(projectApiService.getSearchStrategy('lean_energy')).resolves.toBeNull();
+  });
+
+  it('puts the complete strategy document', async () => {
+    const payload = {
+      name: 'Stored strategy',
+      description: null,
+      research_questions: ['RQ'],
+      concept_groups: [{ group_id: 'g1', name: 'Lean', terms: ['Kaizen'], operator: 'or' as const }],
+      group_operator: 'and' as const,
+      constraints: {
+        publication_year_from: 2020,
+        publication_year_to: 2024,
+        languages: ['en'],
+        publication_types: ['article'],
+        additional_limits: {},
+      },
+      providers: ['openalex' as const],
+      queries: [{ name: 'Query', expression: { node_type: 'term' as const, value: 'Kaizen' } }],
+      version: 1,
+    };
+    const response = {
+      ...payload,
+      strategy_id: '10000000-0000-0000-0000-000000000001',
+      project_id: 'lean_energy',
+      queries: [{
+        ...payload.queries[0],
+        query_id: '20000000-0000-0000-0000-000000000001',
+        version: 1,
+        description: null,
+        created_by: null,
+        notes: null,
+        created_at: '2026-07-30T10:00:00Z',
+      }],
+      created_at: '2026-07-30T10:00:00Z',
+      updated_at: '2026-07-30T10:00:00Z',
+    };
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify(response), { status: 200 })
+    );
+
+    await expect(projectApiService.saveSearchStrategy('lean_energy', payload)).resolves.toEqual(response);
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://localhost:8000/projects/lean_energy/search-strategy',
+      expect.objectContaining({ method: 'PUT', body: JSON.stringify(payload) }),
+    );
+  });
+
   it('sends the editable strategy and maps the backend response', async () => {
     const backendResponse = {
       project_id: 'lean_energy',

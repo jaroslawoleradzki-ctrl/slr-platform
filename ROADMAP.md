@@ -129,6 +129,54 @@ backend restart.
 
 ---
 
+## Phase 6.8 — End-to-End Literature Search Workflow 🚧
+
+The product priority from v0.1.8 is a complete literature-search workflow that
+can be performed without leaving the GUI. Work on further mock-driven screens
+is deferred until Search Strategy and Sources Ingestion use durable backend
+capabilities.
+
+- **6.8.1 Search Strategy Backend** ✅ — durable strategy storage, REST GET/PUT,
+  provider-independent Search Strategy and Search Query models, validation, and
+  provider selection.
+- **6.8.2 Query Rendering** ⬜ — OpenAlex, Crossref, and Semantic Scholar query
+  renderers.
+- **6.8.3 Search Orchestrator** ⬜ — multi-provider execution, result
+  aggregation, partial failures, provenance, and SearchRun.
+- **6.8.4 Search Execution API** ⬜ — execute search, search status, and search
+  results.
+- **6.8.5 Persistence** ⬜ — SearchRun, publications, provenance, and search
+  history.
+- **6.8.6 Search Strategy GUI Integration — Completed (functional)** ✅ — Search Strategy reads and
+  writes the real backend resource, no longer uses project mocks as strategy
+  data, supports the complete authored form and generic Boolean preview,
+  executes live searches, presents results on the same page, and provides the
+  result import workflow. **Szukaj** does not navigate to Sources & Imports.
+- **6.8.7 Sources Ingestion GUI Integration** ⬜ — start searches, show
+  progress, record counts, and provider errors.
+- **6.8.8 GUI Import Integration** ⬜ — RIS and BibTeX through the existing
+  import providers.
+- **6.8.9 Publication Intake Summary** ⬜ — summarize every intake source and
+  provide the transition to later workflow stages.
+
+Phase 6.8.1 and the functional Search Strategy workflow are available. Further
+work before Phase 2 focuses on result completeness and presentation quality.
+
+### Polish before Phase 2
+
+- analyze the OpenAlex result count
+- improve Search Results UX
+- expose backend `rendered_query`
+- display executed-search information
+- citations
+- journal
+- Open Access
+- PDF
+- sorting
+- improved import panel
+
+---
+
 ## Phase 7 — Screening
 
 Support systematic review screening through a backend workflow and a dedicated user interface.

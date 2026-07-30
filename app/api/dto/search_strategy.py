@@ -1,7 +1,15 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Literal
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+from app.domain.search import (
+    BooleanOperator,
+    SearchConceptGroup,
+    SearchConstraints,
+    SearchQuery,
+)
 
 
 class ConceptGroupRequest(BaseModel):
@@ -43,6 +51,58 @@ class SearchStrategyExecutionRequest(BaseModel):
                 "publication_year_from must not be later than publication_year_to"
             )
         return self
+
+
+class SearchStrategyPutRequest(BaseModel):
+    """Complete write contract for one project's persisted search strategy."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    strategy_id: UUID | None = None
+    name: str = Field(min_length=1)
+    description: str | None = None
+    research_questions: list[str] = Field(min_length=1)
+    concept_groups: list[SearchConceptGroup] = Field(min_length=1)
+    group_operator: Literal[BooleanOperator.AND, BooleanOperator.OR] = (
+        BooleanOperator.AND
+    )
+    constraints: SearchConstraints
+    providers: list[
+        Literal["openalex", "crossref", "semantic_scholar"]
+    ] = Field(min_length=1)
+    queries: list[SearchQuery] = Field(min_length=1)
+    version: int = Field(default=1, ge=1)
+    created_at: datetime | None = None
+
+    @field_validator("name", "description")
+    @classmethod
+    def strip_text(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("text fields must not be blank")
+        return stripped
+
+    @field_validator("research_questions")
+    @classmethod
+    def normalize_research_questions(cls, values: list[str]) -> list[str]:
+        stripped = [value.strip() for value in values]
+        if any(not value for value in stripped):
+            raise ValueError("research_questions must not contain blank values")
+        if len(set(stripped)) != len(stripped):
+            raise ValueError("research_questions must be unique")
+        return stripped
+
+    @field_validator("created_at")
+    @classmethod
+    def require_timezone(cls, value: datetime | None) -> datetime | None:
+        if value is not None and (value.tzinfo is None or value.utcoffset() is None):
+            raise ValueError("created_at must be timezone-aware")
+        return value
+
+    def creation_time(self) -> datetime:
+        return self.created_at or datetime.now(timezone.utc)
 
 
 class SearchStrategyExecutionResponse(BaseModel):

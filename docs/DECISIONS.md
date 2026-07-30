@@ -4,6 +4,73 @@ This document records important project decisions that do not require a full ADR
 
 ---
 
+## 2026-07-30
+
+### Search Strategy workflow
+
+Search Strategy is the workspace for both building and executing a literature
+query. Search results are presented on the same page so the user can review the
+effect of the authored strategy without losing form context or changing
+workflow stages.
+
+Sources & Imports does not execute searches. It begins with importing records
+that have already been found or supplied through supported import formats.
+
+This boundary reduces context switching, keeps query refinement and result
+evaluation together, and makes the primary action predictable: `Szukaj`
+executes the current strategy and updates the results in place. A transition to
+Sources & Imports is reserved for intake work rather than being an implicit
+side effect of search execution.
+
+---
+
+### Search Strategy GUI uses the durable resource
+
+Search Strategy GUI consumes the Phase 6.8.1 GET/PUT resource directly. The
+screen keeps a typed editable representation of the backend contract and
+replaces it with the complete server response after every successful save.
+Mock project concepts and filters are not fallback strategy data.
+
+The generic Boolean preview and persisted SearchQuery expression use the same
+AND/OR structure authored in the form. `Szukaj` saves and executes the current
+strategy, then presents the returned records on the same page. It does not
+navigate to Sources & Imports.
+
+---
+
+### Durable Search Strategy boundary (Phase 6.8.1)
+
+Phase 6.8.1 starts the transition from the demonstration GUI to an end-to-end
+literature-search workflow. A project has one current Search Strategy resource,
+addressed by `GET` and `PUT /projects/{project_id}/search-strategy`.
+
+Key decisions:
+
+- **Reuse the canonical query domain:** the existing `SearchQuery`,
+  `SearchGroup`, and `SearchTerm` models remain the provider-independent
+  representation of Boolean query trees. Phase 6.8.1 adds no provider renderer.
+- **Separate authored concepts from executable queries:** Search Strategy stores
+  research questions, concept groups, terms, group operators, constraints and
+  provider selection alongside versioned Search Query objects. This preserves
+  author intent without prematurely defining provider rendering rules.
+- **Repository boundary:** API and domain code depend on
+  `SearchStrategyRepository`. The first durable adapter uses Python's SQLite
+  support and an explicit ordered SQL migration, avoiding a second in-memory
+  source of truth.
+- **Atomic document persistence:** the validated domain model is serialized as
+  one JSON document, while project ID, strategy ID, version, and timestamps are
+  indexed relational columns. This preserves complete round-trip serialization
+  and leaves schema decomposition to later persistence work if query/reporting
+  requirements justify it.
+- **Project-scoped singleton:** `PUT` replaces the current strategy for the
+  project. It does not execute a search, create SearchRuns, import
+  publications, or invoke query rendering.
+- **Supported provider selection:** persisted strategies validate OpenAlex,
+  Crossref, and Semantic Scholar. Availability and execution behavior belong to
+  later Phase 6.8 increments.
+
+---
+
 ## 2026-07-29
 
 ### Duplicate Comparison and Review UI (Phase 6.5)

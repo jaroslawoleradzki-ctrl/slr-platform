@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
+from functools import lru_cache
 from typing import Literal, cast
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
@@ -11,16 +12,23 @@ from app.api.dto.search_strategy import (
     SearchResultsImportResponse,
     SearchStrategyExecutionRequest,
     SearchStrategyExecutionResponse,
+    SearchStrategyPutRequest,
 )
 from app.domain.author import Author
 from app.domain.identifiers import Identifier, IdentifierType
 from app.domain.provenance import ProvenanceEntry
 from app.domain.publication import Publication
+from app.domain.search import SearchStrategy
 from app.normalization.doi import normalize_doi
 from app.repositories.project_publication_repository import (
     ProjectNotFoundError,
     ProjectPublicationRepository,
     demo_project_publication_repository,
+)
+from app.repositories.search_strategy_repository import (
+    SearchStrategyNotFoundError,
+    SearchStrategyRepository,
+    default_search_strategy_repository,
 )
 from app.services.live_search import (
     LiveSearchExecutor,
@@ -37,6 +45,89 @@ def get_live_search_executor() -> LiveSearchExecutor:
 
 def get_project_publication_repository() -> ProjectPublicationRepository:
     return demo_project_publication_repository
+
+
+@lru_cache(maxsize=1)
+def get_search_strategy_repository() -> SearchStrategyRepository:
+    return default_search_strategy_repository()
+
+
+@router.get(
+    "/{project_id}/search-strategy",
+    response_model=SearchStrategy,
+    status_code=status.HTTP_200_OK,
+)
+def get_search_strategy(
+    project_id: str,
+    repository: SearchStrategyRepository = Depends(get_search_strategy_repository),
+) -> SearchStrategy:
+    """Read the complete persisted strategy for a project."""
+
+    try:
+        return repository.get(project_id)
+    except SearchStrategyNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+
+
+@router.put(
+    "/{project_id}/search-strategy",
+    response_model=SearchStrategy,
+    status_code=status.HTTP_200_OK,
+)
+def put_search_strategy(
+    project_id: str,
+    payload: SearchStrategyPutRequest,
+    strategy_repository: SearchStrategyRepository = Depends(
+        get_search_strategy_repository
+    ),
+    project_repository: ProjectPublicationRepository = Depends(
+        get_project_publication_repository
+    ),
+) -> SearchStrategy:
+    """Validate and atomically replace one project's persisted strategy."""
+
+    try:
+        project_repository.get_publications(project_id)
+    except ProjectNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+
+    try:
+        existing_strategy = strategy_repository.get(project_id)
+    except SearchStrategyNotFoundError:
+        existing_strategy = None
+
+    strategy = SearchStrategy(
+        strategy_id=(
+            payload.strategy_id
+            or (existing_strategy.strategy_id if existing_strategy else uuid4())
+        ),
+        project_id=project_id,
+        name=payload.name,
+        description=payload.description,
+        research_questions=payload.research_questions,
+        concept_groups=payload.concept_groups,
+        group_operator=payload.group_operator,
+        constraints=payload.constraints,
+        providers=[str(provider) for provider in payload.providers],
+        queries=payload.queries,
+        version=payload.version,
+        created_at=(
+            payload.created_at
+            or (
+                existing_strategy.created_at
+                if existing_strategy
+                else payload.creation_time()
+            )
+        ),
+        updated_at=datetime.now(timezone.utc),
+    )
+    return strategy_repository.save(strategy)
 
 
 def _source_id(publication: Publication) -> str:

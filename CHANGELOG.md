@@ -1,6 +1,40 @@
 # Changelog
 
-## [0.1.7] — Unreleased
+## [0.1.8] — Unreleased
+
+### Search Strategy
+
+- Restored production UI.
+- Restored backend persistence.
+- Restored live search execution.
+- Removed navigation to Sources after Search.
+- Restored live OpenAlex results.
+- Restored import workflow.
+
+### Added
+
+- Phase 6.8 End-to-End Literature Search Workflow product direction.
+- Durable, project-scoped Search Strategy model and SQLite repository.
+- Versioned Search Query persistence with complete Boolean expression trees.
+- SQLite schema migration for search strategies.
+- REST `GET` and `PUT` Search Strategy endpoints.
+- Validation for research questions, concept groups, terms, constraints,
+  publication years, languages, publication types, and provider selection.
+- Full Search Strategy GUI editing against the persistent GET/PUT API.
+- Generic live Boolean preview and explicit loading, dirty, saving, saved,
+  validation, missing-strategy, and error states.
+
+### Changed
+
+- Product priority now moves from mock-driven GUI expansion to the complete
+  Search Strategy and Sources Ingestion workflow.
+- Backend application version is read from the root `VERSION` source of truth.
+- Search Strategy no longer uses project mock data as its strategy source.
+- The former Repeat/Execute controls are replaced by Save and `Szukaj`;
+  `Szukaj` persists and executes the current strategy while keeping results on
+  the Search Strategy page.
+
+## [0.1.7]
 
 ### Added
 

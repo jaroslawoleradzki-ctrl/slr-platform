@@ -87,6 +87,26 @@ frontend/
 
 ---
 
+## Persistent Search Strategy workflow (v0.1.8)
+
+The Search Strategy screen uses
+`GET/PUT /projects/{project_id}/search-strategy` as its only strategy data
+source. Project demonstration data remains available to unfinished screens but
+does not initialize or persist the Search Strategy form.
+
+The screen supports the complete backend contract: name, research questions,
+concept groups, terms, AND/OR operators, years, languages, publication types,
+additional constraints, provider selection, and a generic Boolean preview.
+UI state distinguishes initial loading, no saved strategy, unsaved changes,
+save in progress, saved state, validation failures, read failures, and write
+failures.
+
+The terminal action is `Szukaj`. It saves the current strategy and navigates to
+Sources Ingestion only after a successful response. It does not execute
+OpenAlex, Crossref, Semantic Scholar, or any background provider request.
+
+---
+
 ## Quality Gate Verification Results
 
 - **TypeScript Compilation**: `npm run type-check` (0 errors)

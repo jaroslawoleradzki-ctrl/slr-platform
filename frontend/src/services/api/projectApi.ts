@@ -7,6 +7,8 @@ import {
   SearchExecutionResult,
   SearchResultRecord,
   SearchResultsImportResponse,
+  SearchStrategy,
+  SearchStrategyWriteRequest,
 } from '../../types';
 import { MOCK_PROJECTS } from '../../mocks/projectData';
 import { API_BASE_URL } from '../../config/api';
@@ -16,8 +18,11 @@ interface FastApiValidationError {
   msg?: unknown;
 }
 
-const formatFastApiError = async (response: Response): Promise<string> => {
-  const fallback = `Nie udało się wykonać strategii (HTTP ${response.status}).`;
+const formatFastApiError = async (
+  response: Response,
+  operation = 'wykonać strategii',
+): Promise<string> => {
+  const fallback = `Nie udało się ${operation} (HTTP ${response.status}).`;
   let payload: unknown;
   try {
     payload = await response.json();
@@ -62,6 +67,11 @@ export interface ProjectApiService {
     groupId: string
   ): Promise<ApiDuplicateGroupDecisionResponse>;
   executeSearchStrategy(projectId: string, strategy: EditableSearchStrategy): Promise<SearchExecutionResult>;
+  getSearchStrategy(projectId: string): Promise<SearchStrategy | null>;
+  saveSearchStrategy(
+    projectId: string,
+    strategy: SearchStrategyWriteRequest
+  ): Promise<SearchStrategy>;
   importSearchResults(
     projectId: string,
     records: SearchResultRecord[]
@@ -73,6 +83,38 @@ class MixedProjectApiService implements ProjectApiService {
 
   async getProjects(): Promise<SLRProject[]> {
     return [...this.projects];
+  }
+
+  async getSearchStrategy(projectId: string): Promise<SearchStrategy | null> {
+    let response: Response;
+    try {
+      response = await fetch(`${API_BASE_URL}/projects/${projectId}/search-strategy`, {
+        headers: { Accept: 'application/json' },
+      });
+    } catch {
+      throw new Error('Nie udało się połączyć z backendem. Sprawdź połączenie i spróbuj ponownie.');
+    }
+    if (response.status === 404) return null;
+    if (!response.ok) throw new Error(await formatFastApiError(response, 'pobrać strategii'));
+    return response.json() as Promise<SearchStrategy>;
+  }
+
+  async saveSearchStrategy(
+    projectId: string,
+    strategy: SearchStrategyWriteRequest
+  ): Promise<SearchStrategy> {
+    let response: Response;
+    try {
+      response = await fetch(`${API_BASE_URL}/projects/${projectId}/search-strategy`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify(strategy),
+      });
+    } catch {
+      throw new Error('Nie udało się połączyć z backendem. Sprawdź połączenie i spróbuj ponownie.');
+    }
+    if (!response.ok) throw new Error(await formatFastApiError(response, 'zapisać strategii'));
+    return response.json() as Promise<SearchStrategy>;
   }
 
   async executeSearchStrategy(
