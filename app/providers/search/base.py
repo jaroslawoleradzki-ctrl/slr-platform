@@ -22,3 +22,6 @@ class ProviderSearchOutput:
 
     publications: list[Publication]
     raw_responses: list[JsonObject]
+    total_count: int | None = None
+    next_cursor: str | None = None
+    has_more: bool = False

@@ -4,11 +4,15 @@ Backlog for the next sprint before beginning Phase 2.
 
 ### Critical
 
-- determine why OpenAlex reports 3560 results while the application returns 8
-- analyze pagination
-- analyze result limits
-- analyze `rendered_query`
-- compare application requests with requests produced by the OpenAlex UI
+- [x] determine why OpenAlex reports thousands of results while the
+  application returned 8 (`filter-after-limit`)
+- [x] apply supported strategy filters in the OpenAlex request before
+  pagination and the 100-record response bound
+- [x] distinguish provider `total_count` from `returned_count`
+- [x] expose `next_cursor` and `has_more`
+- [ ] add GUI controls for requesting subsequent cursor pages
+- [ ] complete an exact OpenAlex UI comparison when a reproducible UI URL or
+  HAR is available
 
 ### UX
 

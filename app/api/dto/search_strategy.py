@@ -43,6 +43,21 @@ class SearchStrategyExecutionRequest(BaseModel):
     publication_year_to: int = Field(ge=1000, le=9999)
     providers: list[Literal["openalex", "crossref"]] = Field(min_length=1)
     concept_groups: list[ConceptGroupRequest] = Field(min_length=1)
+    languages: list[str] = Field(default_factory=list)
+    publication_types: list[
+        Literal["article", "review", "conference_paper", "book_chapter"]
+    ] = Field(default_factory=list)
+    open_access: bool = False
+
+    @field_validator("languages")
+    @classmethod
+    def normalize_languages(cls, languages: list[str]) -> list[str]:
+        normalized = [language.strip().lower() for language in languages]
+        if any(not language for language in normalized):
+            raise ValueError("languages must not contain blank values")
+        if len(set(normalized)) != len(normalized):
+            raise ValueError("languages must be unique")
+        return normalized
 
     @model_validator(mode="after")
     def validate_year_range(self) -> "SearchStrategyExecutionRequest":
@@ -115,7 +130,10 @@ class SearchStrategyExecutionResponse(BaseModel):
     publication_year_from: int
     publication_year_to: int
     executed_at: datetime
-    result_count: int
+    total_count: int = Field(ge=0)
+    returned_count: int = Field(ge=0)
+    next_cursor: str | None = None
+    has_more: bool
     results: list["SearchResultRecordResponse"]
     provider_errors: list["SearchProviderErrorResponse"] = Field(default_factory=list)
 

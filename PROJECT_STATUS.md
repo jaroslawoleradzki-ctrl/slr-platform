@@ -30,7 +30,11 @@ has been restored from `development` and is functional: it loads and persists
 the strategy through GET/PUT, executes live searches, presents results on the
 same page, and exposes the import workflow. `Szukaj` no longer navigates to
 Sources & Imports. The first SLR workflow stage is therefore functional without
-strategy mocks.
+strategy mocks. OpenAlex execution now applies years, languages, publication
+types, and the existing Open Access constraint at provider request time before
+cursor pagination and the 100-record response bound. The execution contract
+separates the provider's filtered `total_count` from `returned_count` and
+exposes `next_cursor` plus `has_more`.
 
 ---
 
@@ -64,9 +68,9 @@ strategy mocks.
 
 ### Known limitations
 
-- OpenAlex reports 3560 results while the application currently returns 8
-  records
-- pagination and result limits require analysis
+- OpenAlex returns at most 100 records in the current execution response;
+  continuation is described by `next_cursor` and `has_more`, but the GUI does
+  not yet request subsequent pages
 - Crossref execution has not yet been verified
 - Semantic Scholar remains inactive
 

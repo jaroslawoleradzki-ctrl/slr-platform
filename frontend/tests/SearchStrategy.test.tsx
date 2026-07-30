@@ -92,7 +92,10 @@ describe('persistent Search Strategy GUI & Execution', () => {
       execution_id: 'exec-1',
       strategy_id: storedStrategy.strategy_id,
       rendered_query: '"lean manufacturing" OR "lean production"',
-      result_count: 1,
+      total_count: 1,
+      returned_count: 1,
+      next_cursor: null,
+      has_more: false,
       results: [
         {
           id: 'rec-1',
@@ -199,7 +202,10 @@ describe('persistent Search Strategy GUI & Execution', () => {
       publication_year_from: 2015,
       publication_year_to: 2026,
       executed_at: '2026-07-30T10:00:00Z',
-      result_count: 1,
+      total_count: 1,
+      returned_count: 1,
+      next_cursor: null,
+      has_more: false,
       results: [
         {
           id: 'rec-100',

@@ -17,7 +17,7 @@ from app.api.dto.search_strategy import (
 from app.domain.author import Author
 from app.domain.identifiers import Identifier, IdentifierType
 from app.domain.provenance import ProvenanceEntry
-from app.domain.publication import Publication
+from app.domain.publication import DocumentType, Publication
 from app.domain.search import SearchStrategy
 from app.normalization.doi import normalize_doi
 from app.repositories.project_publication_repository import (
@@ -37,6 +37,13 @@ from app.services.live_search import (
 )
 
 router = APIRouter(prefix="/projects", tags=["search strategy"])
+
+_PUBLICATION_TYPE_DOMAIN_MAP = {
+    "article": DocumentType.JOURNAL_ARTICLE,
+    "review": DocumentType.REVIEW,
+    "conference_paper": DocumentType.CONFERENCE_PAPER,
+    "book_chapter": DocumentType.BOOK_CHAPTER,
+}
 
 
 def get_live_search_executor() -> LiveSearchExecutor:
@@ -159,6 +166,28 @@ def _map_result(
     )
 
 
+def _matches_execution_constraints(
+    publication: Publication,
+    payload: SearchStrategyExecutionRequest,
+) -> bool:
+    if (
+        publication.publication_year is None
+        or publication.publication_year < payload.publication_year_from
+        or publication.publication_year > payload.publication_year_to
+    ):
+        return False
+    if payload.languages and publication.language not in payload.languages:
+        return False
+    if payload.publication_types and publication.document_type not in {
+        _PUBLICATION_TYPE_DOMAIN_MAP[value]
+        for value in payload.publication_types
+    }:
+        return False
+    if payload.open_access and publication.open_access is not True:
+        return False
+    return True
+
+
 @router.post(
     "/{project_id}/search-strategy/executions",
     response_model=SearchStrategyExecutionResponse,
@@ -184,10 +213,7 @@ async def execute_search_strategy(
         for provider_result in execution.provider_results
         if provider_result.publications is not None
         for publication in provider_result.publications
-        if publication.publication_year is not None
-        and payload.publication_year_from
-        <= publication.publication_year
-        <= payload.publication_year_to
+        if _matches_execution_constraints(publication, payload)
     ]
     results = [
         _map_result(publication, provider=provider)
@@ -206,6 +232,22 @@ async def execute_search_strategy(
         for provider_result in execution.provider_results
         if provider_result.error is not None
     ]
+    successful_provider_results = [
+        provider_result
+        for provider_result in execution.provider_results
+        if provider_result.error is None
+    ]
+    total_count = sum(
+        provider_result.total_count
+        if provider_result.total_count is not None
+        else len(provider_result.publications or [])
+        for provider_result in successful_provider_results
+    )
+    next_cursor = (
+        successful_provider_results[0].next_cursor
+        if len(successful_provider_results) == 1
+        else None
+    )
     query = build_search_query(payload)
     return SearchStrategyExecutionResponse(
         project_id=project_id,
@@ -214,7 +256,13 @@ async def execute_search_strategy(
         publication_year_from=payload.publication_year_from,
         publication_year_to=payload.publication_year_to,
         executed_at=datetime.now(timezone.utc),
-        result_count=len(results),
+        total_count=total_count,
+        returned_count=len(results),
+        next_cursor=next_cursor,
+        has_more=any(
+            provider_result.has_more
+            for provider_result in successful_provider_results
+        ),
         results=results,
         provider_errors=provider_errors,
     )

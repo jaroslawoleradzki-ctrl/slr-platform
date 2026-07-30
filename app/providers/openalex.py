@@ -4,12 +4,59 @@ import asyncio
 import math
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable
+from dataclasses import dataclass
 from typing import Any
 
 import httpx
 from tenacity import AsyncRetrying, retry_if_exception, stop_after_attempt, wait_exponential
 
 _RETRYABLE_STATUS_CODES = frozenset({429, 500, 502, 503, 504})
+
+# Values exposed by SearchLimitsForm mapped to the canonical OpenAlex type
+# identifiers returned by GET /types. Keep this mapping explicit: domain values
+# use underscores while OpenAlex multi-word type identifiers use hyphens.
+_PUBLICATION_TYPE_FILTER_MAP = {
+    "article": "article",
+    "review": "review",
+    "conference_paper": "conference-paper",
+    "book_chapter": "book-chapter",
+}
+
+
+@dataclass(frozen=True, slots=True)
+class OpenAlexSearchFilters:
+    publication_year_from: int | None = None
+    publication_year_to: int | None = None
+    languages: tuple[str, ...] = ()
+    publication_types: tuple[str, ...] = ()
+    open_access: bool = False
+
+    def to_filter_param(self) -> str | None:
+        filters: list[str] = []
+        if self.publication_year_from is not None:
+            filters.append(
+                f"from_publication_date:{self.publication_year_from}-01-01"
+            )
+        if self.publication_year_to is not None:
+            filters.append(
+                f"to_publication_date:{self.publication_year_to}-12-31"
+            )
+        if self.languages:
+            filters.append(f"language:{'|'.join(self.languages)}")
+        if self.publication_types:
+            try:
+                openalex_types = [
+                    _PUBLICATION_TYPE_FILTER_MAP[value]
+                    for value in self.publication_types
+                ]
+            except KeyError as exc:
+                raise ValueError(
+                    f"Unsupported OpenAlex publication type: {exc.args[0]}"
+                ) from exc
+            filters.append(f"type:{'|'.join(openalex_types)}")
+        if self.open_access:
+            filters.append("is_oa:true")
+        return ",".join(filters) or None
 
 
 def _is_retryable_exception(exception: BaseException) -> bool:
@@ -104,6 +151,7 @@ class OpenAlexClient:
         *,
         per_page: int = 25,
         cursor: str = "*",
+        filters: OpenAlexSearchFilters | None = None,
     ) -> dict[str, Any]:
         """Fetch one cursor page of works matching a free-text query."""
 
@@ -120,6 +168,9 @@ class OpenAlexClient:
             "per-page": per_page,
             "cursor": cursor,
         }
+        filter_param = filters.to_filter_param() if filters is not None else None
+        if filter_param is not None:
+            params["filter"] = filter_param
         if self._mailto is not None:
             params["mailto"] = self._mailto
 
@@ -135,6 +186,7 @@ class OpenAlexClient:
         query: str,
         *,
         per_page: int = 200,
+        filters: OpenAlexSearchFilters | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
         """Yield all works by following OpenAlex cursor pagination."""
 
@@ -144,6 +196,7 @@ class OpenAlexClient:
                 query,
                 per_page=per_page,
                 cursor=cursor,
+                filters=filters,
             )
 
             results = payload.get("results")

@@ -16,7 +16,7 @@ from app.domain.provenance import ProvenanceEntry
 from app.domain.publication import DocumentType, Publication
 from app.domain.search import SearchQuery, SearchRun
 from app.normalization import normalize_orcid
-from app.providers.openalex import OpenAlexClient
+from app.providers.openalex import OpenAlexClient, OpenAlexSearchFilters
 from app.providers.search.base import JsonObject, ProviderSearchOutput
 from app.providers.search.mapping_utils import (
     clean_string,
@@ -37,6 +37,7 @@ _DOCUMENT_TYPE_MAP = {
     "dataset": DocumentType.DATASET,
     "review": DocumentType.REVIEW,
     "proceedings-article": DocumentType.CONFERENCE_PAPER,
+    "conference-paper": DocumentType.CONFERENCE_PAPER,
 }
 
 _VENUE_TYPE_MAP = {
@@ -239,6 +240,7 @@ class OpenAlexProvider:
         retrieval_clock: Callable[[], datetime] = _utc_now,
         paginate: bool = False,
         max_results: int = 100,
+        filters: OpenAlexSearchFilters | None = None,
     ) -> None:
         if max_results < 1:
             raise ValueError("max_results must be at least 1")
@@ -246,6 +248,7 @@ class OpenAlexProvider:
         self._retrieval_clock = retrieval_clock
         self._paginate = paginate
         self._max_results = max_results
+        self._filters = filters
 
     async def search(
         self,
@@ -287,6 +290,7 @@ class OpenAlexProvider:
             search_run.rendered_query,
             per_page=per_page,
             cursor=cursor,
+            filters=self._filters,
         )
 
         results = payload.get("results")
@@ -309,6 +313,9 @@ class OpenAlexProvider:
         return ProviderSearchOutput(
             publications=publications,
             raw_responses=[cast(JsonObject, payload)],
+            total_count=self._read_total_count(payload),
+            next_cursor=self._read_next_cursor(payload),
+            has_more=self._read_next_cursor(payload) is not None,
         )
 
     async def _search_paginated_with_raw(
@@ -322,13 +329,21 @@ class OpenAlexProvider:
         publications: list[Publication] = []
         raw_responses: list[JsonObject] = []
         seen_cursors: set[str] = set()
+        total_count: int | None = None
+        next_cursor: str | None = None
         while len(publications) < self._max_results:
             payload = await self._client.search_works(
                 search_run.rendered_query,
                 per_page=min(per_page, self._max_results - len(publications)),
                 cursor=cursor,
+                filters=self._filters,
             )
             raw_responses.append(cast(JsonObject, payload))
+            page_total_count = self._read_total_count(payload)
+            if total_count is None:
+                total_count = page_total_count
+            elif page_total_count != total_count:
+                raise ValueError("OpenAlex meta.count changed during pagination")
             results = payload.get("results")
             if not isinstance(results, list):
                 raise ValueError("OpenAlex response results must be a list")
@@ -349,13 +364,9 @@ class OpenAlexProvider:
             meta = payload.get("meta")
             if not isinstance(meta, dict):
                 raise ValueError("OpenAlex response meta must be a JSON object")
-            next_cursor = meta.get("next_cursor")
+            next_cursor = self._read_next_cursor(payload)
             if next_cursor is None or not results:
                 break
-            if not isinstance(next_cursor, str) or not next_cursor.strip():
-                raise ValueError(
-                    "OpenAlex next_cursor must be a non-blank string or null"
-                )
             if next_cursor == cursor or next_cursor in seen_cursors:
                 break
             seen_cursors.add(cursor)
@@ -363,6 +374,9 @@ class OpenAlexProvider:
         return ProviderSearchOutput(
             publications=publications,
             raw_responses=raw_responses,
+            total_count=total_count,
+            next_cursor=next_cursor,
+            has_more=next_cursor is not None,
         )
 
     async def iterate(
@@ -378,6 +392,7 @@ class OpenAlexProvider:
         async for work in self._client.iterate_works(
             search_run.rendered_query,
             per_page=per_page,
+            filters=self._filters,
         ):
             yield self._map_work_with_provenance(
                 work,
@@ -385,6 +400,32 @@ class OpenAlexProvider:
                 search_query=search_query,
                 retrieved_at=self._retrieval_clock(),
             )
+
+    @staticmethod
+    def _read_total_count(payload: dict[str, Any]) -> int | None:
+        meta = payload.get("meta")
+        if not isinstance(meta, dict):
+            raise ValueError("OpenAlex response meta must be a JSON object")
+        count = meta.get("count")
+        if count is None:
+            return None
+        if not isinstance(count, int) or isinstance(count, bool) or count < 0:
+            raise ValueError("OpenAlex meta.count must be a non-negative integer")
+        return count
+
+    @staticmethod
+    def _read_next_cursor(payload: dict[str, Any]) -> str | None:
+        meta = payload.get("meta")
+        if not isinstance(meta, dict):
+            raise ValueError("OpenAlex response meta must be a JSON object")
+        next_cursor = meta.get("next_cursor")
+        if next_cursor is None:
+            return None
+        if not isinstance(next_cursor, str) or not next_cursor.strip():
+            raise ValueError(
+                "OpenAlex next_cursor must be a non-blank string or null"
+            )
+        return next_cursor
 
     def map_work(self, work: dict[str, Any]) -> Publication:
         """Map one OpenAlex work without I/O or search provenance."""

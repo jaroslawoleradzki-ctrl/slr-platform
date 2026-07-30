@@ -109,7 +109,10 @@ describe('Search Strategy frontend-backend contract', () => {
       publication_year_from: 2020,
       publication_year_to: 2024,
       executed_at: '2026-07-29T15:00:00Z',
-      result_count: 1,
+      total_count: 100,
+      returned_count: 1,
+      next_cursor: 'next-page',
+      has_more: true,
       results: [{
         id: 'result-1',
         title: 'Controlled result',
@@ -137,6 +140,9 @@ describe('Search Strategy frontend-backend contract', () => {
         body: JSON.stringify({
           publication_year_from: 2020,
           publication_year_to: 2024,
+          languages: ['en'],
+          publication_types: ['article'],
+          open_access: false,
           providers: ['openalex'],
           concept_groups: [{ id: 'g1', name: 'Lean', terms: ['Kaizen'] }],
         }),

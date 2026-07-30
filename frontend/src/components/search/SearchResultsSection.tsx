@@ -53,7 +53,7 @@ export const SearchResultsSection: React.FC<Props> = ({
           <span>Wyniki wyszukiwania</span>
         </div>
       }
-      subtitle={`Znaleziono ${result.result_count} rekordów. Wybrano ${selectedIds.length}.`}
+      subtitle={`Znaleziono ${result.total_count} rekordów. Zwrócono ${result.returned_count}. Wybrano ${selectedIds.length}.`}
     >
       {result.provider_errors && result.provider_errors.length > 0 && (
         <div

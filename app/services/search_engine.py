@@ -48,6 +48,9 @@ class ProviderSearchResult:
     search_run: SearchRun
     publications: list[Publication] | None
     error: Exception | None
+    total_count: int | None = None
+    next_cursor: str | None = None
+    has_more: bool = False
 
     def __post_init__(self) -> None:
         if (self.publications is None) == (self.error is None):
@@ -182,6 +185,9 @@ class SearchEngine:
                         search_run=final_search_run,
                         publications=normalized_publications,
                         error=None,
+                        total_count=output.total_count,
+                        next_cursor=output.next_cursor,
+                        has_more=output.has_more,
                     )
                 )
                 result_provenance.extend(

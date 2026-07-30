@@ -131,6 +131,9 @@ class MixedProjectApiService implements ProjectApiService {
           body: JSON.stringify({
             publication_year_from: strategy.filters.publicationYearFrom,
             publication_year_to: strategy.filters.publicationYearTo,
+            languages: strategy.filters.languages,
+            publication_types: strategy.filters.publicationTypes,
+            open_access: strategy.filters.fullTextOnly,
             providers: strategy.providers,
             concept_groups: strategy.conceptGroups,
           }),

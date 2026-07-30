@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
 from datetime import datetime, timezone
 from typing import Protocol
 
@@ -15,7 +14,7 @@ from app.domain.search import (
     SearchTerm,
 )
 from app.providers.crossref import CrossrefClient
-from app.providers.openalex import OpenAlexClient
+from app.providers.openalex import OpenAlexClient, OpenAlexSearchFilters
 from app.providers.search.crossref import CrossrefProvider
 from app.providers.search.openalex import OpenAlexProvider
 from app.repositories.project_publication_repository import (
@@ -87,7 +86,7 @@ class LiveSearchService:
     ) -> SearchExecution:
         self._repository.get_publications(project_id)
         async with httpx.AsyncClient(timeout=30.0) as http_client:
-            providers = self._build_providers(strategy.providers, http_client)
+            providers = self._build_providers(strategy, http_client)
             engine = SearchEngine(
                 providers=providers,
                 raw_response_archive=_InMemoryRawResponseArchive(),
@@ -96,16 +95,23 @@ class LiveSearchService:
 
     @staticmethod
     def _build_providers(
-        provider_names: Sequence[str],
+        strategy: SearchStrategyExecutionRequest,
         http_client: httpx.AsyncClient,
     ) -> list[SearchProvider]:
         providers: list[SearchProvider] = []
-        for name in provider_names:
+        for name in strategy.providers:
             if name == "openalex":
                 providers.append(
                     OpenAlexProvider(
                         client=OpenAlexClient(http_client=http_client),
                         paginate=True,
+                        filters=OpenAlexSearchFilters(
+                            publication_year_from=strategy.publication_year_from,
+                            publication_year_to=strategy.publication_year_to,
+                            languages=tuple(strategy.languages),
+                            publication_types=tuple(strategy.publication_types),
+                            open_access=strategy.open_access,
+                        ),
                     )
                 )
             elif name == "crossref":

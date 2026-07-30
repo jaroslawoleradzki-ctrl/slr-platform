@@ -12,7 +12,10 @@ const result: SearchExecutionResult = {
   publication_year_from: 2020,
   publication_year_to: 2026,
   executed_at: '2026-07-29T12:00:00Z',
-  result_count: 2,
+  total_count: 20,
+  returned_count: 2,
+  next_cursor: 'next-page',
+  has_more: true,
   results: [
     {
       id: 'one',
@@ -59,7 +62,7 @@ describe('SearchResultsSection', () => {
     expect(screen.getByRole('status')).toHaveTextContent('Wyszukiwanie');
     rerender(
       <SearchResultsSection
-        result={{ ...result, result_count: 0, results: [] }}
+        result={{ ...result, total_count: 0, returned_count: 0, results: [] }}
         loading={false}
         selectedIds={[]}
         onSelectionChange={() => undefined}
@@ -70,7 +73,7 @@ describe('SearchResultsSection', () => {
 
   it('renders record fields and omits an empty DOI', () => {
     render(<SelectableResults />);
-    expect(screen.getByText('Znaleziono 2 rekordów. Wybrano 0.')).toBeInTheDocument();
+    expect(screen.getByText('Znaleziono 20 rekordów. Zwrócono 2. Wybrano 0.')).toBeInTheDocument();
     expect(screen.getByText('Lean energy result')).toBeInTheDocument();
     expect(screen.getByText(/Anna Kowalska, Michael Smith · 2021 · Provider: openalex/)).toBeInTheDocument();
     expect(screen.getByText('DOI: 10.1000/lean')).toBeInTheDocument();

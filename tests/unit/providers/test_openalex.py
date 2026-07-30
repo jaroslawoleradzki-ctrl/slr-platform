@@ -7,7 +7,7 @@ import httpx
 import pytest
 
 from app.domain.search import SearchQuery, SearchRun, SearchTerm
-from app.providers.openalex import OpenAlexClient
+from app.providers.openalex import OpenAlexClient, OpenAlexSearchFilters
 from app.providers.search.openalex import OpenAlexProvider
 
 _QUERY_ID = UUID("00000000-0000-0000-0000-000000000001")
@@ -88,6 +88,54 @@ async def test_search_works_sends_expected_request() -> None:
 
 
 @pytest.mark.anyio
+async def test_search_works_sends_strategy_filters_before_pagination() -> None:
+    async def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.params["filter"] == (
+            "from_publication_date:2020-01-01,"
+            "to_publication_date:2026-12-31,"
+            "language:en|pl,"
+            "type:article|review|conference-paper|book-chapter,"
+            "is_oa:true"
+        )
+        assert request.url.params["cursor"] == "*"
+        return httpx.Response(
+            200,
+            json={"meta": {"count": 11, "next_cursor": None}, "results": []},
+            request=request,
+        )
+
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(handler)
+    ) as http_client:
+        await OpenAlexClient(
+            http_client=http_client,
+            requests_per_second=None,
+        ).search_works(
+            "lean manufacturing",
+            filters=OpenAlexSearchFilters(
+                publication_year_from=2020,
+                publication_year_to=2026,
+                languages=("en", "pl"),
+                publication_types=(
+                    "article",
+                    "review",
+                    "conference_paper",
+                    "book_chapter",
+                ),
+                open_access=True,
+            ),
+        )
+
+
+def test_openalex_filters_reject_unknown_publication_type() -> None:
+    with pytest.raises(
+        ValueError,
+        match="Unsupported OpenAlex publication type: unknown",
+    ):
+        OpenAlexSearchFilters(publication_types=("unknown",)).to_filter_param()
+
+
+@pytest.mark.anyio
 async def test_provider_attaches_search_provenance_to_publication() -> None:
     search_run, search_query = build_search_context()
 
@@ -143,6 +191,11 @@ async def test_live_provider_mode_collects_cursor_pages_with_a_bound() -> None:
     requested_cursors: list[str] = []
 
     async def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.params["filter"] == (
+            "from_publication_date:2020-01-01,"
+            "to_publication_date:2026-12-31,"
+            "language:en|pl,type:article"
+        )
         cursor = request.url.params["cursor"]
         requested_cursors.append(cursor)
         index = len(requested_cursors)
@@ -150,6 +203,7 @@ async def test_live_provider_mode_collects_cursor_pages_with_a_bound() -> None:
             200,
             json={
                 "meta": {
+                    "count": 200,
                     "next_cursor": "page-2" if index == 1 else "page-3"
                 },
                 "results": [
@@ -172,6 +226,12 @@ async def test_live_provider_mode_collects_cursor_pages_with_a_bound() -> None:
             ),
             paginate=True,
             max_results=2,
+            filters=OpenAlexSearchFilters(
+                publication_year_from=2020,
+                publication_year_to=2026,
+                languages=("en", "pl"),
+                publication_types=("article",),
+            ),
         )
         output = await provider.search_with_raw(
             search_run=search_run,
@@ -184,6 +244,9 @@ async def test_live_provider_mode_collects_cursor_pages_with_a_bound() -> None:
         "Result 2",
     ]
     assert len(output.raw_responses) == 2
+    assert output.total_count == 200
+    assert output.next_cursor == "page-3"
+    assert output.has_more is True
 
 
 @pytest.mark.anyio

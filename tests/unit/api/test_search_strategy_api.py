@@ -33,10 +33,14 @@ class _Provider:
         name: str,
         publications: list[Publication] | None = None,
         error: Exception | None = None,
+        total_count: int | None = None,
+        next_cursor: str | None = None,
     ) -> None:
         self.name = name
         self.publications = publications or []
         self.error = error
+        self.total_count = total_count
+        self.next_cursor = next_cursor
 
     async def search_with_raw(
         self,
@@ -49,6 +53,9 @@ class _Provider:
         return ProviderSearchOutput(
             publications=self.publications,
             raw_responses=[],
+            total_count=self.total_count,
+            next_cursor=self.next_cursor,
+            has_more=self.next_cursor is not None,
         )
 
 
@@ -138,7 +145,8 @@ def test_openalex_and_crossref_success_are_returned_without_deduplication() -> N
 
     assert response.status_code == 200
     body = response.json()
-    assert body["result_count"] == 2
+    assert body["total_count"] == 2
+    assert body["returned_count"] == 2
     assert [item["provider"] for item in body["results"]] == [
         "openalex",
         "crossref",
@@ -213,12 +221,45 @@ def test_execution_timestamp_is_real_and_remaining_response_is_stable() -> None:
     ]
 
     assert all(started_at <= value <= finished_at for value in timestamps)
-    assert first["result_count"] == second["result_count"] == 1
+    assert first["total_count"] == second["total_count"] == 1
+    assert first["returned_count"] == second["returned_count"] == 1
     assert first["rendered_query"] == second["rendered_query"]
     assert first["providers"] == second["providers"] == ["openalex"]
     assert first["results"][0]["title"] == second["results"][0]["title"]
     assert first["results"][0]["source_id"] == second["results"][0]["source_id"]
     assert first["results"][0]["id"] == second["results"][0]["id"]
+
+
+def test_openalex_metadata_is_exposed_without_confusing_total_and_returned() -> None:
+    publications = [
+        _publication(
+            f"Result {index}",
+            provider="openalex",
+            source_id=f"W{index}",
+        )
+        for index in range(2)
+    ]
+    response = _client_with_executor(
+        _Executor(
+            [
+                _Provider(
+                    "openalex",
+                    publications,
+                    total_count=3560,
+                    next_cursor="next-page",
+                )
+            ]
+        )
+    ).post(
+        "/projects/lean_energy/search-strategy/executions",
+        json=_payload(["openalex"]),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["total_count"] == 3560
+    assert response.json()["returned_count"] == 2
+    assert response.json()["next_cursor"] == "next-page"
+    assert response.json()["has_more"] is True
 
 
 def test_unknown_project_and_invalid_strategy_are_rejected() -> None:

@@ -98,7 +98,10 @@ export interface SearchExecutionResult {
   publication_year_from: number;
   publication_year_to: number;
   executed_at: string;
-  result_count: number;
+  total_count: number;
+  returned_count: number;
+  next_cursor: string | null;
+  has_more: boolean;
   results: SearchResultRecord[];
   provider_errors?: SearchProviderError[];
 }
