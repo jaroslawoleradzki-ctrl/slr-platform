@@ -81,6 +81,65 @@ describe('SearchResultsSection', () => {
     expect(screen.queryByText('DOI:', { exact: true })).not.toBeInTheDocument();
   });
 
+  it('shows and triggers cursor pagination while preserving the loaded count', () => {
+    const onLoadMore = vi.fn();
+    render(
+      <SearchResultsSection
+        result={result}
+        loading={false}
+        selectedIds={[]}
+        onSelectionChange={() => undefined}
+        onLoadMore={onLoadMore}
+      />,
+    );
+
+    const button = screen.getByRole('button', { name: 'Pobierz kolejne wyniki' });
+    expect(button).toBeEnabled();
+    fireEvent.click(button);
+    expect(onLoadMore).toHaveBeenCalledOnce();
+  });
+
+  it('hides pagination when there are no more results and disables it while loading', () => {
+    const onLoadMore = vi.fn();
+    const { rerender } = render(
+      <SearchResultsSection
+        result={{ ...result, has_more: false, next_cursor: null }}
+        loading={false}
+        selectedIds={[]}
+        onSelectionChange={() => undefined}
+        onLoadMore={onLoadMore}
+      />,
+    );
+    expect(screen.queryByRole('button', { name: 'Pobierz kolejne wyniki' })).not.toBeInTheDocument();
+
+    rerender(
+      <SearchResultsSection
+        result={result}
+        loading={false}
+        loadingMore
+        selectedIds={[]}
+        onSelectionChange={() => undefined}
+        onLoadMore={onLoadMore}
+      />,
+    );
+    expect(screen.getByRole('button', { name: 'Pobieranie…' })).toBeDisabled();
+  });
+
+  it('keeps existing records visible when loading the next page fails', () => {
+    render(
+      <SearchResultsSection
+        result={result}
+        loading={false}
+        selectedIds={[]}
+        onSelectionChange={() => undefined}
+        paginationError="Nie udało się pobrać kolejnych wyników."
+        onLoadMore={() => undefined}
+      />,
+    );
+    expect(screen.getByRole('alert')).toHaveTextContent('Nie udało się pobrać kolejnych wyników');
+    expect(screen.getByText('Lean energy result')).toBeInTheDocument();
+  });
+
   it('selects one record and toggles all visible records', () => {
     render(<SelectableResults />);
     const first = screen.getByLabelText('Wybierz rekord Lean energy result');

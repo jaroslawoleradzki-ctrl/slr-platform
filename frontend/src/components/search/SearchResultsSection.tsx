@@ -11,6 +11,9 @@ interface Props {
   importing?: boolean;
   onImport?: () => void;
   importResult?: SearchResultsImportResponse | null;
+  loadingMore?: boolean;
+  paginationError?: string | null;
+  onLoadMore?: () => void;
 }
 
 export const SearchResultsSection: React.FC<Props> = ({
@@ -21,6 +24,9 @@ export const SearchResultsSection: React.FC<Props> = ({
   importing = false,
   onImport,
   importResult = null,
+  loadingMore = false,
+  paginationError = null,
+  onLoadMore,
 }) => {
   if (loading) {
     return (
@@ -36,14 +42,6 @@ export const SearchResultsSection: React.FC<Props> = ({
       </Card>
     );
   }
-  if (result.results.length === 0) {
-    return (
-      <Card title="Wyniki wyszukiwania">
-        <div style={{ color: 'var(--text-secondary)' }}>Nie znaleziono rekordów dla tej strategii.</div>
-      </Card>
-    );
-  }
-
   const allSelected = result.results.every((record) => selectedIds.includes(record.id));
   return (
     <Card
@@ -55,6 +53,11 @@ export const SearchResultsSection: React.FC<Props> = ({
       }
       subtitle={`Znaleziono ${result.total_count} rekordów. Zwrócono ${result.returned_count}. Wybrano ${selectedIds.length}.`}
     >
+      {result.results.length === 0 && (
+        <div style={{ color: 'var(--text-secondary)', marginBottom: 12 }}>
+          Nie znaleziono rekordów dla tej strategii.
+        </div>
+      )}
       {result.provider_errors && result.provider_errors.length > 0 && (
         <div
           role="alert"
@@ -116,6 +119,30 @@ export const SearchResultsSection: React.FC<Props> = ({
             </span>
           )}
         </div>
+      )}
+      {paginationError && (
+        <div role="alert" style={{ color: 'var(--status-danger-text)', marginBottom: 12 }}>
+          {paginationError}
+        </div>
+      )}
+      {onLoadMore && result.has_more && (
+        <button
+          type="button"
+          disabled={loadingMore}
+          onClick={onLoadMore}
+          style={{
+            marginBottom: 12,
+            padding: '8px 14px',
+            borderRadius: 'var(--radius-md)',
+            backgroundColor: 'var(--bg-surface-elevated)',
+            color: 'var(--text-primary)',
+            border: '1px solid var(--border-strong)',
+            fontWeight: 700,
+            opacity: loadingMore ? 0.55 : 1,
+          }}
+        >
+          {loadingMore ? 'Pobieranie…' : 'Pobierz kolejne wyniki'}
+        </button>
       )}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {result.results.map((record) => (

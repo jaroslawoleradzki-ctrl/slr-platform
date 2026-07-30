@@ -51,6 +51,7 @@ class ContractProvider:
         *,
         search_run: SearchRun,
         search_query: SearchQuery,
+        cursor: str = "*",
     ) -> ProviderSearchOutput:
         self.calls.append((search_run, search_query))
         if self.call_order is not None:

@@ -48,6 +48,7 @@ class SearchStrategyExecutionRequest(BaseModel):
         Literal["article", "review", "conference_paper", "book_chapter"]
     ] = Field(default_factory=list)
     open_access: bool = False
+    cursor: str | None = None
 
     @field_validator("languages")
     @classmethod
@@ -57,6 +58,16 @@ class SearchStrategyExecutionRequest(BaseModel):
             raise ValueError("languages must not contain blank values")
         if len(set(normalized)) != len(normalized):
             raise ValueError("languages must be unique")
+        return normalized
+
+    @field_validator("cursor")
+    @classmethod
+    def normalize_cursor(cls, cursor: str | None) -> str | None:
+        if cursor is None:
+            return None
+        normalized = cursor.strip()
+        if not normalized:
+            raise ValueError("cursor must not be blank")
         return normalized
 
     @model_validator(mode="after")

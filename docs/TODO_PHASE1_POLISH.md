@@ -10,7 +10,8 @@ Backlog for the next sprint before beginning Phase 2.
   pagination and the 100-record response bound
 - [x] distinguish provider `total_count` from `returned_count`
 - [x] expose `next_cursor` and `has_more`
-- [ ] add GUI controls for requesting subsequent cursor pages
+- [x] add GUI controls for requesting subsequent cursor pages
+- [ ] implement full automatic retrieval/import of all result pages
 - [ ] complete an exact OpenAlex UI comparison when a reproducible UI URL or
   HAR is available
 

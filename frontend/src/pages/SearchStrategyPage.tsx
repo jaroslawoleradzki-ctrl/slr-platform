@@ -108,6 +108,9 @@ export const SearchStrategyPage: React.FC = () => {
     activeProject,
     executeSearchStrategy,
     searchExecutionResult,
+    loadMoreSearchResults,
+    searchLoadingMore,
+    searchPaginationError,
     selectedSearchResultIds,
     setSelectedSearchResultIds,
     importSelectedSearchResults,
@@ -474,6 +477,9 @@ export const SearchStrategyPage: React.FC = () => {
         onSelectionChange={setSelectedSearchResultIds}
         importing={importing}
         importResult={lastSearchImportResult}
+        loadingMore={searchLoadingMore}
+        paginationError={searchPaginationError}
+        onLoadMore={() => void loadMoreSearchResults()}
         onImport={async () => {
           setImporting(true);
           setExecutionError(null);

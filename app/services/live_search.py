@@ -91,7 +91,10 @@ class LiveSearchService:
                 providers=providers,
                 raw_response_archive=_InMemoryRawResponseArchive(),
             )
-            return await engine.execute(build_search_query(strategy))
+            return await engine.execute(
+                build_search_query(strategy),
+                cursor=strategy.cursor or "*",
+            )
 
     @staticmethod
     def _build_providers(

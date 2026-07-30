@@ -66,7 +66,11 @@ export interface ProjectApiService {
     projectId: string,
     groupId: string
   ): Promise<ApiDuplicateGroupDecisionResponse>;
-  executeSearchStrategy(projectId: string, strategy: EditableSearchStrategy): Promise<SearchExecutionResult>;
+  executeSearchStrategy(
+    projectId: string,
+    strategy: EditableSearchStrategy,
+    cursor?: string,
+  ): Promise<SearchExecutionResult>;
   getSearchStrategy(projectId: string): Promise<SearchStrategy | null>;
   saveSearchStrategy(
     projectId: string,
@@ -119,7 +123,8 @@ class MixedProjectApiService implements ProjectApiService {
 
   async executeSearchStrategy(
     projectId: string,
-    strategy: EditableSearchStrategy
+    strategy: EditableSearchStrategy,
+    cursor?: string,
   ): Promise<SearchExecutionResult> {
     let response: Response;
     try {
@@ -136,6 +141,7 @@ class MixedProjectApiService implements ProjectApiService {
             open_access: strategy.filters.fullTextOnly,
             providers: strategy.providers,
             concept_groups: strategy.conceptGroups,
+            ...(cursor ? { cursor } : {}),
           }),
         }
       );

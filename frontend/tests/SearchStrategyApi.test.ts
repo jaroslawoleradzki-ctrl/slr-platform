@@ -150,6 +150,21 @@ describe('Search Strategy frontend-backend contract', () => {
     );
   });
 
+  it('sends a cursor only when loading a subsequent page', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({}), { status: 200 }),
+    );
+
+    await projectApiService.executeSearchStrategy('lean_energy', strategy, 'next-page');
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://localhost:8000/projects/lean_energy/search-strategy/executions',
+      expect.objectContaining({
+        body: expect.stringContaining('"cursor":"next-page"'),
+      }),
+    );
+  });
+
   it('uses a string FastAPI detail as the primary error reason', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       new Response(JSON.stringify({ detail: 'Project is unavailable' }), { status: 404 })

@@ -41,13 +41,16 @@ class _Provider:
         self.error = error
         self.total_count = total_count
         self.next_cursor = next_cursor
+        self.cursors: list[str] = []
 
     async def search_with_raw(
         self,
         *,
         search_run: object,
         search_query: object,
+        cursor: str = "*",
     ) -> ProviderSearchOutput:
+        self.cursors.append(cursor)
         if self.error is not None:
             raise self.error
         return ProviderSearchOutput(
@@ -68,6 +71,7 @@ class _Executor:
     ) -> None:
         self.providers = providers
         self.missing_project = missing_project
+        self.cursors: list[str] = []
 
     async def execute(self, project_id: str, strategy: object) -> object:
         if self.missing_project:
@@ -75,7 +79,7 @@ class _Executor:
         return await SearchEngine(
             providers=self.providers,
             raw_response_archive=_Archive(),
-        ).execute(build_search_query(strategy))
+        ).execute(build_search_query(strategy), cursor=getattr(strategy, "cursor", None) or "*")
 
 
 def _publication(
@@ -259,6 +263,28 @@ def test_openalex_metadata_is_exposed_without_confusing_total_and_returned() -> 
     assert response.json()["total_count"] == 3560
     assert response.json()["returned_count"] == 2
     assert response.json()["next_cursor"] == "next-page"
+    assert response.json()["has_more"] is True
+
+
+def test_cursor_is_optional_and_forwarded_to_provider() -> None:
+    provider = _Provider(
+        "openalex",
+        [_publication("Cursor result", provider="openalex", source_id="W-cursor")],
+        total_count=2,
+        next_cursor="next-next",
+    )
+    executor = _Executor([provider])
+    payload = _payload(["openalex"])
+    payload["cursor"] = "next-page"
+
+    response = _client_with_executor(executor).post(
+        "/projects/lean_energy/search-strategy/executions",
+        json=payload,
+    )
+
+    assert response.status_code == 200
+    assert provider.cursors == ["next-page"]
+    assert response.json()["next_cursor"] == "next-next"
     assert response.json()["has_more"] is True
 
 

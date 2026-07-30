@@ -34,7 +34,10 @@ strategy mocks. OpenAlex execution now applies years, languages, publication
 types, and the existing Open Access constraint at provider request time before
 cursor pagination and the 100-record response bound. The execution contract
 separates the provider's filtered `total_count` from `returned_count` and
-exposes `next_cursor` plus `has_more`.
+exposes `next_cursor` plus `has_more`. Search Strategy now accepts the
+execution cursor and lets users append subsequent OpenAlex pages without
+restarting the search; full automatic import of all results remains out of
+scope.
 
 ---
 
@@ -68,9 +71,9 @@ exposes `next_cursor` plus `has_more`.
 
 ### Known limitations
 
-- OpenAlex returns at most 100 records in the current execution response;
-  continuation is described by `next_cursor` and `has_more`, but the GUI does
-  not yet request subsequent pages
+- OpenAlex returns at most 100 records per execution response; the Search
+  Strategy UI can request and append subsequent pages, while full automatic
+  retrieval/import of all results remains out of scope
 - Crossref execution has not yet been verified
 - Semantic Scholar remains inactive
 

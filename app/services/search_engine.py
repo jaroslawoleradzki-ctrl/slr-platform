@@ -38,6 +38,7 @@ class SearchProvider(Protocol):
         *,
         search_run: SearchRun,
         search_query: SearchQuery,
+        cursor: str = "*",
     ) -> ProviderSearchOutput: ...
 
 
@@ -107,7 +108,12 @@ class SearchEngine:
             else DuplicateGroupBuilder()
         )
 
-    async def execute(self, search_query: SearchQuery) -> SearchExecution:
+    async def execute(
+        self,
+        search_query: SearchQuery,
+        *,
+        cursor: str = "*",
+    ) -> SearchExecution:
         """Execute providers sequentially and preserve separate result identity."""
 
         execution_started_at = self._clock()
@@ -128,6 +134,7 @@ class SearchEngine:
                 output = await provider.search_with_raw(
                     search_run=search_run,
                     search_query=search_query,
+                    cursor=cursor,
                 )
             except Exception as error:
                 await self._raw_response_archive.save(

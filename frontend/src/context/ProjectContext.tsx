@@ -23,6 +23,9 @@ interface ProjectContextType {
   setCurrentSearchStrategy: (strategy: EditableSearchStrategy) => void;
   setSelectedSearchResultIds: (ids: string[]) => void;
   executeSearchStrategy: (strategy: EditableSearchStrategy) => Promise<SearchExecutionResult>;
+  loadMoreSearchResults: () => Promise<SearchExecutionResult | null>;
+  searchLoadingMore: boolean;
+  searchPaginationError: string | null;
   importSelectedSearchResults: () => Promise<SearchResultsImportResponse | null>;
   lastSearchImportResult: SearchResultsImportResponse | null;
 }
@@ -38,6 +41,10 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [currentSearchStrategy, setCurrentSearchStrategy] = useState<EditableSearchStrategy | null>(null);
   const [lastExecutedSearchStrategy, setLastExecutedSearchStrategy] = useState<EditableSearchStrategy | null>(null);
   const [searchExecutionResult, setSearchExecutionResult] = useState<SearchExecutionResult | null>(null);
+  const [searchLoadingMore, setSearchLoadingMore] = useState(false);
+  const [searchPaginationError, setSearchPaginationError] = useState<string | null>(null);
+  const searchLoadingMoreRef = useRef(false);
+  const searchExecutionVersionRef = useRef(0);
   const [selectedSearchResultIds, setSelectedSearchResultIds] = useState<string[]>([]);
   const [lastSearchImportResult, setLastSearchImportResult] =
     useState<SearchResultsImportResponse | null>(null);
@@ -47,6 +54,10 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setCurrentSearchStrategy(null);
     setLastExecutedSearchStrategy(null);
     setSearchExecutionResult(null);
+    setSearchPaginationError(null);
+    setSearchLoadingMore(false);
+    searchLoadingMoreRef.current = false;
+    searchExecutionVersionRef.current += 1;
     setSelectedSearchResultIds([]);
     setLastSearchImportResult(null);
     activeProjectIdRef.current = id;
@@ -92,13 +103,85 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
     if (!activeProject) throw new Error('Brak aktywnego projektu.');
     const targetProjectId = activeProjectIdRef.current;
     const executionStrategy = structuredClone(strategy);
+    const executionVersion = searchExecutionVersionRef.current + 1;
+    searchExecutionVersionRef.current = executionVersion;
     setSearchExecutionResult(null);
+    setSearchPaginationError(null);
+    setLastExecutedSearchStrategy(null);
+    setSearchLoadingMore(false);
+    searchLoadingMoreRef.current = false;
     setSelectedSearchResultIds([]);
     const result = await projectApiService.executeSearchStrategy(targetProjectId, executionStrategy);
-    if (activeProjectIdRef.current !== targetProjectId) return result;
+    if (
+      activeProjectIdRef.current !== targetProjectId
+      || searchExecutionVersionRef.current !== executionVersion
+    ) return result;
     setLastExecutedSearchStrategy(executionStrategy);
     setSearchExecutionResult(result);
     return result;
+  };
+
+  const loadMoreSearchResults = async (): Promise<SearchExecutionResult | null> => {
+    const current = searchExecutionResult;
+    if (!current || !current.has_more || searchLoadingMoreRef.current) return null;
+    if (!current.next_cursor) {
+      setSearchPaginationError('Nie można pobrać kolejnych wyników: brak cursoru.');
+      setSearchExecutionResult({ ...current, next_cursor: null, has_more: false });
+      return null;
+    }
+    const strategy = lastExecutedSearchStrategy;
+    if (!strategy) {
+      setSearchPaginationError('Nie można pobrać kolejnych wyników: brak strategii.');
+      return null;
+    }
+    const targetProjectId = activeProjectIdRef.current;
+    const executionVersion = searchExecutionVersionRef.current;
+    searchLoadingMoreRef.current = true;
+    setSearchLoadingMore(true);
+    setSearchPaginationError(null);
+    try {
+      const page = await projectApiService.executeSearchStrategy(
+        targetProjectId,
+        strategy,
+        current.next_cursor,
+      );
+      if (
+        activeProjectIdRef.current !== targetProjectId
+        || searchExecutionVersionRef.current !== executionVersion
+      ) return page;
+      if (page.has_more && !page.next_cursor) {
+        throw new Error('Nie można pobrać kolejnych wyników: brak cursoru.');
+      }
+      const seen = new Set<string>();
+      const merged = [...current.results, ...page.results].filter((record) => {
+        const key = record.source_id
+          ? `${record.provider}:${record.source_id}`
+          : record.doi
+            ? `doi:${record.doi.toLowerCase()}`
+            : `id:${record.id}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+      const mergedResult = {
+        ...page,
+        results: merged,
+        returned_count: merged.length,
+      };
+      setSearchExecutionResult(mergedResult);
+      return mergedResult;
+    } catch (error) {
+      if (searchExecutionVersionRef.current !== executionVersion) return null;
+      setSearchPaginationError(
+        error instanceof Error ? error.message : 'Nie udało się pobrać kolejnych wyników.',
+      );
+      return null;
+    } finally {
+      if (searchExecutionVersionRef.current === executionVersion) {
+        searchLoadingMoreRef.current = false;
+        setSearchLoadingMore(false);
+      }
+    }
   };
 
   const importSelectedSearchResults = async () => {
@@ -136,6 +219,9 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
         setCurrentSearchStrategy,
         setSelectedSearchResultIds,
         executeSearchStrategy,
+        loadMoreSearchResults,
+        searchLoadingMore,
+        searchPaginationError,
         importSelectedSearchResults,
         lastSearchImportResult,
       }}

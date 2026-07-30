@@ -10,6 +10,9 @@
 - Removed navigation to Sources after Search.
 - Restored live OpenAlex results.
 - Restored import workflow.
+- Added cursor pagination for Search Strategy results, including append-only
+  loading, duplicate protection, retryable page errors, and total/loaded
+  counts. Full automatic retrieval/import of all result pages is not included.
 
 ### Added
 
