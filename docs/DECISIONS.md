@@ -6,6 +6,18 @@ This document records important project decisions that do not require a full ADR
 
 ## 2026-07-30
 
+### Durable latest normalization execution (0.2.0)
+
+Normalization execution summaries use a project-keyed SQLite table with one
+row per project. A new run replaces the previous row, keeping the minimum
+contract needed by the GUI without introducing full multi-run history. Audit
+trail and applied rules are stored as JSON, while timestamps and counters remain
+relational fields. The existing `PublicationNormalizer` is unchanged.
+
+---
+
+## 2026-07-30
+
 ### Unified project-scoped import history (0.1.9)
 
 The durable import-history resource is shared by manual bibliographic files and

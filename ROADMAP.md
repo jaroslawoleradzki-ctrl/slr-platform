@@ -177,6 +177,17 @@ provider execution status and the broader Sources ingestion workflow.
 Background jobs, provider status APIs, full import history and full Sources
 Ingestion remain unimplemented.
 
+Normalization integration is now available as a synchronous, project-scoped
+endpoint and GUI workflow. The latest execution summary and audit trail are
+durable in SQLite; full multi-run history, ISSN validation, full provenance and
+background execution remain future work.
+
+### Version 0.2.0 increment
+
+The existing `PublicationNormalizer` is now backed by durable latest-run
+storage. Summary fields and audit trail remain available after backend restart.
+Deduplication, screening, background jobs and full provenance remain open.
+
 ### Polish before Phase 2
 
 - analyze the OpenAlex result count

@@ -49,6 +49,14 @@ class ProjectPublicationRepository(Protocol):
         """Atomically import publications unique by provider and source id."""
         ...
 
+    def replace_publications(
+        self,
+        project_id: str,
+        publications: list[Publication],
+    ) -> None:
+        """Replace a project's collection after a transformation."""
+        ...
+
 
 class DemoProjectPublicationRepository:
     """Temporary in-memory demo repository providing sample SLR project publications.
@@ -168,6 +176,15 @@ class DemoProjectPublicationRepository:
             skipped_count=skipped_count,
             working_collection_count=len(self._projects_data[project_id]),
         )
+
+    def replace_publications(
+        self,
+        project_id: str,
+        publications: list[Publication],
+    ) -> None:
+        if project_id not in self._projects_data:
+            raise ProjectNotFoundError(project_id)
+        self._projects_data[project_id] = list(publications)
 
     @staticmethod
     def _source_key(publication: Publication) -> tuple[str, str]:

@@ -184,11 +184,30 @@ export interface BibliographicImportHistoryRecord {
 
 export interface NormalizationStatus {
   completed: boolean;
+  status?: 'completed' | 'warning' | 'error';
   totalRecordsProcessed: number;
   cleanRecordsCount: number;
   warningsCount: number;
   errorsCount: number;
   warningsLog: string[];
+  rulesApplied?: string[];
+  executedAt?: string;
+}
+
+export interface NormalizationResponse {
+  run_id: string;
+  project_id: string;
+  status: 'completed' | 'warning' | 'error';
+  processed_records: number;
+  clean_records: number;
+  warnings_count: number;
+  errors_count: number;
+  rules_applied: string[];
+  audit_trail: string[];
+  started_at: string;
+  completed_at: string;
+  executed_at: string;
+  error_message?: string | null;
 }
 
 export interface DeduplicationSummary {

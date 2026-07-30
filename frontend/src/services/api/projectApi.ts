@@ -12,6 +12,7 @@ import {
   SearchResultsImportResponse,
   SearchStrategy,
   SearchStrategyWriteRequest,
+  NormalizationResponse,
 } from '../../types';
 import { MOCK_PROJECTS } from '../../mocks/projectData';
 import { API_BASE_URL } from '../../config/api';
@@ -91,6 +92,8 @@ export interface ProjectApiService {
   getBibliographicImports(
     projectId: string,
   ): Promise<BibliographicImportHistoryRecord[]>;
+  getNormalization(projectId: string): Promise<NormalizationResponse | null>;
+  runNormalization(projectId: string): Promise<NormalizationResponse>;
 }
 
 class MixedProjectApiService implements ProjectApiService {
@@ -220,6 +223,34 @@ class MixedProjectApiService implements ProjectApiService {
       throw new Error(await formatFastApiError(response, 'pobrać historii importów'));
     }
     return response.json() as Promise<BibliographicImportHistoryRecord[]>;
+  }
+
+  async getNormalization(projectId: string): Promise<NormalizationResponse | null> {
+    let response: Response;
+    try {
+      response = await fetch(`${API_BASE_URL}/projects/${projectId}/normalization`, {
+        headers: { Accept: 'application/json' },
+      });
+    } catch {
+      throw new Error('Nie udało się pobrać stanu normalizacji.');
+    }
+    if (response.status === 404) return null;
+    if (!response.ok) throw new Error(await formatFastApiError(response, 'pobrać stanu normalizacji'));
+    return response.json() as Promise<NormalizationResponse>;
+  }
+
+  async runNormalization(projectId: string): Promise<NormalizationResponse> {
+    let response: Response;
+    try {
+      response = await fetch(`${API_BASE_URL}/projects/${projectId}/normalization`, {
+        method: 'POST',
+        headers: { Accept: 'application/json' },
+      });
+    } catch {
+      throw new Error('Nie udało się uruchomić normalizacji.');
+    }
+    if (!response.ok) throw new Error(await formatFastApiError(response, 'uruchomić normalizacji'));
+    return response.json() as Promise<NormalizationResponse>;
   }
 
   async getProjectById(id: string): Promise<SLRProject | null> {

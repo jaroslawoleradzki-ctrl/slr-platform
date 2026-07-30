@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.2.0] — Unreleased
+
+### Added
+
+- Durable SQLite storage for the latest project-scoped normalization execution,
+  including summary fields, timestamps, rules and audit trail.
+- Normalization results are restored by `GET /projects/{project_id}/normalization`
+  after backend restart.
+
+### Scope limits
+
+- This release does not add ISSN validation, full provenance, multi-run history,
+  background jobs, deduplication or screening.
+
 ## [0.1.9] — Unreleased
 
 ### Added
@@ -16,11 +30,15 @@
 - Selected OpenAlex result imports now create durable provider history records
   with the rendered query, imported count and available total; Sources shows
   the latest successful OpenAlex import and combines file/provider history.
+- Added project-scoped normalization `POST`/`GET` endpoints reusing the existing
+  publication normalizers, with live summary counts and audit entries in the
+  Normalization screen.
 
 ### Scope limits
 
 - Crossref/Semantic Scholar provider status, background jobs, mass import and
   the complete Sources module
+- Durable normalization execution history and ISSN validation
   are not part of 0.1.9.
 
 ## [0.1.8] — Unreleased

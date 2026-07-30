@@ -14,7 +14,7 @@ development
 
 Current version (working tree):
 
-v0.1.9 (Unreleased)
+v0.2.0 (Unreleased)
 
 Current development phase:
 
@@ -45,6 +45,13 @@ same history records selected OpenAlex imports as `source_type=provider`, with
 provider, rendered query, imported count and available total; Sources displays
 the latest successful OpenAlex record and combines file/provider history.
 Provider status APIs and the complete Sources module remain out of scope.
+
+Normalization now has project-scoped `POST`/`GET` endpoints using the existing
+`PublicationNormalizer`. The GUI no longer consumes the demo 2105/2042/63
+summary and displays live processed/clean/warning counts and audit entries
+after execution. Version 0.2.0 stores the latest execution summary and audit
+trail durably in SQLite and restores it after backend restart. Only the latest
+run is retained.
 
 ---
 

@@ -5,6 +5,7 @@ import {
   SearchExecutionResult,
   SearchResultsImportResponse,
   SLRProject,
+  NormalizationResponse,
 } from '../types';
 import { projectApiService } from '../services/api/projectApi';
 import { MOCK_PROJECTS } from '../mocks/projectData';
@@ -12,6 +13,7 @@ import { MOCK_PROJECTS } from '../mocks/projectData';
 const neutralizeSourceData = (project: SLRProject): SLRProject => ({
   ...project,
   imports: [],
+  normalization: [],
   providers: project.providers.map((provider) => ({
     ...provider,
     connected: false,
@@ -42,6 +44,7 @@ interface ProjectContextType {
   searchPaginationError: string | null;
   importSelectedSearchResults: () => Promise<SearchResultsImportResponse | null>;
   importBibliographicFile: (file: File) => Promise<BibliographicImportResponse>;
+  runNormalization: () => Promise<NormalizationResponse>;
   lastSearchImportResult: SearchResultsImportResponse | null;
 }
 
@@ -92,6 +95,36 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   };
 
+  const loadProjectNormalization = async (projectId: string) => {
+    try {
+      const result = await projectApiService.getNormalization(projectId);
+      if (activeProjectIdRef.current !== projectId) return;
+      setProjects((currentProjects) => currentProjects.map((project) => (
+        project.id === projectId
+          ? {
+              ...project,
+              normalization: result ? [{
+                completed: result.status === 'completed' || result.status === 'warning',
+                status: result.status,
+                totalRecordsProcessed: result.processed_records,
+                cleanRecordsCount: result.clean_records,
+                warningsCount: result.warnings_count,
+                errorsCount: result.errors_count,
+                warningsLog: result.audit_trail,
+                rulesApplied: result.rules_applied,
+                executedAt: result.executed_at,
+              }] : [],
+            }
+          : project
+      )));
+    } catch {
+      if (activeProjectIdRef.current !== projectId) return;
+      setProjects((currentProjects) => currentProjects.map((project) => (
+        project.id === projectId ? { ...project, normalization: [] } : project
+      )));
+    }
+  };
+
   const changeActiveProject = (id: string) => {
     if (id === activeProjectId) return;
     setCurrentSearchStrategy(null);
@@ -106,6 +139,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
     activeProjectIdRef.current = id;
     setActiveProjectIdState(id);
     void loadProjectImports(id);
+    void loadProjectNormalization(id);
   };
 
   const refreshProjects = async () => {
@@ -115,6 +149,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
       const data = await projectApiService.getProjects();
       setProjects(data.map(neutralizeSourceData));
       void loadProjectImports(activeProjectIdRef.current);
+      void loadProjectNormalization(activeProjectIdRef.current);
       if (data.length > 0 && !data.some((p) => p.id === activeProjectId)) {
         changeActiveProject(data[0].id);
       }
@@ -264,6 +299,13 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return result;
   };
 
+  const runNormalization = async () => {
+    const targetProjectId = activeProjectIdRef.current;
+    const result = await projectApiService.runNormalization(targetProjectId);
+    await loadProjectNormalization(targetProjectId);
+    return result;
+  };
+
   return (
     <ProjectContext.Provider
       value={{
@@ -286,6 +328,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
         searchPaginationError,
         importSelectedSearchResults,
         importBibliographicFile,
+        runNormalization,
         lastSearchImportResult,
       }}
     >

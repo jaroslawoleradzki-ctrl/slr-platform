@@ -1,15 +1,28 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useProject } from '../context/ProjectContext';
 import { Card } from '../components/common/Card';
 import { Badge } from '../components/common/Badge';
 import { Sparkles, CheckCircle2, ShieldCheck } from 'lucide-react';
 
 export const NormalizationPage: React.FC = () => {
-  const { activeProject } = useProject();
+  const { activeProject, runNormalization } = useProject();
+  const [running, setRunning] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   if (!activeProject) return null;
 
   const norm = activeProject.normalization[0];
+  const run = async () => {
+    setRunning(true);
+    setError(null);
+    try {
+      await runNormalization();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Nie udało się uruchomić normalizacji.');
+    } finally {
+      setRunning(false);
+    }
+  };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
@@ -22,11 +35,23 @@ export const NormalizationPage: React.FC = () => {
         </p>
       </div>
 
+      {error && <p role="alert" style={{ color: 'var(--status-error-text)', fontSize: '0.85rem' }}>{error}</p>}
       {!norm ? (
-        <Card title="Normalizacja oczekuje na uruchomienie">
+        <Card title="Normalizacja oczekuje na uruchomienie" action={<Badge variant="pending">Nie uruchamiano</Badge>}>
           <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-            Uruchom wyszukiwanie lub zaimportuj pliki, aby wykonać automatyczną normalizację kanoniczną.
+            Normalizacja nie została jeszcze uruchomiona dla tego projektu.
           </p>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px', marginTop: '12px' }}>
+            {['Przetworzone rekordy', 'Czyste rekordy canonical', 'Ostrzeżenia'].map((label) => (
+              <div key={label} style={{ padding: '14px', backgroundColor: 'var(--bg-primary)', borderRadius: 'var(--radius-md)' }}>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{label}</span>
+                <div style={{ fontSize: '0.95rem', color: 'var(--text-secondary)', marginTop: '4px' }}>Brak danych</div>
+              </div>
+            ))}
+          </div>
+          <button type="button" onClick={run} disabled={running} style={{ marginTop: '12px' }}>
+            {running ? 'Normalizowanie...' : 'Uruchom normalizację'}
+          </button>
         </Card>
       ) : (
         <>
@@ -37,7 +62,7 @@ export const NormalizationPage: React.FC = () => {
                 <span>Status Normalizacji Kanonicznej</span>
               </div>
             }
-            action={<Badge variant="completed" icon={<CheckCircle2 size={12} />}>Wykonano</Badge>}
+            action={<Badge variant={norm.status === 'warning' ? 'pending_action' : norm.status === 'error' ? 'error' : 'completed'} icon={<CheckCircle2 size={12} />}>{norm.status === 'warning' ? 'Ostrzeżenia' : norm.status === 'error' ? 'Błąd' : 'Wykonano'}</Badge>}
           >
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
               <div style={{ padding: '14px', backgroundColor: 'var(--bg-primary)', borderRadius: 'var(--radius-md)' }}>
@@ -65,7 +90,9 @@ export const NormalizationPage: React.FC = () => {
 
           <Card title="Dziennik Wykonanych Reguł Normalizacyjnych (Normalization Audit Trail)">
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              {norm.warningsLog.map((log, idx) => (
+              {norm.warningsLog.length === 0 ? (
+                <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Brak wpisów audytu.</p>
+              ) : norm.warningsLog.map((log, idx) => (
                 <div
                   key={idx}
                   style={{
@@ -85,6 +112,9 @@ export const NormalizationPage: React.FC = () => {
                 </div>
               ))}
             </div>
+            <button type="button" onClick={run} disabled={running} style={{ marginTop: '12px' }}>
+              {running ? 'Normalizowanie...' : 'Uruchom ponownie'}
+            </button>
           </Card>
         </>
       )}
