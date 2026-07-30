@@ -169,9 +169,10 @@ upload control sends one `.ris` or `.bib` file to
 `POST /projects/{project_id}/imports`, reuses the existing parsers, and stores
 the parsed publications through the existing repository. This is an initial
 upload slice now includes durable project-scoped import history returned
-newest-first by `GET /projects/{project_id}/imports`. GUI Import Integration
-(6.8.8) remains open until provider execution status and the broader Sources
-ingestion workflow are implemented.
+newest-first by `GET /projects/{project_id}/imports`. Selected OpenAlex result
+imports also create provider history records, which are shown on Sources
+alongside file imports. GUI Import Integration (6.8.8) remains open for
+provider execution status and the broader Sources ingestion workflow.
 
 Background jobs, provider status APIs, full import history and full Sources
 Ingestion remain unimplemented.

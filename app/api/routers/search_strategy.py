@@ -1,5 +1,7 @@
 from datetime import datetime, timezone
 from functools import lru_cache
+import hashlib
+import json
 from pathlib import Path
 from typing import Literal, cast
 from uuid import UUID, uuid4
@@ -296,6 +298,9 @@ def import_search_results(
     repository: ProjectPublicationRepository = Depends(
         get_project_publication_repository
     ),
+    history_repository: ImportHistoryRepository = Depends(
+        get_import_history_repository
+    ),
 ) -> SearchResultsImportResponse:
     """Append the explicitly selected result records to the Working Collection."""
 
@@ -339,6 +344,36 @@ def import_search_results(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=str(exc),
         ) from exc
+    if payload.provider == "openalex":
+        fingerprint = hashlib.sha256(
+            json.dumps(
+                {
+                    "project_id": project_id,
+                    "provider": payload.provider,
+                    "query": payload.query,
+                    "records": sorted(record.source_id for record in payload.records),
+                },
+                sort_keys=True,
+            ).encode("utf-8")
+        ).hexdigest()
+        if history_repository.find_by_fingerprint(project_id, fingerprint) is None:
+            history_repository.create(
+                ImportHistoryRecord(
+                    import_id=uuid4(),
+                    project_id=project_id,
+                    source_type="provider",
+                    filename=None,
+                    format=None,
+                    provider="openalex",
+                    query=payload.query,
+                    records_count=import_result.imported_count,
+                    total_available=payload.total_available,
+                    status="success",
+                    warnings=(),
+                    created_at=datetime.now(timezone.utc),
+                    fingerprint=fingerprint,
+                )
+            )
     return SearchResultsImportResponse(
         project_id=project_id,
         imported_count=import_result.imported_count,
@@ -431,9 +466,13 @@ async def import_bibliographic_file(
         ImportHistoryRecord(
             import_id=import_id,
             project_id=project_id,
+            source_type="file",
             filename=file.filename,
             format="RIS" if suffix == ".ris" else "BibTeX",
+            provider=None,
+            query=None,
             records_count=import_result.imported_count,
+            total_available=None,
             status="warning" if warnings else "success",
             warnings=tuple(warnings),
             created_at=datetime.now(timezone.utc),
@@ -471,9 +510,13 @@ def list_bibliographic_imports(
         BibliographicImportHistoryResponse(
             import_id=record.import_id,
             project_id=record.project_id,
+            source_type=record.source_type,
             filename=record.filename,
             format=record.format,
+            provider=record.provider,
+            query=record.query,
             records_count=record.records_count,
+            total_available=record.total_available,
             status=record.status,
             created_at=record.created_at,
             warnings=list(record.warnings),

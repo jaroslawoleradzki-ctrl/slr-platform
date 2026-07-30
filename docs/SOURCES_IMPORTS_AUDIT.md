@@ -142,3 +142,19 @@ zrealizowany kolejny przyrost:
 
 Nadal nie istnieją: trwałe wykonania/statusy providerów, provider health-checki,
 pełny moduł Sources, background jobs i masowy import.
+
+## Aktualizacja audytu — integracja importu selected OpenAlex
+
+Import zaznaczonych wyników z Search Strategy zapisuje publikacje jak wcześniej,
+a następnie tworzy jeden trwały rekord historii typu `provider` dla aktywnego
+projektu. Rekord zawiera `provider=openalex`, rzeczywisty rendered query,
+`records_count` zaimportowanych rekordów oraz `total_available`; fingerprint
+zapobiega duplikatowi przy identycznym ponowieniu requestu. Błąd importu nie
+tworzy wpisu historii.
+
+Karta OpenAlex na Sources korzysta z najnowszego udanego wpisu providerowego i
+pokazuje jego liczbę oraz datę. Historia wspólnie prezentuje importy plikowe i
+OpenAlex newest-first, bez fikcyjnej nazwy pliku dla providera. Crossref i
+Semantic Scholar pozostają neutralne (`Brak danych`/`Nie uruchamiano`), ponieważ
+nie mają podłączonego źródła historii Sources ani health-checku. Pełne
+provenance pozostaje przyszłym etapem.

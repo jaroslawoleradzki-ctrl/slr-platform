@@ -167,10 +167,13 @@ export const FileDropzone: React.FC<FileDropzoneProps> = ({ onFileSelect, import
                   <FileText size={20} style={{ color: 'var(--accent-primary)' }} />
                   <div>
                     <div style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-primary)' }}>
-                      {item.filename}
+                      {item.sourceType === 'provider' ? item.provider ?? 'Provider' : item.filename}
                     </div>
                     <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                      Format: {item.format} • {new Date(item.importedAt).toLocaleString('pl-PL')}
+                      {item.sourceType === 'provider'
+                        ? `${item.query ?? 'Brak zapisanego zapytania'} • `
+                        : `Format: ${item.format} • `}
+                      {new Date(item.importedAt).toLocaleString('pl-PL')}
                     </span>
                   </div>
                 </div>

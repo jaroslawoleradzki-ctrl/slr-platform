@@ -129,6 +129,12 @@ export interface SearchResultsImportResponse {
   working_collection_count: number;
 }
 
+export interface SearchResultsImportMetadata {
+  provider?: 'openalex' | 'crossref';
+  query?: string;
+  total_available?: number;
+}
+
 export interface SearchProviderStatus {
   id: string;
   name: string;
@@ -142,8 +148,12 @@ export interface SearchProviderStatus {
 
 export interface ImportFileRecord {
   id: string;
-  filename: string;
-  format: 'BibTeX' | 'RIS';
+  sourceType?: 'file' | 'provider';
+  filename: string | null;
+  format: 'BibTeX' | 'RIS' | null;
+  provider?: string | null;
+  query?: string | null;
+  totalAvailable?: number | null;
   recordsCount: number;
   importedAt: string;
   status: 'success' | 'warning' | 'error';
@@ -160,9 +170,13 @@ export interface BibliographicImportResponse {
 export interface BibliographicImportHistoryRecord {
   import_id: string;
   project_id: string;
-  filename: string;
-  format: 'BibTeX' | 'RIS';
+  source_type: 'file' | 'provider';
+  filename: string | null;
+  format: 'BibTeX' | 'RIS' | null;
+  provider: string | null;
+  query: string | null;
   records_count: number;
+  total_available: number | null;
   status: 'success' | 'warning';
   created_at: string;
   warnings: string[];

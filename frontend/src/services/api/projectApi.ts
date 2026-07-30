@@ -8,6 +8,7 @@ import {
   BibliographicImportResponse,
   BibliographicImportHistoryRecord,
   SearchResultRecord,
+  SearchResultsImportMetadata,
   SearchResultsImportResponse,
   SearchStrategy,
   SearchStrategyWriteRequest,
@@ -80,7 +81,8 @@ export interface ProjectApiService {
   ): Promise<SearchStrategy>;
   importSearchResults(
     projectId: string,
-    records: SearchResultRecord[]
+    records: SearchResultRecord[],
+    metadata?: SearchResultsImportMetadata,
   ): Promise<SearchResultsImportResponse>;
   importBibliographicFile(
     projectId: string,
@@ -165,14 +167,15 @@ class MixedProjectApiService implements ProjectApiService {
 
   async importSearchResults(
     projectId: string,
-    records: SearchResultRecord[]
+    records: SearchResultRecord[],
+    metadata?: SearchResultsImportMetadata,
   ): Promise<SearchResultsImportResponse> {
     const response = await fetch(
       `${API_BASE_URL}/projects/${projectId}/search-results/imports`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify({ records }),
+        body: JSON.stringify({ records, ...metadata }),
       }
     );
     if (!response.ok) {

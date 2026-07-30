@@ -133,3 +133,43 @@ def test_history_is_project_scoped_sorted_and_persistent(tmp_path: Path) -> None
     assert [item["filename"] for item in history.json()] == ["second.bib", "first.ris"]
     assert other_project.json() == []
     assert [item.filename for item in persisted] == ["second.bib", "first.ris"]
+
+
+def test_selected_openalex_import_creates_one_provider_history_record(
+    tmp_path: Path,
+) -> None:
+    repository = DemoProjectPublicationRepository()
+    client = _client(repository, tmp_path / "provider.db")
+    record = {
+        "id": "00000000-0000-0000-0000-000000000901",
+        "title": "OpenAlex selected record",
+        "authors": ["Ada Author"],
+        "year": 2024,
+        "provider": "openalex",
+        "source_id": "https://openalex.org/W901",
+        "doi": None,
+    }
+    payload = {
+        "records": [record],
+        "provider": "openalex",
+        "query": '("lean manufacturing")',
+        "total_available": 3560,
+    }
+
+    first = client.post(
+        "/projects/ai_architecture/search-results/imports", json=payload
+    )
+    repeated = client.post(
+        "/projects/ai_architecture/search-results/imports", json=payload
+    )
+    history = client.get("/projects/ai_architecture/imports").json()
+
+    assert first.status_code == 200
+    assert repeated.status_code == 200
+    assert len(history) == 1
+    assert history[0]["source_type"] == "provider"
+    assert history[0]["provider"] == "openalex"
+    assert history[0]["filename"] is None
+    assert history[0]["records_count"] == 1
+    assert history[0]["total_available"] == 3560
+    assert history[0]["query"] == '("lean manufacturing")'

@@ -13,10 +13,14 @@
   update after a successful import.
 - Durable SQLite import history with newest-first
   `GET /projects/{project_id}/imports` and project isolation.
+- Selected OpenAlex result imports now create durable provider history records
+  with the rendered query, imported count and available total; Sources shows
+  the latest successful OpenAlex import and combines file/provider history.
 
 ### Scope limits
 
-- Provider status, background jobs, mass import and the complete Sources module
+- Crossref/Semantic Scholar provider status, background jobs, mass import and
+  the complete Sources module
   are not part of 0.1.9.
 
 ## [0.1.8] — Unreleased

@@ -70,8 +70,12 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
       if (activeProjectIdRef.current !== projectId) return;
       const imports = history.map((item) => ({
         id: item.import_id,
+        sourceType: item.source_type,
         filename: item.filename,
         format: item.format,
+        provider: item.provider,
+        query: item.query,
+        totalAvailable: item.total_available,
         recordsCount: item.records_count,
         importedAt: item.created_at,
         status: item.status,
@@ -234,7 +238,14 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
     if (selected.length === 0) return null;
     const result = await projectApiService.importSearchResults(
       targetProjectId,
-      selected
+      selected,
+      {
+        provider: searchExecutionResult.providers.length === 1
+          ? searchExecutionResult.providers[0] as 'openalex' | 'crossref'
+          : undefined,
+        query: searchExecutionResult.rendered_query,
+        total_available: searchExecutionResult.total_count,
+      },
     );
     if (activeProjectIdRef.current !== targetProjectId) return result;
     setSelectedSearchResultIds([]);

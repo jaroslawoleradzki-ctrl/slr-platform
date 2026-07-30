@@ -172,6 +172,9 @@ class SearchResultsImportRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     records: list[SearchResultRecordResponse]
+    provider: Literal["openalex", "crossref"] | None = None
+    query: str | None = None
+    total_available: int | None = Field(default=None, ge=0)
 
 
 class SearchResultsImportResponse(BaseModel):
@@ -198,9 +201,13 @@ class BibliographicImportHistoryResponse(BaseModel):
 
     import_id: UUID
     project_id: str
-    filename: str
-    format: Literal["RIS", "BibTeX"]
+    source_type: Literal["file", "provider"]
+    filename: str | None = None
+    format: Literal["RIS", "BibTeX"] | None = None
+    provider: str | None = None
+    query: str | None = None
     records_count: int = Field(ge=0)
+    total_available: int | None = Field(default=None, ge=0)
     status: Literal["success", "warning"]
     created_at: datetime
     warnings: list[str] = Field(default_factory=list)

@@ -271,4 +271,40 @@ describe('Search Strategy frontend-backend contract', () => {
     expect(request.body).toBeInstanceOf(FormData);
     expect((request.body as FormData).get('file')).toBe(file);
   });
+
+  it('sends OpenAlex execution metadata with selected-result imports', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({
+        project_id: 'lean_energy',
+        imported_count: 2,
+        skipped_count: 0,
+        total_requested: 2,
+        working_collection_count: 7,
+      }), { status: 200 })
+    );
+    const records = [{
+      id: 'result-1',
+      title: 'Selected result',
+      authors: ['Author One'],
+      year: 2021,
+      provider: 'openalex' as const,
+      source_id: 'W1',
+      doi: null,
+    }];
+
+    await projectApiService.importSearchResults('lean_energy', records, {
+      provider: 'openalex',
+      query: '("lean manufacturing")',
+      total_available: 3560,
+    });
+
+    expect(fetchMock.mock.calls[0][1]).toEqual(expect.objectContaining({
+      body: JSON.stringify({
+        records,
+        provider: 'openalex',
+        query: '("lean manufacturing")',
+        total_available: 3560,
+      }),
+    }));
+  });
 });

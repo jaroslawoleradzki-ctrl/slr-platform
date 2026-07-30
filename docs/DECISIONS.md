@@ -6,6 +6,24 @@ This document records important project decisions that do not require a full ADR
 
 ## 2026-07-30
 
+### Unified project-scoped import history (0.1.9)
+
+The durable import-history resource is shared by manual bibliographic files and
+provider imports. Each record carries `source_type` (`file` or `provider`) and
+keeps source-specific metadata nullable, so existing RIS/BibTeX imports remain
+backwards compatible while selected OpenAlex imports can record the provider,
+rendered query, imported count, and provider total.
+
+Selected OpenAlex imports write one project-scoped history record after the
+publication write succeeds. A deterministic request fingerprint prevents an
+identical retry from creating a duplicate history row. This is intentionally a
+minimal source history, not full publication provenance or a provider health
+execution log; Crossref and Semantic Scholar remain outside this integration.
+
+---
+
+## 2026-07-30
+
 ### Search Strategy workflow
 
 Search Strategy is the workspace for both building and executing a literature

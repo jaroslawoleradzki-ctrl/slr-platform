@@ -8,6 +8,20 @@ export const SourcesIngestionPage: React.FC = () => {
 
   if (!activeProject) return null;
 
+  const latestOpenAlexImport = activeProject.imports.find(
+    (item) => item.sourceType === 'provider' && item.provider === 'openalex'
+  );
+  const displayedProviders = activeProject.providers.map((provider) => {
+    if (provider.id !== 'openalex' || !latestOpenAlexImport) return provider;
+    return {
+      ...provider,
+      connected: latestOpenAlexImport.status === 'success',
+      status: latestOpenAlexImport.status === 'success' ? 'completed' as const : 'failed' as const,
+      resultsCount: latestOpenAlexImport.recordsCount,
+      lastRunTimestamp: latestOpenAlexImport.importedAt,
+    };
+  });
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
       <div>
@@ -20,7 +34,7 @@ export const SourcesIngestionPage: React.FC = () => {
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
-        {activeProject.providers.map((provider) => (
+        {displayedProviders.map((provider) => (
           <ProviderStatusCard key={provider.id} provider={provider} />
         ))}
       </div>

@@ -12,7 +12,7 @@ export const ProviderStatusCard: React.FC<ProviderStatusCardProps> = ({ provider
   const getStatusBadge = () => {
     switch (provider.status) {
       case 'completed':
-        return <Badge variant="completed" icon={<CheckCircle2 size={12} />}>Sukces</Badge>;
+        return <Badge variant="completed" icon={<CheckCircle2 size={12} />}>Zaimportowano</Badge>;
       case 'running':
         return <Badge variant="in_progress" icon={<RefreshCw size={12} />}>Uruchomiono...</Badge>;
       case 'failed':

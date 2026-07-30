@@ -40,7 +40,10 @@ restarting the search; full automatic import of all results remains out of
 scope. Version 0.1.9 adds the first working project-scoped bibliographic
 upload: one `.ris` or `.bib` file is parsed by the existing providers and
 persisted into the existing project publication repository. Import history is
-now durable in SQLite and available through a project-scoped GET endpoint.
+now durable in SQLite and available through a project-scoped GET endpoint. The
+same history records selected OpenAlex imports as `source_type=provider`, with
+provider, rendered query, imported count and available total; Sources displays
+the latest successful OpenAlex record and combines file/provider history.
 Provider status APIs and the complete Sources module remain out of scope.
 
 ---
