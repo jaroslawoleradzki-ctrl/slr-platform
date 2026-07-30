@@ -4,7 +4,113 @@ This document records important project decisions that do not require a full ADR
 
 ---
 
+## 2026-07-30
+
+### Search Strategy workflow
+
+Search Strategy is the workspace for both building and executing a literature
+query. Search results are presented on the same page so the user can review the
+effect of the authored strategy without losing form context or changing
+workflow stages.
+
+Sources & Imports does not execute searches. It begins with importing records
+that have already been found or supplied through supported import formats.
+
+This boundary reduces context switching, keeps query refinement and result
+evaluation together, and makes the primary action predictable: `Szukaj`
+executes the current strategy and updates the results in place. A transition to
+Sources & Imports is reserved for intake work rather than being an implicit
+side effect of search execution.
+
+---
+
+### Search Strategy GUI uses the durable resource
+
+Search Strategy GUI consumes the Phase 6.8.1 GET/PUT resource directly. The
+screen keeps a typed editable representation of the backend contract and
+replaces it with the complete server response after every successful save.
+Mock project concepts and filters are not fallback strategy data.
+
+The generic Boolean preview and persisted SearchQuery expression use the same
+AND/OR structure authored in the form. `Szukaj` saves and executes the current
+strategy, then presents the returned records on the same page. It does not
+navigate to Sources & Imports.
+
+---
+
+### Durable Search Strategy boundary (Phase 6.8.1)
+
+Phase 6.8.1 starts the transition from the demonstration GUI to an end-to-end
+literature-search workflow. A project has one current Search Strategy resource,
+addressed by `GET` and `PUT /projects/{project_id}/search-strategy`.
+
+Key decisions:
+
+- **Reuse the canonical query domain:** the existing `SearchQuery`,
+  `SearchGroup`, and `SearchTerm` models remain the provider-independent
+  representation of Boolean query trees. Phase 6.8.1 adds no provider renderer.
+- **Separate authored concepts from executable queries:** Search Strategy stores
+  research questions, concept groups, terms, group operators, constraints and
+  provider selection alongside versioned Search Query objects. This preserves
+  author intent without prematurely defining provider rendering rules.
+- **Repository boundary:** API and domain code depend on
+  `SearchStrategyRepository`. The first durable adapter uses Python's SQLite
+  support and an explicit ordered SQL migration, avoiding a second in-memory
+  source of truth.
+- **Atomic document persistence:** the validated domain model is serialized as
+  one JSON document, while project ID, strategy ID, version, and timestamps are
+  indexed relational columns. This preserves complete round-trip serialization
+  and leaves schema decomposition to later persistence work if query/reporting
+  requirements justify it.
+- **Project-scoped singleton:** `PUT` replaces the current strategy for the
+  project. It does not execute a search, create SearchRuns, import
+  publications, or invoke query rendering.
+- **Supported provider selection:** persisted strategies validate OpenAlex,
+  Crossref, and Semantic Scholar. Availability and execution behavior belong to
+  later Phase 6.8 increments.
+
+---
+
 ## 2026-07-29
+
+### Duplicate Comparison and Review UI (Phase 6.5)
+
+Phase 6.5 introduces a detailed side-by-side comparison interface for candidate duplicate publication groups.
+
+Key decisions:
+- **Deterministic Field Matching**: Field similarity across titles, authors, years, venues, identifiers, and provenance is computed using 4 deterministic states (`MATCH`, `DIFFERENT`, `PARTIAL`, `UNAVAILABLE`) with distinct text badges and icons to avoid relying solely on color.
+- **Decision Rationale (`rationale`)**: `DuplicateGroupReviewDecision` domain model encapsulates `decision: DuplicateDecision` and `rationale: str | None`. Validation trims rationale and enforces a 1000-character limit at the service/domain layer.
+- **Provenance & Venue API Enrichment**: `DuplicateRecordPreviewResponse` DTO is enriched with `venue: str | None` and `provenance: list[ProvenanceEntryResponse]` without adding new HTTP endpoints.
+- **Accessibility**: Comparison view controls utilize `aria-expanded` and explicit button labels.
+
+---
+
+### Candidate Duplicate Review Decisions (Phase 6.4)
+
+Phase 6.4 introduces the capability to record and read human reviewer decisions (`APPROVE` or `REJECT`) for candidate duplicate groups.
+
+Key decisions:
+- **In-Memory Decision Storage**: Decisions are stored in runtime memory via `InMemoryDuplicateReviewDecisionRepository`. No database, file persistence, or disc mutations are performed.
+- **REST Endpoints**:
+  - `POST /projects/{project_id}/duplicate-groups/{group_id}/decision`: Records or overwrites a reviewer decision (`APPROVE` or `REJECT`). Returns 200 OK on success, 404 for unknown project/group, 422 for invalid decision enum.
+  - `GET /projects/{project_id}/duplicate-groups/{group_id}/decision`: Reads current stored decision status (`APPROVE`, `REJECT`, or `PENDING`).
+- **No Publication Mutation / Merge**: Recording a decision does not merge publications, alter publication records, or delete candidate group records.
+- **Interactive GUI State Management**: `DuplicateGroupCardPreview` provides active decision controls (*Approve*, *Reject*), feedback states (*Saving...*, *Saved*, *Error*, *Retry*), and status badges (*Approved*, *Rejected*, *Pending*).
+
+---
+
+### Candidate Duplicate Review Read API (Phase 6.3)
+
+Phase 6.3 introduces a read-only REST API endpoint `GET /projects/{project_id}/duplicate-groups` in FastAPI.
+
+Key decisions:
+- **Read-Only Boundary**: The endpoint is strictly read-only and does not accept or write user review decisions, alter duplicate group statuses, or trigger publication merges. Decision persistence is deferred to Phase 6.4.
+- **Single Source of Truth**: Candidate duplicate groups are constructed on-the-fly by invoking `DuplicateGroupBuilder` on project publications. The backend domain model remains the sole authority for grouping rules and strong-identifier matching (DOI, PMID, OpenAlex ID).
+- **Deterministic Group Keys**: `DuplicateGroup.group_id` UUID values (generated via UUID5 on sorted member record IDs) serve as deterministic string keys in API responses and React component keys.
+- **DTO Isolation**: API contracts (`DuplicateGroupListResponse`, `DuplicateGroupResponse`, `DuplicateRecordPreviewResponse`) expose only the minimal preview data required by the GUI without exposing internal domain structures.
+- **Hybrid Data Mode**: The global GUI status indicator reflects `Hybrid Data Mode (Deduplication API + Demo Data)` to clearly indicate that Duplicate Review connects to live backend API while other modules present mock data.
+
+---
 
 ### Search Engine duplicate-group analysis stage
 

@@ -96,9 +96,9 @@ export const AboutModal: React.FC<AboutModalProps> = ({ isOpen, onClose }) => {
             }}
           >
             <Info size={16} style={{ color: 'var(--accent-primary)', flexShrink: 0, marginTop: '2px' }} />
-            <span>
-              <strong>Architektura:</strong> Backend pozostaje jedynym źródłem prawdy dla logiki domenowej (deduplikacja, screening, normalizacja kanoniczna).
-            </span>
+            <div>
+              <strong>Tryb Hybrydowy (Phase 6.3):</strong> Moduł Duplicate Review pobiera candidate duplicate groups bezpośrednio z read-only API backendu. Pozostałe moduły GUI korzystają z danych demonstracyjnych do czasu kolejnych integracji. Backend pozostaje jedynym źródłem prawdy.
+            </div>
           </div>
         </div>
 

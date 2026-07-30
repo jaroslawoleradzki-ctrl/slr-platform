@@ -14,6 +14,7 @@ export const ErrorAlert: React.FC<ErrorAlertProps> = ({
 }) => {
   return (
     <div
+      role="alert"
       style={{
         padding: '16px',
         borderRadius: 'var(--radius-md)',

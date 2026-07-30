@@ -14,6 +14,121 @@ export interface SearchFilters {
   fullTextOnly: boolean;
 }
 
+export interface EditableSearchStrategy {
+  filters: SearchFilters;
+  providers: string[];
+  conceptGroups: ConceptGroup[];
+}
+
+export type BooleanOperator = 'and' | 'or';
+export type SearchProviderId = 'openalex' | 'crossref' | 'semantic_scholar';
+
+export interface SearchStrategyConceptGroup {
+  group_id: string;
+  name: string;
+  terms: string[];
+  operator: BooleanOperator;
+}
+
+export interface SearchStrategyConstraints {
+  publication_year_from: number | null;
+  publication_year_to: number | null;
+  languages: string[];
+  publication_types: string[];
+  additional_limits: Record<string, string | number | boolean>;
+}
+
+export interface SearchTermExpression {
+  node_type: 'term';
+  value: string;
+  field?: 'any' | 'title' | 'abstract' | 'keywords' | 'author' | 'venue';
+  exact_phrase?: boolean;
+}
+
+export interface SearchGroupExpression {
+  node_type: 'group';
+  operator: 'and' | 'or' | 'not';
+  children: SearchExpression[];
+}
+
+export type SearchExpression = SearchTermExpression | SearchGroupExpression;
+
+export interface SearchQueryWrite {
+  name: string;
+  expression: SearchExpression;
+  version?: number;
+  description?: string | null;
+}
+
+export interface SearchQuery extends SearchQueryWrite {
+  query_id: string;
+  version: number;
+  created_by: string | null;
+  notes: string | null;
+  created_at: string;
+}
+
+export interface SearchStrategyWriteRequest {
+  strategy_id?: string;
+  name: string;
+  description?: string | null;
+  research_questions: string[];
+  concept_groups: SearchStrategyConceptGroup[];
+  group_operator: BooleanOperator;
+  constraints: SearchStrategyConstraints;
+  providers: SearchProviderId[];
+  queries: SearchQueryWrite[];
+  version: number;
+  created_at?: string;
+}
+
+export interface SearchStrategy extends Omit<SearchStrategyWriteRequest, 'queries'> {
+  strategy_id: string;
+  project_id: string;
+  queries: SearchQuery[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SearchExecutionResult {
+  project_id: string;
+  status: 'validated';
+  rendered_query: string;
+  providers: string[];
+  publication_year_from: number;
+  publication_year_to: number;
+  executed_at: string;
+  total_count: number;
+  returned_count: number;
+  next_cursor: string | null;
+  has_more: boolean;
+  results: SearchResultRecord[];
+  provider_errors?: SearchProviderError[];
+}
+
+export interface SearchResultRecord {
+  id: string;
+  title: string;
+  authors: string[];
+  year: number;
+  provider: 'openalex' | 'crossref';
+  source_id: string;
+  doi: string | null;
+}
+
+export interface SearchProviderError {
+  provider: 'openalex' | 'crossref';
+  message: string;
+}
+
+export interface SearchResultsImportResponse {
+  project_id: string;
+  imported_count: number;
+  skipped_count: number;
+  total_requested: number;
+  working_collection_count: number;
+}
+
 export interface SearchProviderStatus {
   id: string;
   name: string;
@@ -64,6 +179,55 @@ export interface DuplicateGroupPreview {
     source: string;
     doi?: string;
   }[];
+}
+
+export interface ApiProvenanceEntry {
+  source: string;
+  source_record_id: string;
+  retrieved_at?: string | null;
+}
+
+export interface ApiDuplicateRecordPreview {
+  id: string;
+  title: string;
+  authors: string;
+  year: number | null;
+  source: string;
+  venue?: string | null;
+  doi?: string | null;
+  pmid?: string | null;
+  openalex_id?: string | null;
+  provenance?: ApiProvenanceEntry[];
+}
+
+export interface ApiSharedIdentifier {
+  identifier_type: string;
+  value: string;
+}
+
+export type DuplicateDecisionType = 'APPROVE' | 'REJECT';
+export type DuplicateDecisionStatus = 'PENDING' | 'APPROVE' | 'REJECT';
+
+export interface ApiDuplicateGroupDecisionResponse {
+  project_id: string;
+  group_id: string;
+  decision: DuplicateDecisionStatus;
+  rationale?: string | null;
+}
+
+export interface ApiDuplicateGroup {
+  group_id: string;
+  reason: string;
+  records_count: number;
+  status: DuplicateDecisionStatus;
+  shared_identifiers: ApiSharedIdentifier[];
+  records: ApiDuplicateRecordPreview[];
+}
+
+export interface ApiDuplicateGroupListResponse {
+  project_id: string;
+  total_groups_count: number;
+  groups: ApiDuplicateGroup[];
 }
 
 export interface ScreeningStatus {

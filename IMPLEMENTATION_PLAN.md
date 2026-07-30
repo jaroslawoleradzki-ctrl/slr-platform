@@ -146,14 +146,16 @@ Status:
 
 Zakres:
 
-- backend DTO contracts for duplicate groups
-- read-only REST endpoints exposing candidate duplicate groups
-- frontend API client adapter
-- replacing mock duplicate groups with real backend data (without decision writing)
+- backend DTO contracts (`DuplicateGroupListResponse`, `DuplicateGroupResponse`, `DuplicateRecordPreviewResponse`)
+- read-only REST endpoint `GET /projects/{project_id}/duplicate-groups`
+- application service (`ProjectDuplicateService`) mapping `DuplicateGroupBuilder` results to DTOs
+- frontend API client adapter with CORS and `VITE_API_BASE_URL` config
+- handling loading, success, empty and error states in `DeduplicationPage`
+- hybrid data mode indicator in GUI
 
 Status:
 
-🚧 Planned (Next Increment)
+✅ Completed
 
 ---
 
@@ -161,13 +163,15 @@ Status:
 
 Zakres:
 
-- API endpoints for recording user duplicate review decisions (approval / rejection)
-- decision persistence and publication merge application
-- frontend review queue workflow and decision controls
+- in-memory decision repository (`InMemoryDuplicateReviewDecisionRepository`) with `(project_id, group_id)` composite key isolation
+- REST endpoints for recording (`POST`) and reading (`GET`) reviewer duplicate decisions (`APPROVE`, `REJECT`)
+- service validation (checking project and group existence, invalid enum handling, decision overwrite support)
+- interactive frontend decision controls (Approve, Reject, Saving..., Saved, Error, Retry)
+- status badges in card header (Approved, Rejected, Pending)
 
 Status:
 
-⬜ Planned
+✅ Completed
 
 ---
 
@@ -175,16 +179,15 @@ Status:
 
 Zakres:
 
-- side-by-side publication comparison
-- identifier and metadata differences
-- provenance visibility
-- duplicate confirmation
-- merge candidate review
-- decision rationale where required
+- side-by-side publication comparison view for candidate group members
+- deterministic field matching and difference calculation (MATCH, DIFFERENT, PARTIAL, UNAVAILABLE)
+- provenance tracing per publication record
+- optional reviewer decision rationale (`rationale`) with trimming and length validation (max 1000 chars)
+- accessibility attributes (`aria-expanded`) and clear visual/text badge states
 
 Status:
 
-⬜ Planned
+✅ Completed
 
 ---
 
@@ -192,14 +195,195 @@ Status:
 
 Zakres:
 
-- backend–frontend contract verification
-- duplicate workflow integration
-- loading, empty and failure cases
-- deterministic review behavior
+- backend contract tests for OpenAPI / DTO schemas and HTTP endpoints (`tests/contract/api/test_deduplication_contract.py`)
+- full duplicate review workflow integration tests (`tests/integration/api/test_deduplication_workflow_integration.py`)
+- frontend integration and regression test suite (`frontend/tests/DeduplicationIntegration.test.tsx`)
+- automated Python DTO ↔ TypeScript types parity verification
+- determinism verification and edge case handling (rationale limit, project isolation, null venue/provenance)
 
 Status:
 
-⬜ Planned
+✅ Completed
+
+---
+
+# Phase 6.7 — Functional Workflow for Modules 1–4 🚧
+
+Before extending the SLR workflow with additional product phases, the existing
+user-facing workflow must become fully functional and manually verifiable.
+
+## 6.7.1 Functional Search Strategy
+
+Zakres:
+
+- editable year range
+- selectable providers
+- editable concept groups
+- validation
+- Execute action
+- Repeat action
+- application state
+- backend integration
+- manual browser acceptance test
+
+Status:
+
+✅ Completed
+
+## 6.7.2a Search Results Workflow
+
+Zakres:
+
+- search result presentation
+- controlled deterministic result data
+- backend response contract
+- record selection
+- project-scoped result state
+- loading, success, empty and error states
+- manual browser acceptance
+- no live OpenAlex or Crossref calls
+- no persistent project import
+
+Status:
+
+✅ Completed
+
+## 6.7.2b Live Search Providers & Import
+
+Zakres:
+
+- live OpenAlex and Crossref execution
+- existing retry and rate limiting
+- mapping provider records to the common publication model
+- partial provider errors and provider attribution
+- bibliographic import
+- import of selected records into one project collection
+- integration tests with mocked providers
+- manual verification against live APIs
+
+Status:
+
+✅ Completed
+
+Notes:
+
+- Module 2 currently does not need to repeat the complete search query.
+- Selected live search records can be imported into the in-memory project
+  Working Collection.
+- OpenAlex and Crossref failures are isolated and reported as partial errors.
+- Live result IDs use deterministic UUID5 identity based on provider and
+  `source_id`.
+- Re-importing the same `(project_id, provider, source_id)` is skipped and the
+  response reports `imported_count`, `skipped_count`, and `total_requested`.
+- The demonstrator Working Collection exists only in backend process memory
+  and is reset when the server restarts.
+- Modules 3 and 4 will be specified after acceptance of Modules 1 and 2.
+
+---
+
+# Phase 6.8 — End-to-End Literature Search Workflow 🚧
+
+Cel:
+
+- pełny proces Search Strategy i Sources Ingestion dostępny z GUI
+- zastępowanie danych demonstracyjnych trwałymi kontraktami backendowymi
+- wstrzymanie rozwoju kolejnych ekranów opartych o mocki
+
+## 6.8.1 Search Strategy Backend
+
+Zakres:
+
+- trwały, projektowy model Search Strategy
+- istniejący provider-independent Search Query jako wersjonowane drzewo Boolean
+- pytania badawcze, grupy pojęć, terminy i operatory logiczne
+- ograniczenia lat, języków, typów publikacji i dodatkowych limitów
+- wybór OpenAlex, Crossref i Semantic Scholar
+- migracja SQLite
+- `GET /projects/{project_id}/search-strategy`
+- `PUT /projects/{project_id}/search-strategy`
+- walidacja i pełna serializacja
+- testy domeny, repozytorium i API
+
+Poza zakresem:
+
+- wykonywanie wyszukiwania
+- renderowanie zapytań providerów
+- orkiestracja, GUI, import i deduplikacja
+
+Status:
+
+✅ Completed
+
+## 6.8.2 Query Rendering
+
+- OpenAlex Query Renderer
+- Crossref Query Renderer
+- Semantic Scholar Query Renderer
+
+Status: ⬜ Planned
+
+## 6.8.3 Search Orchestrator
+
+- uruchamianie wielu providerów
+- agregacja wyników
+- partial failures
+- provenance
+- SearchRun
+
+Status: ⬜ Planned
+
+## 6.8.4 Search Execution API
+
+- execute search
+- search status
+- search results
+
+Status: ⬜ Planned
+
+## 6.8.5 Persistence
+
+- SearchRun
+- Publications
+- provenance
+- search history
+
+Status: ⬜ Planned
+
+## 6.8.6 Search Strategy GUI Integration
+
+- Search Strategy uses backend `GET` and `PUT` as its only source of truth
+- empty state for projects without a strategy
+- complete editing of research questions, concepts, Boolean operators,
+  constraints and provider selection
+- generic, provider-independent Boolean preview
+- loading, dirty, saving, saved, validation and failure states
+- `Szukaj` saves the current strategy before navigating to Sources Ingestion
+- no provider execution and no provider-specific renderer
+
+Status: ✅ Completed
+
+## 6.8.7 Sources Ingestion GUI Integration
+
+- uruchomienie wyszukiwania
+- progress i liczba rekordów
+- błędy providerów
+
+Status: ⬜ Planned
+
+## 6.8.8 GUI Import Integration
+
+- RIS
+- BibTeX
+- wykorzystanie istniejących importerów
+
+Status: ⬜ Planned
+
+## 6.8.9 Publication Intake Summary
+
+- podsumowanie wszystkich źródeł
+- przejście do kolejnych etapów workflow
+
+Status: ⬜ Planned
 
 ---
 

@@ -1,6 +1,6 @@
 # SLR Platform — Project Status
 
-_Last updated: 2026-07-29_
+_Last updated: 2026-07-30_
 
 ## Current status
 
@@ -8,17 +8,74 @@ Project is in active development.
 
 Infrastructure and project architecture are considered stable.
 
-Current version:
+Current branch:
 
-v0.1.0
+development
+
+Current version (working tree):
+
+v0.1.8 (Unreleased)
 
 Current development phase:
 
-Phase 6.1 — GUI Foundation completed. Phase 6.2 — Application Versioning and GUI Release Identity implemented on feature branch `feat/phase-6-2-application-versioning`. Application versioning uses root `VERSION` file as master source of truth. Automated GitHub Releases and Git tagging are deferred to future infrastructure phases.
+Phase 6.8 — End-to-End Literature Search Workflow has started on branch
+`development`. From v0.1.8 the product is transitioning from a predominantly
+demonstration GUI to a complete Search Strategy and Sources Ingestion workflow.
+Phase 6.8.1 is implemented: each project can store and retrieve a complete,
+validated search strategy through REST, backed by SQLite and an explicit
+migration. The strategy retains research questions, concept groups, terms,
+Boolean operators, constraints, years, languages, publication types, provider
+selection, and versioned Search Query trees. The production Search Strategy GUI
+has been restored from `development` and is functional: it loads and persists
+the strategy through GET/PUT, executes live searches, presents results on the
+same page, and exposes the import workflow. `Szukaj` no longer navigates to
+Sources & Imports. The first SLR workflow stage is therefore functional without
+strategy mocks. OpenAlex execution now applies years, languages, publication
+types, and the existing Open Access constraint at provider request time before
+cursor pagination and the 100-record response bound. The execution contract
+separates the provider's filtered `total_count` from `returned_count` and
+exposes `next_cursor` plus `has_more`. Search Strategy now accepts the
+execution cursor and lets users append subsequent OpenAlex pages without
+restarting the search; full automatic import of all results remains out of
+scope.
 
 ---
 
 # Completed
+
+## Phase 6.8.1 — Search Strategy Backend
+
+- durable project-scoped Search Strategy storage in SQLite
+- migration `0001_search_strategies.sql`
+- complete domain validation and JSON serialization
+- provider-independent, versioned Search Query trees with AND/OR/NOT
+- provider selection for OpenAlex, Crossref, and Semantic Scholar
+- REST `GET` and `PUT` at `/projects/{project_id}/search-strategy`
+- repository and API unit tests
+- no query rendering, search execution, GUI, import, or deduplication changes
+
+## Phase 6.8.6 — Search Strategy GUI Integration
+
+- typed frontend GET/PUT adapter for the persistent Search Strategy resource
+- backend strategy is the only source of truth for this screen
+- complete editing of questions, groups, terms, operators, constraints and
+  provider selection
+- dynamic provider-independent Boolean preview
+- loading, missing, dirty, saving, saved, validation and failure states
+- production GUI restored from `development`
+- working GET and PUT persistence
+- `Szukaj` persists the strategy and executes the live search
+- search results are presented on the Search Strategy page
+- `Szukaj` does not navigate to Sources & Imports
+- result import workflow is available again
+
+### Known limitations
+
+- OpenAlex returns at most 100 records per execution response; the Search
+  Strategy UI can request and append subsequent pages, while full automatic
+  retrieval/import of all results remains out of scope
+- Crossref execution has not yet been verified
+- Semantic Scholar remains inactive
 
 ## Infrastructure
 

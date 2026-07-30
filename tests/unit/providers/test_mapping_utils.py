@@ -8,11 +8,47 @@ from app.normalization import (
 )
 from app.providers.search.mapping_utils import (
     clean_string,
+    deterministic_search_record_id,
     normalize_doi,
     normalize_issn,
     normalize_orcid,
     normalize_url,
 )
+
+
+def test_deterministic_search_ids_are_provider_and_source_scoped() -> None:
+    openalex = deterministic_search_record_id(
+        provider="openalex",
+        source_id="shared",
+        doi=None,
+        title="Title",
+        publication_year=2024,
+    )
+    repeated = deterministic_search_record_id(
+        provider="openalex",
+        source_id="shared",
+        doi="10.1000/ignored",
+        title="Changed metadata",
+        publication_year=2020,
+    )
+    crossref = deterministic_search_record_id(
+        provider="crossref",
+        source_id="shared",
+        doi=None,
+        title="Title",
+        publication_year=2024,
+    )
+    different_source = deterministic_search_record_id(
+        provider="openalex",
+        source_id="different",
+        doi=None,
+        title="Title",
+        publication_year=2024,
+    )
+
+    assert openalex == repeated
+    assert openalex != crossref
+    assert openalex != different_source
 
 
 @pytest.mark.parametrize(

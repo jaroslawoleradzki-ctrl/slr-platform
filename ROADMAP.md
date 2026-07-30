@@ -87,7 +87,7 @@ Goals:
 
 ---
 
-## Phase 6 — GUI Foundation and Duplicate Review 🚧
+## Phase 6 — GUI Foundation and Duplicate Review ✅
 
 Establish the reusable graphical application foundation and provide the first functional review workflow for duplicate publications.
 
@@ -95,10 +95,85 @@ Increments:
 
 - **6.1 GUI Foundation** ✅ — Application shell, routing, Information Architecture, SLR process funnel, Concept Group strategy builder, and state placeholders.
 - **6.2 Application Versioning** ✅ — Application-wide version single source of truth in root `VERSION` file, build-time Vite injection, GUI release identity, and About dialog.
-- **6.3 Duplicate Review Read API** 🚧 — Backend DTO contracts, read-only REST endpoints, frontend API adapter, replacing mock candidate duplicate groups with real backend candidate groups (without decision writing).
-- **6.4 Duplicate Review Decisions** — API endpoints and UI flow for recording user duplicate review approvals and rejections.
+- **6.3 Duplicate Review Read API** ✅ — Backend DTO contracts, read-only REST endpoint `GET /projects/{id}/duplicate-groups`, frontend API adapter, loading/empty/error states, and hybrid data mode.
+- **6.4 Duplicate Review Decisions** ✅ — In-memory decision repository (`InMemoryDuplicateReviewDecisionRepository`) with `(project_id, group_id)` composite key isolation, REST endpoints `POST` & `GET` for `APPROVE` and `REJECT` decisions, and interactive decision controls in GUI.
+- **6.5 Duplicate Comparison and Review UI** ✅ — Detailed side-by-side publication comparison view, deterministic field state matching, provenance tracing, optional decision rationale with length validation, and accessible controls.
+- **6.6 Integration and Contract Tests** ✅ — Backend contract tests for OpenAPI/DTO schemas, full duplicate review workflow integration, frontend integration & regression suite, determinism checks, and documentation reconciliation.
 
 This phase does not represent the full GUI MVP. Its purpose is to establish the interface foundation and deliver the complete module supporting deduplication review.
+
+---
+
+## Phase 6.7 — Functional Workflow for Modules 1–4 🚧
+
+Before extending the SLR workflow with additional product phases, the existing
+user-facing workflow must become fully functional and manually verifiable.
+
+- **6.7.1 Functional Search Strategy** ✅ — Editable years, selectable supported
+  providers, fully editable concept groups, validation, Execute and Repeat
+  actions, runtime application state, backend validation, and browser acceptance.
+- **6.7.2a Search Results Workflow** ✅ — Controlled deterministic backend
+  results, response contract, result presentation, record selection, project
+  isolation, and loading/empty/error states without live provider calls or
+  persistent import.
+- **6.7.2b Live Search Providers & Import** ✅ — Live OpenAlex and Crossref
+  execution with existing retry/rate limiting, common publication mapping,
+  partial provider errors, deterministic source-record identifiers, provider
+  attribution, and idempotent import of selected records into the project
+  collection.
+
+Phase 6.7.2a established the frontend/API workflow in v0.1.6. Phase 6.7.2b
+connects the workflow to live providers and the project Working Collection in
+v0.1.7. The demonstrator collection is process-local and does not survive a
+backend restart.
+
+---
+
+## Phase 6.8 — End-to-End Literature Search Workflow 🚧
+
+The product priority from v0.1.8 is a complete literature-search workflow that
+can be performed without leaving the GUI. Work on further mock-driven screens
+is deferred until Search Strategy and Sources Ingestion use durable backend
+capabilities.
+
+- **6.8.1 Search Strategy Backend** ✅ — durable strategy storage, REST GET/PUT,
+  provider-independent Search Strategy and Search Query models, validation, and
+  provider selection.
+- **6.8.2 Query Rendering** ⬜ — OpenAlex, Crossref, and Semantic Scholar query
+  renderers.
+- **6.8.3 Search Orchestrator** ⬜ — multi-provider execution, result
+  aggregation, partial failures, provenance, and SearchRun.
+- **6.8.4 Search Execution API** ⬜ — execute search, search status, and search
+  results.
+- **6.8.5 Persistence** ⬜ — SearchRun, publications, provenance, and search
+  history.
+- **6.8.6 Search Strategy GUI Integration — Completed (functional)** ✅ — Search Strategy reads and
+  writes the real backend resource, no longer uses project mocks as strategy
+  data, supports the complete authored form and generic Boolean preview,
+  executes live searches, presents results on the same page, and provides the
+  result import workflow. **Szukaj** does not navigate to Sources & Imports.
+- **6.8.7 Sources Ingestion GUI Integration** ⬜ — start searches, show
+  progress, record counts, and provider errors.
+- **6.8.8 GUI Import Integration** ⬜ — RIS and BibTeX through the existing
+  import providers.
+- **6.8.9 Publication Intake Summary** ⬜ — summarize every intake source and
+  provide the transition to later workflow stages.
+
+Phase 6.8.1 and the functional Search Strategy workflow are available. Further
+work before Phase 2 focuses on result completeness and presentation quality.
+
+### Polish before Phase 2
+
+- analyze the OpenAlex result count
+- improve Search Results UX
+- expose backend `rendered_query`
+- display executed-search information
+- citations
+- journal
+- Open Access
+- PDF
+- sorting
+- improved import panel
 
 ---
 

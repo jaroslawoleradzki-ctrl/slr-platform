@@ -3,7 +3,7 @@ import { Database, Plus, ChevronDown, Info } from 'lucide-react';
 import { useProject } from '../../context/ProjectContext';
 import { Modal } from '../common/Modal';
 import { AboutModal } from '../common/AboutModal';
-import { APP_VERSION } from '../../config/version';
+import { APP_VERSION, RUNTIME_MODE } from '../../config/version';
 
 export const Header: React.FC = () => {
   const { projects, activeProject, setActiveProjectId, createNewProject } = useProject();
@@ -148,7 +148,7 @@ export const Header: React.FC = () => {
           }}
         >
           <Database size={12} />
-          <span>Mock API / Demo Data</span>
+          <span>{RUNTIME_MODE}</span>
         </div>
 
         <button

@@ -13,11 +13,12 @@ describe('Application Versioning & Release Identity', () => {
     expect(APP_VERSION).toBeDefined();
     expect(typeof APP_VERSION).toBe('string');
     expect(RELEASE_STATUS).toBe('Development Preview');
-    expect(RUNTIME_MODE).toBe('Mock API / Demo Data');
+    expect(RUNTIME_MODE).toContain('Hybrid Data Mode');
   });
 
   it('validates version strings against SemVer format and returns development fallback on invalid input', () => {
     expect(parseAppVersion('0.1.0')).toBe('0.1.0');
+    expect(parseAppVersion('0.1.1')).toBe('0.1.1');
     expect(parseAppVersion('  0.2.1  \n')).toBe('0.2.1');
     expect(parseAppVersion('1.0.0-rc.1')).toBe('1.0.0-rc.1');
     expect(parseAppVersion(null)).toBe('development');
@@ -38,7 +39,7 @@ describe('Application Versioning & Release Identity', () => {
     );
 
     expect(screen.getByText(new RegExp(`v${APP_VERSION}`, 'i'))).toBeInTheDocument();
-    expect(screen.getByText('Mock API / Demo Data')).toBeInTheDocument();
+    expect(screen.getByText(RUNTIME_MODE)).toBeInTheDocument();
     expect(screen.queryByText(/Backend API Connected/i)).not.toBeInTheDocument();
   });
 
@@ -60,8 +61,8 @@ describe('Application Versioning & Release Identity', () => {
     expect(screen.getByText('O aplikacji — SLR Platform')).toBeInTheDocument();
     expect(screen.getByText(`v${APP_VERSION}`)).toBeInTheDocument();
     expect(screen.getByText('Development Preview')).toBeInTheDocument();
-    expect(screen.getByText('Mock API / Demo Data')).toBeInTheDocument();
-    expect(screen.getByText(/Backend pozostaje jedynym źródłem prawdy dla logiki domenowej/i)).toBeInTheDocument();
+    expect(screen.getByText(RUNTIME_MODE)).toBeInTheDocument();
+    expect(screen.getByText(/Backend pozostaje jedynym źródłem prawdy/i)).toBeInTheDocument();
     expect(screen.queryByText(/Commit SHA/i)).not.toBeInTheDocument();
   });
 
