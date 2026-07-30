@@ -8,7 +8,7 @@ from app.api.dto.search_strategy import (
 )
 from app.repositories.project_publication_repository import (
     ProjectPublicationRepository,
-    demo_project_publication_repository,
+    default_project_publication_repository,
 )
 
 _RESULT_NAMESPACE = UUID("b7470f55-69ad-57c8-908d-797a83dc696b")
@@ -69,11 +69,9 @@ class ControlledSearchResultSource:
 
     def __init__(
         self,
-        project_repository: ProjectPublicationRepository = (
-            demo_project_publication_repository
-        ),
+        project_repository: ProjectPublicationRepository | None = None,
     ) -> None:
-        self._project_repository = project_repository
+        self._project_repository = project_repository or default_project_publication_repository()
 
     def search(
         self,

@@ -16,6 +16,8 @@ class NormalizationExecutionRepository(Protocol):
 
     def get_for_project(self, project_id: str) -> NormalizationExecution | None: ...
 
+    def delete_for_project(self, project_id: str) -> None: ...
+
 
 class SqliteNormalizationExecutionRepository:
     """Stores the latest normalization execution for each project."""
@@ -92,6 +94,13 @@ class SqliteNormalizationExecutionRepository:
             rules_applied=tuple(json.loads(str(row[10]))),
             error_message=str(row[11]) if row[11] is not None else None,
         )
+
+    def delete_for_project(self, project_id: str) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                "DELETE FROM normalization_executions WHERE project_id = ?",
+                (project_id,),
+            )
 
     def _connect(self) -> sqlite3.Connection:
         return sqlite3.connect(self._database_path)

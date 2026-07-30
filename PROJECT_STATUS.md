@@ -53,6 +53,10 @@ after execution. Version 0.2.0 stores the latest execution summary and audit
 trail durably in SQLite and restores it after backend restart. Only the latest
 run is retained.
 
+Version 0.2.0 also replaces the runtime demo publication repository with the
+project-scoped SQLite Working Collection. File and selected OpenAlex imports,
+normalization reads and normalization writes now use the same durable records.
+
 ---
 
 # Completed

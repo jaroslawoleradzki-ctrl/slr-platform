@@ -188,6 +188,9 @@ The existing `PublicationNormalizer` is now backed by durable latest-run
 storage. Summary fields and audit trail remain available after backend restart.
 Deduplication, screening, background jobs and full provenance remain open.
 
+The 0.2.0 increment also makes the Working Collection durable in SQLite and
+connects file/provider imports with the normalization input collection.
+
 ### Polish before Phase 2
 
 - analyze the OpenAlex result count

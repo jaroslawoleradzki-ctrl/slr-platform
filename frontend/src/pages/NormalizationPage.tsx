@@ -2,12 +2,16 @@ import React, { useState } from 'react';
 import { useProject } from '../context/ProjectContext';
 import { Card } from '../components/common/Card';
 import { Badge } from '../components/common/Badge';
-import { Sparkles, CheckCircle2, ShieldCheck } from 'lucide-react';
+import { Button } from '../components/common/Button';
+import { Toast } from '../components/common/Toast';
+import { ErrorAlert } from '../components/common/ErrorAlert';
+import { Sparkles, CheckCircle2, ShieldCheck, RotateCw } from 'lucide-react';
 
 export const NormalizationPage: React.FC = () => {
   const { activeProject, runNormalization } = useProject();
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   if (!activeProject) return null;
 
@@ -15,8 +19,10 @@ export const NormalizationPage: React.FC = () => {
   const run = async () => {
     setRunning(true);
     setError(null);
+    setToastMessage(null);
     try {
       await runNormalization();
+      setToastMessage('Normalizacja została wykonana ponownie.');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Nie udało się uruchomić normalizacji.');
     } finally {
@@ -35,7 +41,11 @@ export const NormalizationPage: React.FC = () => {
         </p>
       </div>
 
-      {error && <p role="alert" style={{ color: 'var(--status-error-text)', fontSize: '0.85rem' }}>{error}</p>}
+      {error && <ErrorAlert title="Błąd podczas normalizacji" message={error} />}
+      {toastMessage && (
+        <Toast message={toastMessage} type="success" onClose={() => setToastMessage(null)} />
+      )}
+
       {!norm ? (
         <Card title="Normalizacja oczekuje na uruchomienie" action={<Badge variant="pending">Nie uruchamiano</Badge>}>
           <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
@@ -49,9 +59,17 @@ export const NormalizationPage: React.FC = () => {
               </div>
             ))}
           </div>
-          <button type="button" onClick={run} disabled={running} style={{ marginTop: '12px' }}>
-            {running ? 'Normalizowanie...' : 'Uruchom normalizację'}
-          </button>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '16px' }}>
+            <Button
+              variant="primary"
+              onClick={run}
+              isLoading={running}
+              loadingText="Normalizowanie..."
+              icon={<RotateCw size={16} />}
+            >
+              Uruchom normalizację
+            </Button>
+          </div>
         </Card>
       ) : (
         <>
@@ -112,9 +130,17 @@ export const NormalizationPage: React.FC = () => {
                 </div>
               ))}
             </div>
-            <button type="button" onClick={run} disabled={running} style={{ marginTop: '12px' }}>
-              {running ? 'Normalizowanie...' : 'Uruchom ponownie'}
-            </button>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '16px' }}>
+              <Button
+                variant="primary"
+                onClick={run}
+                isLoading={running}
+                loadingText="Normalizowanie..."
+                icon={<RotateCw size={16} />}
+              >
+                Uruchom ponownie normalizację
+              </Button>
+            </div>
           </Card>
         </>
       )}

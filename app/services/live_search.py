@@ -19,7 +19,7 @@ from app.providers.search.crossref import CrossrefProvider
 from app.providers.search.openalex import OpenAlexProvider
 from app.repositories.project_publication_repository import (
     ProjectPublicationRepository,
-    demo_project_publication_repository,
+    default_project_publication_repository,
 )
 from app.services.search_engine import SearchEngine, SearchExecution, SearchProvider
 from app.storage.raw_response_archive import RawResponseArchiveEntry
@@ -75,9 +75,9 @@ class LiveSearchService:
 
     def __init__(
         self,
-        repository: ProjectPublicationRepository = demo_project_publication_repository,
+        repository: ProjectPublicationRepository | None = None,
     ) -> None:
-        self._repository = repository
+        self._repository = repository or default_project_publication_repository()
 
     async def execute(
         self,

@@ -1,5 +1,9 @@
 from datetime import datetime, timezone
 from dataclasses import dataclass
+import json
+import os
+import sqlite3
+from pathlib import Path
 from typing import Protocol
 from uuid import UUID
 
@@ -198,3 +202,191 @@ class DemoProjectPublicationRepository:
 
 
 demo_project_publication_repository = DemoProjectPublicationRepository()
+
+
+class SqliteProjectPublicationRepository:
+    """Durable project-scoped Working Collection backed by SQLite."""
+
+    _KNOWN_PROJECT_IDS = frozenset({"lean_energy", "ai_architecture"})
+
+    def __init__(self, database_path: str | Path) -> None:
+        self._database_path = Path(database_path)
+        self._database_path.parent.mkdir(parents=True, exist_ok=True)
+        self._apply_migrations()
+
+    def get_publications(self, project_id: str) -> list[Publication]:
+        self._ensure_project(project_id)
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT document
+                FROM project_publications
+                WHERE project_id = ?
+                ORDER BY position ASC, rowid ASC
+                """,
+                (project_id,),
+            ).fetchall()
+        return [Publication.model_validate(json.loads(row[0])) for row in rows]
+
+    def add_publications(
+        self,
+        project_id: str,
+        publications: list[Publication],
+    ) -> int:
+        self._ensure_project(project_id)
+        with self._connect() as connection:
+            next_position = self._next_position(connection, project_id)
+            for offset, publication in enumerate(publications):
+                self._insert_or_replace(
+                    connection, project_id, publication, next_position + offset
+                )
+        return len(self.get_publications(project_id))
+
+    def import_source_publications(
+        self,
+        project_id: str,
+        publications: list[Publication],
+    ) -> PublicationImportResult:
+        self._ensure_project(project_id)
+        existing_keys = {
+            self._source_key(publication)
+            for publication in self.get_publications(project_id)
+            if publication.provenance
+        }
+        new_publications: list[Publication] = []
+        for publication in publications:
+            key = self._source_key(publication)
+            if key in existing_keys:
+                continue
+            existing_keys.add(key)
+            new_publications.append(publication)
+
+        with self._connect() as connection:
+            next_position = self._next_position(connection, project_id)
+            for offset, publication in enumerate(new_publications):
+                self._insert_or_replace(
+                    connection, project_id, publication, next_position + offset
+                )
+        return PublicationImportResult(
+            imported_count=len(new_publications),
+            skipped_count=len(publications) - len(new_publications),
+            working_collection_count=len(self.get_publications(project_id)),
+        )
+
+    def replace_publications(
+        self,
+        project_id: str,
+        publications: list[Publication],
+    ) -> None:
+        self._ensure_project(project_id)
+        with self._connect() as connection:
+            connection.execute(
+                "DELETE FROM project_publications WHERE project_id = ?",
+                (project_id,),
+            )
+            for position, publication in enumerate(publications):
+                self._insert_or_replace(connection, project_id, publication, position)
+
+    def _ensure_project(self, project_id: str) -> None:
+        if project_id in self._KNOWN_PROJECT_IDS:
+            return
+        with self._connect() as connection:
+            exists = connection.execute(
+                "SELECT 1 FROM project_publications WHERE project_id = ? LIMIT 1",
+                (project_id,),
+            ).fetchone()
+        if exists is None:
+            raise ProjectNotFoundError(project_id)
+
+    @staticmethod
+    def _source_key(publication: Publication) -> tuple[str, str]:
+        if not publication.provenance:
+            raise ValueError("source publication requires provenance")
+        provenance = publication.provenance[0]
+        return (
+            provenance.source.strip().casefold(),
+            provenance.source_record_id.strip(),
+        )
+
+    @staticmethod
+    def _next_position(connection: sqlite3.Connection, project_id: str) -> int:
+        row = connection.execute(
+            "SELECT COALESCE(MAX(position), -1) + 1 FROM project_publications WHERE project_id = ?",
+            (project_id,),
+        ).fetchone()
+        return int(row[0])
+
+    @staticmethod
+    def _insert_or_replace(
+        connection: sqlite3.Connection,
+        project_id: str,
+        publication: Publication,
+        position: int,
+    ) -> None:
+        document = publication.model_dump(mode="json")
+        connection.execute(
+            """
+            INSERT INTO project_publications (
+                project_id, record_id, position, title, title_normalized,
+                publication_year, authors, identifiers, provenance, created_at,
+                document
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(project_id, record_id) DO UPDATE SET
+                position = excluded.position,
+                title = excluded.title,
+                title_normalized = excluded.title_normalized,
+                publication_year = excluded.publication_year,
+                authors = excluded.authors,
+                identifiers = excluded.identifiers,
+                provenance = excluded.provenance,
+                created_at = excluded.created_at,
+                document = excluded.document
+            """,
+            (
+                project_id,
+                str(publication.record_id),
+                position,
+                publication.title,
+                publication.title_normalized,
+                publication.publication_year,
+                json.dumps(document["authors"], ensure_ascii=False),
+                json.dumps(document["identifiers"], ensure_ascii=False),
+                json.dumps(document["provenance"], ensure_ascii=False),
+                publication.created_at.isoformat(),
+                json.dumps(document, ensure_ascii=False),
+            ),
+        )
+
+    def _connect(self) -> sqlite3.Connection:
+        return sqlite3.connect(self._database_path)
+
+    def _apply_migrations(self) -> None:
+        migration_directory = Path(__file__).parents[2] / "migrations"
+        with self._connect() as connection:
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS schema_migrations (
+                    version TEXT PRIMARY KEY,
+                    applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )
+                """
+            )
+            applied = {
+                row[0]
+                for row in connection.execute(
+                    "SELECT version FROM schema_migrations"
+                ).fetchall()
+            }
+            for migration in sorted(migration_directory.glob("*.sql")):
+                if migration.name in applied:
+                    continue
+                connection.executescript(migration.read_text(encoding="utf-8"))
+                connection.execute(
+                    "INSERT INTO schema_migrations(version) VALUES (?)",
+                    (migration.name,),
+                )
+
+
+def default_project_publication_repository() -> SqliteProjectPublicationRepository:
+    path = os.environ.get("SLR_DATABASE_PATH", "data/slr-platform.db")
+    return SqliteProjectPublicationRepository(path)

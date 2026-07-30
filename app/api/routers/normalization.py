@@ -1,22 +1,18 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.api.dto.normalization import NormalizationResponse
-from app.api.routers.search_strategy import get_project_publication_repository
+from app.api.routers.search_strategy import (
+    get_normalization_execution_repository,
+    get_project_publication_repository,
+)
 from app.repositories.project_publication_repository import (
     ProjectNotFoundError,
     ProjectPublicationRepository,
 )
-from app.repositories.normalization_execution_repository import (
-    NormalizationExecutionRepository,
-    default_normalization_execution_repository,
-)
+from app.repositories.normalization_execution_repository import NormalizationExecutionRepository
 from app.services.normalization_service import NormalizationExecution, normalize_project
 
 router = APIRouter(prefix="/projects", tags=["normalization"])
-
-
-def get_normalization_execution_repository() -> NormalizationExecutionRepository:
-    return default_normalization_execution_repository()
 
 
 def _response(execution: NormalizationExecution) -> NormalizationResponse:
