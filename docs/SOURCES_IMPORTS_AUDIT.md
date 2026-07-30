@@ -143,6 +143,16 @@ zrealizowany kolejny przyrost:
 Nadal nie istnieją: trwałe wykonania/statusy providerów, provider health-checki,
 pełny moduł Sources, background jobs i masowy import.
 
+## Aktualizacja — trwała Working Collection
+
+W kolejnym przyroście `SqliteProjectPublicationRepository` zastąpiło
+`DemoProjectPublicationRepository` w runtime dla importów i Search Strategy.
+Importy RIS/BibTeX oraz selected OpenAlex zapisują publikacje do wspólnej,
+project-scoped tabeli `project_publications`. Normalizacja czyta i zastępuje
+rekordy w tej samej kolekcji, a publikacje oraz summary normalizacji przetrwają
+restart backendu. Deduplikacja, Crossref i Semantic Scholar pozostają poza tym
+przyrostem.
+
 ## Aktualizacja audytu — integracja importu selected OpenAlex
 
 Import zaznaczonych wyników z Search Strategy zapisuje publikacje jak wcześniej,

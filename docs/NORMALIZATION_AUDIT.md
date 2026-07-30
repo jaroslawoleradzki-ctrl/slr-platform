@@ -1,4 +1,4 @@
-# Normalization audit — 0.1.9
+# Normalization audit — 0.2.0
 
 ## Stan przed integracją
 
@@ -16,7 +16,7 @@ czytał `MOCK_PROJECTS.normalization`, w tym statyczne wartości 2105/2042/63.
 | audit trail/rules | `NormalizationPage.tsx` | j.w. | wynik wykonania | SQLite JSON | live |
 | project scope | `ProjectContext.tsx` | ścieżka z project id | repozytorium publikacji | per project | live |
 | ISSN validation | ekran/tekst pomocniczy | brak | brak globalnej reguły | — | niezaimplementowane |
-| execution persistence | `ProjectContext.tsx` | GET | brak trwałego repozytorium runów | — | in-memory |
+| execution persistence | `ProjectContext.tsx` | GET | `SqliteNormalizationExecutionRepository` | SQLite latest run | live |
 
 ## Zrealizowane podłączenie
 
@@ -36,7 +36,7 @@ obsługuje stan nieuruchomiony, pusty projekt, sukces, błąd i ponowne uruchomi
 
 ## Trwałość i ograniczenia
 
-Publikacje pozostają w obecnym `DemoProjectPublicationRepository`, natomiast
+Publikacje są przechowywane w `SqliteProjectPublicationRepository`, natomiast
 wynik ostatniego runu jest przechowywany trwale w SQLite przez
 `SqliteNormalizationExecutionRepository`. Refresh i restart backendu zachowują
 summary oraz audit trail. Przechowywany jest wyłącznie ostatni run projektu;

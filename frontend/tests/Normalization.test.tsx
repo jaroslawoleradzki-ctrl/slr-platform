@@ -32,7 +32,7 @@ describe('Normalization page', () => {
       executed_at: '2026-07-30T12:00:00Z',
     };
     vi.spyOn(projectApiService, 'getNormalization').mockImplementation(async () => executed ? result : null);
-    vi.spyOn(projectApiService, 'runNormalization').mockImplementation(async () => {
+    const runSpy = vi.spyOn(projectApiService, 'runNormalization').mockImplementation(async () => {
       executed = true;
       return result;
     });
@@ -40,6 +40,7 @@ describe('Normalization page', () => {
 
     expect(screen.queryByText('2,105')).not.toBeInTheDocument();
     expect(screen.getByText('Normalizacja nie została jeszcze uruchomiona dla tego projektu.')).toBeInTheDocument();
+    expect(runSpy).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: 'Uruchom normalizację' }));
     await waitFor(() => expect(screen.getByText('DOI normalized: 2')).toBeInTheDocument());
     expect(screen.getAllByText('5')).toHaveLength(2);
@@ -72,5 +73,56 @@ describe('Normalization page', () => {
     renderPage();
     await waitFor(() => expect(screen.getByText('DOI normalized: 1')).toBeInTheDocument());
     expect(screen.getByText('7')).toBeInTheDocument();
+  });
+
+  it('renders re-run button, handles click, calls runNormalization(), sets disabled while running, and shows toast on success', async () => {
+    vi.spyOn(projectApiService, 'getBibliographicImports').mockResolvedValue([]);
+    const initialResult: NormalizationResponse = {
+      run_id: 'persisted-run',
+      project_id: 'lean_energy',
+      status: 'completed',
+      processed_records: 7,
+      clean_records: 6,
+      warnings_count: 1,
+      errors_count: 0,
+      rules_applied: ['DOI normalized'],
+      audit_trail: ['DOI normalized: 1'],
+      started_at: '2026-07-30T11:59:59Z',
+      completed_at: '2026-07-30T12:00:00Z',
+      executed_at: '2026-07-30T12:00:00Z',
+    };
+    const updatedResult: NormalizationResponse = {
+      ...initialResult,
+      run_id: 're-run-2',
+      processed_records: 10,
+      clean_records: 10,
+    };
+
+    vi.spyOn(projectApiService, 'getNormalization').mockResolvedValue(initialResult);
+
+    let resolveRunPromise: (val: NormalizationResponse) => void = () => {};
+    const runSpy = vi.spyOn(projectApiService, 'runNormalization').mockImplementation(
+      () => new Promise((resolve) => {
+        resolveRunPromise = resolve;
+      }),
+    );
+
+    renderPage();
+
+    const reRunButton = await screen.findByRole('button', { name: 'Uruchom ponownie normalizację' });
+    expect(reRunButton).toBeInTheDocument();
+    expect(reRunButton).not.toBeDisabled();
+
+    fireEvent.click(reRunButton);
+
+    expect(runSpy).toHaveBeenCalledTimes(1);
+    expect(reRunButton).toBeDisabled();
+    expect(reRunButton).toHaveTextContent('Normalizowanie...');
+
+    resolveRunPromise(updatedResult);
+
+    await waitFor(() => {
+      expect(screen.getByText('Normalizacja została wykonana ponownie.')).toBeInTheDocument();
+    });
   });
 });

@@ -19,7 +19,7 @@ from app.repositories.duplicate_review_decision_repository import (
 )
 from app.repositories.project_publication_repository import (
     ProjectPublicationRepository,
-    demo_project_publication_repository,
+    default_project_publication_repository,
 )
 from app.services.duplicate_group_builder import DuplicateGroupBuilder, duplicate_group_builder
 
@@ -97,11 +97,11 @@ class ProjectDuplicateService:
 
     def __init__(
         self,
-        repository: ProjectPublicationRepository = demo_project_publication_repository,
+        repository: ProjectPublicationRepository | None = None,
         decision_repository: DuplicateReviewDecisionRepository = in_memory_duplicate_review_decision_repository,
         builder: DuplicateGroupBuilder = duplicate_group_builder,
     ) -> None:
-        self._repository = repository
+        self._repository = repository or default_project_publication_repository()
         self._decision_repository = decision_repository
         self._builder = builder
 

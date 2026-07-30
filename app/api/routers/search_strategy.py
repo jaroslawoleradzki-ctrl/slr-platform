@@ -33,12 +33,16 @@ from app.providers.import_file.ris.parser import parse_ris
 from app.repositories.project_publication_repository import (
     ProjectNotFoundError,
     ProjectPublicationRepository,
-    demo_project_publication_repository,
+    default_project_publication_repository,
 )
 from app.repositories.import_history_repository import (
     ImportHistoryRecord,
     ImportHistoryRepository,
     default_import_history_repository,
+)
+from app.repositories.normalization_execution_repository import (
+    NormalizationExecutionRepository,
+    default_normalization_execution_repository,
 )
 from app.repositories.search_strategy_repository import (
     SearchStrategyNotFoundError,
@@ -66,11 +70,15 @@ def get_live_search_executor() -> LiveSearchExecutor:
 
 
 def get_project_publication_repository() -> ProjectPublicationRepository:
-    return demo_project_publication_repository
+    return default_project_publication_repository()
 
 
 def get_import_history_repository() -> ImportHistoryRepository:
     return default_import_history_repository()
+
+
+def get_normalization_execution_repository() -> NormalizationExecutionRepository:
+    return default_normalization_execution_repository()
 
 
 @lru_cache(maxsize=1)
@@ -301,6 +309,9 @@ def import_search_results(
     history_repository: ImportHistoryRepository = Depends(
         get_import_history_repository
     ),
+    normalization_repository: NormalizationExecutionRepository = Depends(
+        get_normalization_execution_repository
+    ),
 ) -> SearchResultsImportResponse:
     """Append the explicitly selected result records to the Working Collection."""
 
@@ -344,6 +355,8 @@ def import_search_results(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=str(exc),
         ) from exc
+    if import_result.imported_count:
+        normalization_repository.delete_for_project(project_id)
     if payload.provider == "openalex":
         fingerprint = hashlib.sha256(
             json.dumps(
@@ -397,6 +410,9 @@ async def import_bibliographic_file(
     history_repository: ImportHistoryRepository = Depends(
         get_import_history_repository
     ),
+    normalization_repository: NormalizationExecutionRepository = Depends(
+        get_normalization_execution_repository
+    ),
 ) -> BibliographicImportResponse:
     """Parse one RIS/BibTeX file and append its publications to a project."""
 
@@ -441,6 +457,8 @@ async def import_bibliographic_file(
             project_id,
             publications,
         )
+        if import_result.imported_count:
+            normalization_repository.delete_for_project(project_id)
     except ProjectNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except UnicodeDecodeError as exc:

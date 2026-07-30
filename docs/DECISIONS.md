@@ -14,6 +14,18 @@ contract needed by the GUI without introducing full multi-run history. Audit
 trail and applied rules are stored as JSON, while timestamps and counters remain
 relational fields. The existing `PublicationNormalizer` is unchanged.
 
+The same SQLite database stores the project-scoped Working Collection. Import
+adapters and normalization use one `ProjectPublicationRepository` boundary;
+the runtime import/search default is `SqliteProjectPublicationRepository`.
+Legacy controlled-search and duplicate-review adapters remain outside this
+increment and continue to be separately testable.
+
+Import history and Working Collection use the same SQLite database path, but
+remain separate repository transactions in this minimal increment. Publication
+writes complete before their history row is created; a later failure in history
+recording is therefore surfaced as an API error and is documented as a future
+transaction-boundary improvement rather than being hidden with demo state.
+
 ---
 
 ## 2026-07-30
