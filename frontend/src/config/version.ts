@@ -2,4 +2,4 @@ export const APP_VERSION: string =
   typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : 'development';
 
 export const RELEASE_STATUS: string = 'Development Preview';
-export const RUNTIME_MODE: string = 'Hybrid Data Mode (Deduplication API + Demo Data)';
+export const RUNTIME_MODE: string = 'Hybrid Data Mode (Live Search/Upload API + Demo Project Metadata)';

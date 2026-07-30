@@ -14,7 +14,7 @@ development
 
 Current version (working tree):
 
-v0.1.8 (Unreleased)
+v0.1.9 (Unreleased)
 
 Current development phase:
 
@@ -37,7 +37,11 @@ separates the provider's filtered `total_count` from `returned_count` and
 exposes `next_cursor` plus `has_more`. Search Strategy now accepts the
 execution cursor and lets users append subsequent OpenAlex pages without
 restarting the search; full automatic import of all results remains out of
-scope.
+scope. Version 0.1.9 adds the first working project-scoped bibliographic
+upload: one `.ris` or `.bib` file is parsed by the existing providers and
+persisted into the existing project publication repository. Import history is
+now durable in SQLite and available through a project-scoped GET endpoint.
+Provider status APIs and the complete Sources module remain out of scope.
 
 ---
 
@@ -69,6 +73,24 @@ scope.
 - `Szukaj` does not navigate to Sources & Imports
 - result import workflow is available again
 
+## Version 0.1.9 — Bibliographic upload increment
+
+- `POST /projects/{project_id}/imports` accepts one `.ris` or `.bib` file
+- existing RIS/BibTeX parsers and mappers are reused
+- parsed publications are stored through the existing project publication
+  repository
+- Sources uses a real file input and displays upload success/error feedback
+- the current project view appends a successful import to its visible list
+
+## Version 0.1.9 — Durable import history
+
+- `GET /projects/{project_id}/imports` returns newest-first import history
+- history stores project, filename, format, record count, status, warnings and
+  timestamp in SQLite
+- Sources reloads history from the backend after project changes and uploads
+- provider cards use neutral states because provider executions are not
+  persisted for Sources
+
 ### Known limitations
 
 - OpenAlex returns at most 100 records per execution response; the Search
@@ -76,6 +98,8 @@ scope.
   retrieval/import of all results remains out of scope
 - Crossref execution has not yet been verified
 - Semantic Scholar remains inactive
+- provider executions and provider status APIs are not persisted for Sources
+- initial project metadata remains demo-backed
 
 ## Infrastructure
 

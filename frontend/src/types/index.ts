@@ -150,6 +150,24 @@ export interface ImportFileRecord {
   warnings?: string[];
 }
 
+export interface BibliographicImportResponse {
+  import_id: string;
+  records_count: number;
+  warnings: string[];
+  status: 'success' | 'warning';
+}
+
+export interface BibliographicImportHistoryRecord {
+  import_id: string;
+  project_id: string;
+  filename: string;
+  format: 'BibTeX' | 'RIS';
+  records_count: number;
+  status: 'success' | 'warning';
+  created_at: string;
+  warnings: string[];
+}
+
 export interface NormalizationStatus {
   completed: boolean;
   totalRecordsProcessed: number;

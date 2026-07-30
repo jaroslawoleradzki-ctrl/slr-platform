@@ -4,7 +4,7 @@ import { ProviderStatusCard } from '../components/search/ProviderStatusCard';
 import { FileDropzone } from '../components/imports/FileDropzone';
 
 export const SourcesIngestionPage: React.FC = () => {
-  const { activeProject } = useProject();
+  const { activeProject, importBibliographicFile } = useProject();
 
   if (!activeProject) return null;
 
@@ -15,7 +15,7 @@ export const SourcesIngestionPage: React.FC = () => {
           2. Źródła Wyszukiwania i Importy (Sources & Ingestion)
         </h2>
         <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
-          Status połączeń z live API (OpenAlex, Crossref, Semantic Scholar) oraz ręczne importy plików Ris i BibTeX.
+          Ręczne importy RIS i BibTeX oraz neutralny stan providerów, dla których brak zapisanych wykonań.
         </p>
       </div>
 
@@ -25,7 +25,10 @@ export const SourcesIngestionPage: React.FC = () => {
         ))}
       </div>
 
-      <FileDropzone imports={activeProject.imports} />
+      <FileDropzone
+        imports={activeProject.imports}
+        onFileSelect={importBibliographicFile}
+      />
     </div>
   );
 };

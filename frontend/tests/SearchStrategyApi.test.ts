@@ -249,4 +249,26 @@ describe('Search Strategy frontend-backend contract', () => {
       })
     );
   });
+
+  it('uploads one bibliographic file as multipart form data', async () => {
+    const backendResponse = {
+      import_id: 'import-1',
+      records_count: 2,
+      warnings: [],
+      status: 'success' as const,
+    };
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify(backendResponse), { status: 201 })
+    );
+    const file = new File(['TY  - JOUR\nTI  - One\nER  - \n'], 'one.ris');
+
+    await expect(projectApiService.importBibliographicFile('lean_energy', file))
+      .resolves.toEqual(backendResponse);
+
+    const request = fetchMock.mock.calls[0][1] as RequestInit;
+    expect(fetchMock.mock.calls[0][0]).toBe('http://localhost:8000/projects/lean_energy/imports');
+    expect(request.method).toBe('POST');
+    expect(request.body).toBeInstanceOf(FormData);
+    expect((request.body as FormData).get('file')).toBe(file);
+  });
 });

@@ -1,16 +1,36 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { Upload, FileText, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { ImportFileRecord } from '../../types';
 import { Card } from '../common/Card';
 import { Badge } from '../common/Badge';
 
 interface FileDropzoneProps {
-  onFileSelect?: (filename: string, format: 'BibTeX' | 'RIS') => void;
+  onFileSelect?: (file: File) => Promise<unknown> | unknown;
   imports: ImportFileRecord[];
 }
 
 export const FileDropzone: React.FC<FileDropzoneProps> = ({ onFileSelect, imports }) => {
   const [dragActive, setDragActive] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [uploadSuccess, setUploadSuccess] = useState<string | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const uploadFile = async (file: File) => {
+    setUploadError(null);
+    setUploadSuccess(null);
+    if (!onFileSelect) return;
+    setUploading(true);
+    try {
+      const response = await onFileSelect(file) as { records_count?: number } | undefined;
+      setUploadSuccess(`Zaimportowano ${response?.records_count ?? 0} rekordów.`);
+    } catch (error) {
+      setUploadError(error instanceof Error ? error.message : 'Nie udało się zaimportować pliku.');
+    } finally {
+      setUploading(false);
+      if (inputRef.current) inputRef.current.value = '';
+    }
+  };
 
   const handleDrag = (e: React.DragEvent) => {
     e.preventDefault();
@@ -28,8 +48,7 @@ export const FileDropzone: React.FC<FileDropzoneProps> = ({ onFileSelect, import
     setDragActive(false);
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
       const file = e.dataTransfer.files[0];
-      const fmt = file.name.endsWith('.bib') ? 'BibTeX' : 'RIS';
-      if (onFileSelect) onFileSelect(file.name, fmt);
+      void uploadFile(file);
     }
   };
 
@@ -85,9 +104,9 @@ export const FileDropzone: React.FC<FileDropzoneProps> = ({ onFileSelect, import
             </p>
           </div>
           <button
-            onClick={() => {
-              if (onFileSelect) onFileSelect('custom_import_export.ris', 'RIS');
-            }}
+            type="button"
+            disabled={uploading}
+            onClick={() => inputRef.current?.click()}
             style={{
               padding: '8px 16px',
               borderRadius: 'var(--radius-md)',
@@ -97,8 +116,29 @@ export const FileDropzone: React.FC<FileDropzoneProps> = ({ onFileSelect, import
               fontSize: '0.85rem',
             }}
           >
-            Wybierz Plik
+            {uploading ? 'Importowanie…' : 'Wybierz Plik'}
           </button>
+          <input
+            ref={inputRef}
+            type="file"
+            accept=".ris,.bib"
+            aria-label="Wybierz plik RIS lub BibTeX"
+            hidden
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              if (file) void uploadFile(file);
+            }}
+          />
+          {uploadSuccess && (
+            <div role="status" style={{ color: 'var(--status-success-text)', fontSize: '0.8rem' }}>
+              {uploadSuccess}
+            </div>
+          )}
+          {uploadError && (
+            <div role="alert" style={{ color: 'var(--status-error-text)', fontSize: '0.8rem' }}>
+              {uploadError}
+            </div>
+          )}
         </div>
       </Card>
 

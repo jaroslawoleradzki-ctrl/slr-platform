@@ -18,7 +18,7 @@ export const ProviderStatusCard: React.FC<ProviderStatusCardProps> = ({ provider
       case 'failed':
         return <Badge variant="error" icon={<AlertTriangle size={12} />}>Błąd Providera</Badge>;
       default:
-        return <Badge variant="pending" icon={<Clock size={12} />}>Oczekuje (Idle)</Badge>;
+        return <Badge variant="pending" icon={<Clock size={12} />}>Nie uruchamiano</Badge>;
     }
   };
 
@@ -55,7 +55,7 @@ export const ProviderStatusCard: React.FC<ProviderStatusCardProps> = ({ provider
               {provider.name}
             </h4>
             <span style={{ fontSize: '0.75rem', color: provider.connected ? 'var(--status-success-text)' : 'var(--status-error-text)' }}>
-              {provider.connected ? '● Połączenie OK' : '○ Brak połączenia API'}
+              {provider.connected ? '● Połączenie OK' : '○ Brak danych'}
             </span>
           </div>
         </div>
@@ -66,7 +66,7 @@ export const ProviderStatusCard: React.FC<ProviderStatusCardProps> = ({ provider
         <div>
           <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Pobrane Rekordy</span>
           <div style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)' }}>
-            {provider.resultsCount.toLocaleString()}
+            {provider.resultsCount > 0 ? provider.resultsCount.toLocaleString() : 'Brak danych'}
           </div>
         </div>
         <div>

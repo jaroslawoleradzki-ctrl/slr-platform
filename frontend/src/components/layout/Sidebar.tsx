@@ -19,6 +19,9 @@ export const Sidebar: React.FC = () => {
   const { projectId } = useParams<{ projectId?: string }>();
   const { activeProject } = useProject();
   const currentId = projectId || activeProject?.id || 'lean_energy';
+  const completedProviderCount = activeProject?.providers.filter(
+    (provider) => provider.status === 'completed'
+  ).length ?? 0;
 
   const navItems = [
     {
@@ -37,7 +40,11 @@ export const Sidebar: React.FC = () => {
       to: `/projects/${currentId}/sources`,
       label: '2. Sources & Imports',
       icon: Download,
-      badge: activeProject?.providers ? `${activeProject.providers.filter(p => p.status === 'completed').length}/3` : null,
+      badge: activeProject?.providers
+        ? completedProviderCount > 0
+          ? `${completedProviderCount}/${activeProject.providers.length}`
+          : 'Brak danych'
+        : null,
     },
     {
       to: `/projects/${currentId}/normalize`,

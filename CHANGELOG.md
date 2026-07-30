@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.1.9] — Unreleased
+
+### Added
+
+- First working project-scoped bibliographic upload for one `.ris` or `.bib`
+  file via `POST /projects/{project_id}/imports`.
+- Reuse of the existing RIS and BibTeX parsers, mappers and `Publication`
+  repository path.
+- Upload response with `import_id`, `records_count`, `warnings` and `status`.
+- Real frontend file selection, upload feedback and visible session history
+  update after a successful import.
+- Durable SQLite import history with newest-first
+  `GET /projects/{project_id}/imports` and project isolation.
+
+### Scope limits
+
+- Provider status, background jobs, mass import and the complete Sources module
+  are not part of 0.1.9.
+
 ## [0.1.8] — Unreleased
 
 ### Search Strategy

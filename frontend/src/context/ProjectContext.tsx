@@ -1,12 +1,26 @@
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import {
   EditableSearchStrategy,
+  BibliographicImportResponse,
   SearchExecutionResult,
   SearchResultsImportResponse,
   SLRProject,
 } from '../types';
 import { projectApiService } from '../services/api/projectApi';
 import { MOCK_PROJECTS } from '../mocks/projectData';
+
+const neutralizeSourceData = (project: SLRProject): SLRProject => ({
+  ...project,
+  imports: [],
+  providers: project.providers.map((provider) => ({
+    ...provider,
+    connected: false,
+    status: 'idle',
+    resultsCount: 0,
+    lastRunTimestamp: null,
+    errorMessage: undefined,
+  })),
+});
 
 interface ProjectContextType {
   projects: SLRProject[];
@@ -27,13 +41,14 @@ interface ProjectContextType {
   searchLoadingMore: boolean;
   searchPaginationError: string | null;
   importSelectedSearchResults: () => Promise<SearchResultsImportResponse | null>;
+  importBibliographicFile: (file: File) => Promise<BibliographicImportResponse>;
   lastSearchImportResult: SearchResultsImportResponse | null;
 }
 
 const ProjectContext = createContext<ProjectContextType | undefined>(undefined);
 
 export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [projects, setProjects] = useState<SLRProject[]>(MOCK_PROJECTS);
+  const [projects, setProjects] = useState<SLRProject[]>(MOCK_PROJECTS.map(neutralizeSourceData));
   const [activeProjectId, setActiveProjectIdState] = useState<string>('lean_energy');
   const activeProjectIdRef = useRef(activeProjectId);
   const [loading, setLoading] = useState<boolean>(false);
@@ -49,6 +64,30 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [lastSearchImportResult, setLastSearchImportResult] =
     useState<SearchResultsImportResponse | null>(null);
 
+  const loadProjectImports = async (projectId: string) => {
+    try {
+      const history = await projectApiService.getBibliographicImports(projectId);
+      if (activeProjectIdRef.current !== projectId) return;
+      const imports = history.map((item) => ({
+        id: item.import_id,
+        filename: item.filename,
+        format: item.format,
+        recordsCount: item.records_count,
+        importedAt: item.created_at,
+        status: item.status,
+        warnings: item.warnings,
+      }));
+      setProjects((currentProjects) => currentProjects.map((project) => (
+        project.id === projectId ? { ...project, imports } : project
+      )));
+    } catch {
+      if (activeProjectIdRef.current !== projectId) return;
+      setProjects((currentProjects) => currentProjects.map((project) => (
+        project.id === projectId ? { ...project, imports: [] } : project
+      )));
+    }
+  };
+
   const changeActiveProject = (id: string) => {
     if (id === activeProjectId) return;
     setCurrentSearchStrategy(null);
@@ -62,6 +101,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setLastSearchImportResult(null);
     activeProjectIdRef.current = id;
     setActiveProjectIdState(id);
+    void loadProjectImports(id);
   };
 
   const refreshProjects = async () => {
@@ -69,7 +109,8 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
       setLoading(true);
       setError(null);
       const data = await projectApiService.getProjects();
-      setProjects(data);
+      setProjects(data.map(neutralizeSourceData));
+      void loadProjectImports(activeProjectIdRef.current);
       if (data.length > 0 && !data.some((p) => p.id === activeProjectId)) {
         changeActiveProject(data[0].id);
       }
@@ -202,6 +243,16 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return result;
   };
 
+  const importBibliographicFile = async (file: File) => {
+    const targetProjectId = activeProjectIdRef.current;
+    const result = await projectApiService.importBibliographicFile(
+      targetProjectId,
+      file,
+    );
+    await loadProjectImports(targetProjectId);
+    return result;
+  };
+
   return (
     <ProjectContext.Provider
       value={{
@@ -223,6 +274,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
         searchLoadingMore,
         searchPaginationError,
         importSelectedSearchResults,
+        importBibliographicFile,
         lastSearchImportResult,
       }}
     >

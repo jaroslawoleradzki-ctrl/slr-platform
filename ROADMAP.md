@@ -162,6 +162,20 @@ capabilities.
 Phase 6.8.1 and the functional Search Strategy workflow are available. Further
 work before Phase 2 focuses on result completeness and presentation quality.
 
+### Version 0.1.9 increment
+
+The first project-scoped bibliographic upload is implemented: the Sources
+upload control sends one `.ris` or `.bib` file to
+`POST /projects/{project_id}/imports`, reuses the existing parsers, and stores
+the parsed publications through the existing repository. This is an initial
+upload slice now includes durable project-scoped import history returned
+newest-first by `GET /projects/{project_id}/imports`. GUI Import Integration
+(6.8.8) remains open until provider execution status and the broader Sources
+ingestion workflow are implemented.
+
+Background jobs, provider status APIs, full import history and full Sources
+Ingestion remain unimplemented.
+
 ### Polish before Phase 2
 
 - analyze the OpenAlex result count

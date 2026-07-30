@@ -1,12 +1,15 @@
 from datetime import datetime, timezone
 from functools import lru_cache
+from pathlib import Path
 from typing import Literal, cast
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 
 from app.api.dto.search_strategy import (
     SearchProviderErrorResponse,
+    BibliographicImportResponse,
+    BibliographicImportHistoryResponse,
     SearchResultRecordResponse,
     SearchResultsImportRequest,
     SearchResultsImportResponse,
@@ -20,10 +23,20 @@ from app.domain.provenance import ProvenanceEntry
 from app.domain.publication import DocumentType, Publication
 from app.domain.search import SearchStrategy
 from app.normalization.doi import normalize_doi
+from app.normalization import normalize_publication
+from app.providers.import_file.bibtex.mapper import map_bibtex_record
+from app.providers.import_file.bibtex.parser import parse_bibtex
+from app.providers.import_file.ris.mapper import map_ris_record
+from app.providers.import_file.ris.parser import parse_ris
 from app.repositories.project_publication_repository import (
     ProjectNotFoundError,
     ProjectPublicationRepository,
     demo_project_publication_repository,
+)
+from app.repositories.import_history_repository import (
+    ImportHistoryRecord,
+    ImportHistoryRepository,
+    default_import_history_repository,
 )
 from app.repositories.search_strategy_repository import (
     SearchStrategyNotFoundError,
@@ -52,6 +65,10 @@ def get_live_search_executor() -> LiveSearchExecutor:
 
 def get_project_publication_repository() -> ProjectPublicationRepository:
     return demo_project_publication_repository
+
+
+def get_import_history_repository() -> ImportHistoryRepository:
+    return default_import_history_repository()
 
 
 @lru_cache(maxsize=1)
@@ -329,3 +346,137 @@ def import_search_results(
         total_requested=len(payload.records),
         working_collection_count=import_result.working_collection_count,
     )
+
+
+@router.post(
+    "/{project_id}/imports",
+    response_model=BibliographicImportResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def import_bibliographic_file(
+    project_id: str,
+    file: UploadFile | None = File(default=None),
+    repository: ProjectPublicationRepository = Depends(
+        get_project_publication_repository
+    ),
+    history_repository: ImportHistoryRepository = Depends(
+        get_import_history_repository
+    ),
+) -> BibliographicImportResponse:
+    """Parse one RIS/BibTeX file and append its publications to a project."""
+
+    if file is None or not file.filename:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="A single RIS or BibTeX file is required.",
+        )
+
+    suffix = Path(file.filename).suffix.casefold()
+    if suffix not in {".ris", ".bib"}:
+        await file.close()
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail="Unsupported file extension. Use .ris or .bib.",
+        )
+
+    try:
+        repository.get_publications(project_id)
+        raw_content = await file.read()
+        if not raw_content.strip():
+            raise ValueError("The uploaded file is empty.")
+        content = raw_content.decode("utf-8-sig")
+
+        if suffix == ".ris":
+            parsed_records = parse_ris(content)
+            publications = [
+                normalize_publication(map_ris_record(record, source="ris"))
+                for record in parsed_records
+            ]
+        else:
+            parsed_records = parse_bibtex(content)
+            publications = [
+                normalize_publication(map_bibtex_record(record, source="bibtex"))
+                for record in parsed_records
+            ]
+
+        if not publications:
+            raise ValueError("The uploaded file contains no bibliographic records.")
+
+        import_result = repository.import_source_publications(
+            project_id,
+            publications,
+        )
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except UnicodeDecodeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="The uploaded file must be valid UTF-8 text.",
+        ) from exc
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(exc),
+        ) from exc
+    finally:
+        await file.close()
+
+    warnings: list[str] = []
+    if import_result.skipped_count:
+        warnings.append(
+            f"Skipped {import_result.skipped_count} duplicate record(s) already in the project."
+        )
+    import_id = uuid4()
+    history_repository.create(
+        ImportHistoryRecord(
+            import_id=import_id,
+            project_id=project_id,
+            filename=file.filename,
+            format="RIS" if suffix == ".ris" else "BibTeX",
+            records_count=import_result.imported_count,
+            status="warning" if warnings else "success",
+            warnings=tuple(warnings),
+            created_at=datetime.now(timezone.utc),
+        )
+    )
+    return BibliographicImportResponse(
+        import_id=import_id,
+        records_count=import_result.imported_count,
+        warnings=warnings,
+        status="warning" if warnings else "success",
+    )
+
+
+@router.get(
+    "/{project_id}/imports",
+    response_model=list[BibliographicImportHistoryResponse],
+    status_code=status.HTTP_200_OK,
+)
+def list_bibliographic_imports(
+    project_id: str,
+    project_repository: ProjectPublicationRepository = Depends(
+        get_project_publication_repository
+    ),
+    history_repository: ImportHistoryRepository = Depends(
+        get_import_history_repository
+    ),
+) -> list[BibliographicImportHistoryResponse]:
+    """Return durable bibliographic import history for one project."""
+
+    try:
+        project_repository.get_publications(project_id)
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    return [
+        BibliographicImportHistoryResponse(
+            import_id=record.import_id,
+            project_id=record.project_id,
+            filename=record.filename,
+            format=record.format,
+            records_count=record.records_count,
+            status=record.status,
+            created_at=record.created_at,
+            warnings=list(record.warnings),
+        )
+        for record in history_repository.list_for_project(project_id)
+    ]

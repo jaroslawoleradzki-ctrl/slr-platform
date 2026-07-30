@@ -1,6 +1,6 @@
 [project]
 name = "slr-platform"
-version = "0.1.8"
+version = "0.1.9"
 description = "Modułowa aplikacja wspomagająca systematyczne przeglądy literatury."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -11,6 +11,7 @@ dependencies = [
   "pyyaml>=6.0,<7.0",
   "httpx>=0.28,<1.0",
   "tenacity>=9.1,<10.0",
+  "python-multipart>=0.0.20,<1.0",
 ]
 
 [project.optional-dependencies]

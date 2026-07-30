@@ -184,4 +184,26 @@ class SearchResultsImportResponse(BaseModel):
     working_collection_count: int
 
 
+class BibliographicImportResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    import_id: UUID
+    records_count: int = Field(ge=0)
+    warnings: list[str] = Field(default_factory=list)
+    status: Literal["success", "warning"]
+
+
+class BibliographicImportHistoryResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    import_id: UUID
+    project_id: str
+    filename: str
+    format: Literal["RIS", "BibTeX"]
+    records_count: int = Field(ge=0)
+    status: Literal["success", "warning"]
+    created_at: datetime
+    warnings: list[str] = Field(default_factory=list)
+
+
 SearchStrategyExecutionResponse.model_rebuild()

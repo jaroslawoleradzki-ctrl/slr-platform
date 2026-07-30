@@ -5,6 +5,8 @@ import {
   DuplicateDecisionType,
   EditableSearchStrategy,
   SearchExecutionResult,
+  BibliographicImportResponse,
+  BibliographicImportHistoryRecord,
   SearchResultRecord,
   SearchResultsImportResponse,
   SearchStrategy,
@@ -80,6 +82,13 @@ export interface ProjectApiService {
     projectId: string,
     records: SearchResultRecord[]
   ): Promise<SearchResultsImportResponse>;
+  importBibliographicFile(
+    projectId: string,
+    file: File,
+  ): Promise<BibliographicImportResponse>;
+  getBibliographicImports(
+    projectId: string,
+  ): Promise<BibliographicImportHistoryRecord[]>;
 }
 
 class MixedProjectApiService implements ProjectApiService {
@@ -170,6 +179,44 @@ class MixedProjectApiService implements ProjectApiService {
       throw new Error(await formatFastApiError(response));
     }
     return response.json() as Promise<SearchResultsImportResponse>;
+  }
+
+  async importBibliographicFile(
+    projectId: string,
+    file: File,
+  ): Promise<BibliographicImportResponse> {
+    const formData = new FormData();
+    formData.append('file', file);
+    let response: Response;
+    try {
+      response = await fetch(`${API_BASE_URL}/projects/${projectId}/imports`, {
+        method: 'POST',
+        body: formData,
+      });
+    } catch {
+      throw new Error('Nie udało się połączyć z backendem. Sprawdź połączenie i spróbuj ponownie.');
+    }
+    if (!response.ok) {
+      throw new Error(await formatFastApiError(response, 'zaimportować pliku'));
+    }
+    return response.json() as Promise<BibliographicImportResponse>;
+  }
+
+  async getBibliographicImports(
+    projectId: string,
+  ): Promise<BibliographicImportHistoryRecord[]> {
+    let response: Response;
+    try {
+      response = await fetch(`${API_BASE_URL}/projects/${projectId}/imports`, {
+        headers: { Accept: 'application/json' },
+      });
+    } catch {
+      throw new Error('Nie udało się pobrać historii importów.');
+    }
+    if (!response.ok) {
+      throw new Error(await formatFastApiError(response, 'pobrać historii importów'));
+    }
+    return response.json() as Promise<BibliographicImportHistoryRecord[]>;
   }
 
   async getProjectById(id: string): Promise<SLRProject | null> {
