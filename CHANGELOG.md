@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.2.2] — 2026-07-31
+
+### Added
+
+- `WorkflowNavigationStatus` single source of truth in `ProjectContext` for stages 1–8.
+- Parallel `Promise.allSettled` status fetch (`refreshWorkflowStatus`) for backend project endpoints:
+  1. `GET /projects/{project_id}/search-strategy`
+  2. `GET /projects/{project_id}/imports`
+  3. `GET /projects/{project_id}/normalization`
+  4. `GET /projects/{project_id}/duplicate-groups`
+- Dynamic navigation badges in `Sidebar` and `WorkflowStepper` using real backend operational metrics.
+- Route parameter synchronization (`projectId`) in `AppShell` with clean race-condition prevention.
+- Instant state synchronization after duplicate review decisions (`APPROVE`, `REJECT`) with 1 POST and 0 extra GET requests.
+- Stage 5–8 navigation items strictly rendered with neutral `not_available` ("Niedostępne") status.
+
+### Scope limits
+
+- No physical publication merging, screening persistence, quality assessment persistence, data extraction, background jobs, or WebSockets.
+
 ## [0.2.1] — Unreleased
 
 ### Added

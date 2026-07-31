@@ -209,7 +209,7 @@ describe('DeduplicationPage Phase 6.5 — Duplicate Comparison & Review UI', () 
       'Zweryfikowano zgodność po analizie abstraktów'
     );
     expect(await screen.findByText(/Decyzja Zapisana!/i)).toBeInTheDocument();
-    expect(screen.getByText(/Approved/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Approved/i)).toBeInTheDocument();
   });
 
   it('handles reject click, error state, and retry action with rationale', async () => {

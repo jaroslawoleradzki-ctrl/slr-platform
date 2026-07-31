@@ -1,10 +1,20 @@
-import React from 'react';
-import { Outlet } from 'react-router-dom';
+import React, { useEffect } from 'react';
+import { Outlet, useParams } from 'react-router-dom';
 import { Header } from './Header';
 import { Sidebar } from './Sidebar';
 import { WorkflowStepper } from '../workflow/WorkflowStepper';
+import { useProject } from '../../context/ProjectContext';
 
 export const AppShell: React.FC = () => {
+  const { projectId } = useParams<{ projectId?: string }>();
+  const { activeProject, setActiveProjectId } = useProject();
+
+  useEffect(() => {
+    if (projectId && projectId !== activeProject?.id) {
+      setActiveProjectId(projectId);
+    }
+  }, [projectId, activeProject?.id, setActiveProjectId]);
+
   return (
     <div
       style={{

@@ -14,18 +14,16 @@ development
 
 Current version (working tree):
 
-v0.2.1 (Unreleased)
+v0.2.2
 
 Current development phase:
 
-Phase 6.8 / Version 0.2.1 — Durable Duplicate Review Integration.
+Phase 6.8.8 / Version 0.2.2 — Dynamic Workflow Navigation Status.
 
-Version 0.2.1 connects the backend deduplication review decisions and frontend GUI with durable SQLite storage (`SqliteDuplicateReviewDecisionRepository` and migration `0006_duplicate_review_decisions.sql`).
-Reviewer decisions (`APPROVE`, `REJECT`) and optional rationale persist across application restarts.
-`group_id` generation is verified to be deterministic across input reordering, SQLite re-reads, unrelated publication additions, and normalization executions.
-`GET /projects/{project_id}/duplicate-groups` returns the current decision status and rationale for every group, eliminating N+1 decision requests per group card.
-The frontend `DeduplicationPage` maintains a single state source of truth and recalculates summary metrics (Total, Pending, Approve, Reject) dynamically from backend data.
-Physical publication merging remains open for a subsequent increment.
+Version 0.2.2 unifies the workflow navigation state across Sidebar and WorkflowStepper with a single source of truth (`useWorkflowNavigationStatus` in `ProjectContext`).
+Static mock counters (`45`, `425`) are removed for backend projects, and real metrics are derived via parallel `Promise.allSettled` queries across stages 1–4.
+Deduplication pending alert counters accurately reflect `pendingGroups` (omitted when 0), and review decisions update navigation status synchronously without N+1 GET requests.
+Unimplemented stages 5–8 display neutral `not_available` ("Niedostępne") state.
 
 ---
 

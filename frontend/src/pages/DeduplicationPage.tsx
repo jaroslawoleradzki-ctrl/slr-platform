@@ -1,7 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { useProject } from '../context/ProjectContext';
-import { projectApiService } from '../services/api/projectApi';
-import { ApiDuplicateGroupListResponse, DuplicateDecisionStatus } from '../types';
+import { DuplicateDecisionStatus } from '../types';
 import { DeduplicationSummaryCard } from '../components/deduplication/DeduplicationSummaryCard';
 import { DuplicateGroupCardPreview } from '../components/deduplication/DuplicateGroupCardPreview';
 import { LoadingSpinner } from '../components/common/LoadingSpinner';
@@ -10,50 +9,21 @@ import { EmptyState } from '../components/common/EmptyState';
 import { Layers, ShieldCheck } from 'lucide-react';
 
 export const DeduplicationPage: React.FC = () => {
-  const { activeProject } = useProject();
-  const [loading, setLoading] = useState<boolean>(true);
-  const [error, setError] = useState<string | null>(null);
-  const [duplicateData, setDuplicateData] = useState<ApiDuplicateGroupListResponse | null>(null);
-
-  const fetchDuplicateGroups = async (projectId: string) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const result = await projectApiService.getDuplicateGroups(projectId);
-      setDuplicateData(result);
-    } catch (err: unknown) {
-      const errorMessage =
-        err instanceof Error
-          ? err.message
-          : 'Nie udało się połączyć z API backendu deduplikacji.';
-      setError(errorMessage);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    if (activeProject) {
-      fetchDuplicateGroups(activeProject.id);
-    }
-  }, [activeProject?.id]);
+  const {
+    activeProject,
+    duplicateData,
+    duplicateGroupError,
+    workflowStatusLoading,
+    updateGroupDecision,
+    refreshWorkflowStatus,
+  } = useProject();
 
   const handleGroupDecisionUpdated = (
     groupId: string,
     decision: DuplicateDecisionStatus,
     rationale?: string | null
   ) => {
-    setDuplicateData((prev) => {
-      if (!prev) return prev;
-      return {
-        ...prev,
-        groups: prev.groups.map((g) =>
-          g.group_id === groupId
-            ? { ...g, status: decision, rationale: rationale ?? g.rationale }
-            : g
-        ),
-      };
-    });
+    updateGroupDecision(groupId, decision, rationale);
   };
 
   if (!activeProject) return null;
@@ -77,7 +47,7 @@ export const DeduplicationPage: React.FC = () => {
               fontWeight: 600,
             }}
           >
-            Durable Duplicate Review Integration (v0.2.1)
+            Dynamic Workflow Navigation Status (v0.2.2)
           </div>
         </div>
         <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
@@ -92,15 +62,15 @@ export const DeduplicationPage: React.FC = () => {
       />
 
       {/* Main Content Area Handling Loading, Error, Empty & Success States */}
-      {loading ? (
+      {workflowStatusLoading && !duplicateData && !duplicateGroupError ? (
         <div style={{ padding: '40px 0' }}>
           <LoadingSpinner label="Pobieranie grup kandydatów z API backendu..." />
         </div>
-      ) : error ? (
+      ) : duplicateGroupError ? (
         <ErrorAlert
           title="Błąd połączenia z API Deduplikacji"
-          message={error}
-          onRetry={() => activeProject && fetchDuplicateGroups(activeProject.id)}
+          message={duplicateGroupError}
+          onRetry={() => activeProject && void refreshWorkflowStatus(activeProject.id)}
         />
       ) : duplicateData && duplicateData.total_groups_count === 0 ? (
         <EmptyState
@@ -149,7 +119,7 @@ export const DeduplicationPage: React.FC = () => {
       >
         <ShieldCheck size={16} style={{ color: 'var(--status-success-text)', flexShrink: 0 }} />
         <span>
-          <strong>Trwała rejestracja decyzji w SQLite (v0.2.1):</strong> Kliknięcie <em>Approve</em> potwierdza, że rekordy reprezentują ten sam utwór, a <em>Reject</em> potwierdza, że rekordy nie są duplikatami. Decyzja i uzasadnienie są zapisywane trwale w bazie SQLite. W wersji 0.2.1 zatwierdzenie nie wykonuje jeszcze fizycznego scalenia (merge) publikacji w zbiorze roboczym.
+          <strong>Trwała rejestracja decyzji w SQLite (v0.2.2):</strong> Kliknięcie <em>Approve</em> potwierdza, że rekordy reprezentują ten sam utwór, a <em>Reject</em> potwierdza, że rekordy nie są duplikatami. Decyzja i uzasadnienie są zapisywane trwale w bazie SQLite. W wersji 0.2.2 stan nawigacji workflow odświeża się natychmiast po zapisaniu decyzji.
         </span>
       </div>
     </div>

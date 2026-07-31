@@ -345,3 +345,54 @@ export interface SLRProject {
   qualityAssessment: QualityAssessmentStatus;
   prismaMetrics: PrismaFunnelMetrics;
 }
+
+export type WorkflowStageState =
+  | 'not_started'
+  | 'in_progress'
+  | 'pending_action'
+  | 'completed'
+  | 'warning'
+  | 'error'
+  | 'not_available';
+
+export interface WorkflowNavigationStatus {
+  search: {
+    state: WorkflowStageState;
+    count: number | null;
+    label: string | null;
+  };
+  sources: {
+    state: WorkflowStageState;
+    count: number | null;
+    label: string | null;
+  };
+  normalization: {
+    state: WorkflowStageState;
+    count: number | null;
+    label: string | null;
+  };
+  deduplication: {
+    state: WorkflowStageState;
+    totalGroups: number;
+    pendingGroups: number;
+    approvedGroups: number;
+    rejectedGroups: number;
+    label: string | null;
+  };
+  screening: {
+    state: 'not_available';
+    label: string;
+  };
+  qualityAssessment: {
+    state: 'not_available';
+    label: string;
+  };
+  dataExtraction: {
+    state: 'not_available';
+    label: string;
+  };
+  exports: {
+    state: 'not_available' | 'available';
+    label: string;
+  };
+}

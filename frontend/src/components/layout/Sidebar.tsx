@@ -14,78 +14,109 @@ import {
 import { useProject } from '../../context/ProjectContext';
 import { Badge } from '../common/Badge';
 import { APP_VERSION } from '../../config/version';
+import { WorkflowNavigationStatus } from '../../types';
 
 export const Sidebar: React.FC = () => {
   const { projectId } = useParams<{ projectId?: string }>();
-  const { activeProject } = useProject();
+  const { activeProject, workflowStatus } = useProject();
   const currentId = projectId || activeProject?.id || 'lean_energy';
-  const completedProviderCount = activeProject?.providers.filter(
-    (provider) => provider.status === 'completed'
-  ).length ?? 0;
+
+  const renderBadge = (stage: keyof WorkflowNavigationStatus | 'dashboard') => {
+    if (!workflowStatus || stage === 'dashboard') return null;
+    const item = workflowStatus[stage];
+
+    if (stage === 'deduplication') {
+      const dedup = workflowStatus.deduplication;
+      if (dedup.state === 'error') {
+        return <span style={{ fontSize: '0.7rem', color: 'var(--status-error-text)' }}>Błąd</span>;
+      }
+      if (dedup.pendingGroups > 0) {
+        return (
+          <Badge variant="pending_action">
+            {dedup.pendingGroups} do oceny
+          </Badge>
+        );
+      }
+      if (dedup.state === 'completed' || dedup.pendingGroups === 0) {
+        return (
+          <span style={{ fontSize: '0.7rem', color: 'var(--status-success-text)', fontWeight: 600 }}>
+            Oceniono
+          </span>
+        );
+      }
+      return null;
+    }
+
+    if (item.state === 'not_available') {
+      return <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{item.label || 'Niedostępne'}</span>;
+    }
+
+    if (item.state === 'error') {
+      return <span style={{ fontSize: '0.7rem', color: 'var(--status-error-text)' }}>{item.label || 'Błąd'}</span>;
+    }
+
+    if (item.label) {
+      return <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{item.label}</span>;
+    }
+
+    return null;
+  };
 
   const navItems = [
     {
       to: `/projects/${currentId}/dashboard`,
       label: 'Dashboard',
       icon: LayoutDashboard,
-      badge: null,
+      stage: 'dashboard' as const,
     },
     {
       to: `/projects/${currentId}/search`,
       label: '1. Search Strategy',
       icon: Search,
-      badge: activeProject?.conceptGroups?.length ? `${activeProject.conceptGroups.length} grup` : null,
+      stage: 'search' as const,
     },
     {
       to: `/projects/${currentId}/sources`,
       label: '2. Sources & Imports',
       icon: Download,
-      badge: activeProject?.providers
-        ? completedProviderCount > 0
-          ? `${completedProviderCount}/${activeProject.providers.length}`
-          : 'Brak danych'
-        : null,
+      stage: 'sources' as const,
     },
     {
       to: `/projects/${currentId}/normalize`,
       label: '3. Normalization',
       icon: Sparkles,
-      badge: activeProject?.normalization?.[0]?.completed ? 'OK' : 'Pending',
+      stage: 'normalization' as const,
     },
     {
       to: `/projects/${currentId}/dedup`,
       label: '4. Deduplication',
       icon: GitMerge,
-      badge: activeProject?.deduplication?.candidateGroupsPendingUserReview ? (
-        <Badge variant="pending_action">
-          {activeProject.deduplication.candidateGroupsPendingUserReview} do oceny
-        </Badge>
-      ) : null,
+      stage: 'deduplication' as const,
     },
     {
       to: `/projects/${currentId}/screen`,
       label: '5. Screening',
       icon: Filter,
-      badge: activeProject?.screening?.titleAbstract?.pending ? `${activeProject.screening.titleAbstract.pending} pending` : null,
+      stage: 'screening' as const,
     },
     {
       to: `/projects/${currentId}/qa`,
       label: '6. Quality Assessment',
       icon: Award,
-      badge: 'Faza 7',
+      stage: 'qualityAssessment' as const,
     },
     {
       to: `/projects/${currentId}/extract`,
       label: '7. Data Extraction',
       icon: FileSpreadsheet,
-      badge: 'Faza 8',
+      stage: 'dataExtraction' as const,
       disabled: true,
     },
     {
       to: `/projects/${currentId}/exports`,
       label: '8. Exports & PRISMA',
       icon: FileCheck2,
-      badge: 'Flow',
+      stage: 'exports' as const,
     },
   ];
 
@@ -110,6 +141,8 @@ export const Sidebar: React.FC = () => {
 
       {navItems.map((item) => {
         const Icon = item.icon;
+        const badgeContent = renderBadge(item.stage);
+
         if (item.disabled) {
           return (
             <div
@@ -131,7 +164,7 @@ export const Sidebar: React.FC = () => {
                 <span>{item.label}</span>
               </div>
               <span style={{ fontSize: '0.7rem', padding: '1px 6px', borderRadius: '4px', backgroundColor: 'var(--bg-surface-elevated)' }}>
-                {typeof item.badge === 'string' ? item.badge : 'Coming'}
+                {badgeContent || 'Niedostępne'}
               </span>
             </div>
           );
@@ -160,13 +193,9 @@ export const Sidebar: React.FC = () => {
               <Icon size={16} style={{ color: 'var(--accent-primary)' }} />
               <span>{item.label}</span>
             </div>
-            {item.badge && (
+            {badgeContent && (
               <span style={{ fontSize: '0.75rem' }}>
-                {typeof item.badge === 'string' ? (
-                  <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{item.badge}</span>
-                ) : (
-                  item.badge
-                )}
+                {badgeContent}
               </span>
             )}
           </NavLink>
