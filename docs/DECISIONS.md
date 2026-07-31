@@ -4,6 +4,23 @@ This document records important project decisions that do not require a full ADR
 
 ---
 
+## 2026-07-31
+
+### Durable duplicate review decision repository (0.2.1)
+
+Version 0.2.1 replaces `InMemoryDuplicateReviewDecisionRepository` with `SqliteDuplicateReviewDecisionRepository` as the default decision persistence layer for `ProjectDuplicateService`.
+
+Key decisions:
+- **Composite Primary Key**: Decisions are stored in SQLite in `duplicate_review_decisions` table with `PRIMARY KEY (project_id, group_id)`.
+- **Durable Persistence**: Decisions (`APPROVE`/`REJECT`) and optional rationale text persist across backend application restarts and repository reinvocations.
+- **Project Isolation**: Composite key `(project_id, group_id)` ensures strict isolation between different projects even if candidate groups share an identical `group_id`.
+- **In-Memory Repository Retention**: `InMemoryDuplicateReviewDecisionRepository` is retained in the codebase for fast isolated unit tests and in-memory test setups.
+- **Single List Request & Rationale Parity**: `GET /projects/{project_id}/duplicate-groups` returns `status` and `rationale` for each group response, eliminating N+1 `GET decision` network calls per card on page render.
+- **Deterministic Group IDs**: `DuplicateGroupBuilder` derives `group_id` deterministically using `UUID5` over the sorted tuple of publication UUIDs (`publication.record_id`). Group IDs remain stable across input reordering, SQLite re-reads, additions of unrelated publications, and normalization executions.
+- **Physical Merge Deferred**: Recording an `APPROVE` decision registers human confirmation that publications represent the same work, but does not mutate the Working Collection or trigger physical publication merges in version 0.2.1.
+
+---
+
 ## 2026-07-30
 
 ### Durable project-scoped Working Collection (0.2.0)

@@ -296,4 +296,118 @@ describe('Deduplication Page Full Integration Workflow & Regression Suite', () =
 
     expect(screen.getAllByText(/Zgodne \(Identical\)/i).length).toBe(initialMatchesCount);
   });
+
+  it('performs exactly one GET duplicate-groups call and ZERO per-card GET decision calls on page load', async () => {
+    const mockResponse: ApiDuplicateGroupListResponse = {
+      project_id: 'lean_energy',
+      total_groups_count: 2,
+      groups: [
+        {
+          group_id: 'grp-no-n1-1',
+          reason: 'Zgodność DOI',
+          records_count: 2,
+          status: 'PENDING',
+          rationale: null,
+          shared_identifiers: [{ identifier_type: 'doi', value: '10.1000/one' }],
+          records: [
+            { id: 'r1', title: 'Paper 1A', authors: 'A', year: 2021, source: 'S1' },
+            { id: 'r2', title: 'Paper 1B', authors: 'B', year: 2021, source: 'S2' },
+          ],
+        },
+        {
+          group_id: 'grp-no-n1-2',
+          reason: 'Zgodność PMID',
+          records_count: 2,
+          status: 'APPROVE',
+          rationale: 'Pre-approved rationale',
+          shared_identifiers: [{ identifier_type: 'pmid', value: '7788' }],
+          records: [
+            { id: 'r3', title: 'Paper 2A', authors: 'C', year: 2022, source: 'S3' },
+            { id: 'r4', title: 'Paper 2B', authors: 'D', year: 2022, source: 'S4' },
+          ],
+        },
+      ],
+    };
+
+    const getGroupsSpy = vi.spyOn(projectApiService, 'getDuplicateGroups').mockResolvedValue(mockResponse);
+    const getDecisionSpy = vi.spyOn(projectApiService, 'getDuplicateGroupDecision');
+
+    render(
+      <ProjectProvider>
+        <MemoryRouter initialEntries={['/projects/lean_energy/dedup']}>
+          <DeduplicationPage />
+        </MemoryRouter>
+      </ProjectProvider>
+    );
+
+    expect(await screen.findByText(/grp-no-n1-1/i)).toBeInTheDocument();
+    expect(screen.getByText(/grp-no-n1-2/i)).toBeInTheDocument();
+
+    // 1 group call made, 0 decision calls made for cards
+    expect(getGroupsSpy).toHaveBeenCalledTimes(1);
+    expect(getDecisionSpy).toHaveBeenCalledTimes(0);
+
+    // Initial statuses rendered from group.status
+    expect(screen.getByText(/Pending Review/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Approved/i).length).toBeGreaterThan(0);
+  });
+
+  it('updates summary metrics dynamically when a decision is recorded', async () => {
+    const mockResponse: ApiDuplicateGroupListResponse = {
+      project_id: 'lean_energy',
+      total_groups_count: 2,
+      groups: [
+        {
+          group_id: 'grp-summary-1',
+          reason: 'Zgodność DOI',
+          records_count: 2,
+          status: 'PENDING',
+          shared_identifiers: [{ identifier_type: 'doi', value: '10.1000/s1' }],
+          records: [
+            { id: 'r1', title: 'Summary Test Paper 1', authors: 'A', year: 2021, source: 'S1' },
+            { id: 'r2', title: 'Summary Test Paper 2', authors: 'B', year: 2021, source: 'S2' },
+          ],
+        },
+        {
+          group_id: 'grp-summary-2',
+          reason: 'Zgodność PMID',
+          records_count: 2,
+          status: 'PENDING',
+          shared_identifiers: [{ identifier_type: 'pmid', value: '9900' }],
+          records: [
+            { id: 'r3', title: 'Summary Test Paper 3', authors: 'C', year: 2022, source: 'S3' },
+            { id: 'r4', title: 'Summary Test Paper 4', authors: 'D', year: 2022, source: 'S4' },
+          ],
+        },
+      ],
+    };
+
+    vi.spyOn(projectApiService, 'getDuplicateGroups').mockResolvedValue(mockResponse);
+    vi.spyOn(projectApiService, 'postDuplicateGroupDecision').mockResolvedValue({
+      project_id: 'lean_energy',
+      group_id: 'grp-summary-1',
+      decision: 'APPROVE',
+      rationale: 'Approved via GUI test',
+    });
+
+    render(
+      <ProjectProvider>
+        <MemoryRouter initialEntries={['/projects/lean_energy/dedup']}>
+          <DeduplicationPage />
+        </MemoryRouter>
+      </ProjectProvider>
+    );
+
+    expect(await screen.findByText(/Summary Test Paper 1/i)).toBeInTheDocument();
+
+    // Verify initial summary counts: Total: 2, Pending: 2, Approve: 0, Reject: 0
+    expect(screen.getByText(/Oczekujące grupy duplikatów \(2\)/i)).toBeInTheDocument();
+
+    // Click Approve on first group
+    const approveBtns = screen.getAllByRole('button', { name: /Zatwierdź/i });
+    fireEvent.click(approveBtns[0]);
+
+    // Verify summary counts update immediately: Pending becomes 1
+    expect(await screen.findByText(/Oczekujące grupy duplikatów \(1\)/i)).toBeInTheDocument();
+  });
 });

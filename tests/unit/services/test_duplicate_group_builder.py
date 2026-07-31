@@ -1,5 +1,6 @@
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from uuid import UUID
 
 import pytest
@@ -388,3 +389,80 @@ def test_default_build_uses_one_utc_timestamp_for_all_groups() -> None:
     assert all(group.updated_at == group.created_at for group in groups)
     assert groups[0].created_at.tzinfo is not None
     assert groups[0].created_at.utcoffset() is not None
+
+
+def test_group_id_stability_same_collection_gives_same_id() -> None:
+    pub1 = _publication(1, (IdentifierType.DOI, "10.1000/stability"))
+    pub2 = _publication(2, (IdentifierType.DOI, "10.1000/stability"))
+    builder = DuplicateGroupBuilder()
+
+    groups_run1 = builder.build([pub1, pub2])
+    groups_run2 = builder.build([pub1, pub2])
+
+    assert len(groups_run1) == 1
+    assert len(groups_run2) == 1
+    assert groups_run1[0].group_id == groups_run2[0].group_id
+
+
+def test_group_id_stability_reordering_input_does_not_change_id() -> None:
+    pub1 = _publication(1, (IdentifierType.DOI, "10.1000/stability"))
+    pub2 = _publication(2, (IdentifierType.DOI, "10.1000/stability"))
+    builder = DuplicateGroupBuilder()
+
+    groups_normal = builder.build([pub1, pub2])
+    groups_reversed = builder.build([pub2, pub1])
+
+    assert groups_normal[0].group_id == groups_reversed[0].group_id
+
+
+def test_group_id_stability_reread_from_sqlite_does_not_change_id(tmp_path: Path) -> None:
+    from app.repositories.project_publication_repository import SqliteProjectPublicationRepository
+    db_path = tmp_path / "stability.db"
+    repo = SqliteProjectPublicationRepository(db_path)
+
+    pub1 = _publication(1, (IdentifierType.DOI, "10.1000/sqlite_stability"))
+    pub2 = _publication(2, (IdentifierType.DOI, "10.1000/sqlite_stability"))
+    repo.add_publications("lean_energy", [pub1, pub2])
+
+    read1 = repo.get_publications("lean_energy")
+    builder = DuplicateGroupBuilder()
+    groups1 = builder.build(read1)
+
+    # Instantiate new repository pointing to same database
+    repo2 = SqliteProjectPublicationRepository(db_path)
+    read2 = repo2.get_publications("lean_energy")
+    groups2 = builder.build(read2)
+
+    assert len(groups1) == 1
+    assert groups1[0].group_id == groups2[0].group_id
+
+
+def test_group_id_stability_adding_unrelated_publication_does_not_change_id() -> None:
+    pub1 = _publication(1, (IdentifierType.DOI, "10.1000/existing_group"))
+    pub2 = _publication(2, (IdentifierType.DOI, "10.1000/existing_group"))
+    unrelated = _publication(3, (IdentifierType.DOI, "10.1000/unrelated"))
+
+    builder = DuplicateGroupBuilder()
+    original_groups = builder.build([pub1, pub2])
+    with_unrelated_groups = builder.build([pub1, pub2, unrelated])
+
+    assert len(original_groups) == 1
+    assert len(with_unrelated_groups) == 1
+    assert original_groups[0].group_id == with_unrelated_groups[0].group_id
+
+
+def test_group_id_stability_normalization_rerun_does_not_change_id() -> None:
+    from app.normalization.publication import PublicationNormalizer
+    pub1 = _publication(1, (IdentifierType.DOI, "10.1000/norm_group"))
+    pub2 = _publication(2, (IdentifierType.DOI, "10.1000/norm_group"))
+
+    builder = DuplicateGroupBuilder()
+    groups_before = builder.build([pub1, pub2])
+
+    normalizer = PublicationNormalizer()
+    norm_pub1 = normalizer.normalize(pub1)
+    norm_pub2 = normalizer.normalize(pub2)
+
+    groups_after = builder.build([norm_pub1, norm_pub2])
+
+    assert groups_before[0].group_id == groups_after[0].group_id

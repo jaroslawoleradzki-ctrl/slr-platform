@@ -1,3 +1,4 @@
+from typing import Literal, cast
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.api.dto.normalization import NormalizationResponse
@@ -19,7 +20,7 @@ def _response(execution: NormalizationExecution) -> NormalizationResponse:
     return NormalizationResponse(
         run_id=execution.run_id,
         project_id=execution.project_id,
-        status=execution.status,
+        status=cast(Literal["completed", "warning", "error"], execution.status),
         processed_records=execution.processed_records,
         clean_records=execution.clean_records,
         warnings_count=execution.warnings_count,

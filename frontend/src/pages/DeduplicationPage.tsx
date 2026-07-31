@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useProject } from '../context/ProjectContext';
 import { projectApiService } from '../services/api/projectApi';
-import { ApiDuplicateGroupListResponse } from '../types';
+import { ApiDuplicateGroupListResponse, DuplicateDecisionStatus } from '../types';
 import { DeduplicationSummaryCard } from '../components/deduplication/DeduplicationSummaryCard';
 import { DuplicateGroupCardPreview } from '../components/deduplication/DuplicateGroupCardPreview';
 import { LoadingSpinner } from '../components/common/LoadingSpinner';
@@ -38,6 +38,24 @@ export const DeduplicationPage: React.FC = () => {
     }
   }, [activeProject?.id]);
 
+  const handleGroupDecisionUpdated = (
+    groupId: string,
+    decision: DuplicateDecisionStatus,
+    rationale?: string | null
+  ) => {
+    setDuplicateData((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        groups: prev.groups.map((g) =>
+          g.group_id === groupId
+            ? { ...g, status: decision, rationale: rationale ?? g.rationale }
+            : g
+        ),
+      };
+    });
+  };
+
   if (!activeProject) return null;
 
   return (
@@ -59,7 +77,7 @@ export const DeduplicationPage: React.FC = () => {
               fontWeight: 600,
             }}
           >
-            Duplicate Comparison & Review UI (Phase 6.5)
+            Durable Duplicate Review Integration (v0.2.1)
           </div>
         </div>
         <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
@@ -68,7 +86,10 @@ export const DeduplicationPage: React.FC = () => {
       </div>
 
       {/* Summary Card */}
-      <DeduplicationSummaryCard summary={activeProject.deduplication} />
+      <DeduplicationSummaryCard
+        groups={duplicateData ? duplicateData.groups : []}
+        summary={activeProject.deduplication}
+      />
 
       {/* Main Content Area Handling Loading, Error, Empty & Success States */}
       {loading ? (
@@ -105,6 +126,7 @@ export const DeduplicationPage: React.FC = () => {
                 group={group}
                 index={idx}
                 projectId={activeProject.id}
+                onDecisionUpdated={handleGroupDecisionUpdated}
               />
             ))}
           </div>
@@ -127,7 +149,7 @@ export const DeduplicationPage: React.FC = () => {
       >
         <ShieldCheck size={16} style={{ color: 'var(--status-success-text)', flexShrink: 0 }} />
         <span>
-          <strong>Tryb Decyzji Badacza (Phase 6.4):</strong> Kliknięcie <em>Approve</em> lub <em>Reject</em> wysyła żądanie <code>POST</code> do API backendu i zapisuje stan decyzji w pamięci runtime serwera.
+          <strong>Trwała rejestracja decyzji w SQLite (v0.2.1):</strong> Kliknięcie <em>Approve</em> potwierdza, że rekordy reprezentują ten sam utwór, a <em>Reject</em> potwierdza, że rekordy nie są duplikatami. Decyzja i uzasadnienie są zapisywane trwale w bazie SQLite. W wersji 0.2.1 zatwierdzenie nie wykonuje jeszcze fizycznego scalenia (merge) publikacji w zbiorze roboczym.
         </span>
       </div>
     </div>

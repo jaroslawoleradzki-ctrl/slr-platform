@@ -152,3 +152,10 @@ def test_python_dto_to_typescript_types_parity_contract() -> None:
     for field in py_prov_fields:
         pattern = rf"\b{field}\??\s*:"
         assert re.search(pattern, ts_content), f"Python DTO field '{field}' missing in TypeScript types"
+
+    # Check DuplicateGroupResponse Python fields exist in TypeScript ApiDuplicateGroup
+    from app.api.dto.deduplication import DuplicateGroupResponse
+    py_group_fields = set(DuplicateGroupResponse.model_fields.keys())
+    for field in py_group_fields:
+        pattern = rf"\b{field}\??\s*:"
+        assert re.search(pattern, ts_content), f"Python DTO field '{field}' missing in TypeScript ApiDuplicateGroup"

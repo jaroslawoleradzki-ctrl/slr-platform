@@ -1,5 +1,6 @@
 from copy import deepcopy
 from datetime import datetime, timezone
+from pathlib import Path
 from uuid import UUID
 import pytest
 
@@ -441,3 +442,44 @@ def test_decision_isolation_between_projects_sharing_same_group_id() -> None:
     # Verify independence
     assert service.get_decision("proj_a", group_id).rationale == "Rationale for Proj A"
     assert service.get_decision("proj_b", group_id).rationale == "Rationale for Proj B"
+
+
+def test_service_with_sqlite_repository_persistence(tmp_path: Path) -> None:
+    from app.repositories.duplicate_review_decision_repository import SqliteDuplicateReviewDecisionRepository
+    db_path = tmp_path / "service_persistence.db"
+
+    pub1 = Publication(
+        record_id=UUID("00000000-0000-0000-0000-000000000091"),
+        title="Persisted Paper A",
+        identifiers=[Identifier(type=IdentifierType.DOI, value="10.1000/persisted")],
+        provenance=[ProvenanceEntry(source="SourceA", source_record_id="SA1")],
+        created_at=_TIME,
+    )
+    pub2 = Publication(
+        record_id=UUID("00000000-0000-0000-0000-000000000092"),
+        title="Persisted Paper B",
+        identifiers=[Identifier(type=IdentifierType.DOI, value="10.1000/persisted")],
+        provenance=[ProvenanceEntry(source="SourceA", source_record_id="SA2")],
+        created_at=_TIME,
+    )
+
+    proj_repo = DummyProjectRepository({"proj_persist": [pub1, pub2]})
+    sqlite_dec_repo1 = SqliteDuplicateReviewDecisionRepository(db_path)
+    service1 = ProjectDuplicateService(repository=proj_repo, decision_repository=sqlite_dec_repo1)
+
+    groups = service1.get_candidate_duplicate_groups("proj_persist")
+    group_id = groups.groups[0].group_id
+
+    service1.record_decision("proj_persist", group_id, "APPROVE", "Persisted rationale text")
+
+    # Re-instantiate service with new SQLite repository instance
+    sqlite_dec_repo2 = SqliteDuplicateReviewDecisionRepository(db_path)
+    service2 = ProjectDuplicateService(repository=proj_repo, decision_repository=sqlite_dec_repo2)
+
+    decision_res = service2.get_decision("proj_persist", group_id)
+    assert decision_res.decision == DuplicateDecisionStatus.APPROVE
+    assert decision_res.rationale == "Persisted rationale text"
+
+    groups_res = service2.get_candidate_duplicate_groups("proj_persist")
+    assert groups_res.groups[0].status == DuplicateDecisionStatus.APPROVE
+    assert groups_res.groups[0].rationale == "Persisted rationale text"

@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.2.1] — Unreleased
+
+### Added
+
+- Durable SQLite storage for duplicate review decisions (`SqliteDuplicateReviewDecisionRepository`)
+  with schema migration `0006_duplicate_review_decisions.sql`.
+- Human duplicate decisions (`APPROVE`, `REJECT`) and optional rationale text
+  persist across backend restarts and page reloads.
+- Verified deterministic `group_id` generation for identical publication groups
+  independent of input ordering, SQLite re-reads, unrelated publication additions, or normalization executions.
+- `GET /projects/{project_id}/duplicate-groups` now returns decision status and rationale for every group, eliminating N+1 decision requests per card on page load.
+- Frontend state for duplicate candidate groups is unified at `DeduplicationPage` level with immediate status and dynamic summary updates.
+- Real deduplication summary metrics (Total, Pending, Approve, Reject) calculated directly from backend duplicate group responses.
+- Clarified UI messages explaining that APPROVE confirms matching publications, REJECT confirms distinct publications, decisions are stored in SQLite, and physical publication merging remains deferred to a future release.
+
+### Scope limits
+
+- Physical publication merging, record deletion, `PublicationMergePolicy` execution,
+  and candidate publication status mutation are not part of 0.2.1.
+
 ## [0.2.0] — Unreleased
 
 ### Added

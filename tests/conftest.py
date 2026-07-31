@@ -1,4 +1,6 @@
+from pathlib import Path
 import pytest
+
 from app.api.main import app
 from app.api.routers.deduplication import get_duplicate_service
 from app.repositories.duplicate_review_decision_repository import (
@@ -6,6 +8,13 @@ from app.repositories.duplicate_review_decision_repository import (
 )
 from app.repositories.project_publication_repository import demo_project_publication_repository
 from app.services.project_duplicate_service import ProjectDuplicateService
+
+
+@pytest.fixture(autouse=True)
+def isolate_test_database(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Isolate SQLite database path for pytest runs to prevent polluting data/slr-platform.db."""
+    db_file = tmp_path / "test_slr.db"
+    monkeypatch.setenv("SLR_DATABASE_PATH", str(db_file))
 
 
 @pytest.fixture(autouse=True)

@@ -15,7 +15,7 @@ from app.normalization.doi import normalize_doi
 from app.repositories.duplicate_review_decision_repository import (
     DuplicateReviewDecisionRepository,
     GroupNotFoundError,
-    in_memory_duplicate_review_decision_repository,
+    default_duplicate_review_decision_repository,
 )
 from app.repositories.project_publication_repository import (
     ProjectPublicationRepository,
@@ -98,11 +98,15 @@ class ProjectDuplicateService:
     def __init__(
         self,
         repository: ProjectPublicationRepository | None = None,
-        decision_repository: DuplicateReviewDecisionRepository = in_memory_duplicate_review_decision_repository,
+        decision_repository: DuplicateReviewDecisionRepository | None = None,
         builder: DuplicateGroupBuilder = duplicate_group_builder,
     ) -> None:
         self._repository = repository or default_project_publication_repository()
-        self._decision_repository = decision_repository
+        self._decision_repository = (
+            decision_repository
+            if decision_repository is not None
+            else default_duplicate_review_decision_repository()
+        )
         self._builder = builder
 
     def get_candidate_duplicate_groups(self, project_id: str) -> DuplicateGroupListResponse:
@@ -134,6 +138,7 @@ class ProjectDuplicateService:
                 if domain_decision
                 else DuplicateDecisionStatus.PENDING
             )
+            rationale_val = domain_decision.rationale if domain_decision else None
 
             group_responses.append(
                 DuplicateGroupResponse(
@@ -141,6 +146,7 @@ class ProjectDuplicateService:
                     reason=reason_str,
                     records_count=len(record_previews),
                     status=status_enum,
+                    rationale=rationale_val,
                     shared_identifiers=shared_idents,
                     records=record_previews,
                 )

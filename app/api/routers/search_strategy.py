@@ -438,16 +438,16 @@ async def import_bibliographic_file(
         content = raw_content.decode("utf-8-sig")
 
         if suffix == ".ris":
-            parsed_records = parse_ris(content)
+            parsed_ris = parse_ris(content)
             publications = [
                 normalize_publication(map_ris_record(record, source="ris"))
-                for record in parsed_records
+                for record in parsed_ris
             ]
         else:
-            parsed_records = parse_bibtex(content)
+            parsed_bibtex = parse_bibtex(content)
             publications = [
                 normalize_publication(map_bibtex_record(record, source="bibtex"))
-                for record in parsed_records
+                for record in parsed_bibtex
             ]
 
         if not publications:
@@ -528,14 +528,14 @@ def list_bibliographic_imports(
         BibliographicImportHistoryResponse(
             import_id=record.import_id,
             project_id=record.project_id,
-            source_type=record.source_type,
+            source_type=cast(Literal["file", "provider"], record.source_type),
             filename=record.filename,
-            format=record.format,
+            format=cast(Literal["RIS", "BibTeX"] | None, record.format),
             provider=record.provider,
             query=record.query,
             records_count=record.records_count,
             total_available=record.total_available,
-            status=record.status,
+            status=cast(Literal["success", "warning"], record.status),
             created_at=record.created_at,
             warnings=list(record.warnings),
         )

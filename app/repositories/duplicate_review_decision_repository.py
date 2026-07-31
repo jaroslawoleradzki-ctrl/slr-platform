@@ -1,6 +1,10 @@
+import os
+import sqlite3
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import Protocol
 
-from app.domain.duplicate_review import DuplicateGroupReviewDecision
+from app.domain.duplicate_review import DuplicateDecision, DuplicateGroupReviewDecision
 
 
 class GroupNotFoundError(Exception):
@@ -62,3 +66,89 @@ class InMemoryDuplicateReviewDecisionRepository:
 in_memory_duplicate_review_decision_repository = (
     InMemoryDuplicateReviewDecisionRepository()
 )
+
+
+class SqliteDuplicateReviewDecisionRepository:
+    """Durable SQLite storage for human duplicate review decisions, keyed by (project_id, group_id)."""
+
+    def __init__(self, database_path: str | Path) -> None:
+        self._database_path = Path(database_path)
+        self._database_path.parent.mkdir(parents=True, exist_ok=True)
+        self._apply_migrations()
+
+    def save_decision(
+        self, project_id: str, group_id: str, decision: DuplicateGroupReviewDecision
+    ) -> None:
+        now_str = datetime.now(timezone.utc).isoformat()
+        with self._connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO duplicate_review_decisions (
+                    project_id, group_id, decision, rationale, updated_at
+                ) VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(project_id, group_id) DO UPDATE SET
+                    decision = excluded.decision,
+                    rationale = excluded.rationale,
+                    updated_at = excluded.updated_at
+                """,
+                (
+                    project_id,
+                    group_id,
+                    decision.decision.value,
+                    decision.rationale,
+                    now_str,
+                ),
+            )
+
+    def get_decision(
+        self, project_id: str, group_id: str
+    ) -> DuplicateGroupReviewDecision | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                SELECT decision, rationale
+                FROM duplicate_review_decisions
+                WHERE project_id = ? AND group_id = ?
+                """,
+                (project_id, group_id),
+            ).fetchone()
+        if row is None:
+            return None
+        return DuplicateGroupReviewDecision(
+            decision=DuplicateDecision(str(row[0])),
+            rationale=str(row[1]) if row[1] is not None else None,
+        )
+
+    def _connect(self) -> sqlite3.Connection:
+        return sqlite3.connect(self._database_path)
+
+    def _apply_migrations(self) -> None:
+        migration_directory = Path(__file__).parents[2] / "migrations"
+        with self._connect() as connection:
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS schema_migrations (
+                    version TEXT PRIMARY KEY,
+                    applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )
+                """
+            )
+            applied = {
+                str(row[0])
+                for row in connection.execute(
+                    "SELECT version FROM schema_migrations"
+                ).fetchall()
+            }
+            for migration in sorted(migration_directory.glob("*.sql")):
+                if migration.name in applied:
+                    continue
+                connection.executescript(migration.read_text(encoding="utf-8"))
+                connection.execute(
+                    "INSERT INTO schema_migrations(version) VALUES (?)",
+                    (migration.name,),
+                )
+
+
+def default_duplicate_review_decision_repository() -> SqliteDuplicateReviewDecisionRepository:
+    path = os.environ.get("SLR_DATABASE_PATH", "data/slr-platform.db")
+    return SqliteDuplicateReviewDecisionRepository(path)
