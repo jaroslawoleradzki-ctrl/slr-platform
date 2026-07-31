@@ -54,7 +54,7 @@ def get_project_duplicate_groups(
     summary="Record reviewer decision for a candidate duplicate group",
     description=(
         "Records or overwrites a human review decision (APPROVE or REJECT) for a candidate duplicate group. "
-        "Decisions are maintained in runtime memory and do not modify underlying publication records or trigger merges."
+        "Decisions are stored durably in SQLite database and do not modify underlying publication records or trigger merges."
     ),
 )
 def record_duplicate_group_decision(

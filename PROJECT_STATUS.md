@@ -14,56 +14,18 @@ development
 
 Current version (working tree):
 
-v0.2.0 (Unreleased)
+v0.2.1 (Unreleased)
 
 Current development phase:
 
-Phase 6.8 — End-to-End Literature Search Workflow has started on branch
-`development`. From v0.1.8 the product is transitioning from a predominantly
-demonstration GUI to a complete Search Strategy and Sources Ingestion workflow.
-Phase 6.8.1 is implemented: each project can store and retrieve a complete,
-validated search strategy through REST, backed by SQLite and an explicit
-migration. The strategy retains research questions, concept groups, terms,
-Boolean operators, constraints, years, languages, publication types, provider
-selection, and versioned Search Query trees. The production Search Strategy GUI
-has been restored from `development` and is functional: it loads and persists
-the strategy through GET/PUT, executes live searches, presents results on the
-same page, and exposes the import workflow. `Szukaj` no longer navigates to
-Sources & Imports. The first SLR workflow stage is therefore functional without
-strategy mocks. OpenAlex execution now applies years, languages, publication
-types, and the existing Open Access constraint at provider request time before
-cursor pagination and the 100-record response bound. The execution contract
-separates the provider's filtered `total_count` from `returned_count` and
-exposes `next_cursor` plus `has_more`. Search Strategy now accepts the
-execution cursor and lets users append subsequent OpenAlex pages without
-restarting the search; full automatic import of all results remains out of
-scope. Version 0.1.9 adds the first working project-scoped bibliographic
-upload: one `.ris` or `.bib` file is parsed by the existing providers and
-persisted into the existing project publication repository. Import history is
-now durable in SQLite and available through a project-scoped GET endpoint. The
-same history records selected OpenAlex imports as `source_type=provider`, with
-provider, rendered query, imported count and available total; Sources displays
-the latest successful OpenAlex record and combines file/provider history.
-Provider status APIs and the complete Sources module remain out of scope.
+Phase 6.8 / Version 0.2.1 — Durable Duplicate Review Integration.
 
-Normalization now has project-scoped `POST`/`GET` endpoints using the existing
-`PublicationNormalizer`. The GUI no longer consumes the demo 2105/2042/63
-summary and displays live processed/clean/warning counts and audit entries
-after execution. Version 0.2.0 stores the latest execution summary and audit
-trail durably in SQLite (`SqliteNormalizationExecutionRepository`) and restores
-it after backend restart. Only the latest run is retained.
-
-Version 0.2.0 also completely replaces the runtime demo publication repository
-(`DemoProjectPublicationRepository`) with the durable project-scoped SQLite Working
-Collection (`SqliteProjectPublicationRepository`). All project publications are
-persisted in SQLite (`project_publications` table).
-
-The single, unified `ProjectPublicationRepository` boundary is now shared across
-these platform operations:
-- import of selected live search results,
-- import of RIS and BibTeX files (`POST /projects/{project_id}/imports`),
-- normalization execution reads and canonical record updates (`POST/GET /projects/{project_id}/normalization`),
-- duplicate candidate generation and preview service (`GET /projects/{project_id}/duplicate-groups`).
+Version 0.2.1 connects the backend deduplication review decisions and frontend GUI with durable SQLite storage (`SqliteDuplicateReviewDecisionRepository` and migration `0006_duplicate_review_decisions.sql`).
+Reviewer decisions (`APPROVE`, `REJECT`) and optional rationale persist across application restarts.
+`group_id` generation is verified to be deterministic across input reordering, SQLite re-reads, unrelated publication additions, and normalization executions.
+`GET /projects/{project_id}/duplicate-groups` returns the current decision status and rationale for every group, eliminating N+1 decision requests per group card.
+The frontend `DeduplicationPage` maintains a single state source of truth and recalculates summary metrics (Total, Pending, Approve, Reject) dynamically from backend data.
+Physical publication merging remains open for a subsequent increment.
 
 ---
 

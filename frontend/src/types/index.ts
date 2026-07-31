@@ -271,6 +271,7 @@ export interface ApiDuplicateGroup {
   reason: string;
   records_count: number;
   status: DuplicateDecisionStatus;
+  rationale?: string | null;
   shared_identifiers: ApiSharedIdentifier[];
   records: ApiDuplicateRecordPreview[];
 }

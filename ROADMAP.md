@@ -201,6 +201,17 @@ audit trail remain available after backend restart.
 
 Deduplication, screening, background jobs and full provenance remain open.
 
+### Version 0.2.1 increment — Durable Duplicate Review Integration
+
+The 0.2.1 increment connects the backend deduplication review decisions and frontend GUI with durable SQLite storage (`SqliteDuplicateReviewDecisionRepository` and migration `0006_duplicate_review_decisions.sql`).
+
+Key outcomes:
+- `group_id` generation is verified deterministic across input reordering, SQLite re-reads, unrelated publication additions, and normalization executions.
+- Human review decisions (`APPROVE`, `REJECT`) and optional rationale persist across application restarts and page reloads.
+- `GET /projects/{project_id}/duplicate-groups` returns the current decision status and rationale for every group, eliminating N+1 decision requests per group card.
+- `DeduplicationPage` maintains a single state source of truth and recalculates summary metrics (Total, Pending, Approve, Reject) dynamically from backend data.
+- GUI clearly informs users that decisions are stored in SQLite and physical publication merging remains deferred to a subsequent increment.
+
 ### Polish before Phase 2
 
 - analyze the OpenAlex result count

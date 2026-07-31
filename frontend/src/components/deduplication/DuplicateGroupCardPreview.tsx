@@ -147,13 +147,18 @@ export const DuplicateGroupCardPreview: React.FC<DuplicateGroupCardPreviewProps>
   const reason = group.reason;
   const sharedIdentifiers = 'shared_identifiers' in group ? group.shared_identifiers : [];
   const initialStatus: DuplicateDecisionStatus = ('status' in group && group.status) ? group.status : 'PENDING';
+  const initialRationale: string = ('rationale' in group && group.rationale) ? group.rationale : '';
 
-  const [decisionStatus, setDecisionStatus] = useState<DuplicateDecisionStatus>(initialStatus);
-  const [rationale, setRationale] = useState<string>('');
+  const decisionStatus = initialStatus;
+  const [rationale, setRationale] = useState<string>(initialRationale);
   const [isExpanded, setIsExpanded] = useState<boolean>(true);
   const [saving, setSaving] = useState<boolean>(false);
   const [saved, setSaved] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setRationale(('rationale' in group && group.rationale) ? group.rationale : '');
+  }, [group]);
 
   const normalizedSharedIdents = sharedIdentifiers.map((ident) =>
     typeof ident === 'string' ? ident : `${ident.identifier_type.toUpperCase()}: ${ident.value}`
@@ -169,29 +174,8 @@ export const DuplicateGroupCardPreview: React.FC<DuplicateGroupCardPreviewProps>
     doi: 'doi' in r ? r.doi : undefined,
     pmid: 'pmid' in r ? r.pmid : undefined,
     openalex_id: 'openalex_id' in r ? r.openalex_id : undefined,
-    provenance: 'provenance' in r ? (r.provenance as any) : undefined,
+    provenance: 'provenance' in r && Array.isArray(r.provenance) ? r.provenance : undefined,
   }));
-
-  useEffect(() => {
-    // Attempt to load decision details including rationale from API
-    let isMounted = true;
-    projectApiService
-      .getDuplicateGroupDecision(projectId, groupId)
-      .then((res) => {
-        if (isMounted) {
-          setDecisionStatus(res.decision);
-          if (res.rationale) {
-            setRationale(res.rationale);
-          }
-        }
-      })
-      .catch(() => {
-        // Silently ignore loading error, fallback to group initial status
-      });
-    return () => {
-      isMounted = false;
-    };
-  }, [projectId, groupId]);
 
   const handleDecision = async (decision: DuplicateDecisionType) => {
     setSaving(true);
@@ -204,7 +188,6 @@ export const DuplicateGroupCardPreview: React.FC<DuplicateGroupCardPreviewProps>
         decision,
         rationale
       );
-      setDecisionStatus(res.decision);
       setRationale(res.rationale || '');
       setSaved(true);
       if (onDecisionUpdated) {

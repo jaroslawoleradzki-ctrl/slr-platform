@@ -62,6 +62,7 @@ class DuplicateGroupResponse(BaseModel):
     reason: str
     records_count: int
     status: DuplicateDecisionStatus = DuplicateDecisionStatus.PENDING
+    rationale: str | None = None
     shared_identifiers: list[SharedIdentifierResponse] = Field(default_factory=list)
     records: list[DuplicateRecordPreviewResponse]
 
