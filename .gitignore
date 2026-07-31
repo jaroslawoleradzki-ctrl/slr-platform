@@ -26,3 +26,6 @@ dist/
 *.egg-info/
 frontend/node_modules/
 data/*.db
+
+# Local application and validation data
+/data/
