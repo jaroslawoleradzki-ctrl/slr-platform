@@ -41,8 +41,8 @@ describe('Sources ingestion upload', () => {
     fireEvent.change(input, { target: { files: [file] } });
 
     await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Zaimportowano 2 rekordów.'));
-    expect(screen.getByText('new.bib')).toBeInTheDocument();
-    expect(screen.getByText('2 rekordów')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText('new.bib')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('2 rekordów')).toBeInTheDocument());
   });
 
   it('preserves existing history and shows the backend error on upload failure', async () => {

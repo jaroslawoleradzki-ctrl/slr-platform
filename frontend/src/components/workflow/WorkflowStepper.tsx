@@ -2,10 +2,11 @@ import React from 'react';
 import { NavLink, useParams } from 'react-router-dom';
 import { CheckCircle2, AlertCircle, Clock, Circle } from 'lucide-react';
 import { useProject } from '../../context/ProjectContext';
+import { WorkflowStageState } from '../../types';
 
 export const WorkflowStepper: React.FC = () => {
   const { projectId } = useParams<{ projectId?: string }>();
-  const { activeProject } = useProject();
+  const { activeProject, workflowStatus } = useProject();
   const currentId = projectId || activeProject?.id || 'lean_energy';
 
   const steps = [
@@ -13,61 +14,76 @@ export const WorkflowStepper: React.FC = () => {
       id: 'search',
       label: 'Search Strategy',
       path: `/projects/${currentId}/search`,
-      status: activeProject?.conceptGroups?.length ? 'completed' : 'in_progress',
+      status: workflowStatus?.search.state || 'not_started',
+      alertCount: null,
     },
     {
       id: 'sources',
       label: 'Sources & Ingestion',
       path: `/projects/${currentId}/sources`,
-      status: activeProject?.providers?.some((p) => p.status === 'completed') ? 'completed' : 'pending',
+      status: workflowStatus?.sources.state || 'not_started',
+      alertCount: null,
     },
     {
       id: 'normalize',
       label: 'Normalization',
       path: `/projects/${currentId}/normalize`,
-      status: activeProject?.normalization?.[0]?.completed ? 'completed' : 'pending',
+      status: workflowStatus?.normalization.state || 'not_started',
+      alertCount: null,
     },
     {
       id: 'dedup',
       label: 'Deduplication',
       path: `/projects/${currentId}/dedup`,
-      status: activeProject?.deduplication?.candidateGroupsPendingUserReview ? 'pending_action' : 'completed',
-      alertCount: activeProject?.deduplication?.candidateGroupsPendingUserReview,
+      status: workflowStatus?.deduplication.state || 'not_started',
+      alertCount:
+        workflowStatus?.deduplication && workflowStatus.deduplication.pendingGroups > 0
+          ? workflowStatus.deduplication.pendingGroups
+          : null,
     },
     {
       id: 'screen',
       label: 'Screening',
       path: `/projects/${currentId}/screen`,
-      status: activeProject?.screening?.titleAbstract?.included ? 'in_progress' : 'pending',
+      status: 'not_available' as const,
+      alertCount: null,
     },
     {
       id: 'qa',
       label: 'Quality Assessment',
       path: `/projects/${currentId}/qa`,
-      status: 'pending',
+      status: 'not_available' as const,
+      alertCount: null,
     },
     {
       id: 'extract',
       label: 'Data Extraction',
       path: `/projects/${currentId}/extract`,
-      status: 'pending',
+      status: 'not_available' as const,
+      alertCount: null,
     },
     {
       id: 'exports',
       label: 'Exports & PRISMA',
       path: `/projects/${currentId}/exports`,
-      status: 'pending',
+      status: 'not_available' as const,
+      alertCount: null,
     },
   ];
 
-  const getStatusIcon = (status: string) => {
+  const getStatusIcon = (status: WorkflowStageState) => {
     switch (status) {
       case 'completed':
         return <CheckCircle2 size={14} style={{ color: 'var(--status-success-text)' }} />;
       case 'pending_action':
+      case 'warning':
         return <AlertCircle size={14} style={{ color: 'var(--status-warning-text)' }} />;
+      case 'error':
+        return <AlertCircle size={14} style={{ color: 'var(--status-error-text)' }} />;
       case 'in_progress':
         return <Circle size={14} style={{ color: 'var(--status-info-text)' }} />;
+      case 'not_available':
+        return <Clock size={14} style={{ color: 'var(--text-muted)', opacity: 0.5 }} />;
       default:
         return <Clock size={14} style={{ color: 'var(--text-muted)' }} />;
     }

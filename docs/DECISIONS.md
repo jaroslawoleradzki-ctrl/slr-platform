@@ -6,6 +6,22 @@ This document records important project decisions that do not require a full ADR
 
 ## 2026-07-31
 
+### Dynamic Workflow Navigation Status (0.2.2)
+
+Version 0.2.2 establishes a unified `WorkflowNavigationStatus` model in `ProjectContext` to eliminate mock data leakage and hardcoded badges in navigation components (`Sidebar.tsx` and `WorkflowStepper.tsx`).
+
+Key decisions:
+- **Single Source of Truth**: `useWorkflowNavigationStatus` in `ProjectContext` is the sole source of workflow navigation state for both `Sidebar` and `WorkflowStepper`. Components do not maintain duplicate calculation logic.
+- **Parallel Operational Queries**: Navigation status for stages 1–4 is derived using `Promise.allSettled` across existing project-scoped REST endpoints (`search-strategy`, `imports`, `normalization`, `duplicate-groups`).
+- **Race Condition & Error Isolation**: Active project ID refs guard against stale asynchronous responses during rapid project switching. Failure of a single endpoint isolates to that stage (`error`) without breaking other stages.
+- **Deduplication Alert Counter Parity**: Deduplication pending alert count equals `pendingGroups`. When `pendingGroups === 0`, alert counters are hidden and status transitions to `completed`.
+- **Instant Decision Sync**: Review decision posts (`APPROVE`, `REJECT`) update local `duplicateData` and `workflowStatus.deduplication` synchronously, requiring 1 POST and 0 extra GET requests.
+- **Neutral Unimplemented Stages**: Stages 5–8 (Screening, QA, Extraction, Exports) render strictly as neutral `not_available` ("Niedostępne").
+
+---
+
+## 2026-07-31
+
 ### Durable duplicate review decision repository (0.2.1)
 
 Version 0.2.1 replaces `InMemoryDuplicateReviewDecisionRepository` with `SqliteDuplicateReviewDecisionRepository` as the default decision persistence layer for `ProjectDuplicateService`.

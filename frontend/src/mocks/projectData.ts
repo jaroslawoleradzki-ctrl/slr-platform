@@ -10,7 +10,7 @@ export const MOCK_PROJECTS: SLRProject[] = [
     updatedAt: '2026-07-28T16:45:00Z',
     nextAction: {
       title: 'Ocena Grup Duplikatów (Deduplikacja)',
-      description: 'Techniczny ResultMerger wykonał wstępne scalenie identyfikatorów. Wykryto 45 candidate duplicate groups (identifier-linked duplicate groups awaiting human review).',
+      description: 'Techniczny ResultMerger wykonał wstępne scalenie identyfikatorów. Wykryto grupy kandydatów na duplikaty oczekujące na przegląd badacza.',
       targetStageId: 'dedup',
       actionLabel: 'Przejdź do Oceny Duplikatów',
       severity: 'urgent',
@@ -122,90 +122,45 @@ export const MOCK_PROJECTS: SLRProject[] = [
       }
     ],
     deduplication: {
-      recordsBeforeDedup: 2105,
-      identifierLinkedGroupsCount: 380,
-      recordsAfterResultMerger: 1725,
-      candidateGroupsPendingUserReview: 45,
-      status: 'pending_action'
+      recordsBeforeDedup: 0,
+      identifierLinkedGroupsCount: 0,
+      recordsAfterResultMerger: 0,
+      candidateGroupsPendingUserReview: 0,
+      status: 'pending'
     },
-    duplicateGroups: [
-      {
-        groupId: 'grp-001',
-        similarityScore: 1.0,
-        reason: 'Zgodność identyfikatorów DOI & OpenAlex ID (Identifier-linked)',
-        records: [
-          {
-            id: 'rec-101',
-            title: 'Energy reduction through lean production in auto manufacturing: A systematic review',
-            authors: 'Smith, J., Kowalski, P.',
-            year: 2021,
-            source: 'OpenAlex',
-            doi: '10.1016/j.jclepro.2021.102834'
-          },
-          {
-            id: 'rec-102',
-            title: 'Energy reduction through lean production in automotive manufacturing: Systematic Review',
-            authors: 'Smith, John, Kowalski, Piotr',
-            year: 2021,
-            source: 'Crossref'
-          }
-        ]
-      },
-      {
-        groupId: 'grp-002',
-        similarityScore: 1.0,
-        reason: 'Zgodność identyfikatora DOI i PMID (Identifier-linked)',
-        records: [
-          {
-            id: 'rec-201',
-            title: 'Applying Kaizen principles to lower electricity consumption in foundry operations',
-            authors: 'Müller, H., Schmidt, A.',
-            year: 2019,
-            source: 'Semantic Scholar',
-            doi: '10.1007/s00170-019-04122-z'
-          },
-          {
-            id: 'rec-202',
-            title: 'Applying Kaizen principles to lower electricity consumption in foundry operations.',
-            authors: 'Muller, H., Schmidt, A.',
-            year: 2019,
-            source: 'RIS file (Google Scholar export)'
-          }
-        ]
-      }
-    ],
+    duplicateGroups: [],
     screening: {
       titleAbstract: {
-        pending: 425,
-        included: 340,
-        excluded: 960,
-        unresolved: 0,
-        total: 1725
-      },
-      fullText: {
-        pending: 340,
+        pending: 0,
         included: 0,
         excluded: 0,
         unresolved: 0,
-        total: 340
+        total: 0
       },
-      status: 'in_progress'
+      fullText: {
+        pending: 0,
+        included: 0,
+        excluded: 0,
+        unresolved: 0,
+        total: 0
+      },
+      status: 'pending'
     },
     qualityAssessment: {
-      totalToAssess: 340,
+      totalToAssess: 0,
       completedAssessments: 0,
       reviewerConflictsCount: 0,
       status: 'pending'
     },
     prismaMetrics: {
-      recordsIdentifiedProviders: 1870,
-      recordsIdentifiedImports: 235,
-      totalIdentified: 2105,
-      recordsAfterNormalization: 2105,
-      recordsBeforeDedup: 2105,
-      recordsAfterTechnicalMerger: 1725,
-      duplicateGroupsPendingReview: 45,
-      recordsScreenedTitleAbstract: 1300,
+      recordsIdentifiedProviders: 0,
+      recordsIdentifiedImports: 0,
+      totalIdentified: 0,
+      recordsAfterNormalization: 0,
+      recordsBeforeDedup: 0,
+      recordsAfterTechnicalMerger: 0,
+      duplicateGroupsPendingReview: 0,
+      recordsScreenedTitleAbstract: 0,
       recordsScreenedFullText: 0,
       studiesIncludedSynthesis: 0
     }
