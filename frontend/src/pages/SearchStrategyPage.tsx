@@ -31,11 +31,7 @@ const emptyStrategy = (project?: SLRProject | null): SearchStrategyWriteRequest 
     publication_types: project?.searchFilters?.publicationTypes ? [...project.searchFilters.publicationTypes] : [],
     additional_limits: project?.searchFilters?.fullTextOnly ? { open_access: true } : {},
   },
-  providers: project?.providers
-    ? project.providers
-        .filter((p) => p.connected && p.type === 'live_api' && ['openalex', 'crossref', 'semantic_scholar'].includes(p.id))
-        .map((p) => p.id as SearchProviderId)
-    : ['openalex'],
+  providers: [],
   queries: [],
   version: 1,
 });
@@ -422,18 +418,18 @@ export const SearchStrategyPage: React.FC = () => {
             gap: 12,
           }}
         >
-          {((activeProject.providers && activeProject.providers.length > 0)
-            ? activeProject.providers.filter((provider) => provider.type === 'live_api').map((p) => ({
-                id: p.id as SearchProviderId,
-                name: p.name,
-                supported: p.connected && ['openalex', 'crossref', 'semantic_scholar'].includes(p.id),
-              }))
-            : [
-                { id: 'openalex' as SearchProviderId, name: 'OpenAlex', supported: true },
-                { id: 'crossref' as SearchProviderId, name: 'Crossref', supported: true },
-                { id: 'semantic_scholar' as SearchProviderId, name: 'Semantic Scholar', supported: true },
-              ]
-          ).map((provider) => (
+          {(() => {
+            const supportedProviderIds = ['openalex', 'crossref'];
+            const knownProviders: { id: SearchProviderId; name: string; supported: boolean }[] = [
+              { id: 'openalex', name: 'OpenAlex', supported: true },
+              { id: 'crossref', name: 'Crossref', supported: true },
+              { id: 'semantic_scholar', name: 'Semantic Scholar', supported: false },
+            ];
+            return knownProviders.map((kp) => ({
+              ...kp,
+              supported: supportedProviderIds.includes(kp.id),
+            }));
+          })().map((provider) => (
             <label
               key={provider.id}
               style={{

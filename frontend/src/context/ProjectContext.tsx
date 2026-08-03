@@ -502,9 +502,9 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
       targetProjectId,
       selected,
       {
-        provider: searchExecutionResult.providers.length === 1
-          ? searchExecutionResult.providers[0] as 'openalex' | 'crossref'
-          : undefined,
+        provider: (searchExecutionResult.providers && searchExecutionResult.providers.length > 0)
+          ? (searchExecutionResult.providers[0] as 'openalex' | 'crossref')
+          : (selected[0]?.provider as 'openalex' | 'crossref' | undefined),
         query: searchExecutionResult.rendered_query,
         total_available: searchExecutionResult.total_count,
       },

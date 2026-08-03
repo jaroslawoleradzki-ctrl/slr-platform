@@ -1,6 +1,6 @@
 # SLR Platform — Project Status
 
-_Last updated: 2026-07-30_
+_Last updated: 2026-08-03_
 
 ## Current status
 
@@ -14,20 +14,40 @@ development
 
 Current version (working tree):
 
-v0.2.2
+v0.2.3
 
 Current development phase:
 
-Phase 6.8.8 / Version 0.2.2 — Dynamic Workflow Navigation Status.
+Version 0.2.3 — Functional Project Dashboard and Sources Aggregation.
 
-Version 0.2.2 unifies the workflow navigation state across Sidebar and WorkflowStepper with a single source of truth (`useWorkflowNavigationStatus` in `ProjectContext`).
-Static mock counters (`45`, `425`) are removed for backend projects, and real metrics are derived via parallel `Promise.allSettled` queries across stages 1–4.
-Deduplication pending alert counters accurately reflect `pendingGroups` (omitted when 0), and review decisions update navigation status synchronously without N+1 GET requests.
-Unimplemented stages 5–8 display neutral `not_available` ("Niedostępne") state.
+The Project Dashboard renders real status data for workflow stages 1–4, including loading, empty, partial-data and partial-failure states, and uses a shared selector for the recommended next action. Static demonstration metrics are no longer used by the Dashboard. Stages 5–8 remain explicitly unavailable.
+
+Search Strategy supports creating the first persisted strategy from the empty state. OpenAlex and Crossref can be selected independently of the technical provider `connected` field; Semantic Scholar remains unavailable. OpenAlex is verified in the current search-and-import workflow, while Crossref has not been manually verified end to end for this release.
+
+Sources & Imports shows the accumulated successful record count for OpenAlex and retains the individual import audit entries below the aggregate. File imports remain separate from provider aggregation. Normalization and Deduplication retain their existing execution behavior and are read by the Dashboard only through their current status responses.
 
 ---
 
 # Completed
+
+## Version 0.2.3 — Functional Project Dashboard and Sources Aggregation
+
+- Dashboard cards for stages 1–4 are derived from real backend workflow status.
+- Dashboard loading, empty, partial-data and partial-failure states are covered by frontend tests.
+- Dashboard stage navigation preserves the current `projectId`.
+- Search Strategy can be created from an empty state and exposes selectable OpenAlex and Crossref controls without relying on `connected`.
+- Semantic Scholar remains visibly unavailable.
+- Sources & Imports aggregates successful OpenAlex import deltas while preserving separate history records.
+- Stages 5–8 remain unavailable; normalization and deduplication behavior is unchanged.
+
+### Release verification
+
+- Frontend: `npm test` — 98 passed; `npm run build` — passed; `npm run type-check` — passed.
+- Backend: `uv run pytest` — 903 passed with one Starlette deprecation warning; `uv run ruff check .` — passed; `uv run mypy app/` — no issues in 80 source files.
+- Repository: `git diff --check` — passed.
+- Manual OpenAlex data path previously verified with two independent 100-record imports: Working Collection increased from 100 to 200 and import history retained two separate successful entries.
+
+The remaining visual smoke-test checklist is recorded in the release preparation summary because no browser-control instance was available in the validation environment.
 
 ## Phase 6.8.1 — Search Strategy Backend
 
@@ -89,10 +109,11 @@ Unimplemented stages 5–8 display neutral `not_available` ("Niedostępne") stat
 - OpenAlex returns at most 100 records per execution response; the Search
   Strategy UI can request and append subsequent pages, while full automatic
   retrieval/import of all results remains out of scope
-- Crossref execution has not yet been verified
+- Crossref is selectable in Search Strategy but has not been manually verified across the complete save, search, import and Sources workflow
 - Semantic Scholar remains inactive
-- provider executions and provider status APIs are not persisted for Sources
+- Sources provider status is derived from durable import history; there is no separate persisted provider-status API
 - initial project metadata remains demo-backed
+- workflow stages 5–8 are not implemented
 
 ## Infrastructure
 

@@ -4,6 +4,20 @@ This document records important project decisions that do not require a full ADR
 
 ---
 
+## 2026-08-03
+
+### Publication intake views and sources of truth (0.2.3)
+
+- **Working Collection** is the source of truth for the current publication state of a project.
+- **Import History** is the durable audit of individual import executions and stores the number of records added by each execution.
+- **Search Strategy** presents the result and import outcome of one search execution.
+- **Sources & Imports** presents the accumulated source state together with the individual import-history entries.
+- **Normalization and Deduplication** remain separate workflow stages and do not redefine the responsibilities of Search Strategy or Sources & Imports.
+
+The 0.2.3 frontend derives the OpenAlex aggregate from successful durable import deltas because the existing Sources API exposes import history but does not expose a provider-grouped Working Collection projection. This is a release-scoped read model and does not change the underlying Working Collection authority.
+
+---
+
 ## 2026-07-31
 
 ### Dynamic Workflow Navigation Status (0.2.2)

@@ -156,7 +156,7 @@ export interface ImportFileRecord {
   totalAvailable?: number | null;
   recordsCount: number;
   importedAt: string;
-  status: 'success' | 'warning' | 'error';
+  status: 'success' | 'warning' | 'failed' | 'error';
   warnings?: string[];
 }
 
@@ -164,7 +164,7 @@ export interface BibliographicImportResponse {
   import_id: string;
   records_count: number;
   warnings: string[];
-  status: 'success' | 'warning';
+  status: 'success' | 'warning' | 'failed' | 'error';
 }
 
 export interface BibliographicImportHistoryRecord {
@@ -177,7 +177,7 @@ export interface BibliographicImportHistoryRecord {
   query: string | null;
   records_count: number;
   total_available: number | null;
-  status: 'success' | 'warning';
+  status: 'success' | 'warning' | 'failed' | 'error';
   created_at: string;
   warnings: string[];
 }
