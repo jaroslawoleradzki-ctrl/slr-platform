@@ -289,4 +289,53 @@ describe('persistent Search Strategy GUI & Execution', () => {
     expect(screen.getByText('Brak wykonanych wyszukiwań.')).toBeInTheDocument();
     expect(screen.queryByText('Mock Result Record')).not.toBeInTheDocument();
   });
+
+  it('13. 404 -> pusty formularz z pustą listą providerów -> blokada zapisu bez wyboru -> OpenAlex zaznaczalny -> zapis pierwszej strategii', async () => {
+    vi.mocked(projectApiService.getSearchStrategy).mockResolvedValue(null);
+    renderPage();
+
+    // 1. 404 -> infobar o braku strategii
+    expect(await screen.findByText(/nie ma jeszcze zapisanej strategii/i)).toBeInTheDocument();
+
+    // 2. OpenAlex i Crossref nie są domyślnie zaznaczone, ale są możliwe do zaznaczenia; Semantic Scholar zablokowany
+    const openAlexCb = screen.getByRole('checkbox', { name: /OpenAlex/i });
+    const crossrefCb = screen.getByRole('checkbox', { name: /Crossref/i });
+    const semanticCb = screen.getByRole('checkbox', { name: /Semantic Scholar/i });
+
+    expect(openAlexCb).not.toBeChecked();
+    expect(crossrefCb).not.toBeChecked();
+    expect(openAlexCb).not.toBeDisabled();
+    expect(crossrefCb).not.toBeDisabled();
+    expect(semanticCb).toBeDisabled();
+
+    // Dodajmy grupę pojęć
+    const groupInput = screen.getByRole('textbox', { name: 'Nazwa nowej grupy' });
+    fireEvent.change(groupInput, { target: { value: 'Energy' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Dodaj grupę' }));
+
+    const termInput = screen.getByRole('textbox', { name: 'Nowy termin grupy 1' });
+    fireEvent.change(termInput, { target: { value: 'solar' } });
+    fireEvent.keyDown(termInput, { key: 'Enter', code: 'Enter' });
+
+    // 3. Próba zapisu bez zaznaczonego providera -> błąd walidacji
+    fireEvent.click(screen.getByRole('button', { name: 'Zapisz' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Wybierz co najmniej jednego providera.');
+    expect(projectApiService.saveSearchStrategy).not.toHaveBeenCalled();
+
+    // 4. Zaznaczenie OpenAlex i ponowny zapis -> pomyślna walidacja i PUT
+    fireEvent.click(openAlexCb);
+    fireEvent.click(screen.getByRole('button', { name: 'Zapisz' }));
+
+    await waitFor(() => {
+      expect(projectApiService.saveSearchStrategy).toHaveBeenCalledWith('lean_energy', expect.objectContaining({
+        concept_groups: expect.arrayContaining([
+          expect.objectContaining({ name: 'Energy', terms: ['solar'] }),
+        ]),
+        providers: ['openalex'],
+      }));
+    });
+
+    expect(await screen.findByText(/Strategia została zapisana/i)).toBeInTheDocument();
+    expect(screen.queryByText(/nie ma jeszcze zapisanej strategii/i)).not.toBeInTheDocument();
+  });
 });

@@ -1,5 +1,34 @@
 # Changelog
 
+## [0.2.3] — 2026-08-03
+
+### Added / Improved
+
+- Functional Project Dashboard based on real stage 1–4 data.
+- Real loading, empty, partial-data and partial-failure states on the Dashboard.
+- Responsive Dashboard card layout.
+- Shared next-action derivation used by the Dashboard workflow UI.
+- Ability to create and save the first Search Strategy from its empty state.
+- OpenAlex and Crossref selection independent of the technical provider `connected` field; Semantic Scholar remains unavailable.
+- Accumulated OpenAlex record aggregation on Sources & Imports.
+- Individual import-history entries remain visible below the provider aggregate.
+
+### Fixed
+
+- Removed static and demonstration values from the Project Dashboard.
+- Restored provider selection when the project has no saved Search Strategy.
+- Removed false green provider connection states when no import data exists.
+- Prevented Sources data from being incorrectly reset or overwritten.
+- Preserved meaningful numeric zero values instead of rendering them as missing data.
+- Fixed the regression where the OpenAlex card used only the newest import-history entry instead of the accumulated successful import state.
+- Preserved `projectId` when navigating between workflow stages.
+
+### Scope limits
+
+- OpenAlex is the manually verified provider for the current end-to-end workflow. Crossref remains selectable but is not declared fully verified end to end.
+- Semantic Scholar and workflow stages 5–8 remain unavailable.
+- No normalization or deduplication behavior changed; the Dashboard only reads their existing statuses.
+
 ## [0.2.2] — 2026-07-31
 
 ### Added

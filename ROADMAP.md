@@ -163,6 +163,18 @@ capabilities.
 Phase 6.8.1 and the functional Search Strategy workflow are available. Further
 work before Phase 2 focuses on result completeness and presentation quality.
 
+### Version 0.2.3 — Functional Project Dashboard and Sources Aggregation ✅
+
+- Project Dashboard uses real workflow data for stages 1–4, including loading, empty, partial-data and partial-failure states.
+- Search Strategy has a functional empty state and can persist the first strategy.
+- OpenAlex is the verified provider in the current search and import workflow.
+- Crossref remains selectable in the UI but is not marked as fully verified end to end; Semantic Scholar remains unavailable.
+- Sources & Imports presents accumulated successful record counts per available provider and retains the individual import history below the aggregate.
+- Workflow stages 5–8 remain unavailable.
+- Normalization and deduplication behavior is unchanged; the Dashboard reads their existing statuses only.
+
+This increment does not add new provider integrations, background jobs, screening, quality assessment, data extraction, exports, normalization rules, or deduplication behavior.
+
 ### Version 0.1.9 increment
 
 The first project-scoped bibliographic upload is implemented: the Sources

@@ -2,21 +2,26 @@ import React from 'react';
 import { ArrowRight, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useProject } from '../../context/ProjectContext';
+import { deriveNextAction } from '../../selectors/workflowNextAction';
 
+/**
+ * Displays the next recommended workflow action derived from WorkflowNavigationStatus.
+ *
+ * Derivation logic lives exclusively in `selectors/workflowNextAction.ts`.
+ * This component only handles rendering and navigation.
+ */
 export const NextActionCard: React.FC = () => {
-  const { activeProject } = useProject();
+  const { activeProject, workflowStatus, workflowStatusLoading } = useProject();
   const navigate = useNavigate();
   const { projectId } = useParams<{ projectId?: string }>();
-  const currentId = projectId || activeProject?.id || 'lean_energy';
+  const currentId = projectId || activeProject?.id || '';
 
-  if (!activeProject) return null;
+  if (!activeProject || workflowStatusLoading || !workflowStatus) return null;
 
-  const { nextAction } = activeProject;
+  const nextAction = deriveNextAction(workflowStatus);
+  if (!nextAction) return null;
+
   const isUrgent = nextAction.severity === 'urgent';
-
-  const handleActionClick = () => {
-    navigate(`/projects/${currentId}/${nextAction.targetStageId}`);
-  };
 
   return (
     <div
@@ -50,19 +55,17 @@ export const NextActionCard: React.FC = () => {
         </div>
 
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span
-              style={{
-                fontSize: '0.7rem',
-                textTransform: 'uppercase',
-                fontWeight: 700,
-                letterSpacing: '0.05em',
-                color: isUrgent ? 'var(--status-warning-text)' : 'var(--accent-primary)',
-              }}
-            >
-              Kolejny Krok Procesu (Recommended Next Action)
-            </span>
-          </div>
+          <span
+            style={{
+              fontSize: '0.7rem',
+              textTransform: 'uppercase',
+              fontWeight: 700,
+              letterSpacing: '0.05em',
+              color: isUrgent ? 'var(--status-warning-text)' : 'var(--accent-primary)',
+            }}
+          >
+            Kolejny Krok Procesu
+          </span>
 
           <h3
             style={{
@@ -89,7 +92,7 @@ export const NextActionCard: React.FC = () => {
       </div>
 
       <button
-        onClick={handleActionClick}
+        onClick={() => navigate(`/projects/${currentId}/${nextAction.targetStageId}`)}
         style={{
           display: 'inline-flex',
           alignItems: 'center',

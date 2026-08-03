@@ -8,17 +8,34 @@ export const SourcesIngestionPage: React.FC = () => {
 
   if (!activeProject) return null;
 
-  const latestOpenAlexImport = activeProject.imports.find(
-    (item) => item.sourceType === 'provider' && item.provider === 'openalex'
-  );
+
   const displayedProviders = activeProject.providers.map((provider) => {
-    if (provider.id !== 'openalex' || !latestOpenAlexImport) return provider;
+    const providerImports = activeProject.imports
+      .filter((item) => item.sourceType === 'provider' && item.provider === provider.id)
+      .sort((a, b) => new Date(b.importedAt).getTime() - new Date(a.importedAt).getTime());
+
+    const latestImport = providerImports[0];
+    if (!latestImport) {
+      return {
+        ...provider,
+        connected: false,
+        status: 'idle' as const,
+        resultsCount: 0,
+        lastRunTimestamp: null,
+      };
+    }
+
+    const isSuccess = latestImport.status === 'success';
+    const recordsCount = providerImports
+      .filter((item) => item.status === 'success')
+      .reduce((total, item) => total + item.recordsCount, 0);
     return {
       ...provider,
-      connected: latestOpenAlexImport.status === 'success',
-      status: latestOpenAlexImport.status === 'success' ? 'completed' as const : 'failed' as const,
-      resultsCount: latestOpenAlexImport.recordsCount,
-      lastRunTimestamp: latestOpenAlexImport.importedAt,
+      connected: isSuccess,
+      status: isSuccess ? ('completed' as const) : ('failed' as const),
+      resultsCount: recordsCount,
+      lastRunTimestamp: latestImport.importedAt,
+      errorMessage: !isSuccess ? latestImport.warnings?.[0] || 'Nieudana próba pobrania' : undefined,
     };
   });
 

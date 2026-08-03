@@ -1,7 +1,5 @@
 from datetime import datetime, timezone
 from functools import lru_cache
-import hashlib
-import json
 from pathlib import Path
 from typing import Literal, cast
 from uuid import UUID, uuid4
@@ -316,35 +314,93 @@ def import_search_results(
     """Append the explicitly selected result records to the Working Collection."""
 
     try:
-        publications = []
-        for record in payload.records:
-            identifiers = []
-            if record.doi is not None:
-                identifiers.append(
-                    Identifier(type=IdentifierType.DOI, value=record.doi)
+        existing_publications = repository.get_publications(project_id)
+    except ProjectNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+
+    if not payload.records:
+        return SearchResultsImportResponse(
+            project_id=project_id,
+            imported_count=0,
+            skipped_count=0,
+            total_requested=0,
+            working_collection_count=len(existing_publications),
+        )
+
+    # 1. Grupowanie rekordów wg dostawcy (record.provider)
+    grouped_records: dict[str, list[SearchResultRecordResponse]] = {}
+    for record in payload.records:
+        grouped_records.setdefault(record.provider, []).append(record)
+
+    total_imported = 0
+    total_skipped = 0
+    total_requested = 0
+    final_working_count = len(existing_publications)
+
+    try:
+        # Pętla po poszczególnych niepustych grupach dostawców
+        for provider_name, records_group in grouped_records.items():
+            publications = []
+            for record in records_group:
+                identifiers = []
+                if record.doi is not None:
+                    identifiers.append(
+                        Identifier(type=IdentifierType.DOI, value=record.doi)
+                    )
+                publications.append(
+                    Publication(
+                        record_id=UUID(record.id),
+                        title=record.title,
+                        authors=[
+                            Author(display_name=display_name)
+                            for display_name in record.authors
+                        ],
+                        publication_year=record.year,
+                        identifiers=identifiers,
+                        provenance=[
+                            ProvenanceEntry(
+                                source=record.provider,
+                                source_record_id=record.source_id,
+                            )
+                        ],
+                    )
                 )
-            publications.append(
-                Publication(
-                    record_id=UUID(record.id),
-                    title=record.title,
-                    authors=[
-                        Author(display_name=display_name)
-                        for display_name in record.authors
-                    ],
-                    publication_year=record.year,
-                    identifiers=identifiers,
-                    provenance=[
-                        ProvenanceEntry(
-                            source=record.provider,
-                            source_record_id=record.source_id,
-                        )
-                    ],
+
+            group_result = repository.import_source_publications(
+                project_id,
+                publications,
+            )
+
+            total_imported += group_result.imported_count
+            total_skipped += group_result.skipped_count
+            total_requested += len(records_group)
+            final_working_count = group_result.working_collection_count
+
+            # Domyślnie total_available jest globalny w wyszukiwaniu; dla pojedynczego providera używamy payload.total_available
+            is_single_provider = len(grouped_records) == 1
+            group_total_available = payload.total_available if is_single_provider else None
+
+            history_repository.create(
+                ImportHistoryRecord(
+                    import_id=uuid4(),
+                    project_id=project_id,
+                    source_type="provider",
+                    filename=None,
+                    format=None,
+                    provider=provider_name,
+                    query=payload.query,
+                    records_count=group_result.imported_count,
+                    total_available=group_total_available,
+                    status="success",
+                    warnings=(),
+                    created_at=datetime.now(timezone.utc),
+                    fingerprint=None,
                 )
             )
-        import_result = repository.import_source_publications(
-            project_id,
-            publications,
-        )
+
     except ProjectNotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -355,44 +411,16 @@ def import_search_results(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=str(exc),
         ) from exc
-    if import_result.imported_count:
+
+    if total_imported > 0:
         normalization_repository.delete_for_project(project_id)
-    if payload.provider == "openalex":
-        fingerprint = hashlib.sha256(
-            json.dumps(
-                {
-                    "project_id": project_id,
-                    "provider": payload.provider,
-                    "query": payload.query,
-                    "records": sorted(record.source_id for record in payload.records),
-                },
-                sort_keys=True,
-            ).encode("utf-8")
-        ).hexdigest()
-        if history_repository.find_by_fingerprint(project_id, fingerprint) is None:
-            history_repository.create(
-                ImportHistoryRecord(
-                    import_id=uuid4(),
-                    project_id=project_id,
-                    source_type="provider",
-                    filename=None,
-                    format=None,
-                    provider="openalex",
-                    query=payload.query,
-                    records_count=import_result.imported_count,
-                    total_available=payload.total_available,
-                    status="success",
-                    warnings=(),
-                    created_at=datetime.now(timezone.utc),
-                    fingerprint=fingerprint,
-                )
-            )
+
     return SearchResultsImportResponse(
         project_id=project_id,
-        imported_count=import_result.imported_count,
-        skipped_count=import_result.skipped_count,
-        total_requested=len(payload.records),
-        working_collection_count=import_result.working_collection_count,
+        imported_count=total_imported,
+        skipped_count=total_skipped,
+        total_requested=total_requested,
+        working_collection_count=final_working_count,
     )
 
 
