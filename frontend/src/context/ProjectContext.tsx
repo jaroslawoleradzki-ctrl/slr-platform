@@ -152,6 +152,7 @@ interface ProjectContextType {
   createNewProject: (title: string, description: string, protocolVersion: string) => Promise<SLRProject>;
   refreshProjects: () => Promise<void>;
   refreshWorkflowStatus: (projectId?: string) => Promise<void>;
+  runDeduplication: () => Promise<ApiDuplicateGroupListResponse>;
   updateGroupDecision: (groupId: string, newStatus: DuplicateDecisionStatus, newRationale?: string | null) => void;
   currentSearchStrategy: EditableSearchStrategy | null;
   lastExecutedSearchStrategy: EditableSearchStrategy | null;
@@ -534,6 +535,39 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return result;
   };
 
+  const runDeduplication = async (): Promise<ApiDuplicateGroupListResponse> => {
+    const targetProjectId = activeProjectIdRef.current;
+    setWorkflowStatusLoading(true);
+    setDuplicateGroupError(null);
+    try {
+      const result = await projectApiService.getDuplicateGroups(targetProjectId);
+      if (activeProjectIdRef.current !== targetProjectId) return result;
+
+      setDuplicateData(result);
+      const pendingGroups = result.groups.filter((group) => group.status === 'PENDING').length;
+      const approvedGroups = result.groups.filter((group) => group.status === 'APPROVE').length;
+      const rejectedGroups = result.groups.filter((group) => group.status === 'REJECT').length;
+      setWorkflowStatus((current) => current ? {
+        ...current,
+        deduplication: {
+          state: pendingGroups > 0 ? 'pending_action' : 'completed',
+          totalGroups: result.total_groups_count,
+          pendingGroups,
+          approvedGroups,
+          rejectedGroups,
+          label: pendingGroups > 0 ? `${pendingGroups} do oceny` : 'Oceniono',
+        },
+      } : current);
+      return result;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Nie udało się uruchomić deduplikacji.';
+      if (activeProjectIdRef.current === targetProjectId) setDuplicateGroupError(message);
+      throw error;
+    } finally {
+      if (activeProjectIdRef.current === targetProjectId) setWorkflowStatusLoading(false);
+    }
+  };
+
   return (
     <ProjectContext.Provider
       value={{
@@ -550,6 +584,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
         createNewProject,
         refreshProjects,
         refreshWorkflowStatus,
+        runDeduplication,
         updateGroupDecision,
         currentSearchStrategy,
         lastExecutedSearchStrategy,
