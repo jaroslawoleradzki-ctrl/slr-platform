@@ -1,6 +1,6 @@
 # SLR Platform — Project Status
 
-_Last updated: 2026-08-03_
+_Last updated: 2026-08-04_
 
 ## Current status
 
@@ -14,21 +14,34 @@ development
 
 Current version (working tree):
 
-v0.2.3
+v0.2.4
 
 Current development phase:
 
-Version 0.2.3 — Functional Project Dashboard and Sources Aggregation.
+Version 0.2.4 — Data Consistency and Executable Deduplication.
 
 The Project Dashboard renders real status data for workflow stages 1–4, including loading, empty, partial-data and partial-failure states, and uses a shared selector for the recommended next action. Static demonstration metrics are no longer used by the Dashboard. Stages 5–8 remain explicitly unavailable.
 
 Search Strategy supports creating the first persisted strategy from the empty state. OpenAlex and Crossref can be selected independently of the technical provider `connected` field; Semantic Scholar remains unavailable. OpenAlex is verified in the current search-and-import workflow, while Crossref has not been manually verified end to end for this release.
 
-Sources & Imports shows the accumulated successful record count for OpenAlex and retains the individual import audit entries below the aggregate. File imports remain separate from provider aggregation. Normalization and Deduplication retain their existing execution behavior and are read by the Dashboard only through their current status responses.
+Sources & Imports shows the accumulated successful import count and retains individual audit entries below the aggregate. For `lean_energy`, its OpenAlex history was explicitly backfilled to match the 535-publication Working Collection after removal of the single synthetic Crossref test record. Normalization reads this same Working Collection and its latest execution reports 535 input records.
+
+Deduplication is run explicitly from the UI through the existing duplicate-groups endpoint. The screen reports the latest execution status, input and analyzed counts, group count, client-measured duration and completion time separately from the candidate-group review counters. APPROVE and REJECT decisions remain durable; APPROVE does not yet physically merge publications.
 
 ---
 
 # Completed
+
+## Version 0.2.4 — Data Consistency and Executable Deduplication
+
+- Repaired the historical `lean_energy` data to contain 535 OpenAlex publications and no synthetic Crossref test publication.
+- Added one clearly labelled 391-record OpenAlex history backfill, aligning successful OpenAlex import history with the Working Collection.
+- Confirmed Sources & Imports, Working Collection and Normalization at 535 project publications.
+- Added explicit manual deduplication execution through the existing backend GET endpoint.
+- Added the last execution report and separated it from candidate-group review metrics.
+- Added accurate pre-run, in-progress, zero-group, pending-review, fully-reviewed and error states.
+- Kept durable APPROVE/REJECT review decisions without implementing physical publication merging.
+- Screening remains unavailable and is not part of this increment.
 
 ## Version 0.2.3 — Functional Project Dashboard and Sources Aggregation
 

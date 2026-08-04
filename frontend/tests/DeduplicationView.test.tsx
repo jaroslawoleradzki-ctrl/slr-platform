@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, act } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { ProjectProvider } from '../src/context/ProjectContext';
 import { DeduplicationPage } from '../src/pages/DeduplicationPage';
@@ -108,6 +108,124 @@ describe('DeduplicationPage Phase 6.5 — Duplicate Comparison & Review UI', () 
     );
 
     expect(await screen.findByText(/Brak grup kandydatów na duplikaty/i)).toBeInTheDocument();
+  });
+
+  it('reruns duplicate detection with the existing GET endpoint and reports the result', async () => {
+    vi.spyOn(projectApiService, 'getBibliographicImports').mockResolvedValue([
+      {
+        import_id: 'history-535',
+        project_id: 'lean_energy',
+        source_type: 'provider',
+        filename: null,
+        format: null,
+        provider: 'openalex',
+        query: 'accumulated imports',
+        total_available: null,
+        records_count: 535,
+        status: 'success',
+        created_at: '2026-08-04T08:00:00Z',
+        warnings: [],
+      },
+    ]);
+    const initialResponse: ApiDuplicateGroupListResponse = {
+      project_id: 'lean_energy',
+      total_groups_count: 0,
+      groups: [],
+    };
+    const rerunResponse: ApiDuplicateGroupListResponse = {
+      project_id: 'lean_energy',
+      total_groups_count: 1,
+      groups: [{
+        group_id: 'grp-rerun-1',
+        reason: 'Zgodność DOI',
+        records_count: 2,
+        status: 'APPROVE',
+        rationale: 'Existing decision',
+        shared_identifiers: [{ identifier_type: 'doi', value: '10.1000/rerun' }],
+        records: [
+          { id: 'r1', title: 'Rerun A', authors: 'A', year: 2024, source: 'OpenAlex' },
+          { id: 'r2', title: 'Rerun B', authors: 'B', year: 2024, source: 'OpenAlex' },
+        ],
+      }],
+    };
+    const getGroupsSpy = vi.spyOn(projectApiService, 'getDuplicateGroups')
+      .mockResolvedValueOnce(initialResponse)
+      .mockResolvedValueOnce(rerunResponse);
+
+    render(
+      <ProjectProvider>
+        <MemoryRouter initialEntries={['/projects/lean_energy/dedup']}>
+          <DeduplicationPage />
+        </MemoryRouter>
+      </ProjectProvider>
+    );
+
+    expect(await screen.findByText(/Brak grup kandydatów na duplikaty/i)).toBeInTheDocument();
+    expect(screen.getByText(/Nigdy nie uruchamiano deduplikacji/i)).toBeInTheDocument();
+    expect(screen.getByText(/Uruchom deduplikację, aby wyszukać grupy kandydatów/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Oceniono wszystkie grupy/i)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Uruchom deduplikację/i }));
+
+    expect(await screen.findByText(/Deduplikacja zakończona pomyślnie/i)).toBeInTheDocument();
+    expect(screen.getByText(/Zakończono pomyślnie/i)).toBeInTheDocument();
+    expect(screen.getByText(/535 publikacji/i)).toBeInTheDocument();
+    expect(screen.getByText(/Znaleziono grup/i).parentElement).toHaveTextContent('1');
+    expect(screen.getByText(/Czas wykonania/i).parentElement).toHaveTextContent(/s/);
+    expect(screen.getByText(/Oceniono wszystkie grupy/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Existing decision/i)).toBeInTheDocument();
+    expect(getGroupsSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it('shows analyzed record count, loading state, and successful zero-group result', async () => {
+    vi.spyOn(projectApiService, 'getBibliographicImports').mockResolvedValue([
+      {
+        import_id: 'history-535-empty',
+        project_id: 'lean_energy',
+        source_type: 'provider',
+        filename: null,
+        format: null,
+        provider: 'openalex',
+        query: 'accumulated imports',
+        total_available: null,
+        records_count: 535,
+        status: 'success',
+        created_at: '2026-08-04T08:00:00Z',
+        warnings: [],
+      },
+    ]);
+    const emptyResponse: ApiDuplicateGroupListResponse = {
+      project_id: 'lean_energy',
+      total_groups_count: 0,
+      groups: [],
+    };
+    let finishRerun!: (response: ApiDuplicateGroupListResponse) => void;
+    vi.spyOn(projectApiService, 'getDuplicateGroups')
+      .mockResolvedValueOnce(emptyResponse)
+      .mockReturnValueOnce(new Promise((resolve) => { finishRerun = resolve; }));
+
+    render(
+      <ProjectProvider>
+        <MemoryRouter initialEntries={['/projects/lean_energy/dedup']}>
+          <DeduplicationPage />
+        </MemoryRouter>
+      </ProjectProvider>
+    );
+
+    expect(await screen.findByText(/Wejściowa kolekcja: 535/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Uruchom deduplikację/i }));
+
+    expect(screen.getByText(/Analizowanie 535 rekordów/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Uruchamianie deduplikacji/i })).toBeDisabled();
+
+    await act(async () => finishRerun(emptyResponse));
+
+    expect(await screen.findByText(/Deduplikacja zakończona pomyślnie/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Przeanalizowano 535 rekordów. Nie znaleziono grup kandydatów/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/Nie znaleziono grup wymagających oceny/i)).toBeInTheDocument();
+    expect(screen.getByText(/Wykryte grupy kandydatów/i)).toBeInTheDocument();
+    expect(screen.getByText(/Decyzje APPROVE i REJECT są trwale zapisywane w bazie SQLite/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Trwała rejestracja decyzji w SQLite \(v0\.2\.2\)/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Oceniono wszystkie grupy/i)).not.toBeInTheDocument();
   });
 
   it('supports toggling comparison view with aria-expanded accessibility attribute', async () => {

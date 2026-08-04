@@ -400,8 +400,10 @@ describe('Deduplication Page Full Integration Workflow & Regression Suite', () =
 
     expect(await screen.findByText(/Summary Test Paper 1/i)).toBeInTheDocument();
 
+    fireEvent.click(screen.getByRole('button', { name: /Uruchom deduplikację/i }));
+
     // Verify initial summary counts: Total: 2, Pending: 2, Approve: 0, Reject: 0
-    expect(screen.getByText(/Oczekujące grupy duplikatów \(2\)/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Oczekujące grupy duplikatów \(2\)/i)).toBeInTheDocument();
 
     // Click Approve on first group
     const approveBtns = screen.getAllByRole('button', { name: /Zatwierdź/i });

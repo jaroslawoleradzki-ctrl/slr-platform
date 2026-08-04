@@ -163,6 +163,16 @@ capabilities.
 Phase 6.8.1 and the functional Search Strategy workflow are available. Further
 work before Phase 2 focuses on result completeness and presentation quality.
 
+### Version 0.2.4 — Data Consistency and Executable Deduplication ✅
+
+- Working Collection, Sources & Imports and Normalization are aligned to the same project publication set.
+- Historical `lean_energy` data is repaired to 535 OpenAlex publications, with the synthetic Crossref test record removed and a clearly labelled 391-record OpenAlex history backfill.
+- Deduplication can be run manually through the existing duplicate-groups endpoint.
+- The UI reports the last deduplication execution separately from the candidate-group review summary.
+- Candidate review distinguishes not-run, zero-group, pending and fully reviewed states.
+- APPROVE and REJECT decisions remain durable; physical publication merging is not implemented.
+- Screening remains unavailable and is not implemented by this increment.
+
 ### Version 0.2.3 — Functional Project Dashboard and Sources Aggregation ✅
 
 - Project Dashboard uses real workflow data for stages 1–4, including loading, empty, partial-data and partial-failure states.

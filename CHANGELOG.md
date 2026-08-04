@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.2.4] — 2026-08-04
+
+### Added / Improved
+
+- Added the explicit `Uruchom deduplikację` action using the existing duplicate-groups request.
+- Added a last-run deduplication report with status, Working Collection input size, analyzed publication count, candidate-group count, client-measured duration and completion time.
+- Separated the execution report from the candidate-group review summary.
+- Added distinct pre-run, running, success, empty-result and error states for deduplication.
+- Added one explicitly labelled historical OpenAlex import-history backfill for 391 publications that predated correct history recording.
+
+### Fixed
+
+- Repaired the historical `lean_energy` project data and removed the single synthetic Crossref test publication together with its import-history entry.
+- Reconciled Working Collection, Sources & Imports and Normalization at 535 OpenAlex publications for `lean_energy`.
+- Corrected the zero-group review state so it is neutral and is not presented as completed human review.
+- Removed redundant zero-group execution copy already represented by the deduplication metrics.
+- Removed hardcoded application-version text from the durable duplicate-decision notice.
+- Clarified that the total review counter represents detected candidate groups.
+
+### Scope limits
+
+- APPROVE and REJECT decisions remain durable, but APPROVE does not physically merge publications.
+- No screening implementation, deduplication algorithm change or new backend endpoint is included.
+
 ## [0.2.3] — 2026-08-03
 
 ### Added / Improved

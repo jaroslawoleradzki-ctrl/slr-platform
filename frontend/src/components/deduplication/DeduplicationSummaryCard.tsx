@@ -7,9 +7,10 @@ import { Badge } from '../common/Badge';
 interface DeduplicationSummaryCardProps {
   summary?: DeduplicationSummary;
   groups?: ApiDuplicateGroup[];
+  hasRun?: boolean;
 }
 
-export const DeduplicationSummaryCard: React.FC<DeduplicationSummaryCardProps> = ({ summary, groups }) => {
+export const DeduplicationSummaryCard: React.FC<DeduplicationSummaryCardProps> = ({ summary, groups, hasRun = false }) => {
   if (groups !== undefined) {
     const totalGroups = groups.length;
     const pendingGroups = groups.filter((g) => g.status === 'PENDING').length;
@@ -21,11 +22,19 @@ export const DeduplicationSummaryCard: React.FC<DeduplicationSummaryCardProps> =
         title={
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <GitMerge size={18} style={{ color: 'var(--accent-primary)' }} />
-            <span>Podsumowanie Deduplikacji (Deduplication Summary)</span>
+            <span>Przegląd grup kandydatów</span>
           </div>
         }
         action={
-          pendingGroups > 0 ? (
+          !hasRun ? (
+            <Badge variant="pending">
+              Uruchom deduplikację, aby wyszukać grupy kandydatów
+            </Badge>
+          ) : totalGroups === 0 ? (
+            <Badge variant="pending">
+              Nie znaleziono grup wymagających oceny
+            </Badge>
+          ) : pendingGroups > 0 ? (
             <Badge variant="pending_action" icon={<ShieldAlert size={12} />}>
               Oczekujące grupy duplikatów ({pendingGroups})
             </Badge>
@@ -37,25 +46,6 @@ export const DeduplicationSummaryCard: React.FC<DeduplicationSummaryCardProps> =
         }
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          <div
-            style={{
-              padding: '12px 16px',
-              borderRadius: 'var(--radius-md)',
-              backgroundColor: 'var(--status-info-bg)',
-              border: '1px solid var(--status-info-border)',
-              color: 'var(--status-info-text)',
-              fontSize: '0.8rem',
-              display: 'flex',
-              alignItems: 'flex-start',
-              gap: '10px',
-            }}
-          >
-            <Info size={16} style={{ flexShrink: 0, marginTop: '2px' }} />
-            <span>
-              <strong>Kandydaci na duplikaty:</strong> Generowani z trwałej kolekcji projektu na podstawie zgodności silnych identyfikatorów (<strong>DOI</strong>, <strong>PMID</strong>, <strong>OpenAlex ID</strong>). Decyzje badacza są przechowywane trwale w bazie SQLite. W wersji 0.2.1 zatwierdzenie (APPROVE) nie wykonuje jeszcze fizycznego scalenia publikacji.
-            </span>
-          </div>
-
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px' }}>
             <div
               style={{
@@ -65,11 +55,11 @@ export const DeduplicationSummaryCard: React.FC<DeduplicationSummaryCardProps> =
                 border: '1px solid var(--border-subtle)',
               }}
             >
-              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Wszystkie Grupy</span>
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Wszystkie grupy</span>
               <div style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-primary)', marginTop: '2px' }}>
                 {totalGroups.toLocaleString()}
               </div>
-              <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>Kandydaci wykryci z API</span>
+              <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>Wykryte grupy kandydatów</span>
             </div>
 
             <div
