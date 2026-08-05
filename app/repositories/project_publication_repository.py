@@ -53,6 +53,10 @@ class ProjectPublicationRepository(Protocol):
         """Atomically import publications unique by provider and source id."""
         ...
 
+    def count_by_project(self, project_id: str) -> int:
+        """Return total publication count for a project or raise ProjectNotFoundError."""
+        ...
+
     def replace_publications(
         self,
         project_id: str,
@@ -140,6 +144,11 @@ class DemoProjectPublicationRepository:
         if project_id not in self._projects_data:
             raise ProjectNotFoundError(project_id)
         return list(self._projects_data[project_id])
+
+    def count_by_project(self, project_id: str) -> int:
+        if project_id not in self._projects_data:
+            raise ProjectNotFoundError(project_id)
+        return len(self._projects_data[project_id])
 
     def add_publications(
         self,
@@ -236,6 +245,23 @@ class SqliteProjectPublicationRepository:
             (project_id,),
         ).fetchall()
         return [Publication.model_validate(json.loads(row[0])) for row in rows]
+
+    def count_by_project(
+        self, project_id: str, *, connection: sqlite3.Connection | None = None
+    ) -> int:
+        self._ensure_project(project_id, connection=connection)
+        if connection is not None:
+            row = connection.execute(
+                "SELECT COUNT(*) FROM project_publications WHERE project_id = ?",
+                (project_id,),
+            ).fetchone()
+            return int(row[0])
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT COUNT(*) FROM project_publications WHERE project_id = ?",
+                (project_id,),
+            ).fetchone()
+            return int(row[0])
 
     def add_publications(
         self,
