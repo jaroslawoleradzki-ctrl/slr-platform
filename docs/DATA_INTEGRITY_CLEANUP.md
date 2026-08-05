@@ -88,15 +88,16 @@ Inicjalizacja schematu bazy i wywoływanie `_apply_migrations()` w konstruktorac
 
 **Zależności:** Zadanie 1 — Integrity Audit, który dostarcza reguły walidujące rezultat transakcji.
 
-## Zadanie 3 — Backend Read Models
+## Zadanie 3 — Backend Read Models [COMPLETED]
 
 **Cel**
 
 Przeniesienie agregacji danych Sources & Imports z frontendu do jawnego modelu odczytowego backendu.
 
-**Uzasadnienie**
+**Status:** COMPLETED
 
-Frontend nie powinien rekonstruować znaczenia domenowego na podstawie surowych wpisów Import History. Gotowy read model ogranicza ryzyko rozbieżnych obliczeń między ekranami i jednoznacznie określa semantykę prezentowanych liczników.
+**Opis zmian:**
+Stworzono backendowy DTO `SourcesSummaryResponse` oraz serwis `SourcesSummaryService` serwujący dedykowany endpoint `GET /projects/{project_id}/sources-summary`. Licznik `working_collection.total_records` pobierany jest bezpośrednio z `ProjectPublicationRepository.count_by_project()`, a podsumowania per źródło (`source_summaries`) oraz historia importów (`import_history`) są wyliczane i deterministycznie sortowane na backendzie. Z frontendu (`SourcesIngestionPage.tsx`) całkowicie usunięto domenowe sumowania `reduce()` i grupowania importów.
 
 **Zakres**
 

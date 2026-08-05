@@ -6,6 +6,7 @@ from uuid import uuid4
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 
+from app.api.dto.sources_summary import SourcesSummaryResponse
 from app.api.dto.search_strategy import (
     SearchProviderErrorResponse,
     BibliographicImportResponse,
@@ -49,6 +50,7 @@ from app.repositories.search_strategy_repository import (
     SearchStrategyRepository,
     default_search_strategy_repository,
 )
+from app.services.sources_summary_service import SourcesSummaryService
 from app.services.live_search import (
     LiveSearchExecutor,
     build_search_query,
@@ -524,3 +526,41 @@ def list_bibliographic_imports(
         )
         for record in history_repository.list_for_project(project_id)
     ]
+
+
+def get_sources_summary_service(
+    pub_repo: ProjectPublicationRepository = Depends(
+        get_project_publication_repository
+    ),
+    history_repo: ImportHistoryRepository = Depends(
+        get_import_history_repository
+    ),
+) -> SourcesSummaryService:
+    return SourcesSummaryService(
+        publication_repository=pub_repo,
+        import_history_repository=history_repo,
+    )
+
+
+@router.get(
+    "/{project_id}/sources-summary",
+    response_model=SourcesSummaryResponse,
+    status_code=status.HTTP_200_OK,
+)
+def get_sources_summary(
+    project_id: str,
+    project_repository: ProjectPublicationRepository = Depends(
+        get_project_publication_repository
+    ),
+    service: SourcesSummaryService = Depends(
+        get_sources_summary_service
+    ),
+) -> SourcesSummaryResponse:
+    """Return read model summary for Sources & Imports screen."""
+
+    try:
+        project_repository.count_by_project(project_id)
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+    return service.get_sources_summary(project_id)

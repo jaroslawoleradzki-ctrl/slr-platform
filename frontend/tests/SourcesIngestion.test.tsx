@@ -20,23 +20,19 @@ describe('Sources ingestion upload', () => {
       warnings: [],
       status: 'success',
     });
-    vi.spyOn(projectApiService, 'getBibliographicImports').mockResolvedValue([{
-      import_id: 'import-new',
+    vi.spyOn(projectApiService, 'getSourcesSummary').mockResolvedValue({
       project_id: 'lean_energy',
-      source_type: 'file',
-      filename: 'new.bib',
-      format: 'BibTeX',
-      provider: null,
-      query: null,
-      records_count: 2,
-      total_available: null,
-      status: 'success',
-      created_at: '2026-07-30T12:00:00Z',
-      warnings: [],
-    }]);
+      working_collection: { total_records: 2 },
+      source_summaries: [{
+        source: 'RIS', source_kind: 'file', successful_imports_count: 1, warning_imports_count: 0, failed_imports_count: 0, records_added_count: 2, last_import_at: '2026-07-30T12:00:00Z', last_import_status: 'success'
+      }],
+      import_history: [{
+        import_id: 'import-new', source_type: 'file', filename: 'new.bib', format: 'BibTeX', provider: null, query: null, records_count: 2, status: 'success', warnings: [], created_at: '2026-07-30T12:00:00Z'
+      }],
+    });
     renderPage();
 
-    const input = screen.getByLabelText('Wybierz plik RIS lub BibTeX');
+    const input = await screen.findByLabelText('Wybierz plik RIS lub BibTeX');
     const file = new File(['@article{one, title={One}}'], 'new.bib', { type: 'text/plain' });
     fireEvent.change(input, { target: { files: [file] } });
 
@@ -49,10 +45,15 @@ describe('Sources ingestion upload', () => {
     vi.spyOn(projectApiService, 'importBibliographicFile').mockRejectedValue(
       new Error('Niepoprawny RIS (HTTP 422).'),
     );
-    vi.spyOn(projectApiService, 'getBibliographicImports').mockResolvedValue([]);
+    vi.spyOn(projectApiService, 'getSourcesSummary').mockResolvedValue({
+      project_id: 'lean_energy',
+      working_collection: { total_records: 0 },
+      source_summaries: [],
+      import_history: [],
+    });
     renderPage();
 
-    const input = screen.getByLabelText('Wybierz plik RIS lub BibTeX');
+    const input = await screen.findByLabelText('Wybierz plik RIS lub BibTeX');
     const file = new File(['broken'], 'broken.ris', { type: 'text/plain' });
     fireEvent.change(input, { target: { files: [file] } });
 
@@ -62,22 +63,23 @@ describe('Sources ingestion upload', () => {
   });
 
   it('reloads the history for the newly selected project', async () => {
-    vi.spyOn(projectApiService, 'getBibliographicImports').mockImplementation(async (projectId) => [
-      {
+    vi.spyOn(projectApiService, 'getSourcesSummary').mockImplementation(async (projectId) => ({
+      project_id: projectId,
+      working_collection: { total_records: 1 },
+      source_summaries: [{ source: 'RIS', source_kind: 'file', successful_imports_count: 1, warning_imports_count: 0, failed_imports_count: 0, records_added_count: 1, last_import_at: '2026-07-30T12:00:00Z', last_import_status: 'success' }],
+      import_history: [{
         import_id: projectId,
-        project_id: projectId,
         source_type: 'file',
         filename: `${projectId}.ris`,
         format: 'RIS',
         provider: null,
         query: null,
         records_count: 1,
-        total_available: null,
         status: 'success',
         created_at: '2026-07-30T12:00:00Z',
         warnings: [],
-      },
-    ]);
+      }],
+    }));
     const Switcher = () => {
       const { setActiveProjectId } = useProject();
       return <button type="button" onClick={() => setActiveProjectId('ai_architecture')}>switch</button>;
@@ -96,36 +98,14 @@ describe('Sources ingestion upload', () => {
   });
 
   it('shows the accumulated provider record count and reflects neutral vs success status accurately', async () => {
-    vi.spyOn(projectApiService, 'getBibliographicImports').mockResolvedValue([
-      {
-        import_id: 'i-100',
-        project_id: 'lean_energy',
-        source_type: 'provider',
-        filename: null,
-        format: 'BibTeX',
-        provider: 'openalex',
-        query: 'test query',
-        records_count: 100,
-        total_available: 100,
-        status: 'success',
-        created_at: '2026-07-30T12:00:00Z',
-        warnings: [],
-      },
-      {
-        import_id: 'i-previous-100',
-        project_id: 'lean_energy',
-        source_type: 'provider',
-        filename: null,
-        format: 'BibTeX',
-        provider: 'openalex',
-        query: 'previous query',
-        records_count: 100,
-        total_available: 100,
-        status: 'success',
-        created_at: '2026-07-29T12:00:00Z',
-        warnings: [],
-      },
-    ]);
+    vi.spyOn(projectApiService, 'getSourcesSummary').mockResolvedValue({
+      project_id: 'lean_energy',
+      working_collection: { total_records: 200 },
+      source_summaries: [{
+        source: 'openalex', source_kind: 'provider', successful_imports_count: 2, warning_imports_count: 0, failed_imports_count: 0, records_added_count: 200, last_import_at: '2026-07-30T12:00:00Z', last_import_status: 'success'
+      }],
+      import_history: [],
+    });
 
     renderPage();
 
@@ -137,60 +117,41 @@ describe('Sources ingestion upload', () => {
   });
 
   it('reflects failed latest import without masking it with previous connected state', async () => {
-    vi.spyOn(projectApiService, 'getBibliographicImports').mockResolvedValue([
-      {
-        import_id: 'i-old',
-        project_id: 'lean_energy',
-        source_type: 'provider',
-        filename: null,
-        format: 'BibTeX',
-        provider: 'openalex',
-        query: 'old query',
-        records_count: 100,
-        total_available: 100,
-        status: 'success',
-        created_at: '2026-07-20T12:00:00Z',
-        warnings: [],
-      },
-      {
-        import_id: 'i-new-failed',
-        project_id: 'lean_energy',
-        source_type: 'provider',
-        filename: null,
-        format: 'BibTeX',
-        provider: 'openalex',
-        query: 'failed query',
-        records_count: 0,
-        total_available: 0,
-        status: 'failed',
-        created_at: '2026-07-30T12:00:00Z',
-        warnings: ['Provider API Timeout'],
-      },
-    ]);
+    vi.spyOn(projectApiService, 'getSourcesSummary').mockResolvedValue({
+      project_id: 'lean_energy',
+      working_collection: { total_records: 100 },
+      source_summaries: [{
+        source: 'openalex', source_kind: 'provider', successful_imports_count: 1, warning_imports_count: 0, failed_imports_count: 1, records_added_count: 100, last_import_at: '2026-07-30T12:00:00Z', last_import_status: 'failed'
+      }],
+      import_history: [],
+    });
 
     renderPage();
 
     await waitFor(() => expect(screen.getByText('Błąd Providera')).toBeInTheDocument());
-    expect(screen.getByText('Provider API Timeout')).toBeInTheDocument();
+    expect(screen.getByText('Nieudana próba pobrania')).toBeInTheDocument();
   });
 
   it('ignores file imports for provider card record counts', async () => {
-    vi.spyOn(projectApiService, 'getBibliographicImports').mockResolvedValue([
-      {
+    vi.spyOn(projectApiService, 'getSourcesSummary').mockResolvedValue({
+      project_id: 'lean_energy',
+      working_collection: { total_records: 500 },
+      source_summaries: [{
+        source: 'RIS', source_kind: 'file', successful_imports_count: 1, warning_imports_count: 0, failed_imports_count: 0, records_added_count: 500, last_import_at: '2026-07-30T12:00:00Z', last_import_status: 'success'
+      }],
+      import_history: [{
         import_id: 'i-file-1',
-        project_id: 'lean_energy',
         source_type: 'file',
         filename: 'data.ris',
         format: 'RIS',
-        provider: 'openalex', // powiązanic file-based
+        provider: 'openalex',
         query: null,
         records_count: 500,
-        total_available: null,
         status: 'success',
         created_at: '2026-07-30T12:00:00Z',
         warnings: [],
-      },
-    ]);
+      }],
+    });
 
     renderPage();
 

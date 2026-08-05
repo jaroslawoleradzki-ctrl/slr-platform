@@ -7,6 +7,7 @@ import {
   SearchExecutionResult,
   BibliographicImportResponse,
   BibliographicImportHistoryRecord,
+  SourcesSummaryResponse,
   SearchResultRecord,
   SearchResultsImportMetadata,
   SearchResultsImportResponse,
@@ -92,6 +93,7 @@ export interface ProjectApiService {
   getBibliographicImports(
     projectId: string,
   ): Promise<BibliographicImportHistoryRecord[]>;
+  getSourcesSummary(projectId: string): Promise<SourcesSummaryResponse>;
   getNormalization(projectId: string): Promise<NormalizationResponse | null>;
   runNormalization(projectId: string): Promise<NormalizationResponse>;
 }
@@ -223,6 +225,21 @@ class MixedProjectApiService implements ProjectApiService {
       throw new Error(await formatFastApiError(response, 'pobrać historii importów'));
     }
     return response.json() as Promise<BibliographicImportHistoryRecord[]>;
+  }
+
+  async getSourcesSummary(projectId: string): Promise<SourcesSummaryResponse> {
+    let response: Response;
+    try {
+      response = await fetch(`${API_BASE_URL}/projects/${projectId}/sources-summary`, {
+        headers: { Accept: 'application/json' },
+      });
+    } catch {
+      throw new Error('Nie udało się pobrać podsumowania źródeł.');
+    }
+    if (!response.ok) {
+      throw new Error(await formatFastApiError(response, 'pobrać podsumowania źródeł'));
+    }
+    return response.json() as Promise<SourcesSummaryResponse>;
   }
 
   async getNormalization(projectId: string): Promise<NormalizationResponse | null> {
