@@ -391,7 +391,7 @@ def test_repository_connection_ownership_and_standalone_behavior(pub_repo, histo
             created_at=_TIME,
         )
         pub_repo.add_publications(project_id, [pub2], connection=external_conn)
-        
+
         # Verify uncommitted state on external connection before commit
         pubs_in_tx = pub_repo.get_publications(project_id, connection=external_conn)
         assert len(pubs_in_tx) == 2
