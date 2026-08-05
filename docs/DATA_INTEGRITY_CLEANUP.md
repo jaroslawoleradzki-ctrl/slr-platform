@@ -119,15 +119,18 @@ Stworzono backendowy DTO `SourcesSummaryResponse` oraz serwis `SourcesSummarySer
 
 **Zależności:** Zadanie 1 — reguły spójności; Zadanie 2 — stabilna granica zapisu danych źródłowych.
 
-## Zadanie 4 — SQLite Constraints Review
+## Zadanie 4 — SQLite Constraints Review [COMPLETED]
 
 **Cel**
 
 Przeprowadzenie przeglądu ograniczeń integralności i indeksów w istniejącym schemacie SQLite.
 
-**Uzasadnienie**
+**Status:** COMPLETED
 
-Część reguł domenowych może być obecnie egzekwowana wyłącznie przez kod aplikacji. Udokumentowanie brakujących zabezpieczeń pozwoli rozróżnić reguły wymagające ograniczeń bazy od tych, które powinny pozostać w warstwie domenowej.
+**Artefakt wyjściowy:** [docs/SQLITE_CONSTRAINTS_REVIEW.md](file:///Users/jarek/Git/slr-platform/docs/SQLITE_CONSTRAINTS_REVIEW.md)
+
+**Podsumowanie wyników przeglądu:**
+Przeprowadzono audyt architektoniczny dla tabel pipeline'u (`search_strategies`, `import_history`, `project_publications`, `normalization_executions`, `duplicate_review_decisions`) oraz tabeli infrastrukturalnej `schema_migrations`. Zidentyfikowano brak więzów `FOREIGN KEY` (z powodu braku nadrzędnej tabeli `projects`), brak klauzul `CHECK` dla słowników statusów i typów oraz zweryfikowano zapytania bazy za pomocą `EXPLAIN QUERY PLAN`. Sformułowano katalog reguł (A/B/C/D), priorytety późniejszych migracji (HIGH/MEDIUM/LOW) oraz ocenę ryzyka przebudowy tabel.
 
 **Zakres**
 
@@ -267,10 +270,10 @@ Sprint Data Integrity Cleanup nie obejmuje:
 
 ## Kolejność realizacji
 
-1. Integrity Audit
-2. Transaction Boundary
-3. Backend Read Models
-4. SQLite Constraints
+1. Integrity Audit [COMPLETED]
+2. Transaction Boundary [COMPLETED]
+3. Backend Read Models [COMPLETED]
+4. SQLite Constraints [COMPLETED]
 5. Repository Contracts
 6. Test Fixtures
 7. CLI Integrity Check
