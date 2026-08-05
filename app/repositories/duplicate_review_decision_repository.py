@@ -36,6 +36,12 @@ class DuplicateReviewDecisionRepository(Protocol):
         """Retrieve the stored decision for a (project_id, group_id), or None if undecided."""
         ...
 
+    def list_decisions_for_project(
+        self, project_id: str
+    ) -> dict[str, DuplicateGroupReviewDecision]:
+        """List all stored decisions for a project mapped by group_id."""
+        ...
+
 
 class InMemoryDuplicateReviewDecisionRepository:
     """In-memory repository for human duplicate review decisions, keyed by composite (project_id, group_id).
@@ -57,6 +63,15 @@ class InMemoryDuplicateReviewDecisionRepository:
         self, project_id: str, group_id: str
     ) -> DuplicateGroupReviewDecision | None:
         return self._decisions.get((project_id, group_id))
+
+    def list_decisions_for_project(
+        self, project_id: str
+    ) -> dict[str, DuplicateGroupReviewDecision]:
+        return {
+            group_id: decision
+            for (p_id, group_id), decision in self._decisions.items()
+            if p_id == project_id
+        }
 
     def clear(self) -> None:
         """Helper for resetting state between tests."""
@@ -118,6 +133,26 @@ class SqliteDuplicateReviewDecisionRepository:
             decision=DuplicateDecision(str(row[0])),
             rationale=str(row[1]) if row[1] is not None else None,
         )
+
+    def list_decisions_for_project(
+        self, project_id: str
+    ) -> dict[str, DuplicateGroupReviewDecision]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT group_id, decision, rationale
+                FROM duplicate_review_decisions
+                WHERE project_id = ?
+                """,
+                (project_id,),
+            ).fetchall()
+        return {
+            str(row[0]): DuplicateGroupReviewDecision(
+                decision=DuplicateDecision(str(row[1])),
+                rationale=str(row[2]) if row[2] is not None else None,
+            )
+            for row in rows
+        }
 
     def _connect(self) -> sqlite3.Connection:
         return sqlite3.connect(self._database_path)
