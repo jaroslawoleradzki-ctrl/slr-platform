@@ -43,33 +43,43 @@ class SqliteImportHistoryRepository:
         self._database_path.parent.mkdir(parents=True, exist_ok=True)
         self._apply_migrations()
 
-    def create(self, record: ImportHistoryRecord) -> ImportHistoryRecord:
-        with self._connect() as connection:
-            connection.execute(
-                """
-                INSERT INTO import_history (
-                    import_id, project_id, source_type, filename, format,
-                    provider, query, records_count, total_available, status,
-                    warnings, created_at, fingerprint
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    str(record.import_id),
-                    record.project_id,
-                    record.source_type,
-                    record.filename,
-                    record.format,
-                    record.provider,
-                    record.query,
-                    record.records_count,
-                    record.total_available,
-                    record.status,
-                    json.dumps(list(record.warnings), ensure_ascii=False),
-                    record.created_at.isoformat(),
-                    record.fingerprint,
-                ),
-            )
+    def create(
+        self, record: ImportHistoryRecord, *, connection: sqlite3.Connection | None = None
+    ) -> ImportHistoryRecord:
+        if connection is not None:
+            self._create_with_conn(connection, record)
+        else:
+            with self._connect() as conn:
+                self._create_with_conn(conn, record)
         return record
+
+    def _create_with_conn(
+        self, connection: sqlite3.Connection, record: ImportHistoryRecord
+    ) -> None:
+        connection.execute(
+            """
+            INSERT INTO import_history (
+                import_id, project_id, source_type, filename, format,
+                provider, query, records_count, total_available, status,
+                warnings, created_at, fingerprint
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                str(record.import_id),
+                record.project_id,
+                record.source_type,
+                record.filename,
+                record.format,
+                record.provider,
+                record.query,
+                record.records_count,
+                record.total_available,
+                record.status,
+                json.dumps(list(record.warnings), ensure_ascii=False),
+                record.created_at.isoformat(),
+                record.fingerprint,
+            ),
+        )
 
     def list_for_project(self, project_id: str) -> list[ImportHistoryRecord]:
         with self._connect() as connection:

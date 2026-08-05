@@ -47,15 +47,25 @@ Working Collection, Import History, Provenance, wyniki Normalization oraz dane w
 
 **Zależności:** brak; zadanie definiuje reguły integralności wykorzystywane przez kolejne prace.
 
-## Zadanie 2 — Transaction Boundary
+## Zadanie 2 — Transaction Boundary [COMPLETED]
 
 **Cel**
 
 Zapewnienie atomowego zapisu publikacji do Working Collection i odpowiadającego mu wpisu Import History w jednej transakcji SQLite.
 
-**Uzasadnienie**
+**Status:** COMPLETED
 
-Oddzielne transakcje repozytoriów umożliwiają stan częściowego sukcesu: publikacje mogą zostać zapisane bez kompletnego audytu operacji albo historia może wskazywać rekordy, których nie dodano do kolekcji. Wspólna granica transakcji eliminuje tę klasę niespójności.
+**Opis nowej granicy transakcji:**
+Atomowy zapis publikacji do Working Collection (`project_publications`), stworzenie rekordu w historii importu (`import_history`) oraz ewentualne usunięcie nieaktualnej normalizacji (`normalization_executions`) zostały wyizolowane w usłudze `ProjectImportService` i ujęte w jedną transakcję SQLite zaradzaną przez `SqliteTransactionManager` (`with connection:`).
+
+**Rollback:**
+Dowolny błąd w trakcie wykonywania zapisu publikacji, tworzenia wpisu w historii, usuwania starej normalizacji czy operacji SQL powoduje wycofanie całej transakcji SQLite (`ROLLBACK`). Stan Working Collection, Import History oraz Normalization Execution powraca do stanu początkowego 1:1.
+
+**Semantyka `records_count`:**
+Wartość `records_count` w historii odpowiada wyłącznie liczbie publikacji rzeczywiście dodanych do Working Collection (`group_result.imported_count`), a nie liczbie wejściowych rekordów z pliku/API. Dla ponownego importu samych duplikatów `records_count == 0` przy statusie `"warning"`.
+
+**Uwaga architektoniczna (Bootstrap / Migracje):**
+Inicjalizacja schematu bazy i wywoływanie `_apply_migrations()` w konstruktorach repozytoriów SQLite zostały pozostawione bez zmian w ich obecnym kształcie i podlegają przeglądowi w ramach Zadania 4 / Zadania 5.
 
 **Zakres**
 
