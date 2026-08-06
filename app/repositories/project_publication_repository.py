@@ -4,7 +4,7 @@ import json
 import os
 import sqlite3
 from pathlib import Path
-from typing import Protocol
+from typing import Protocol, runtime_checkable
 from uuid import UUID
 
 from app.domain.author import Author
@@ -30,8 +30,15 @@ class ProjectNotFoundError(Exception):
         super().__init__(f"Project '{project_id}' not found.")
 
 
+@runtime_checkable
 class ProjectPublicationRepository(Protocol):
-    """Abstraction for retrieving publication collections for an SLR project."""
+    """Abstraction for persisting and retrieving publication collections for an SLR project.
+
+    Responsibilities:
+    - Single entry point for managing project Working Collections.
+    - Preserving record order via publication positions.
+    - Idempotent import of provider source records.
+    """
 
     def get_publications(self, project_id: str) -> list[Publication]:
         """Retrieve publications for a project or raise ProjectNotFoundError."""
@@ -42,7 +49,7 @@ class ProjectPublicationRepository(Protocol):
         project_id: str,
         publications: list[Publication],
     ) -> int:
-        """Append publications to a project's Working Collection."""
+        """Append publications to a project's Working Collection and return new total count."""
         ...
 
     def import_source_publications(
@@ -50,7 +57,7 @@ class ProjectPublicationRepository(Protocol):
         project_id: str,
         publications: list[Publication],
     ) -> PublicationImportResult:
-        """Atomically import publications unique by provider and source id."""
+        """Atomically import publications unique by provider and source id within a project."""
         ...
 
     def count_by_project(self, project_id: str) -> int:
@@ -62,7 +69,7 @@ class ProjectPublicationRepository(Protocol):
         project_id: str,
         publications: list[Publication],
     ) -> None:
-        """Replace a project's collection after a transformation."""
+        """Replace a project's collection after a normalization or cleanup transformation."""
         ...
 
 

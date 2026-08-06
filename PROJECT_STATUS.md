@@ -32,6 +32,14 @@ Deduplication is run explicitly from the UI through the existing duplicate-group
 
 # Completed
 
+## Task 5 — Repository Contracts (Data Integrity Cleanup)
+
+- Clarified and standardized abstract `Protocol` interfaces for all repositories (`ProjectPublicationRepository`, `ImportHistoryRepository`, `NormalizationExecutionRepository`, `DuplicateReviewDecisionRepository`, `SearchStrategyRepository`).
+- Decorated all protocol classes with `@runtime_checkable` for explicit runtime typing verification.
+- Isolated database driver dependencies (`sqlite3`) from abstract `Protocol` definitions to maintain vendor independence.
+- Kept optional transaction connection parameters in SQLite implementation classes to support atomic transactions managed by `SqliteTransactionManager`.
+- Added a dedicated contract test suite in `tests/unit/repositories/test_repository_contracts.py`.
+
 ## Version 0.2.4 — Data Consistency and Executable Deduplication
 
 - Repaired the historical `lean_energy` data to contain 535 OpenAlex publications and no synthetic Crossref test publication.

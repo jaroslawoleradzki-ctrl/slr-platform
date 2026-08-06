@@ -15,7 +15,7 @@ Przed rozpoczęciem prac nad Screeningiem należy uporządkować integralność 
 
 Zakres prac nie obejmuje nowych możliwości produktu ani zmian UX. Celem jest zwiększenie stabilności architektury, jednoznaczności źródeł danych, atomowości zapisu i przewidywalności testów przy zachowaniu obecnego zachowania funkcjonalnego aplikacji.
 
-## Zadanie 1 — Integrity Audit
+## Zadanie 1 — Integrity Audit [COMPLETED]
 
 **Cel**
 
@@ -119,18 +119,18 @@ Stworzono backendowy DTO `SourcesSummaryResponse` oraz serwis `SourcesSummarySer
 
 **Zależności:** Zadanie 1 — reguły spójności; Zadanie 2 — stabilna granica zapisu danych źródłowych.
 
-## Zadanie 4 — SQLite Constraints Review [COMPLETED]
+## Zadanie 4 — SQLite Constraints Review [ARCHITECTURE COMPLETED / IMPLEMENTATION PENDING]
 
 **Cel**
 
 Przeprowadzenie przeglądu ograniczeń integralności i indeksów w istniejącym schemacie SQLite.
 
-**Status:** COMPLETED
+**Status:** ARCHITECTURE COMPLETED / IMPLEMENTATION PENDING
 
 **Artefakt wyjściowy:** [docs/SQLITE_CONSTRAINTS_REVIEW.md](file:///Users/jarek/Git/slr-platform/docs/SQLITE_CONSTRAINTS_REVIEW.md)
 
 **Podsumowanie wyników przeglądu:**
-Przeprowadzono audyt architektoniczny dla tabel pipeline'u (`search_strategies`, `import_history`, `project_publications`, `normalization_executions`, `duplicate_review_decisions`) oraz tabeli infrastrukturalnej `schema_migrations`. Zidentyfikowano brak więzów `FOREIGN KEY` (z powodu braku nadrzędnej tabeli `projects`), brak klauzul `CHECK` dla słowników statusów i typów oraz zweryfikowano zapytania bazy za pomocą `EXPLAIN QUERY PLAN`. Sformułowano katalog reguł (A/B/C/D), priorytety późniejszych migracji (HIGH/MEDIUM/LOW) oraz ocenę ryzyka przebudowy tabel.
+Przeprowadzono audyt architektoniczny dla tabel pipeline'u (`search_strategies`, `import_history`, `project_publications`, `normalization_executions`, `duplicate_review_decisions`) oraz tabeli infrastrukturalnej `schema_migrations`. Zidentyfikowano brak więzów `FOREIGN KEY` (z powodu braku nadrzędnej tabeli `projects`), brak klauzul `CHECK` dla słowników statusów i typów oraz zweryfikowano zapytania bazy za pomocą `EXPLAIN QUERY PLAN`. Sformułowano katalog reguł (A/B/C/D), priorytety późniejszych migracji (HIGH/MEDIUM/LOW) oraz ocenę ryzyka przebudowy tabel. Sam przegląd nie modyfikował DDL tabel w SQLite; fizyczne wdrożenie migracji SQL oczekuje na realizację.
 
 **Zakres**
 
@@ -153,11 +153,16 @@ Przeprowadzono audyt architektoniczny dla tabel pipeline'u (`search_strategies`,
 
 **Zależności:** Zadanie 1 — katalog reguł integralności; Zadanie 2 — docelowa granica transakcji.
 
-## Zadanie 5 — Repository Contracts
+## Zadanie 5 — Repository Contracts [COMPLETED]
 
 **Cel**
 
 Zweryfikowanie i doprecyzowanie odpowiedzialności kontraktów repozytoriów uczestniczących w pipeline'ie danych projektu.
+
+**Status:** COMPLETED
+
+**Opis zmian:**
+Doprecyzowano abstrakcyjne protokoły wszystkich repozytoriów (`ProjectPublicationRepository`, `ImportHistoryRepository`, `NormalizationExecutionRepository`, `DuplicateReviewDecisionRepository`, `SearchStrategyRepository`) w `app/repositories/`. Oznaczono je dekoratorem `@runtime_checkable`, opisano odpowiedzialności domenowe w docstringach oraz wyeliminowano wyciek sterownika `sqlite3` ze styków interfejsów Protocol. Opcjonalne parametry połączenia transakcyjnego zachowano w klasach implementacji SQLite, a spójność kontraktów potwierdzono nowym zestawem testów `tests/unit/repositories/test_repository_contracts.py`.
 
 **Uzasadnienie**
 
@@ -273,7 +278,7 @@ Sprint Data Integrity Cleanup nie obejmuje:
 1. Integrity Audit [COMPLETED]
 2. Transaction Boundary [COMPLETED]
 3. Backend Read Models [COMPLETED]
-4. SQLite Constraints [COMPLETED]
-5. Repository Contracts
+4. SQLite Constraints [ARCHITECTURE COMPLETED / IMPLEMENTATION PENDING]
+5. Repository Contracts [COMPLETED]
 6. Test Fixtures
 7. CLI Integrity Check

@@ -1,5 +1,15 @@
 # Changelog
 
+## [Unreleased]
+
+### Improved
+
+- Clarified abstract `Protocol` contracts for all repository interfaces (`ProjectPublicationRepository`, `ImportHistoryRepository`, `NormalizationExecutionRepository`, `DuplicateReviewDecisionRepository`, `SearchStrategyRepository`).
+- Added `@runtime_checkable` decorators to repository protocols for runtime type verification.
+- Isolated driver-specific `sqlite3` types from abstract `Protocol` interfaces to ensure vendor independence.
+- Preserved transactional connection parameters in SQLite repository implementations to maintain atomic multi-repository transactions.
+- Added repository contract test suite (`tests/unit/repositories/test_repository_contracts.py`).
+
 ## [0.2.4] — 2026-08-04
 
 ### Added / Improved

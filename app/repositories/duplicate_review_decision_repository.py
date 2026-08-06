@@ -2,7 +2,7 @@ import os
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Protocol
+from typing import Protocol, runtime_checkable
 
 from app.domain.duplicate_review import DuplicateDecision, DuplicateGroupReviewDecision
 
@@ -21,17 +21,29 @@ class GroupNotFoundError(Exception):
         super().__init__(msg)
 
 
+@runtime_checkable
 class DuplicateReviewDecisionRepository(Protocol):
-    """Interface for storing and retrieving duplicate review decisions keyed by (project_id, group_id)."""
+    """Interface for storing and retrieving duplicate review decisions keyed by (project_id, group_id).
+
+    Responsibilities:
+    - Persisting reviewer decisions (APPROVE / REJECT) and optional rationale text.
+    - Retrieving decision by project ID and candidate group ID.
+    - Listing all decisions for a project mapped by group ID.
+    """
 
     def save_decision(
-        self, project_id: str, group_id: str, decision: DuplicateGroupReviewDecision
+        self,
+        project_id: str,
+        group_id: str,
+        decision: DuplicateGroupReviewDecision,
     ) -> None:
         """Store or update a decision for a duplicate group within a specific project."""
         ...
 
     def get_decision(
-        self, project_id: str, group_id: str
+        self,
+        project_id: str,
+        group_id: str,
     ) -> DuplicateGroupReviewDecision | None:
         """Retrieve the stored decision for a (project_id, group_id), or None if undecided."""
         ...
