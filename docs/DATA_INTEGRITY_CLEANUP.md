@@ -119,13 +119,13 @@ Stworzono backendowy DTO `SourcesSummaryResponse` oraz serwis `SourcesSummarySer
 
 **Zależności:** Zadanie 1 — reguły spójności; Zadanie 2 — stabilna granica zapisu danych źródłowych.
 
-## Zadanie 4 — SQLite Constraints Review [ARCHITECTURE COMPLETED / IMPLEMENTATION PENDING]
+## Zadanie 4 — SQLite Constraints Review [ARCHITECTURE COMPLETED — IMPLEMENTATION DEFERRED]
 
 **Cel**
 
 Przeprowadzenie przeglądu ograniczeń integralności i indeksów w istniejącym schemacie SQLite.
 
-**Status:** ARCHITECTURE COMPLETED / IMPLEMENTATION PENDING
+**Status:** ARCHITECTURE COMPLETED — IMPLEMENTATION DEFERRED
 
 **Artefakt wyjściowy:** [docs/SQLITE_CONSTRAINTS_REVIEW.md](file:///Users/jarek/Git/slr-platform/docs/SQLITE_CONSTRAINTS_REVIEW.md)
 
@@ -288,7 +288,7 @@ Sprint Data Integrity Cleanup nie obejmuje:
 1. Integrity Audit [COMPLETED]
 2. Transaction Boundary [COMPLETED]
 3. Backend Read Models [COMPLETED]
-4. SQLite Constraints [ARCHITECTURE COMPLETED / IMPLEMENTATION PENDING]
+4. SQLite Constraints [ARCHITECTURE COMPLETED — IMPLEMENTATION DEFERRED]
 5. Repository Contracts [COMPLETED]
 6. Test Fixtures [COMPLETED]
 7. CLI Integrity Check [COMPLETED]

@@ -16,6 +16,7 @@
 - Added `@runtime_checkable` decorators to repository protocols for runtime type verification.
 - Isolated driver-specific `sqlite3` types from abstract `Protocol` interfaces to ensure vendor independence.
 - Preserved transactional connection parameters in SQLite repository implementations to maintain atomic multi-repository transactions.
+- Completed SQLite constraints architecture audit for foreign keys, CHECK constraints, and query indexes (`docs/SQLITE_CONSTRAINTS_REVIEW.md`). Status: `ARCHITECTURE COMPLETED — IMPLEMENTATION DEFERRED`.
 - Added repository contract test suite (`tests/unit/repositories/test_repository_contracts.py`).
 
 ## [0.2.4] — 2026-08-04

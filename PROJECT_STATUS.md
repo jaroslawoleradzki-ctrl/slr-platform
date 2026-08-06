@@ -50,6 +50,10 @@ The next planned product phase is Phase 7 — Screening (not yet started).
 - Kept optional transaction connection parameters in SQLite implementation classes to support atomic transactions managed by `SqliteTransactionManager`.
 - Added a dedicated contract test suite in `tests/unit/repositories/test_repository_contracts.py`.
 
+## Task 4 — SQLite Constraints Review (Data Integrity Cleanup)
+
+- Completed architectural audit of foreign keys, status CHECK constraints, and query indexes across all 6 pipeline tables (`docs/SQLITE_CONSTRAINTS_REVIEW.md`). Status: ARCHITECTURE COMPLETED — IMPLEMENTATION DEFERRED.
+
 ## Version 0.2.4 — Data Consistency and Executable Deduplication
 
 - Repaired the historical `lean_energy` data to contain 535 OpenAlex publications and no synthetic Crossref test publication.
