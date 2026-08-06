@@ -1,6 +1,6 @@
 # SLR Platform — Project Status
 
-_Last updated: 2026-08-04_
+_Last updated: 2026-08-06_
 
 ## Current status
 
@@ -14,19 +14,15 @@ development
 
 Current version (working tree):
 
-v0.2.4
+v0.2.5
 
 Current development phase:
 
-Version 0.2.4 — Data Consistency and Executable Deduplication.
+Version 0.2.5 — Data Integrity Cleanup (Completed).
 
-The Project Dashboard renders real status data for workflow stages 1–4, including loading, empty, partial-data and partial-failure states, and uses a shared selector for the recommended next action. Static demonstration metrics are no longer used by the Dashboard. Stages 5–8 remain explicitly unavailable.
+The Data Integrity Cleanup initiative (Tasks 1–7) is fully completed and verified. This release stabilizes data consistency, introduces a deterministic integrity audit engine (`ProjectIntegrityAuditService`), enforces explicit transaction boundaries (`SqliteTransactionManager`), separates read models (`SourcesSummaryService`), standardizes repository contracts and runtime typing (`Protocol` + `@runtime_checkable`), establishes deterministic test fixtures/factories (`factories.py`, `project_fixtures.py`), and provides a standalone CLI integrity check tool (`python -m app.tools.integrity PROJECT_ID`).
 
-Search Strategy supports creating the first persisted strategy from the empty state. OpenAlex and Crossref can be selected independently of the technical provider `connected` field; Semantic Scholar remains unavailable. OpenAlex is verified in the current search-and-import workflow, while Crossref has not been manually verified end to end for this release.
-
-Sources & Imports shows the accumulated successful import count and retains individual audit entries below the aggregate. For `lean_energy`, its OpenAlex history was explicitly backfilled to match the 535-publication Working Collection after removal of the single synthetic Crossref test record. Normalization reads this same Working Collection and its latest execution reports 535 input records.
-
-Deduplication is run explicitly from the UI through the existing duplicate-groups endpoint. The screen reports the latest execution status, input and analyzed counts, group count, client-measured duration and completion time separately from the candidate-group review counters. APPROVE and REJECT decisions remain durable; APPROVE does not yet physically merge publications.
+The next planned product phase is Phase 7 — Screening (not yet started).
 
 ---
 
