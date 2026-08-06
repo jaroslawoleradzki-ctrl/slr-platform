@@ -1,9 +1,8 @@
-from datetime import datetime, timezone
-from uuid import UUID, uuid4
+from uuid import UUID
 
 import pytest
 
-from app.domain.duplicate_review import DuplicateDecision, DuplicateGroupReviewDecision
+from app.domain.duplicate_review import DuplicateDecision
 from app.domain.integrity_audit import IntegrityAuditStatus, IntegrityCheckLevel
 from app.domain.provenance import ProvenanceEntry
 from app.domain.publication import Publication
@@ -11,7 +10,6 @@ from app.repositories.duplicate_review_decision_repository import (
     SqliteDuplicateReviewDecisionRepository,
 )
 from app.repositories.import_history_repository import (
-    ImportHistoryRecord,
     SqliteImportHistoryRepository,
 )
 from app.repositories.normalization_execution_repository import (
@@ -21,9 +19,12 @@ from app.repositories.project_publication_repository import (
     SqliteProjectPublicationRepository,
 )
 from app.services.integrity_audit_service import ProjectIntegrityAuditService
-from app.services.normalization_service import NormalizationExecution
-
-_TIME = datetime(2026, 8, 1, 12, 0, tzinfo=timezone.utc)
+from tests.fixtures.factories import (
+    make_duplicate_decision,
+    make_import_history,
+    make_normalization_execution,
+    make_publication,
+)
 
 
 class InMemoryPublicationRepository:
@@ -75,44 +76,25 @@ def decision_repo(temp_db_path):
 
 def test_integrity_audit_healthy_project(pub_repo, history_repo, norm_repo, decision_repo):
     project_id = "lean_energy"
-    pub1 = Publication(
-        record_id=UUID("00000000-0000-0000-0000-000000000001"),
-        title="Test Pub 1",
-        provenance=[ProvenanceEntry(source="OpenAlex", source_record_id="W1")],
-        created_at=_TIME,
-    )
+    pub1 = make_publication(index=1, title="Test Pub 1", source="OpenAlex", source_id="W1")
     pub_repo.add_publications(project_id, [pub1])
 
     history_repo.create(
-        ImportHistoryRecord(
-            import_id=uuid4(),
+        make_import_history(
             project_id=project_id,
-            source_type="provider",
-            filename=None,
-            format=None,
-            provider="openalex",
-            query="test",
             records_count=1,
-            total_available=1,
+            source_type="provider",
+            provider="openalex",
             status="success",
-            warnings=(),
-            created_at=_TIME,
         )
     )
 
     norm_repo.save(
-        NormalizationExecution(
-            run_id=uuid4(),
+        make_normalization_execution(
             project_id=project_id,
-            status="completed",
             processed_records=1,
             clean_records=1,
-            warnings_count=0,
-            errors_count=0,
-            rules_applied=("DOI normalized",),
-            audit_trail=("DOI normalized: 0",),
-            started_at=_TIME,
-            completed_at=_TIME,
+            status="completed",
         )
     )
 
@@ -131,102 +113,63 @@ def test_integrity_audit_healthy_project(pub_repo, history_repo, norm_repo, deci
 
 def test_integrity_audit_import_history_statuses(pub_repo, history_repo, norm_repo, decision_repo):
     project_id = "lean_energy"
-    pub1 = Publication(
-        record_id=UUID("00000000-0000-0000-0000-000000000001"),
-        title="Test Pub 1",
-        provenance=[ProvenanceEntry(source="OpenAlex", source_record_id="W1")],
-        created_at=_TIME,
-    )
-    pub2 = Publication(
-        record_id=UUID("00000000-0000-0000-0000-000000000002"),
-        title="Test Pub 2",
-        provenance=[ProvenanceEntry(source="Crossref", source_record_id="W2")],
-        created_at=_TIME,
-    )
+    pub1 = make_publication(index=1, title="Test Pub 1", source="OpenAlex", source_id="W1")
+    pub2 = make_publication(index=2, title="Test Pub 2", source="Crossref", source_id="W2")
     pub_repo.add_publications(project_id, [pub1, pub2])
 
     # 1. Success import (+1)
     history_repo.create(
-        ImportHistoryRecord(
-            import_id=uuid4(),
+        make_import_history(
             project_id=project_id,
             source_type="provider",
-            filename=None,
-            format=None,
             provider="openalex",
-            query="test",
             records_count=1,
-            total_available=1,
             status="success",
-            warnings=(),
-            created_at=_TIME,
         )
     )
     # 2. Warning import with duplicate skip (+1 imported, +1 skipped warning)
     history_repo.create(
-        ImportHistoryRecord(
-            import_id=uuid4(),
+        make_import_history(
             project_id=project_id,
             source_type="file",
-            filename="import.ris",
-            format="RIS",
             provider=None,
-            query=None,
+            filename="import.ris",
+            format_type="RIS",
             records_count=1,
-            total_available=None,
             status="warning",
-            warnings=("Skipped 1 duplicate record(s) already in the project.",),
-            created_at=_TIME,
         )
     )
     # 3. Import with 0 imported records (all duplicates) (+0)
     history_repo.create(
-        ImportHistoryRecord(
-            import_id=uuid4(),
+        make_import_history(
             project_id=project_id,
             source_type="file",
-            filename="dup.ris",
-            format="RIS",
             provider=None,
-            query=None,
+            filename="dup.ris",
+            format_type="RIS",
             records_count=0,
-            total_available=None,
             status="warning",
-            warnings=("Skipped 5 duplicate record(s) already in the project.",),
-            created_at=_TIME,
         )
     )
     # 4. Failed import record (records_count = 0)
     history_repo.create(
-        ImportHistoryRecord(
-            import_id=uuid4(),
+        make_import_history(
             project_id=project_id,
             source_type="file",
-            filename="corrupt.ris",
-            format="RIS",
             provider=None,
-            query=None,
+            filename="corrupt.ris",
+            format_type="RIS",
             records_count=0,
-            total_available=None,
             status="failed",
-            warnings=("Parsing failed",),
-            created_at=_TIME,
         )
     )
 
     norm_repo.save(
-        NormalizationExecution(
-            run_id=uuid4(),
+        make_normalization_execution(
             project_id=project_id,
-            status="completed",
             processed_records=2,
             clean_records=2,
-            warnings_count=0,
-            errors_count=0,
-            rules_applied=(),
-            audit_trail=(),
-            started_at=_TIME,
-            completed_at=_TIME,
+            status="completed",
         )
     )
 
@@ -238,7 +181,6 @@ def test_integrity_audit_import_history_statuses(pub_repo, history_repo, norm_re
     )
 
     report = service.audit_project(project_id)
-    # Should be OK because sum of success + warning records_count is 1 + 1 + 0 = 2, matching WC size 2
     assert report.status is IntegrityAuditStatus.OK
     assert not any(c.code == "IH_RECORD_COUNT_MISMATCH" for c in report.checks)
 
@@ -266,7 +208,6 @@ def test_integrity_audit_detects_missing_provenance_error(pub_repo, history_repo
         record_id=UUID("00000000-0000-0000-0000-000000000002"),
         title="Pub Without Provenance",
         provenance=[],
-        created_at=_TIME,
     )
     pub_repo.add_publications(project_id, [pub_no_prov])
 
@@ -290,7 +231,6 @@ def test_integrity_audit_detects_incomplete_provenance_error(history_repo, norm_
         record_id=UUID("00000000-0000-0000-0000-000000000003"),
         title="Incomplete Provenance Pub",
         provenance=[ProvenanceEntry.model_construct(source="OpenAlex", source_record_id="")],
-        created_at=_TIME,
     )
     mock_pub_repo = InMemoryPublicationRepository({project_id: [pub_inc_prov]})
 
@@ -310,18 +250,8 @@ def test_integrity_audit_detects_incomplete_provenance_error(history_repo, norm_
 def test_integrity_audit_detects_duplicate_record_id_error(history_repo, norm_repo, decision_repo):
     project_id = "lean_energy"
     rec_id = UUID("00000000-0000-0000-0000-000000000005")
-    pub1 = Publication(
-        record_id=rec_id,
-        title="Pub 1",
-        provenance=[ProvenanceEntry(source="OpenAlex", source_record_id="W1")],
-        created_at=_TIME,
-    )
-    pub2 = Publication(
-        record_id=rec_id,
-        title="Pub 2 Duplicate ID",
-        provenance=[ProvenanceEntry(source="Crossref", source_record_id="W2")],
-        created_at=_TIME,
-    )
+    pub1 = make_publication(index=1, record_id=rec_id, title="Pub 1")
+    pub2 = make_publication(index=2, record_id=rec_id, title="Pub 2 Duplicate ID")
     mock_pub_repo = InMemoryPublicationRepository({project_id: [pub1, pub2]})
 
     service = ProjectIntegrityAuditService(
@@ -339,12 +269,7 @@ def test_integrity_audit_detects_duplicate_record_id_error(history_repo, norm_re
 
 def test_integrity_audit_detects_orphaned_dedup_decision_warning(pub_repo, history_repo, norm_repo, decision_repo):
     project_id = "lean_energy"
-    pub1 = Publication(
-        record_id=UUID("00000000-0000-0000-0000-000000000001"),
-        title="Test Pub 1",
-        provenance=[ProvenanceEntry(source="OpenAlex", source_record_id="W1")],
-        created_at=_TIME,
-    )
+    pub1 = make_publication(index=1, title="Test Pub 1")
     pub_repo.add_publications(project_id, [pub1])
 
     # Save a decision for a group_id that doesn't exist in candidate groups
@@ -352,7 +277,7 @@ def test_integrity_audit_detects_orphaned_dedup_decision_warning(pub_repo, histo
     decision_repo.save_decision(
         project_id,
         orphaned_group_id,
-        DuplicateGroupReviewDecision(decision=DuplicateDecision.APPROVE),
+        make_duplicate_decision(project_id=project_id, group_id=orphaned_group_id, decision=DuplicateDecision.APPROVE),
     )
 
     service = ProjectIntegrityAuditService(
@@ -371,12 +296,7 @@ def test_integrity_audit_detects_orphaned_dedup_decision_warning(pub_repo, histo
 
 def test_integrity_audit_is_read_only(pub_repo, history_repo, norm_repo, decision_repo):
     project_id = "lean_energy"
-    pub1 = Publication(
-        record_id=UUID("00000000-0000-0000-0000-000000000001"),
-        title="Test Pub 1",
-        provenance=[ProvenanceEntry(source="OpenAlex", source_record_id="W1")],
-        created_at=_TIME,
-    )
+    pub1 = make_publication(index=1, title="Test Pub 1")
     pub_repo.add_publications(project_id, [pub1])
 
     # Record state before
@@ -404,12 +324,7 @@ def test_integrity_audit_is_read_only(pub_repo, history_repo, norm_repo, decisio
 
 def test_integrity_audit_consecutive_runs_are_identical(pub_repo, history_repo, norm_repo, decision_repo):
     project_id = "lean_energy"
-    pub1 = Publication(
-        record_id=UUID("00000000-0000-0000-0000-000000000001"),
-        title="Test Pub 1",
-        provenance=[ProvenanceEntry(source="OpenAlex", source_record_id="W1")],
-        created_at=_TIME,
-    )
+    pub1 = make_publication(index=1, title="Test Pub 1")
     pub_repo.add_publications(project_id, [pub1])
 
     service = ProjectIntegrityAuditService(

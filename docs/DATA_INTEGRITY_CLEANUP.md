@@ -190,11 +190,16 @@ Jednoznaczne granice repozytoriów ograniczają duplikowanie zapytań, ukryte ag
 
 **Zależności:** Zadanie 2 — granica transakcji; Zadanie 3 — oddzielenie read modeli; Zadanie 4 — wynik przeglądu schematu.
 
-## Zadanie 6 — Test Fixtures
+## Zadanie 6 — Test Fixtures [COMPLETED]
 
 **Cel**
 
 Zastąpienie długowiecznych, ręcznie przygotowanych projektów testowych deterministycznymi fixture tworzonymi na potrzeby konkretnego testu.
+
+**Status:** COMPLETED
+
+**Opis zmian:**
+Utworzono deterministyczne fabryki domeny SLR (`make_publication`, `make_author`, `make_import_history`, `make_normalization_execution`, `make_duplicate_decision`) w `tests/fixtures/factories.py` oraz odizolowane fixture projektowe (`empty_project`, `project_100`, `project_duplicates`, `project_normalized`) w `tests/fixtures/project_fixtures.py`. Wyeliminowano lokalne helpery mockujące oraz powielony setup danych w `test_integrity_audit_service.py`.
 
 **Uzasadnienie**
 
@@ -280,5 +285,5 @@ Sprint Data Integrity Cleanup nie obejmuje:
 3. Backend Read Models [COMPLETED]
 4. SQLite Constraints [ARCHITECTURE COMPLETED / IMPLEMENTATION PENDING]
 5. Repository Contracts [COMPLETED]
-6. Test Fixtures
+6. Test Fixtures [COMPLETED]
 7. CLI Integrity Check

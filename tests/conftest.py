@@ -6,8 +6,25 @@ from app.api.routers.deduplication import get_duplicate_service
 from app.repositories.duplicate_review_decision_repository import (
     in_memory_duplicate_review_decision_repository,
 )
-from app.repositories.project_publication_repository import demo_project_publication_repository
+from app.repositories.project_publication_repository import (
+    demo_project_publication_repository,
+)
 from app.services.project_duplicate_service import ProjectDuplicateService
+
+# Expose standard project fixtures for test suite
+from tests.fixtures.project_fixtures import (
+    empty_project,
+    project_100,
+    project_duplicates,
+    project_normalized,
+)
+
+__all__ = [
+    "empty_project",
+    "project_100",
+    "project_duplicates",
+    "project_normalized",
+]
 
 
 @pytest.fixture(autouse=True)

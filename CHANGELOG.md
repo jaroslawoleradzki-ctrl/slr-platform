@@ -4,6 +4,10 @@
 
 ### Improved
 
+- Standardized domain object factories (`make_publication`, `make_author`, `make_import_history`, `make_normalization_execution`, `make_duplicate_decision`) in `tests/fixtures/factories.py`.
+- Added standard project fixtures (`empty_project`, `project_100`, `project_duplicates`, `project_normalized`) in `tests/fixtures/project_fixtures.py`.
+- Refactored `test_integrity_audit_service.py` to use test factories and eliminated redundant mock helpers.
+- Added fixture test suite (`tests/unit/test_fixtures.py`).
 - Clarified abstract `Protocol` contracts for all repository interfaces (`ProjectPublicationRepository`, `ImportHistoryRepository`, `NormalizationExecutionRepository`, `DuplicateReviewDecisionRepository`, `SearchStrategyRepository`).
 - Added `@runtime_checkable` decorators to repository protocols for runtime type verification.
 - Isolated driver-specific `sqlite3` types from abstract `Protocol` interfaces to ensure vendor independence.

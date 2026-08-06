@@ -32,6 +32,13 @@ Deduplication is run explicitly from the UI through the existing duplicate-group
 
 # Completed
 
+## Task 6 — Test Fixtures (Data Integrity Cleanup)
+
+- Implemented deterministic domain object factories (`make_publication`, `make_author`, `make_import_history`, `make_normalization_execution`, `make_duplicate_decision`) in `tests/fixtures/factories.py`.
+- Implemented standard isolated project fixtures (`empty_project`, `project_100`, `project_duplicates`, `project_normalized`) in `tests/fixtures/project_fixtures.py` using standard application project IDs.
+- Eliminated redundant mock helpers (e.g. `InMemoryPublicationRepository`) and duplicated object construction in unit tests (`test_integrity_audit_service.py`).
+- Added unit test suite `tests/unit/test_fixtures.py` verifying deterministic fixture generation.
+
 ## Task 5 — Repository Contracts (Data Integrity Cleanup)
 
 - Clarified and standardized abstract `Protocol` interfaces for all repositories (`ProjectPublicationRepository`, `ImportHistoryRepository`, `NormalizationExecutionRepository`, `DuplicateReviewDecisionRepository`, `SearchStrategyRepository`).
