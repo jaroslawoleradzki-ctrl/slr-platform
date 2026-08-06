@@ -15,7 +15,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.4,<9.0", "ruff>=0.12,<1.0", "mypy>=1.16,<2.0"]
+dev = ["pytest>=8.4,<9.0", "ruff>=0.12,<1.0", "mypy>=1.16,<2.0", "types-pyyaml>=6.0"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
@@ -29,3 +29,12 @@ build-backend = "setuptools.build_meta"
 where = ["."]
 include = ["app*"]
 exclude = ["docker*", "projects*", "tests*", "scripts*"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+ignore = ["E501", "W291"]
+
