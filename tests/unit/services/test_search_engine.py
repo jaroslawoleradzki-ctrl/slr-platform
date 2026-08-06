@@ -13,12 +13,12 @@ from app.domain.search import SearchQuery, SearchRun, SearchRunStatus, SearchTer
 from app.providers.search.base import JsonObject, ProviderSearchOutput
 from app.services.duplicate_group_builder import DuplicateGroupBuilder
 from app.services.publication_merge_policy import PublicationMergePolicy
+from app.services.result_merger import ResultMerger
 from app.services.search_engine import (
     ProviderSearchResult,
     SearchEngine,
     SearchProvider,
 )
-from app.services.result_merger import ResultMerger
 from app.storage.raw_response_archive import (
     RawResponseArchiveEntry,
     RawResponseStatus,

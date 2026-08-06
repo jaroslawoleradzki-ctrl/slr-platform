@@ -1,4 +1,5 @@
 from enum import Enum
+
 from pydantic import BaseModel, ConfigDict, field_validator
 
 MAX_RATIONALE_LENGTH = 1000

@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-from contextlib import contextmanager
 import os
 import sqlite3
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Generator
-
 
 
 class SqliteTransactionManager:

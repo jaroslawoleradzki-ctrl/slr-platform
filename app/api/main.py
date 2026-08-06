@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.routers import deduplication, normalization, search_strategy
 from app.core.config import load_project_config
 
+
 def _application_version() -> str:
     return (Path(__file__).parents[2] / "VERSION").read_text(encoding="utf-8").strip()
 

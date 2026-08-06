@@ -6,8 +6,8 @@ from uuid import UUID
 
 import pytest
 
-from app.domain.identifiers import Identifier, IdentifierType
 from app.domain.deduplication import DuplicateGroupStatus
+from app.domain.identifiers import Identifier, IdentifierType
 from app.domain.publication import Publication
 from app.domain.search import (
     BooleanOperator,
@@ -18,8 +18,8 @@ from app.domain.search import (
     SearchTerm,
 )
 from app.providers.search.base import JsonObject, ProviderSearchOutput
-from app.services.search_engine import SearchEngine
 from app.services.publication_merge_policy import PublicationMergePolicy
+from app.services.search_engine import SearchEngine
 from app.storage.raw_response_archive import (
     RawResponseArchiveEntry,
     RawResponseStatus,

@@ -1,9 +1,13 @@
+from app.domain.models import PublicationRecord
 from app.modules.normalize.service import (
     normalize_doi as legacy_normalize_doi,
+)
+from app.modules.normalize.service import (
     normalize_record,
+)
+from app.modules.normalize.service import (
     normalize_title as legacy_normalize_title,
 )
-from app.domain.models import PublicationRecord
 from app.normalization import normalize_doi, normalize_title
 
 

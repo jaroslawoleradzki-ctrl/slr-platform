@@ -1,5 +1,6 @@
 from app.domain.models import PublicationRecord
 
+
 def deduplicate_by_doi(
     records: list[PublicationRecord],
 ) -> tuple[list[PublicationRecord], list[PublicationRecord]]:

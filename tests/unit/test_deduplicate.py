@@ -1,6 +1,7 @@
 from app.domain.models import PublicationRecord
 from app.modules.deduplicate.service import deduplicate_by_doi
 
+
 def test_deduplicate_by_doi():
     records = [
         PublicationRecord(title="A", doi="10.1/a"),

@@ -2,8 +2,8 @@ from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
 from uuid import UUID
-import pytest
 
+import pytest
 from fastapi.testclient import TestClient
 
 from app.api.dto.deduplication import DuplicateDecisionStatus

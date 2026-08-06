@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 from typing import Literal, cast
+
 from app.api.dto.sources_summary import (
     ImportHistoryItemDTO,
-    SourceSummaryItem,
     SourcesSummaryResponse,
+    SourceSummaryItem,
     WorkingCollectionSummary,
 )
 from app.repositories.import_history_repository import (
@@ -63,7 +64,7 @@ class SourcesSummaryService:
                 raw_source = item.provider or "provider"
             else:
                 raw_source = item.format or "file"
-            
+
             source_name = raw_source.lower()
             key = (source_name, item.source_type)
             source_groups.setdefault(key, []).append(item)

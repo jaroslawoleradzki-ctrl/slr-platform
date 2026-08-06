@@ -1,5 +1,6 @@
 from pathlib import Path
 
+
 def import_google_scholar(path: str | Path):
     source = Path(path)
     if not source.exists():

@@ -7,8 +7,8 @@ from app.api.routers.search_strategy import (
     get_import_history_repository,
     get_project_publication_repository,
 )
-from app.repositories.project_publication_repository import DemoProjectPublicationRepository
 from app.repositories.import_history_repository import SqliteImportHistoryRepository
+from app.repositories.project_publication_repository import DemoProjectPublicationRepository
 
 
 def _client(

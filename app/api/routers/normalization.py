@@ -1,4 +1,5 @@
 from typing import Literal, cast
+
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.api.dto.normalization import NormalizationResponse
@@ -6,11 +7,11 @@ from app.api.routers.search_strategy import (
     get_normalization_execution_repository,
     get_project_publication_repository,
 )
+from app.repositories.normalization_execution_repository import NormalizationExecutionRepository
 from app.repositories.project_publication_repository import (
     ProjectNotFoundError,
     ProjectPublicationRepository,
 )
-from app.repositories.normalization_execution_repository import NormalizationExecutionRepository
 from app.services.normalization_service import NormalizationExecution, normalize_project
 
 router = APIRouter(prefix="/projects", tags=["normalization"])

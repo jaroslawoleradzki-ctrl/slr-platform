@@ -4,7 +4,6 @@ from app.domain import IdentifierType
 from app.domain.publication import DocumentType
 from app.providers.import_file.ris.mapper import map_ris_record
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

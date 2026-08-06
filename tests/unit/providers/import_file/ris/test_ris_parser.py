@@ -2,7 +2,6 @@ import pytest
 
 from app.providers.import_file.ris.parser import parse_ris
 
-
 # ---------------------------------------------------------------------------
 # Happy-path tests
 # ---------------------------------------------------------------------------

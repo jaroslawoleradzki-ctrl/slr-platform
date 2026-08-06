@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
+
 import pytest
 
 from app.api.dto.search_strategy import SearchResultRecordResponse
@@ -252,8 +253,9 @@ def test_sources_summary_deterministic_tie_breaker(history_repo, pub_repo, summa
 
 def test_sources_summary_http_endpoint(pub_repo, history_repo):
     from fastapi.testclient import TestClient
+
     from app.api.main import app
-    from app.api.routers.search_strategy import get_project_publication_repository, get_import_history_repository
+    from app.api.routers.search_strategy import get_import_history_repository, get_project_publication_repository
 
     project_id = "lean_energy"
     pub_repo.add_publications(project_id, [
@@ -316,8 +318,9 @@ def test_sources_summary_http_endpoint(pub_repo, history_repo):
 
 def test_sources_summary_http_endpoint_empty_project(pub_repo, history_repo):
     from fastapi.testclient import TestClient
+
     from app.api.main import app
-    from app.api.routers.search_strategy import get_project_publication_repository, get_import_history_repository
+    from app.api.routers.search_strategy import get_import_history_repository, get_project_publication_repository
 
     project_id = "lean_energy"
     # Ensure project exists in repository with 0 publications

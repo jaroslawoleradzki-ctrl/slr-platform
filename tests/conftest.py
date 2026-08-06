@@ -1,4 +1,5 @@
 from pathlib import Path
+
 import pytest
 
 from app.api.main import app

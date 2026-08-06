@@ -4,6 +4,8 @@ import pytest
 
 from app.normalization import (
     normalize_doi as normalize_canonical_doi,
+)
+from app.normalization import (
     normalize_orcid as normalize_canonical_orcid,
 )
 from app.providers.search.mapping_utils import (

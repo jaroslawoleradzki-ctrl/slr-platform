@@ -1,7 +1,9 @@
 from pathlib import Path
 from typing import Any
+
 import yaml
 from pydantic import BaseModel, Field
+
 
 class ProjectInfo(BaseModel):
     id: str

@@ -6,11 +6,10 @@ from uuid import uuid4
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 
-from app.api.dto.sources_summary import SourcesSummaryResponse
 from app.api.dto.search_strategy import (
-    SearchProviderErrorResponse,
-    BibliographicImportResponse,
     BibliographicImportHistoryResponse,
+    BibliographicImportResponse,
+    SearchProviderErrorResponse,
     SearchResultRecordResponse,
     SearchResultsImportRequest,
     SearchResultsImportResponse,
@@ -18,21 +17,16 @@ from app.api.dto.search_strategy import (
     SearchStrategyExecutionResponse,
     SearchStrategyPutRequest,
 )
+from app.api.dto.sources_summary import SourcesSummaryResponse
 from app.domain.identifiers import IdentifierType
 from app.domain.publication import DocumentType, Publication
 from app.domain.search import SearchStrategy
-from app.normalization.doi import normalize_doi
 from app.normalization import normalize_publication
+from app.normalization.doi import normalize_doi
 from app.providers.import_file.bibtex.mapper import map_bibtex_record
 from app.providers.import_file.bibtex.parser import parse_bibtex
 from app.providers.import_file.ris.mapper import map_ris_record
 from app.providers.import_file.ris.parser import parse_ris
-from app.repositories.project_publication_repository import (
-    ProjectNotFoundError,
-    ProjectPublicationRepository,
-    SqliteProjectPublicationRepository,
-    default_project_publication_repository,
-)
 from app.repositories.import_history_repository import (
     ImportHistoryRepository,
     SqliteImportHistoryRepository,
@@ -43,19 +37,25 @@ from app.repositories.normalization_execution_repository import (
     SqliteNormalizationExecutionRepository,
     default_normalization_execution_repository,
 )
-from app.repositories.transaction_manager import SqliteTransactionManager
-from app.services.project_import_service import ProjectImportService
+from app.repositories.project_publication_repository import (
+    ProjectNotFoundError,
+    ProjectPublicationRepository,
+    SqliteProjectPublicationRepository,
+    default_project_publication_repository,
+)
 from app.repositories.search_strategy_repository import (
     SearchStrategyNotFoundError,
     SearchStrategyRepository,
     default_search_strategy_repository,
 )
-from app.services.sources_summary_service import SourcesSummaryService
+from app.repositories.transaction_manager import SqliteTransactionManager
 from app.services.live_search import (
     LiveSearchExecutor,
     build_search_query,
     live_search_service,
 )
+from app.services.project_import_service import ProjectImportService
+from app.services.sources_summary_service import SourcesSummaryService
 
 router = APIRouter(prefix="/projects", tags=["search strategy"])
 

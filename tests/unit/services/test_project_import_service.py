@@ -1,6 +1,7 @@
-from datetime import datetime, timezone
 import sqlite3
+from datetime import datetime, timezone
 from uuid import UUID, uuid4
+
 import pytest
 
 from app.api.dto.search_strategy import SearchResultRecordResponse

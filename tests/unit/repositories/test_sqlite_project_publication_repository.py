@@ -3,8 +3,8 @@ from uuid import uuid4
 
 import pytest
 
-from app.domain.publication import Publication
 from app.domain.provenance import ProvenanceEntry
+from app.domain.publication import Publication
 from app.repositories.project_publication_repository import (
     ProjectNotFoundError,
     SqliteProjectPublicationRepository,

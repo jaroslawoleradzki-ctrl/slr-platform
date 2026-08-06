@@ -110,8 +110,8 @@ def test_new_import_invalidates_previous_normalization_result(tmp_path: Path) ->
 def test_one_hundred_records_survive_normalization_and_repository_restart(tmp_path: Path) -> None:
     database = tmp_path / "project.db"
     repository = SqliteProjectPublicationRepository(database)
-    from app.domain.publication import Publication
     from app.domain.provenance import ProvenanceEntry
+    from app.domain.publication import Publication
 
     records = [
         Publication(

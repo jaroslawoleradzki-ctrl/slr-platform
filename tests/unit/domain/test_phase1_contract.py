@@ -4,8 +4,8 @@ import pytest
 from pydantic import ValidationError
 
 from app.domain import (
-    AIRecommendation,
     Affiliation,
+    AIRecommendation,
     Author,
     BooleanOperator,
     DocumentType,
