@@ -32,6 +32,13 @@ Deduplication is run explicitly from the UI through the existing duplicate-group
 
 # Completed
 
+## Task 7 — CLI Integrity Check (Data Integrity Cleanup)
+
+- Implemented thin CLI adapter in `app/tools/integrity.py` runnable via `python -m app.tools.integrity PROJECT_ID`.
+- Added options for custom database path (`-d` / `--db-path`) and JSON formatting (`--json`).
+- Mapped audit results to standard exit codes (`0` for OK/WARNING, `1` for ERROR, `2` for invalid CLI args).
+- Added unit parser tests in `tests/unit/tools/test_cli_integrity.py` and integration tests in `tests/integration/tools/test_cli_integrity_integration.py`.
+
 ## Task 6 — Test Fixtures (Data Integrity Cleanup)
 
 - Implemented deterministic domain object factories (`make_publication`, `make_author`, `make_import_history`, `make_normalization_execution`, `make_duplicate_decision`) in `tests/fixtures/factories.py`.

@@ -228,17 +228,22 @@ Współdzielone bazy i ręcznie modyfikowane projekty utrudniają odtworzenie b�
 
 **Zależności:** Zadanie 1 — zestaw scenariuszy integralności; Zadania 2–5 — ustabilizowane kontrakty zapisu, odczytu i repozytoriów.
 
-## Zadanie 7 — CLI Integrity Check
+## Zadanie 7 — CLI Integrity Check [COMPLETED]
 
 **Cel**
 
 Dodanie prostego narzędzia CLI uruchamianego jako:
 
 ```bash
-python -m app.tools.integrity
+python -m app.tools.integrity PROJECT_ID
 ```
 
-Narzędzie ma umożliwiać wykonanie pełnej diagnostyki integralności projektu bez GUI.
+Narzędzie umożliwia wykonanie pełnej diagnostyki integralności projektu bez GUI.
+
+**Status:** COMPLETED
+
+**Opis zmian:**
+Zaimplementowano adapter CLI w `app/tools/integrity.py` bez duplikacji logiki biznesowej z `ProjectIntegrityAuditService`. Komenda udostępnia formatowanie tekstu dla terminala oraz opcjonalny format JSON (`--json`), obsługuje własną ścieżkę bazy (`-d / --db-path`) oraz zwraca stabilne kody wyjścia (`0` dla OK/WARNING, `1` dla ERROR, `2` dla błędnych argumentów CLI).
 
 **Uzasadnienie**
 
@@ -286,4 +291,4 @@ Sprint Data Integrity Cleanup nie obejmuje:
 4. SQLite Constraints [ARCHITECTURE COMPLETED / IMPLEMENTATION PENDING]
 5. Repository Contracts [COMPLETED]
 6. Test Fixtures [COMPLETED]
-7. CLI Integrity Check
+7. CLI Integrity Check [COMPLETED]

@@ -4,6 +4,10 @@
 
 ### Improved
 
+- Added CLI integrity check entrypoint (`app/tools/integrity.py`) runnable via `python -m app.tools.integrity PROJECT_ID`.
+- Added `--json` output format and custom `--db-path` options to CLI tool.
+- Mapped integrity audit status to standard CLI exit codes (`0` for OK/WARNING, `1` for ERROR, `2` for argument errors).
+- Added CLI unit and integration test suites (`tests/unit/tools/test_cli_integrity.py` and `tests/integration/tools/test_cli_integrity_integration.py`).
 - Standardized domain object factories (`make_publication`, `make_author`, `make_import_history`, `make_normalization_execution`, `make_duplicate_decision`) in `tests/fixtures/factories.py`.
 - Added standard project fixtures (`empty_project`, `project_100`, `project_duplicates`, `project_normalized`) in `tests/fixtures/project_fixtures.py`.
 - Refactored `test_integrity_audit_service.py` to use test factories and eliminated redundant mock helpers.
