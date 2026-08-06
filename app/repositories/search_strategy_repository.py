@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 import sqlite3
 from pathlib import Path
-from typing import Protocol
+from typing import Protocol, runtime_checkable
 
 from app.domain.search import SearchStrategy
 
@@ -14,10 +14,22 @@ class SearchStrategyNotFoundError(Exception):
         super().__init__(f"Search strategy for project '{project_id}' not found.")
 
 
+@runtime_checkable
 class SearchStrategyRepository(Protocol):
-    def get(self, project_id: str) -> SearchStrategy: ...
+    """Abstraction for storing and retrieving project literature search strategy documents.
 
-    def save(self, strategy: SearchStrategy) -> SearchStrategy: ...
+    Responsibilities:
+    - Atomically persisting complete versioned SearchStrategy domain documents per project.
+    - Retrieving current strategy document for a project or raising SearchStrategyNotFoundError.
+    """
+
+    def get(self, project_id: str) -> SearchStrategy:
+        """Retrieve the persisted SearchStrategy for a project or raise SearchStrategyNotFoundError."""
+        ...
+
+    def save(self, strategy: SearchStrategy) -> SearchStrategy:
+        """Save or replace the persisted SearchStrategy for a project."""
+        ...
 
 
 class SqliteSearchStrategyRepository:
@@ -28,43 +40,66 @@ class SqliteSearchStrategyRepository:
         self._database_path.parent.mkdir(parents=True, exist_ok=True)
         self._apply_migrations()
 
-    def get(self, project_id: str) -> SearchStrategy:
-        with self._connect() as connection:
-            row = connection.execute(
-                "SELECT document FROM search_strategies WHERE project_id = ?",
-                (project_id,),
-            ).fetchone()
+    def get(
+        self, project_id: str, *, connection: sqlite3.Connection | None = None
+    ) -> SearchStrategy:
+        if connection is not None:
+            return self._get_with_conn(connection, project_id)
+        with self._connect() as conn:
+            return self._get_with_conn(conn, project_id)
+
+    def _get_with_conn(
+        self, connection: sqlite3.Connection, project_id: str
+    ) -> SearchStrategy:
+        row = connection.execute(
+            "SELECT document FROM search_strategies WHERE project_id = ?",
+            (project_id,),
+        ).fetchone()
         if row is None:
             raise SearchStrategyNotFoundError(project_id)
         return SearchStrategy.model_validate_json(row[0])
 
-    def save(self, strategy: SearchStrategy) -> SearchStrategy:
+    def save(
+        self, strategy: SearchStrategy, *, connection: sqlite3.Connection | None = None
+    ) -> SearchStrategy:
         project_id = str(strategy.project_id)
         if strategy.project_id is None:
             raise ValueError("persisted search strategy requires project_id")
         document = strategy.model_dump_json()
-        with self._connect() as connection:
-            connection.execute(
-                """
-                INSERT INTO search_strategies (
-                    project_id, strategy_id, version, document, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?)
-                ON CONFLICT(project_id) DO UPDATE SET
-                    strategy_id = excluded.strategy_id,
-                    version = excluded.version,
-                    document = excluded.document,
-                    updated_at = excluded.updated_at
-                """,
-                (
-                    project_id,
-                    str(strategy.strategy_id),
-                    strategy.version,
-                    document,
-                    strategy.created_at.isoformat(),
-                    strategy.updated_at.isoformat(),
-                ),
-            )
+        if connection is not None:
+            self._save_with_conn(connection, project_id, strategy, document)
+        else:
+            with self._connect() as conn:
+                self._save_with_conn(conn, project_id, strategy, document)
         return strategy
+
+    def _save_with_conn(
+        self,
+        connection: sqlite3.Connection,
+        project_id: str,
+        strategy: SearchStrategy,
+        document: str,
+    ) -> None:
+        connection.execute(
+            """
+            INSERT INTO search_strategies (
+                project_id, strategy_id, version, document, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(project_id) DO UPDATE SET
+                strategy_id = excluded.strategy_id,
+                version = excluded.version,
+                document = excluded.document,
+                updated_at = excluded.updated_at
+            """,
+            (
+                project_id,
+                str(strategy.strategy_id),
+                strategy.version,
+                document,
+                strategy.created_at.isoformat(),
+                strategy.updated_at.isoformat(),
+            ),
+        )
 
     def _connect(self) -> sqlite3.Connection:
         return sqlite3.connect(self._database_path)

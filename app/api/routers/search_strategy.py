@@ -2,10 +2,11 @@ from datetime import datetime, timezone
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal, cast
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 
+from app.api.dto.sources_summary import SourcesSummaryResponse
 from app.api.dto.search_strategy import (
     SearchProviderErrorResponse,
     BibliographicImportResponse,
@@ -17,9 +18,7 @@ from app.api.dto.search_strategy import (
     SearchStrategyExecutionResponse,
     SearchStrategyPutRequest,
 )
-from app.domain.author import Author
-from app.domain.identifiers import Identifier, IdentifierType
-from app.domain.provenance import ProvenanceEntry
+from app.domain.identifiers import IdentifierType
 from app.domain.publication import DocumentType, Publication
 from app.domain.search import SearchStrategy
 from app.normalization.doi import normalize_doi
@@ -31,22 +30,27 @@ from app.providers.import_file.ris.parser import parse_ris
 from app.repositories.project_publication_repository import (
     ProjectNotFoundError,
     ProjectPublicationRepository,
+    SqliteProjectPublicationRepository,
     default_project_publication_repository,
 )
 from app.repositories.import_history_repository import (
-    ImportHistoryRecord,
     ImportHistoryRepository,
+    SqliteImportHistoryRepository,
     default_import_history_repository,
 )
 from app.repositories.normalization_execution_repository import (
     NormalizationExecutionRepository,
+    SqliteNormalizationExecutionRepository,
     default_normalization_execution_repository,
 )
+from app.repositories.transaction_manager import SqliteTransactionManager
+from app.services.project_import_service import ProjectImportService
 from app.repositories.search_strategy_repository import (
     SearchStrategyNotFoundError,
     SearchStrategyRepository,
     default_search_strategy_repository,
 )
+from app.services.sources_summary_service import SourcesSummaryService
 from app.services.live_search import (
     LiveSearchExecutor,
     build_search_query,
@@ -77,6 +81,33 @@ def get_import_history_repository() -> ImportHistoryRepository:
 
 def get_normalization_execution_repository() -> NormalizationExecutionRepository:
     return default_normalization_execution_repository()
+
+
+def get_project_import_service(
+    pub_repo: ProjectPublicationRepository = Depends(
+        get_project_publication_repository
+    ),
+    history_repo: ImportHistoryRepository = Depends(
+        get_import_history_repository
+    ),
+    norm_repo: NormalizationExecutionRepository = Depends(
+        get_normalization_execution_repository
+    ),
+) -> ProjectImportService:
+    tx_manager = None
+    if isinstance(history_repo, SqliteImportHistoryRepository):
+        tx_manager = SqliteTransactionManager(history_repo._database_path)
+    elif isinstance(pub_repo, SqliteProjectPublicationRepository):
+        tx_manager = SqliteTransactionManager(pub_repo._database_path)
+    elif isinstance(norm_repo, SqliteNormalizationExecutionRepository):
+        tx_manager = SqliteTransactionManager(norm_repo._database_path)
+
+    return ProjectImportService(
+        publication_repository=pub_repo,
+        import_history_repository=history_repo,
+        normalization_repository=norm_repo,
+        transaction_manager=tx_manager,
+    )
 
 
 @lru_cache(maxsize=1)
@@ -304,11 +335,8 @@ def import_search_results(
     repository: ProjectPublicationRepository = Depends(
         get_project_publication_repository
     ),
-    history_repository: ImportHistoryRepository = Depends(
-        get_import_history_repository
-    ),
-    normalization_repository: NormalizationExecutionRepository = Depends(
-        get_normalization_execution_repository
+    import_service: ProjectImportService = Depends(
+        get_project_import_service
     ),
 ) -> SearchResultsImportResponse:
     """Append the explicitly selected result records to the Working Collection."""
@@ -343,64 +371,21 @@ def import_search_results(
     try:
         # Pętla po poszczególnych niepustych grupach dostawców
         for provider_name, records_group in grouped_records.items():
-            publications = []
-            for record in records_group:
-                identifiers = []
-                if record.doi is not None:
-                    identifiers.append(
-                        Identifier(type=IdentifierType.DOI, value=record.doi)
-                    )
-                publications.append(
-                    Publication(
-                        record_id=UUID(record.id),
-                        title=record.title,
-                        authors=[
-                            Author(display_name=display_name)
-                            for display_name in record.authors
-                        ],
-                        publication_year=record.year,
-                        identifiers=identifiers,
-                        provenance=[
-                            ProvenanceEntry(
-                                source=record.provider,
-                                source_record_id=record.source_id,
-                            )
-                        ],
-                    )
-                )
+            is_single_provider = len(grouped_records) == 1
+            group_total_available = payload.total_available if is_single_provider else None
 
-            group_result = repository.import_source_publications(
-                project_id,
-                publications,
+            group_result = import_service.import_provider_results_group(
+                project_id=project_id,
+                provider_name=provider_name,
+                records_group=records_group,
+                query=payload.query,
+                group_total_available=group_total_available,
             )
 
             total_imported += group_result.imported_count
             total_skipped += group_result.skipped_count
             total_requested += len(records_group)
             final_working_count = group_result.working_collection_count
-
-            # Domyślnie total_available jest globalny w wyszukiwaniu; dla pojedynczego providera używamy payload.total_available
-            is_single_provider = len(grouped_records) == 1
-            group_total_available = payload.total_available if is_single_provider else None
-
-            history_repository.create(
-                ImportHistoryRecord(
-                    import_id=uuid4(),
-                    project_id=project_id,
-                    source_type="provider",
-                    filename=None,
-                    format=None,
-                    provider=provider_name,
-                    query=payload.query,
-                    records_count=group_result.imported_count,
-                    total_available=group_total_available,
-                    status="success",
-                    warnings=(),
-                    created_at=datetime.now(timezone.utc),
-                    fingerprint=None,
-                )
-            )
-
     except ProjectNotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -411,9 +396,6 @@ def import_search_results(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=str(exc),
         ) from exc
-
-    if total_imported > 0:
-        normalization_repository.delete_for_project(project_id)
 
     return SearchResultsImportResponse(
         project_id=project_id,
@@ -435,11 +417,8 @@ async def import_bibliographic_file(
     repository: ProjectPublicationRepository = Depends(
         get_project_publication_repository
     ),
-    history_repository: ImportHistoryRepository = Depends(
-        get_import_history_repository
-    ),
-    normalization_repository: NormalizationExecutionRepository = Depends(
-        get_normalization_execution_repository
+    import_service: ProjectImportService = Depends(
+        get_project_import_service
     ),
 ) -> BibliographicImportResponse:
     """Parse one RIS/BibTeX file and append its publications to a project."""
@@ -481,12 +460,12 @@ async def import_bibliographic_file(
         if not publications:
             raise ValueError("The uploaded file contains no bibliographic records.")
 
-        import_result = repository.import_source_publications(
-            project_id,
-            publications,
+        import_result, history_record = import_service.import_bibliographic_publications(
+            project_id=project_id,
+            filename=file.filename,
+            file_format="RIS" if suffix == ".ris" else "BibTeX",
+            publications=publications,
         )
-        if import_result.imported_count:
-            normalization_repository.delete_for_project(project_id)
     except ProjectNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except UnicodeDecodeError as exc:
@@ -502,33 +481,11 @@ async def import_bibliographic_file(
     finally:
         await file.close()
 
-    warnings: list[str] = []
-    if import_result.skipped_count:
-        warnings.append(
-            f"Skipped {import_result.skipped_count} duplicate record(s) already in the project."
-        )
-    import_id = uuid4()
-    history_repository.create(
-        ImportHistoryRecord(
-            import_id=import_id,
-            project_id=project_id,
-            source_type="file",
-            filename=file.filename,
-            format="RIS" if suffix == ".ris" else "BibTeX",
-            provider=None,
-            query=None,
-            records_count=import_result.imported_count,
-            total_available=None,
-            status="warning" if warnings else "success",
-            warnings=tuple(warnings),
-            created_at=datetime.now(timezone.utc),
-        )
-    )
     return BibliographicImportResponse(
-        import_id=import_id,
-        records_count=import_result.imported_count,
-        warnings=warnings,
-        status="warning" if warnings else "success",
+        import_id=history_record.import_id,
+        records_count=history_record.records_count,
+        warnings=list(history_record.warnings),
+        status=cast(Literal["success", "warning"], history_record.status),
     )
 
 
@@ -569,3 +526,41 @@ def list_bibliographic_imports(
         )
         for record in history_repository.list_for_project(project_id)
     ]
+
+
+def get_sources_summary_service(
+    pub_repo: ProjectPublicationRepository = Depends(
+        get_project_publication_repository
+    ),
+    history_repo: ImportHistoryRepository = Depends(
+        get_import_history_repository
+    ),
+) -> SourcesSummaryService:
+    return SourcesSummaryService(
+        publication_repository=pub_repo,
+        import_history_repository=history_repo,
+    )
+
+
+@router.get(
+    "/{project_id}/sources-summary",
+    response_model=SourcesSummaryResponse,
+    status_code=status.HTTP_200_OK,
+)
+def get_sources_summary(
+    project_id: str,
+    project_repository: ProjectPublicationRepository = Depends(
+        get_project_publication_repository
+    ),
+    service: SourcesSummaryService = Depends(
+        get_sources_summary_service
+    ),
+) -> SourcesSummaryResponse:
+    """Return read model summary for Sources & Imports screen."""
+
+    try:
+        project_repository.count_by_project(project_id)
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+    return service.get_sources_summary(project_id)

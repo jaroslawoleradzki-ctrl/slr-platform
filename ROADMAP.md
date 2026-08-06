@@ -163,6 +163,17 @@ capabilities.
 Phase 6.8.1 and the functional Search Strategy workflow are available. Further
 work before Phase 2 focuses on result completeness and presentation quality.
 
+### Version 0.2.5 — Data Integrity Cleanup ✅
+
+- **Task 1 — Integrity Audit Service** ✅ — Deterministic data integrity audit engine (`ProjectIntegrityAuditService`) verifying provenance completeness, record_id uniqueness, import history record count alignment, and orphaned review decisions.
+- **Task 2 — Transaction Boundary** ✅ — Explicit `SqliteTransactionManager` enforcing atomic multi-repository write operations during search/import ingestion.
+- **Task 3 — Backend Read Models** ✅ — Isolated `SourcesSummaryService` read model decorrelating GUI intake summaries from raw persistence models.
+- **Task 4 — SQLite Constraints Review** ✅ — Complete DDL review of foreign keys, CHECK constraints, and indexes across all 6 pipeline tables (ARCHITECTURE COMPLETED — IMPLEMENTATION DEFERRED).
+- **Task 5 — Repository Contracts** ✅ — Standardized `Protocol` definitions decorated with `@runtime_checkable`, vendor-agnostic method signatures, and a dedicated contract test suite.
+- **Task 6 — Test Fixtures** ✅ — Deterministic domain object factories (`factories.py`) and isolated standard project fixtures (`empty_project`, `project_100`, `project_duplicates`, `project_normalized`).
+- **Task 7 — CLI Integrity Check** ✅ — Thin CLI tool (`python -m app.tools.integrity PROJECT_ID`) supporting terminal text and JSON output formats with standard process exit codes (`0` for OK/WARNING, `1` for ERROR, `2` for argument errors).
+- **Next Phase:** Phase 7 — Screening (not yet started).
+
 ### Version 0.2.4 — Data Consistency and Executable Deduplication ✅
 
 - Working Collection, Sources & Imports and Normalization are aligned to the same project publication set.

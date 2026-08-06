@@ -1,6 +1,6 @@
 # SLR Platform — Project Status
 
-_Last updated: 2026-08-04_
+_Last updated: 2026-08-06_
 
 ## Current status
 
@@ -14,23 +14,45 @@ development
 
 Current version (working tree):
 
-v0.2.4
+v0.2.5
 
 Current development phase:
 
-Version 0.2.4 — Data Consistency and Executable Deduplication.
+Version 0.2.5 — Data Integrity Cleanup (Completed).
 
-The Project Dashboard renders real status data for workflow stages 1–4, including loading, empty, partial-data and partial-failure states, and uses a shared selector for the recommended next action. Static demonstration metrics are no longer used by the Dashboard. Stages 5–8 remain explicitly unavailable.
+The Data Integrity Cleanup initiative (Tasks 1–7) is fully completed and verified. This release stabilizes data consistency, introduces a deterministic integrity audit engine (`ProjectIntegrityAuditService`), enforces explicit transaction boundaries (`SqliteTransactionManager`), separates read models (`SourcesSummaryService`), standardizes repository contracts and runtime typing (`Protocol` + `@runtime_checkable`), establishes deterministic test fixtures/factories (`factories.py`, `project_fixtures.py`), and provides a standalone CLI integrity check tool (`python -m app.tools.integrity PROJECT_ID`).
 
-Search Strategy supports creating the first persisted strategy from the empty state. OpenAlex and Crossref can be selected independently of the technical provider `connected` field; Semantic Scholar remains unavailable. OpenAlex is verified in the current search-and-import workflow, while Crossref has not been manually verified end to end for this release.
-
-Sources & Imports shows the accumulated successful import count and retains individual audit entries below the aggregate. For `lean_energy`, its OpenAlex history was explicitly backfilled to match the 535-publication Working Collection after removal of the single synthetic Crossref test record. Normalization reads this same Working Collection and its latest execution reports 535 input records.
-
-Deduplication is run explicitly from the UI through the existing duplicate-groups endpoint. The screen reports the latest execution status, input and analyzed counts, group count, client-measured duration and completion time separately from the candidate-group review counters. APPROVE and REJECT decisions remain durable; APPROVE does not yet physically merge publications.
+The next planned product phase is Phase 7 — Screening (not yet started).
 
 ---
 
 # Completed
+
+## Task 7 — CLI Integrity Check (Data Integrity Cleanup)
+
+- Implemented thin CLI adapter in `app/tools/integrity.py` runnable via `python -m app.tools.integrity PROJECT_ID`.
+- Added options for custom database path (`-d` / `--db-path`) and JSON formatting (`--json`).
+- Mapped audit results to standard exit codes (`0` for OK/WARNING, `1` for ERROR, `2` for invalid CLI args).
+- Added unit parser tests in `tests/unit/tools/test_cli_integrity.py` and integration tests in `tests/integration/tools/test_cli_integrity_integration.py`.
+
+## Task 6 — Test Fixtures (Data Integrity Cleanup)
+
+- Implemented deterministic domain object factories (`make_publication`, `make_author`, `make_import_history`, `make_normalization_execution`, `make_duplicate_decision`) in `tests/fixtures/factories.py`.
+- Implemented standard isolated project fixtures (`empty_project`, `project_100`, `project_duplicates`, `project_normalized`) in `tests/fixtures/project_fixtures.py` using standard application project IDs.
+- Eliminated redundant mock helpers (e.g. `InMemoryPublicationRepository`) and duplicated object construction in unit tests (`test_integrity_audit_service.py`).
+- Added unit test suite `tests/unit/test_fixtures.py` verifying deterministic fixture generation.
+
+## Task 5 — Repository Contracts (Data Integrity Cleanup)
+
+- Clarified and standardized abstract `Protocol` interfaces for all repositories (`ProjectPublicationRepository`, `ImportHistoryRepository`, `NormalizationExecutionRepository`, `DuplicateReviewDecisionRepository`, `SearchStrategyRepository`).
+- Decorated all protocol classes with `@runtime_checkable` for explicit runtime typing verification.
+- Isolated database driver dependencies (`sqlite3`) from abstract `Protocol` definitions to maintain vendor independence.
+- Kept optional transaction connection parameters in SQLite implementation classes to support atomic transactions managed by `SqliteTransactionManager`.
+- Added a dedicated contract test suite in `tests/unit/repositories/test_repository_contracts.py`.
+
+## Task 4 — SQLite Constraints Review (Data Integrity Cleanup)
+
+- Completed architectural audit of foreign keys, status CHECK constraints, and query indexes across all 6 pipeline tables (`docs/SQLITE_CONSTRAINTS_REVIEW.md`). Status: ARCHITECTURE COMPLETED — IMPLEMENTATION DEFERRED.
 
 ## Version 0.2.4 — Data Consistency and Executable Deduplication
 

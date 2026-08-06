@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.2.5] — 2026-08-06
+
+### Improved
+
+- Added CLI integrity check entrypoint (`app/tools/integrity.py`) runnable via `python -m app.tools.integrity PROJECT_ID`.
+- Added `--json` output format and custom `--db-path` options to CLI tool.
+- Mapped integrity audit status to standard CLI exit codes (`0` for OK/WARNING, `1` for ERROR, `2` for argument errors).
+- Added CLI unit and integration test suites (`tests/unit/tools/test_cli_integrity.py` and `tests/integration/tools/test_cli_integrity_integration.py`).
+- Standardized domain object factories (`make_publication`, `make_author`, `make_import_history`, `make_normalization_execution`, `make_duplicate_decision`) in `tests/fixtures/factories.py`.
+- Added standard project fixtures (`empty_project`, `project_100`, `project_duplicates`, `project_normalized`) in `tests/fixtures/project_fixtures.py`.
+- Refactored `test_integrity_audit_service.py` to use test factories and eliminated redundant mock helpers.
+- Added fixture test suite (`tests/unit/test_fixtures.py`).
+- Clarified abstract `Protocol` contracts for all repository interfaces (`ProjectPublicationRepository`, `ImportHistoryRepository`, `NormalizationExecutionRepository`, `DuplicateReviewDecisionRepository`, `SearchStrategyRepository`).
+- Added `@runtime_checkable` decorators to repository protocols for runtime type verification.
+- Isolated driver-specific `sqlite3` types from abstract `Protocol` interfaces to ensure vendor independence.
+- Preserved transactional connection parameters in SQLite repository implementations to maintain atomic multi-repository transactions.
+- Completed SQLite constraints architecture audit for foreign keys, CHECK constraints, and query indexes (`docs/SQLITE_CONSTRAINTS_REVIEW.md`). Status: `ARCHITECTURE COMPLETED — IMPLEMENTATION DEFERRED`.
+- Added repository contract test suite (`tests/unit/repositories/test_repository_contracts.py`).
+
 ## [0.2.4] — 2026-08-04
 
 ### Added / Improved

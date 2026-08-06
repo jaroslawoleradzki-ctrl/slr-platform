@@ -2,7 +2,7 @@ import os
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Protocol
+from typing import Protocol, runtime_checkable
 
 from app.domain.duplicate_review import DuplicateDecision, DuplicateGroupReviewDecision
 
@@ -21,19 +21,37 @@ class GroupNotFoundError(Exception):
         super().__init__(msg)
 
 
+@runtime_checkable
 class DuplicateReviewDecisionRepository(Protocol):
-    """Interface for storing and retrieving duplicate review decisions keyed by (project_id, group_id)."""
+    """Interface for storing and retrieving duplicate review decisions keyed by (project_id, group_id).
+
+    Responsibilities:
+    - Persisting reviewer decisions (APPROVE / REJECT) and optional rationale text.
+    - Retrieving decision by project ID and candidate group ID.
+    - Listing all decisions for a project mapped by group ID.
+    """
 
     def save_decision(
-        self, project_id: str, group_id: str, decision: DuplicateGroupReviewDecision
+        self,
+        project_id: str,
+        group_id: str,
+        decision: DuplicateGroupReviewDecision,
     ) -> None:
         """Store or update a decision for a duplicate group within a specific project."""
         ...
 
     def get_decision(
-        self, project_id: str, group_id: str
+        self,
+        project_id: str,
+        group_id: str,
     ) -> DuplicateGroupReviewDecision | None:
         """Retrieve the stored decision for a (project_id, group_id), or None if undecided."""
+        ...
+
+    def list_decisions_for_project(
+        self, project_id: str
+    ) -> dict[str, DuplicateGroupReviewDecision]:
+        """List all stored decisions for a project mapped by group_id."""
         ...
 
 
@@ -57,6 +75,15 @@ class InMemoryDuplicateReviewDecisionRepository:
         self, project_id: str, group_id: str
     ) -> DuplicateGroupReviewDecision | None:
         return self._decisions.get((project_id, group_id))
+
+    def list_decisions_for_project(
+        self, project_id: str
+    ) -> dict[str, DuplicateGroupReviewDecision]:
+        return {
+            group_id: decision
+            for (p_id, group_id), decision in self._decisions.items()
+            if p_id == project_id
+        }
 
     def clear(self) -> None:
         """Helper for resetting state between tests."""
@@ -118,6 +145,26 @@ class SqliteDuplicateReviewDecisionRepository:
             decision=DuplicateDecision(str(row[0])),
             rationale=str(row[1]) if row[1] is not None else None,
         )
+
+    def list_decisions_for_project(
+        self, project_id: str
+    ) -> dict[str, DuplicateGroupReviewDecision]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT group_id, decision, rationale
+                FROM duplicate_review_decisions
+                WHERE project_id = ?
+                """,
+                (project_id,),
+            ).fetchall()
+        return {
+            str(row[0]): DuplicateGroupReviewDecision(
+                decision=DuplicateDecision(str(row[1])),
+                rationale=str(row[2]) if row[2] is not None else None,
+            )
+            for row in rows
+        }
 
     def _connect(self) -> sqlite3.Connection:
         return sqlite3.connect(self._database_path)

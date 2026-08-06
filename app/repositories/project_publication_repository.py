@@ -4,7 +4,7 @@ import json
 import os
 import sqlite3
 from pathlib import Path
-from typing import Protocol
+from typing import Protocol, runtime_checkable
 from uuid import UUID
 
 from app.domain.author import Author
@@ -30,8 +30,15 @@ class ProjectNotFoundError(Exception):
         super().__init__(f"Project '{project_id}' not found.")
 
 
+@runtime_checkable
 class ProjectPublicationRepository(Protocol):
-    """Abstraction for retrieving publication collections for an SLR project."""
+    """Abstraction for persisting and retrieving publication collections for an SLR project.
+
+    Responsibilities:
+    - Single entry point for managing project Working Collections.
+    - Preserving record order via publication positions.
+    - Idempotent import of provider source records.
+    """
 
     def get_publications(self, project_id: str) -> list[Publication]:
         """Retrieve publications for a project or raise ProjectNotFoundError."""
@@ -42,7 +49,7 @@ class ProjectPublicationRepository(Protocol):
         project_id: str,
         publications: list[Publication],
     ) -> int:
-        """Append publications to a project's Working Collection."""
+        """Append publications to a project's Working Collection and return new total count."""
         ...
 
     def import_source_publications(
@@ -50,7 +57,11 @@ class ProjectPublicationRepository(Protocol):
         project_id: str,
         publications: list[Publication],
     ) -> PublicationImportResult:
-        """Atomically import publications unique by provider and source id."""
+        """Atomically import publications unique by provider and source id within a project."""
+        ...
+
+    def count_by_project(self, project_id: str) -> int:
+        """Return total publication count for a project or raise ProjectNotFoundError."""
         ...
 
     def replace_publications(
@@ -58,7 +69,7 @@ class ProjectPublicationRepository(Protocol):
         project_id: str,
         publications: list[Publication],
     ) -> None:
-        """Replace a project's collection after a transformation."""
+        """Replace a project's collection after a normalization or cleanup transformation."""
         ...
 
 
@@ -141,6 +152,11 @@ class DemoProjectPublicationRepository:
             raise ProjectNotFoundError(project_id)
         return list(self._projects_data[project_id])
 
+    def count_by_project(self, project_id: str) -> int:
+        if project_id not in self._projects_data:
+            raise ProjectNotFoundError(project_id)
+        return len(self._projects_data[project_id])
+
     def add_publications(
         self,
         project_id: str,
@@ -214,43 +230,85 @@ class SqliteProjectPublicationRepository:
         self._database_path.parent.mkdir(parents=True, exist_ok=True)
         self._apply_migrations()
 
-    def get_publications(self, project_id: str) -> list[Publication]:
-        self._ensure_project(project_id)
-        with self._connect() as connection:
-            rows = connection.execute(
-                """
-                SELECT document
-                FROM project_publications
-                WHERE project_id = ?
-                ORDER BY position ASC, rowid ASC
-                """,
-                (project_id,),
-            ).fetchall()
+    def get_publications(
+        self, project_id: str, *, connection: sqlite3.Connection | None = None
+    ) -> list[Publication]:
+        self._ensure_project(project_id, connection=connection)
+        if connection is not None:
+            return self._get_publications_with_conn(connection, project_id)
+        with self._connect() as conn:
+            return self._get_publications_with_conn(conn, project_id)
+
+    def _get_publications_with_conn(
+        self, connection: sqlite3.Connection, project_id: str
+    ) -> list[Publication]:
+        rows = connection.execute(
+            """
+            SELECT document
+            FROM project_publications
+            WHERE project_id = ?
+            ORDER BY position ASC, rowid ASC
+            """,
+            (project_id,),
+        ).fetchall()
         return [Publication.model_validate(json.loads(row[0])) for row in rows]
+
+    def count_by_project(
+        self, project_id: str, *, connection: sqlite3.Connection | None = None
+    ) -> int:
+        self._ensure_project(project_id, connection=connection)
+        if connection is not None:
+            row = connection.execute(
+                "SELECT COUNT(*) FROM project_publications WHERE project_id = ?",
+                (project_id,),
+            ).fetchone()
+            return int(row[0])
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT COUNT(*) FROM project_publications WHERE project_id = ?",
+                (project_id,),
+            ).fetchone()
+            return int(row[0])
 
     def add_publications(
         self,
         project_id: str,
         publications: list[Publication],
+        *,
+        connection: sqlite3.Connection | None = None,
     ) -> int:
-        self._ensure_project(project_id)
-        with self._connect() as connection:
-            next_position = self._next_position(connection, project_id)
-            for offset, publication in enumerate(publications):
-                self._insert_or_replace(
-                    connection, project_id, publication, next_position + offset
-                )
-        return len(self.get_publications(project_id))
+        self._ensure_project(project_id, connection=connection)
+        if connection is not None:
+            self._add_publications_with_conn(connection, project_id, publications)
+            return len(self._get_publications_with_conn(connection, project_id))
+        with self._connect() as conn:
+            self._add_publications_with_conn(conn, project_id, publications)
+            return len(self._get_publications_with_conn(conn, project_id))
+
+    def _add_publications_with_conn(
+        self,
+        connection: sqlite3.Connection,
+        project_id: str,
+        publications: list[Publication],
+    ) -> None:
+        next_position = self._next_position(connection, project_id)
+        for offset, publication in enumerate(publications):
+            self._insert_or_replace(
+                connection, project_id, publication, next_position + offset
+            )
 
     def import_source_publications(
         self,
         project_id: str,
         publications: list[Publication],
+        *,
+        connection: sqlite3.Connection | None = None,
     ) -> PublicationImportResult:
-        self._ensure_project(project_id)
+        self._ensure_project(project_id, connection=connection)
+        existing_pubs = self.get_publications(project_id, connection=connection)
         existing_keys = {
             self._source_key(publication)
-            for publication in self.get_publications(project_id)
+            for publication in existing_pubs
             if publication.provenance
         }
         new_publications: list[Publication] = []
@@ -261,40 +319,71 @@ class SqliteProjectPublicationRepository:
             existing_keys.add(key)
             new_publications.append(publication)
 
-        with self._connect() as connection:
+        if connection is not None:
             next_position = self._next_position(connection, project_id)
             for offset, publication in enumerate(new_publications):
                 self._insert_or_replace(
                     connection, project_id, publication, next_position + offset
                 )
+            working_count = len(self._get_publications_with_conn(connection, project_id))
+        else:
+            with self._connect() as conn:
+                next_position = self._next_position(conn, project_id)
+                for offset, publication in enumerate(new_publications):
+                    self._insert_or_replace(
+                        conn, project_id, publication, next_position + offset
+                    )
+                working_count = len(self._get_publications_with_conn(conn, project_id))
+
         return PublicationImportResult(
             imported_count=len(new_publications),
             skipped_count=len(publications) - len(new_publications),
-            working_collection_count=len(self.get_publications(project_id)),
+            working_collection_count=working_count,
         )
 
     def replace_publications(
         self,
         project_id: str,
         publications: list[Publication],
+        *,
+        connection: sqlite3.Connection | None = None,
     ) -> None:
-        self._ensure_project(project_id)
-        with self._connect() as connection:
-            connection.execute(
-                "DELETE FROM project_publications WHERE project_id = ?",
-                (project_id,),
-            )
-            for position, publication in enumerate(publications):
-                self._insert_or_replace(connection, project_id, publication, position)
+        self._ensure_project(project_id, connection=connection)
+        if connection is not None:
+            self._replace_publications_with_conn(connection, project_id, publications)
+        else:
+            with self._connect() as conn:
+                self._replace_publications_with_conn(conn, project_id, publications)
 
-    def _ensure_project(self, project_id: str) -> None:
+    def _replace_publications_with_conn(
+        self,
+        connection: sqlite3.Connection,
+        project_id: str,
+        publications: list[Publication],
+    ) -> None:
+        connection.execute(
+            "DELETE FROM project_publications WHERE project_id = ?",
+            (project_id,),
+        )
+        for position, publication in enumerate(publications):
+            self._insert_or_replace(connection, project_id, publication, position)
+
+    def _ensure_project(
+        self, project_id: str, *, connection: sqlite3.Connection | None = None
+    ) -> None:
         if project_id in self._KNOWN_PROJECT_IDS:
             return
-        with self._connect() as connection:
+        if connection is not None:
             exists = connection.execute(
                 "SELECT 1 FROM project_publications WHERE project_id = ? LIMIT 1",
                 (project_id,),
             ).fetchone()
+        else:
+            with self._connect() as conn:
+                exists = conn.execute(
+                    "SELECT 1 FROM project_publications WHERE project_id = ? LIMIT 1",
+                    (project_id,),
+                ).fetchone()
         if exists is None:
             raise ProjectNotFoundError(project_id)
 

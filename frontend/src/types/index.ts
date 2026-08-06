@@ -167,6 +167,41 @@ export interface BibliographicImportResponse {
   status: 'success' | 'warning' | 'failed' | 'error';
 }
 
+export interface WorkingCollectionSummary {
+  total_records: number;
+}
+
+export interface SourceSummaryItem {
+  source: string;
+  source_kind: 'provider' | 'file';
+  successful_imports_count: number;
+  warning_imports_count: number;
+  failed_imports_count: number;
+  records_added_count: number;
+  last_import_at: string | null;
+  last_import_status: 'success' | 'warning' | 'failed' | null;
+}
+
+export interface ImportHistoryItemDTO {
+  import_id: string;
+  source_type: 'provider' | 'file';
+  filename: string | null;
+  format: string | null;
+  provider: string | null;
+  query: string | null;
+  records_count: number;
+  status: 'success' | 'warning' | 'failed';
+  warnings: string[];
+  created_at: string;
+}
+
+export interface SourcesSummaryResponse {
+  project_id: string;
+  working_collection: WorkingCollectionSummary;
+  source_summaries: SourceSummaryItem[];
+  import_history: ImportHistoryItemDTO[];
+}
+
 export interface BibliographicImportHistoryRecord {
   import_id: string;
   project_id: string;

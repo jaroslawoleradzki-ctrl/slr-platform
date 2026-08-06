@@ -5,18 +5,33 @@ import os
 import sqlite3
 from datetime import datetime
 from pathlib import Path
-from typing import Protocol
+from typing import Protocol, runtime_checkable
 from uuid import UUID
 
 from app.services.normalization_service import NormalizationExecution
 
 
+@runtime_checkable
 class NormalizationExecutionRepository(Protocol):
-    def save(self, execution: NormalizationExecution) -> NormalizationExecution: ...
+    """Abstraction for storing and retrieving project normalization execution summaries.
 
-    def get_for_project(self, project_id: str) -> NormalizationExecution | None: ...
+    Responsibilities:
+    - Persisting latest normalization run statistics and audit trail per project.
+    - Retrieving current execution summary for a project.
+    - Deleting execution records upon collection reset or import invalidation.
+    """
 
-    def delete_for_project(self, project_id: str) -> None: ...
+    def save(self, execution: NormalizationExecution) -> NormalizationExecution:
+        """Save or update the single latest normalization execution record for a project."""
+        ...
+
+    def get_for_project(self, project_id: str) -> NormalizationExecution | None:
+        """Retrieve the latest normalization execution for a project, or None if never run."""
+        ...
+
+    def delete_for_project(self, project_id: str) -> None:
+        """Delete normalization execution summary for a project."""
+        ...
 
 
 class SqliteNormalizationExecutionRepository:
@@ -95,12 +110,20 @@ class SqliteNormalizationExecutionRepository:
             error_message=str(row[11]) if row[11] is not None else None,
         )
 
-    def delete_for_project(self, project_id: str) -> None:
-        with self._connect() as connection:
+    def delete_for_project(
+        self, project_id: str, *, connection: sqlite3.Connection | None = None
+    ) -> None:
+        if connection is not None:
             connection.execute(
                 "DELETE FROM normalization_executions WHERE project_id = ?",
                 (project_id,),
             )
+        else:
+            with self._connect() as conn:
+                conn.execute(
+                    "DELETE FROM normalization_executions WHERE project_id = ?",
+                    (project_id,),
+                )
 
     def _connect(self) -> sqlite3.Connection:
         return sqlite3.connect(self._database_path)
