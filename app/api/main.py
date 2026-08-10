@@ -3,7 +3,7 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routers import deduplication, normalization, search_strategy
+from app.api.routers import deduplication, normalization, screening, search_strategy
 from app.core.config import load_project_config
 
 
@@ -25,13 +25,14 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "OPTIONS"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "OPTIONS"],
     allow_headers=["*"],
 )
 
 app.include_router(deduplication.router)
 app.include_router(search_strategy.router)
 app.include_router(normalization.router)
+app.include_router(screening.router)
 
 
 @app.get("/")

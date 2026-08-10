@@ -14,13 +14,13 @@ development
 
 Current version (working tree):
 
-v0.2.7
+v0.2.8
 
 Current development phase:
 
-Version 0.2.7 — Screening Criteria Domain Model (Completed).
+Version 0.2.8 — Screening Criteria Persistence and API (Completed).
 
-Version 0.2.7 introduces the infrastructure-independent `ScreeningCriterion` domain model (`criterion_id: UUID`, `project_id: str`, `name`, `description`, `criterion_type`, `screening_stage`, `display_order`, `is_active`, `is_required`), domain validation rules, text normalization, and 21 domain unit tests.
+Version 0.2.8 introduces durable SQLite storage (`screening_criteria` table in `migrations/0007_screening_criteria.sql`), the `ScreeningCriterionRepository` protocol contract, `SqliteScreeningCriterionRepository`, project-scoped REST API endpoints (`/projects/{project_id}/screening/criteria`), payload DTOs, deactivation lifecycle via `PATCH /deactivate`, deterministic display ordering, strict project isolation, and 34 unit tests.
 
 Phase 6.7 & Phase 6.8 Workflow State:
 - **Phase 6.7 (Modules 1–4 Functional Workflow)**: ✅ Completed (6.7.1, 6.7.2a, 6.7.2b).
@@ -40,10 +40,11 @@ Technical Debt & Prerequisites for Executable Screening:
 2. **Deduplicated Screening Input Set**: Current deduplication records human `APPROVE`/`REJECT` decisions without physical publication merging. Approved duplicates remain as separate records in Working Collection. An explicit screening input set pipeline (`Working Collection` → `Duplicate Decisions` → `Canonical / Deduplicated Screening Set` → `Screening`) is a prerequisite for executable Phase 7.5.
 
 State of Phase 7 — Screening:
-- Version 0.2.7 is completed.
-- Phase 7 — Screening is in progress (domain model increment 7.1 completed; persistence, API & GUI not started).
+- Version 0.2.8 is completed.
+- Phase 7 — Screening is in progress (domain model increment 7.1 and persistence/API increment 7.2 completed; GUI 7.3 not started).
 - Phase 7.1 — Screening Criteria Domain Model is ✅ Completed (`ScreeningCriterion`, `ScreeningCriterionType`, `ScreeningCriterionStage`, validation, unit tests).
-- Phase 7.2 — Screening Criteria Persistence and API is the next implementation increment.
+- Phase 7.2 — Screening Criteria Persistence and API is ✅ Completed (SQLite schema `0007_screening_criteria.sql`, repository, project isolation, REST API, DTOs, tests).
+- Phase 7.3 — Screening Configuration GUI is the next implementation increment.
 - Phase 7.1–7.4 are decoupled from 6.8 debt and can proceed independently.
 - Phase 7.5 (Title & Abstract Screening) requires resolving Metadata Loss (1) and Deduplicated Screening Input Set (2).
 
@@ -835,8 +836,9 @@ Phase 6 — GUI Foundation and Duplicate Review: Completed.
 Version 0.2.5 — Data Integrity Cleanup: Completed.
 Version 0.2.6 — Provider-Specific Query Rendering: Completed.
 Version 0.2.7 — Screening Criteria Domain Model: Completed.
+Version 0.2.8 — Screening Criteria Persistence and API: Completed.
 
-The next planned implementation increment is Phase 7.2 — Screening Criteria Persistence and API (Phase 7 — Screening in progress).
+The next planned implementation increment is Phase 7.3 — Screening Configuration GUI (Phase 7 — Screening in progress).
 
 ---
 
@@ -889,7 +891,7 @@ Every feature must:
 
 # Next milestone
 
-Phase 7.2 — Screening Criteria Persistence and API (Phase 7 — Screening). Not started.
+Phase 7.3 — Screening Configuration GUI (Phase 7 — Screening). Not started.
 
 ---
 

@@ -10,11 +10,11 @@ Unlike ROADMAP.md, this file is intentionally technical and may change frequentl
 
 Current milestone:
 
-Version 0.2.7 — Screening Criteria Domain Model (completed)
+Version 0.2.8 — Screening Criteria Persistence and API (completed)
 
 Next milestone:
 
-Phase 7 — Screening (Phase 7.2 — Screening Criteria Persistence and API next)
+Phase 7 — Screening (Phase 7.3 — Screening Configuration GUI next)
 
 ---
 
@@ -477,12 +477,12 @@ Zakres:
 - SQLite persistence (`SqliteScreeningCriterionRepository`)
 - database migration
 - abstract repository contract (`ScreeningCriterionRepository` decorated with `@runtime_checkable`)
-- CRUD / lifecycle operations
-- project isolation and order preservation
+- CRUD / lifecycle operations (`create`, `get`, `list_by_project`, `update`, `deactivate` via `PATCH /deactivate`)
+- project isolation and deterministic order preservation (`ORDER BY display_order ASC, criterion_id ASC`)
 - REST API (`/projects/{project_id}/screening/criteria`)
-- validation and API contract tests
+- validation and contract test suites (34 tests)
 
-Status: ⬜ Planned
+Status: ✅ Completed (SQLite schema `0007_screening_criteria.sql`, `@runtime_checkable` `ScreeningCriterionRepository` contract, `SqliteScreeningCriterionRepository` adapter, project isolation, REST API, DTOs, tests)
 
 ---
 

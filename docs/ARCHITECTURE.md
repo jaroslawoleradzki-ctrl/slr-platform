@@ -38,12 +38,20 @@ W punkcie końcowym API `POST /projects/{project_id}/search-strategy/executions`
 - `SearchStrategyExecutionResponse.rendered_query`: Kanoniczny podgląd zapytania Boolean (`search_query.to_boolean_query()`), stanowiący niezależną od dostawcy reprezentację podglądową.
 - `SearchStrategyExecutionResponse.provider_queries`: Lista faktycznie wykonanych zapytań fizycznych dla poszczególnych providerów odczytana z obiektów `SearchRun` (wraz z flagą `is_lossless` oraz ostrzeżeniami `warnings`).
 
-### Screening Subsystem (`app.domain.screening`)
+### Screening Subsystem (`app.domain.screening`, `app.repositories`, `app.api.routers.screening`)
 
-W Phase 7.1 zaimplementowano czysty model domenowy konfigurowalnych kryteriów screeningu:
+Podsystem kryteriów screeningu zapewnia rejestrację i zarządzanie kryteriami kwalifikacji i wykluczenia w ramach projektów SLR:
 
-- `ScreeningCriterion`: Niemutowalny obiekt domenowy reprezentujący jednostkowe kryterium kwalifikacji lub wykluczenia publikacji w ramach projektu (`criterion_id: UUID`, `project_id: str`, `name`, `description`, `criterion_type`, `screening_stage`, `display_order`, `is_active`, `is_required`).
-- `ScreeningCriterionType`: Enum `INCLUSION` / `EXCLUSION`.
-- `ScreeningCriterionStage`: Enum określający zakres stosowania kryterium: `TITLE_ABSTRACT`, `FULL_TEXT` lub `BOTH`.
-- **Decyzja architektoniczna dot. etapu**: Istniejący enum `ScreeningStage` (`TITLE_ABSTRACT`, `FULL_TEXT`) pozostaje przeznaczony wyłącznie dla konkretnych zdarzeń decyzji screeningowych (`ScreeningDecision`), które nie mogą zachodzić na etapie `BOTH`. Dla zakresu stosowania kryteriów wprowadzono osobny `ScreeningCriterionStage`.
-- **Granice przyrostu 7.1**: Model jest czysto domenowy — nie definiuje persystencji SQLite, endpointów REST API, komponentów GUI, scoringu ani automatycznego wyliczania decyzji.
+1. **Model domenowy (`app.domain.screening`)**:
+   - `ScreeningCriterion`: Niemutowalny obiekt domenowy reprezentujący jednostkowe kryterium kwalifikacji lub wykluczenia publikacji w ramach projektu (`criterion_id: UUID`, `project_id: str`, `name`, `description`, `criterion_type`, `screening_stage`, `display_order`, `is_active`, `is_required`).
+   - `ScreeningCriterionType`: Enum `INCLUSION` / `EXCLUSION`.
+   - `ScreeningCriterionStage`: Enum określający zakres stosowania kryterium: `TITLE_ABSTRACT`, `FULL_TEXT` lub `BOTH`.
+   - **Decyzja architektoniczna dot. etapu**: Istniejący enum `ScreeningStage` (`TITLE_ABSTRACT`, `FULL_TEXT`) pozostaje przeznaczony wyłącznie dla konkretnych zdarzeń decyzji screeningowych (`ScreeningDecision`), które nie mogą zachodzić na etapie `BOTH`. Dla zakresu stosowania kryteriów używany jest `ScreeningCriterionStage`.
+
+2. **Warstwa persystencji (`app.repositories.screening_criterion_repository`)**:
+   - `ScreeningCriterionRepository`: Protokół abstrakcyjny udekorowany `@runtime_checkable` określający kontrakt persystencji (`create`, `get`, `list_by_project`, `update`, `deactivate`).
+   - `SqliteScreeningCriterionRepository`: Dedykowany adapter trwały przechowujący obiekty w tabeli SQLite `screening_criteria` (migracja `migrations/0007_screening_criteria.sql`).
+   - **Zasady**: Ścisła izolacja projektowa (`WHERE project_id = ? AND criterion_id = ?`), deterministyczne sortowanie (`ORDER BY display_order ASC, criterion_id ASC`), brak fizycznego kasowania rekordu w celu zachowania spójności referencyjnej z historycznymi decyzjami.
+
+3. **Warstwa API (`app.api.routers.screening`, `app.api.dto.screening`)**:
+   - Project-scoped REST API (`/projects/{project_id}/screening/criteria`) obsługujące operacje `POST` (tworzenie), `GET` (pobieranie pojedyncze i lista), `PUT` (edycja atrybutów bez zmiany tożsamości `criterion_id` ani własności `project_id`) oraz `PATCH /deactivate` (soft-lifecycle).

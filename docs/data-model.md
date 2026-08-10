@@ -63,16 +63,19 @@ Informacja o pochodzeniu konkretnego pola lub rekordu:
 
 Kryterium włączenia lub wyłączenia zdefiniowane dla konkretnego projektu (project-scoped).
 
-Pola:
-- `criterion_id`: `UUID`
-- `project_id`: `str`
-- `name`: `str`
-- `description`: `str | None`
-- `criterion_type` (`ScreeningCriterionType`): `INCLUSION` / `EXCLUSION`
-- `screening_stage` (`ScreeningCriterionStage`): `TITLE_ABSTRACT` / `FULL_TEXT` / `BOTH`
-- `display_order`: `int` (ge=0)
-- `is_active`: `bool`
-- `is_required`: `bool`
+Pola modelu domenowego i schematu tabeli SQLite (`screening_criteria` w `migrations/0007_screening_criteria.sql`):
+- `criterion_id`: `UUID` / `TEXT PRIMARY KEY` (stabilna tożsamość wygenerowana przez backend)
+- `project_id`: `str` / `TEXT NOT NULL` (izolacja w ramach projektu, niewymienny po utworzeniu)
+- `name`: `str` / `TEXT NOT NULL` (nazwa kryterium)
+- `description`: `str | None` / `TEXT` (opcjonalny opis/instrukcja)
+- `criterion_type` (`ScreeningCriterionType`): `INCLUSION` / `EXCLUSION` (przechowywane jako ciąg tekstowy `'inclusion'` / `'exclusion'`)
+- `screening_stage` (`ScreeningCriterionStage`): `TITLE_ABSTRACT` / `FULL_TEXT` / `BOTH` (przechowywane jako ciąg tekstowy `'title_abstract'` / `'full_text'` / `'both'`)
+- `display_order`: `int` (ge=0) / `INTEGER NOT NULL DEFAULT 0` (kolejność wyświetlania)
+- `is_active`: `bool` / `INTEGER NOT NULL DEFAULT 1` (wartości `1` dla True, `0` dla False)
+- `is_required`: `bool` / `INTEGER NOT NULL DEFAULT 1` (wartości `1` dla True, `0` dla False)
+
+Indeks bazodanowy:
+- `idx_screening_criteria_project` na `(project_id, display_order, criterion_id)` zapewniający optymalną izolację projektową oraz deterministyczne sortowanie `ORDER BY display_order ASC, criterion_id ASC`.
 
 Uwaga: Dostępność pełnego tekstu (full-text availability/status) jest informacją techniczną o publikacji w workflow (np. URL, link DOI), a NIE wbudowanym kryterium kwalifikacji. To konfigurowalne ScreeningCriterion danego projektu określa, czy brak pełnego tekstu prowadzi do wykluczenia.
 

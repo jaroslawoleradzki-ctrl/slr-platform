@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.2.8] — 2026-08-10
+
+### Added
+
+- **Phase 7.2 Screening Criteria Persistence and API**: Added durable SQLite storage (`screening_criteria` table in `migrations/0007_screening_criteria.sql`) and `SqliteScreeningCriterionRepository` for project-scoped screening criteria.
+- Added `ScreeningCriterionRepository` abstract protocol decorated with `@runtime_checkable` and `CriterionNotFoundError` exception.
+- Added project-scoped REST API endpoints (`/projects/{project_id}/screening/criteria`) supporting `POST` (create), `GET` (list and single item), `PUT` (update), and `PATCH /deactivate` (soft lifecycle).
+- Added DTO models (`ScreeningCriterionCreateRequest`, `ScreeningCriterionUpdateRequest`, `ScreeningCriterionResponse`, `ScreeningCriterionListResponse`).
+- Enforced strict project isolation across repository and API operations.
+- Added 34 unit tests covering SQLite persistence, deterministic display ordering (`ORDER BY display_order ASC, criterion_id ASC`), Enum/Bool round-trips, and cross-project isolation.
+
 ## [0.2.7] — 2026-08-10
 
 ### Added

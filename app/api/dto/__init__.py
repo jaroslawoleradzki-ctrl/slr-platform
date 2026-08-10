@@ -9,6 +9,12 @@ from app.api.dto.deduplication import (
     ProvenanceEntryResponse,
     SharedIdentifierResponse,
 )
+from app.api.dto.screening import (
+    ScreeningCriterionCreateRequest,
+    ScreeningCriterionListResponse,
+    ScreeningCriterionResponse,
+    ScreeningCriterionUpdateRequest,
+)
 
 __all__ = [
     "DuplicateDecisionStatus",
@@ -20,4 +26,8 @@ __all__ = [
     "DuplicateRecordPreviewResponse",
     "ProvenanceEntryResponse",
     "SharedIdentifierResponse",
+    "ScreeningCriterionCreateRequest",
+    "ScreeningCriterionListResponse",
+    "ScreeningCriterionResponse",
+    "ScreeningCriterionUpdateRequest",
 ]
