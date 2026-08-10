@@ -7,6 +7,7 @@ from app.domain.deduplication import (
     InvalidDuplicateGroupTransition,
 )
 from app.domain.identifiers import Identifier, IdentifierType
+from app.domain.project import Project, ProjectStatus
 from app.domain.provenance import ProvenanceEntry
 from app.domain.publication import DocumentType, Publication
 from app.domain.screening import (
@@ -48,6 +49,8 @@ __all__ = [
     "Identifier",
     "IdentifierType",
     "InvalidDuplicateGroupTransition",
+    "Project",
+    "ProjectStatus",
     "ProvenanceEntry",
     "Publication",
     "ScreeningCriterion",

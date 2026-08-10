@@ -72,6 +72,12 @@ class ProjectPublicationRepository(Protocol):
         """Replace a project's collection after a normalization or cleanup transformation."""
         ...
 
+    def delete_for_project(
+        self, project_id: str, *, connection: sqlite3.Connection | None = None
+    ) -> None:
+        """Delete all publications for the given project."""
+        ...
+
 
 class DemoProjectPublicationRepository:
     """Temporary in-memory demo repository providing sample SLR project publications.
@@ -367,6 +373,19 @@ class SqliteProjectPublicationRepository:
         )
         for position, publication in enumerate(publications):
             self._insert_or_replace(connection, project_id, publication, position)
+
+    def delete_for_project(
+        self, project_id: str, *, connection: sqlite3.Connection | None = None
+    ) -> None:
+        if connection is not None:
+            connection.execute(
+                "DELETE FROM project_publications WHERE project_id = ?", (project_id,)
+            )
+        else:
+            with self._connect() as conn:
+                conn.execute(
+                    "DELETE FROM project_publications WHERE project_id = ?", (project_id,)
+                )
 
     def _ensure_project(
         self, project_id: str, *, connection: sqlite3.Connection | None = None

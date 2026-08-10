@@ -6,6 +6,7 @@ export const MOCK_PROJECTS: SLRProject[] = [
     title: 'Lean Management and Energy Efficiency in Industrial Manufacturing',
     description: 'Systematic review investigating operational lean principles (TPS, Kaizen, JIT) and their quantitative impact on industrial energy performance and consumption reduction.',
     protocolVersion: '0.6',
+    status: 'active',
     createdAt: '2026-07-01T10:00:00Z',
     updatedAt: '2026-07-28T16:45:00Z',
     nextAction: {
@@ -88,39 +89,8 @@ export const MOCK_PROJECTS: SLRProject[] = [
         lastRunTimestamp: '2026-07-28T14:25:00Z'
       }
     ],
-    imports: [
-      {
-        id: 'imp-1',
-        filename: 'google_scholar_export_2026.ris',
-        format: 'RIS',
-        recordsCount: 150,
-        importedAt: '2026-07-28T15:00:00Z',
-        status: 'success'
-      },
-      {
-        id: 'imp-2',
-        filename: 'scopus_supplement.bib',
-        format: 'BibTeX',
-        recordsCount: 85,
-        importedAt: '2026-07-28T15:10:00Z',
-        status: 'warning',
-        warnings: ['3 rekordy zawierały brakujące pola rocznika — ustawiono wartośc domyślną']
-      }
-    ],
-    normalization: [
-      {
-        completed: true,
-        totalRecordsProcessed: 2105,
-        cleanRecordsCount: 2042,
-        warningsCount: 63,
-        errorsCount: 0,
-        warningsLog: [
-          'Normalizacja DOI: sprowadzono 1,410 adresów URL do postaci canonical bare DOI',
-          'Sformatowano nazwy 320 autorów do postaci Lastname, Firstname',
-          'Pomijanie 63 nieprawidłowych opcjonalnych identyfikatorów ISSN'
-        ]
-      }
-    ],
+    imports: [],
+    normalization: [],
     deduplication: {
       recordsBeforeDedup: 0,
       identifierLinkedGroupsCount: 0,
@@ -170,6 +140,7 @@ export const MOCK_PROJECTS: SLRProject[] = [
     title: 'Architectural Tactics for LLM Integration in Enterprise Systems',
     description: 'Systematic literature review on software architecture patterns, latency mitigation, and cost-optimization tactics when embedding LLMs into critical backend services.',
     protocolVersion: '0.2',
+    status: 'active',
     createdAt: '2026-07-15T09:00:00Z',
     updatedAt: '2026-07-27T11:20:00Z',
     nextAction: {

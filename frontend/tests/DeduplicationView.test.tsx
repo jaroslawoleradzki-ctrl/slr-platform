@@ -8,6 +8,7 @@ import { ApiDuplicateGroupListResponse } from '../src/types';
 
 describe('DeduplicationPage Phase 6.5 — Duplicate Comparison & Review UI', () => {
   beforeEach(() => {
+    localStorage.clear();
     vi.restoreAllMocks();
   });
 

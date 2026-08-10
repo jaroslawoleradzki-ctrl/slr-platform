@@ -5,7 +5,10 @@ import { SourcesIngestionPage } from '../src/pages/SourcesIngestionPage';
 import { projectApiService } from '../src/services/api/projectApi';
 
 describe('Sources ingestion upload', () => {
-  afterEach(() => vi.restoreAllMocks());
+  afterEach(() => {
+    localStorage.clear();
+    vi.restoreAllMocks();
+  });
 
   const renderPage = () => render(
     <ProjectProvider>
