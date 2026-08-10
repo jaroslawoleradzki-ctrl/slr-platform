@@ -23,6 +23,9 @@ export const Sidebar: React.FC = () => {
 
   const renderBadge = (stage: keyof WorkflowNavigationStatus | 'dashboard') => {
     if (!workflowStatus || stage === 'dashboard') return null;
+    if (stage === 'screening') {
+      return <span style={{ fontSize: '0.7rem', color: 'var(--status-success-text)' }}>Dostępne</span>;
+    }
     const item = workflowStatus[stage];
 
     if (stage === 'deduplication') {
@@ -94,7 +97,7 @@ export const Sidebar: React.FC = () => {
       stage: 'deduplication' as const,
     },
     {
-      to: `/projects/${currentId}/screen`,
+      to: `/projects/${currentId}/screen/title-abstract`,
       label: '5. Screening',
       icon: Filter,
       stage: 'screening' as const,

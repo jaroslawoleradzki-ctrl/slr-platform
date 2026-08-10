@@ -12,15 +12,19 @@ Current branch:
 
 development
 
-Current version (working tree):
+Current version:
 
-v0.3.0
+v0.3.1
+
+Current release status:
+
+Completed
 
 Current development phase:
 
-Version 0.3.0 — Screening Decision Domain and Persistence (Completed).
-
-Version 0.3.0 introduces a project-scoped screening decision domain model (`ScreeningDecision`), criterion-level assessments (`CriterionAssessment`, `CriterionAssessmentValue`), server-side authoritative criterion snapshot construction, application service validation rules (`ScreeningDecisionService`), durable SQLite persistence (`SqliteScreeningDecisionRepository`, migration `0008_screening_decisions.sql` with composite primary key `(decision_id, criterion_id)`), append-only decision history, latest decision resolution, project-scoped REST API endpoints (`/projects/{project_id}/screening/decisions`), and 22 backend test cases. 100% AI-free design.
+Phase 7 — Screening remains in progress. Title & Abstract Screening (7.5A–7.5D)
+and Project Management are completed; the next planned increment is 7.6 —
+Full-Text Screening.
 
 Phase 6.7 & Phase 6.8 Workflow State:
 - **Phase 6.7 (Modules 1–4 Functional Workflow)**: ✅ Completed (6.7.1, 6.7.2a, 6.7.2b).
@@ -35,20 +39,34 @@ Phase 6.7 & Phase 6.8 Workflow State:
   - 6.8.8 GUI Import Integration — ✅ Completed (`POST /imports` RIS/BibTeX upload & history)
   - 6.8.9 Publication Intake Summary — ✅ Completed (`SourcesSummaryService` read model & GET endpoint)
 
-Technical Debt & Prerequisites for Executable Screening:
-1. **Live Search Import Metadata Loss**: `SearchResultRecordResponse` DTO passes trimmed attributes (`id`, `title`, `authors`, `year`, `provider`, `source_id`, `doi`), omitting `abstract` and other metadata. `ProjectImportService` constructs imported `Publication` objects from this DTO, causing abstract to be lost on import. Preserving abstract is a mandatory blocker for executable Phase 7.5.
-2. **Deduplicated Screening Input Set**: Current deduplication records human `APPROVE`/`REJECT` decisions without physical publication merging. Approved duplicates remain as separate records in Working Collection. An explicit screening input set pipeline (`Working Collection` → `Duplicate Decisions` → `Canonical / Deduplicated Screening Set` → `Screening`) is a prerequisite for executable Phase 7.5.
+Screening prerequisites resolved in v0.3.1:
+- Authoritative `SearchResultSnapshot` records retain canonical provider metadata
+  and provenance for new live-search imports.
+- `ScreeningInputService` derives a stable, non-destructive canonical input set;
+  pending duplicate groups and merge conflicts explicitly block readiness.
 
 State of Phase 7 — Screening:
-- Version 0.3.0 is completed.
-- Phase 7 — Screening is in progress (domain model 7.1, persistence/API 7.2, GUI 7.3, and decision domain/persistence 7.4 completed; 7.5 next).
+- v0.3.1 is completed.
+- Phase 7 — Screening is in progress; 7.1–7.5D are completed and 7.6 is next.
 - Phase 7.1 — Screening Criteria Domain Model is ✅ Completed (`ScreeningCriterion`, `ScreeningCriterionType`, `ScreeningCriterionStage`, validation, unit tests).
 - Phase 7.2 — Screening Criteria Persistence and API is ✅ Completed (SQLite schema `0007_screening_criteria.sql`, repository, project isolation, REST API, DTOs, tests).
 - Phase 7.3 — Screening Configuration GUI is ✅ Completed (ScreeningCriteriaList, ScreeningCriterionCard, ScreeningCriterionModal, projectApiService adapter, validation, 22 frontend tests).
 - Phase 7.4 — Screening Decision Domain and Persistence is ✅ Completed (ScreeningDecision, CriterionAssessment, authoritative snapshot, ScreeningDecisionService, SqliteScreeningDecisionRepository, migration 0008, REST API, 22 backend tests).
-- Phase 7.5 — Title & Abstract Screening is the next implementation increment.
-- Phase 7.1–7.4 are decoupled from 6.8 debt and can proceed independently.
-- Phase 7.5 (Title & Abstract Screening) requires resolving Metadata Loss (1) and Deduplicated Screening Input Set (2).
+- Phase 7.5A — Screening Input Prerequisites is ✅ Completed.
+- Phase 7.5B — Title & Abstract Screening Backend Workflow is ✅ Completed.
+- Phase 7.5C — Title & Abstract Screening GUI is ✅ Completed.
+- Phase 7.5D — Automatic Metadata-Based Screening Criteria is ✅ Completed.
+- Next: Phase 7.6 — Full-Text Screening.
+
+Completed in this release:
+- Project Management: persistent project resource, list/create/open/edit,
+  archive/restore, active-project persistence and atomic hard delete.
+- SearchResultSnapshot-based live-search import, metadata/provenance retention
+  and canonical deduplicated screening input.
+- Title & Abstract Screening backend and GUI, reviewer-specific progress and
+  append-only decision resume semantics.
+- Manual and deterministic metadata-rule criteria with server-authoritative
+  automatic assessments.
 
 ---
 
@@ -840,7 +858,7 @@ Version 0.2.6 — Provider-Specific Query Rendering: Completed.
 Version 0.2.7 — Screening Criteria Domain Model: Completed.
 Version 0.2.8 — Screening Criteria Persistence and API: Completed.
 
-The next planned implementation increment is Phase 7.3 — Screening Configuration GUI (Phase 7 — Screening in progress).
+The next planned implementation increment is Phase 7.6 — Full-Text Screening (Phase 7 — Screening remains in progress).
 
 ---
 
@@ -893,7 +911,7 @@ Every feature must:
 
 # Next milestone
 
-Phase 7.3 — Screening Configuration GUI (Phase 7 — Screening). Not started.
+Phase 7.6 — Full-Text Screening (Phase 7 — Screening).
 
 ---
 

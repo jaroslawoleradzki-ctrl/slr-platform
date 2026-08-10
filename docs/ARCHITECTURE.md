@@ -40,17 +40,46 @@ W punkcie końcowym API `POST /projects/{project_id}/search-strategy/executions`
 
 ### Screening Subsystem (`app.domain.screening`, `app.repositories`, `app.api.routers.screening`)
 
-Podsystem kryteriów screeningu zapewnia rejestrację i zarządzanie kryteriami kwalifikacji i wykluczenia w ramach projektów SLR:
+Wykonywalny przepływ Title & Abstract Screening jest project-scoped i
+niedestrukcyjny:
+
+```text
+Project
+  → Search
+  → SearchResultSnapshot
+  → Import
+  → Working Collection
+  → Normalization
+  → Deduplication
+  → ScreeningInputService
+  → TitleAbstractScreeningService
+  → ScreeningDecisionService
+  → ScreeningDecisionRepository
+```
+
+`SearchResultSnapshot` jest autorytatywnym, trwałym zapisem canonical
+`Publication` z konkretnego wykonania wyszukiwania. Import odczytuje snapshot po
+stronie serwera, więc klient nie jest źródłem metadanych ani provenance.
+`ScreeningInputService` buduje canonical/deduplicated input bez zmiany Working
+Collection: APPROVE jest scalane przez istniejącą merge policy, REJECT pozostaje
+osobno, a PENDING lub konflikt merge blokuje gotowość.
+
+Podsystem kryteriów i decyzji screeningu zapewnia rejestrację oraz wykonywanie
+kryteriów kwalifikacji i wykluczenia w ramach projektów SLR:
 
 1. **Model domenowy (`app.domain.screening`)**:
-   - `ScreeningCriterion`: Niemutowalny obiekt domenowy reprezentujący jednostkowe kryterium kwalifikacji lub wykluczenia publikacji w ramach projektu (`criterion_id: UUID`, `project_id: str`, `name`, `description`, `criterion_type`, `screening_stage`, `display_order`, `is_active`, `is_required`).
+   - `ScreeningCriterion`: Niemutowalny obiekt domenowy reprezentujący jednostkowe kryterium kwalifikacji lub wykluczenia publikacji w ramach projektu (`criterion_id: UUID`, `project_id: str`, `name`, `description`, `criterion_type`, `screening_stage`, `display_order`, `is_active`, `is_required`, `evaluation_mode`, `metadata_rule`).
    - `ScreeningCriterionType`: Enum `INCLUSION` / `EXCLUSION`.
    - `ScreeningCriterionStage`: Enum określający zakres stosowania kryterium: `TITLE_ABSTRACT`, `FULL_TEXT` lub `BOTH`.
+   - `ScreeningCriterionEvaluationMode`: `MANUAL` albo `METADATA_RULE`.
+     Reguły metadanych używają wyłącznie allow-listy pól canonical
+     `Publication` i typed operatorów; nie wykonują arbitralnego kodu ani
+     ścieżek JSON.
    - **Decyzja architektoniczna dot. etapu**: Istniejący enum `ScreeningStage` (`TITLE_ABSTRACT`, `FULL_TEXT`) pozostaje przeznaczony wyłącznie dla konkretnych zdarzeń decyzji screeningowych (`ScreeningDecision`), które nie mogą zachodzić na etapie `BOTH`. Dla zakresu stosowania kryteriów używany jest `ScreeningCriterionStage`.
 
 2. **Warstwa persystencji (`app.repositories.screening_criterion_repository`)**:
    - `ScreeningCriterionRepository`: Protokół abstrakcyjny udekorowany `@runtime_checkable` określający kontrakt persystencji (`create`, `get`, `list_by_project`, `update`, `deactivate`).
-   - `SqliteScreeningCriterionRepository`: Dedykowany adapter trwały przechowujący obiekty w tabeli SQLite `screening_criteria` (migracja `migrations/0007_screening_criteria.sql`).
+   - `SqliteScreeningCriterionRepository`: Dedykowany adapter trwały przechowujący obiekty w tabeli SQLite `screening_criteria` (migracje `0007_screening_criteria.sql` i `0011_screening_metadata_rules.sql`).
    - **Zasady**: Ścisła izolacja projektowa (`WHERE project_id = ? AND criterion_id = ?`), deterministyczne sortowanie (`ORDER BY display_order ASC, criterion_id ASC`), brak fizycznego kasowania rekordu w celu zachowania spójności referencyjnej z historycznymi decyzjami.
 
 3. **Warstwa API (`app.api.routers.screening`, `app.api.dto.screening`)**:
@@ -58,7 +87,12 @@ Podsystem kryteriów screeningu zapewnia rejestrację i zarządzanie kryteriami 
 
 4. **Podsystem Decyzji Screeningowych (`ScreeningDecision`, `ScreeningDecisionService`, `SqliteScreeningDecisionRepository`)**:
    - **Model domenowy**: `ScreeningDecision` rejestruje imutowalne zdarzenie decyzji dla publikacji, etapu (`TITLE_ABSTRACT` / `FULL_TEXT`) i reviewera. Przechowuje wybór wyniku (`INCLUDE` / `EXCLUDE` / `UNCERTAIN`), uzasadnienie (`rationale`), przypisanie reviewera (`reviewer_id`), znacznik czasu (`decided_at`) oraz autorytatywną migawkę ocen poszczególnych kryteriów (`CriterionAssessment`).
-   - **Autorytatywny snapshot kryterium**: Klient API dostarcza w payloadzie wyłącznie id ocenianego kryterium, wartość oceny (`MET` / `NOT_MET` / `UNCERTAIN` / `NOT_ASSESSED`) i opcjonalne notatki. Warstwa serwisu `ScreeningDecisionService` pobiera aktualny obiekt `ScreeningCriterion` z `ScreeningCriterionRepository` i buduje imutowalny snapshot (`criterion_name`, `criterion_type`, `criterion_stage`, `criterion_is_required`), uniemożliwiając sfałszowanie danych historycznych przez klienta API.
+   - **Autorytatywny snapshot kryterium**: Klient API przekazuje wyłącznie
+     manualne assessmenty. `ScreeningDecisionService` pobiera aktualne
+     `ScreeningCriterion` i buduje imutowalny snapshot. Dla `METADATA_RULE`
+     serwis uruchamia `ScreeningCriterionRuleEvaluator` na canonical
+     `Publication` i zapisuje evaluation mode, rule oraz evaluated value;
+     klient nie może spoofować wyniku automatic assessment.
    - **Reguły biznesowe w serwisie**: `ScreeningDecisionService` stanowi granicę (boundary) dla integralności decyzji. Weryfikuje istnienie i przynależność publikacji do projektu (`ProjectPublicationRepository`), przynależność i aktywność kryteriów (`is_active == True`), zgodność etapów, kompletność ocen dla aktywnych i wymaganych kryteriów etapu oraz odrzuca duplikaty. Serwis NIE wylicza wyniku `outcome` automatycznie z ocen kryteriów — wynik jest jawnie określany przez człowieka.
    - **Wzorzec persystencji decyzji**: `SqliteScreeningDecisionRepository` (tabela `screening_decisions` oraz `screening_criterion_assessments` z kompozytowym kluczem głównym `PRIMARY KEY (decision_id, criterion_id)` w migracji `migrations/0008_screening_decisions.sql`). Rejestracja decyzji ma charakter **append-only history** — zmiana decyzji tworzy nowy rekord z aktualnym timestampem. Najnowsza decyzja ustalana jest dla klucza `(project_id, publication_id, stage, reviewer_id)`.
    - **Zależności architektoniczne podsystemu**:
@@ -71,5 +105,5 @@ Podsystem kryteriów screeningu zapewnia rejestrację i zarządzanie kryteriami 
             ↘                        ↙
           SqliteScreeningDecisionRepository
             ↓
-          SQLite (migracja 0008_screening_decisions.sql)
+          SQLite (migracje 0008 i 0011)
      ```

@@ -10,6 +10,8 @@ import { SourcesIngestionPage } from './pages/SourcesIngestionPage';
 import { NormalizationPage } from './pages/NormalizationPage';
 import { DeduplicationPage } from './pages/DeduplicationPage';
 import { ScreeningPage } from './pages/ScreeningPage';
+import { TitleAbstractScreeningPage } from './pages/TitleAbstractScreeningPage';
+import { ScreeningSectionLayout } from './components/screening/ScreeningSectionLayout';
 import { QualityAssessmentPage } from './pages/QualityAssessmentPage';
 import { DataExtractionPlaceholderPage } from './pages/DataExtractionPlaceholderPage';
 import { ExportsPage } from './pages/ExportsPage';
@@ -30,7 +32,12 @@ export const App: React.FC = () => {
             <Route path="sources" element={<SourcesIngestionPage />} />
             <Route path="normalize" element={<NormalizationPage />} />
             <Route path="dedup" element={<DeduplicationPage />} />
-            <Route path="screen" element={<ScreeningPage />} />
+            <Route path="screen" element={<ScreeningSectionLayout />}>
+              <Route index element={<Navigate to="title-abstract" replace />} />
+              <Route path="criteria" element={<ScreeningPage />} />
+              <Route path="title-abstract" element={<TitleAbstractScreeningPage />} />
+              <Route path="title-abstract/:publicationId" element={<TitleAbstractScreeningPage />} />
+            </Route>
             <Route path="qa" element={<QualityAssessmentPage />} />
             <Route path="extract" element={<DataExtractionPlaceholderPage />} />
             <Route path="exports" element={<ExportsPage />} />

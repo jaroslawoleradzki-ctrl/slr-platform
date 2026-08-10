@@ -394,13 +394,13 @@ class SqliteProjectPublicationRepository:
             return
         if connection is not None:
             exists = connection.execute(
-                "SELECT 1 FROM project_publications WHERE project_id = ? LIMIT 1",
+                "SELECT 1 FROM projects WHERE project_id = ? LIMIT 1",
                 (project_id,),
             ).fetchone()
         else:
             with self._connect() as conn:
                 exists = conn.execute(
-                    "SELECT 1 FROM project_publications WHERE project_id = ? LIMIT 1",
+                    "SELECT 1 FROM projects WHERE project_id = ? LIMIT 1",
                     (project_id,),
                 ).fetchone()
         if exists is None:

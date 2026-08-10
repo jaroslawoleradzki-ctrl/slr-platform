@@ -39,10 +39,17 @@ from app.repositories.normalization_execution_repository import (
     default_normalization_execution_repository,
 )
 from app.repositories.project_publication_repository import (
+    DemoProjectPublicationRepository,
     ProjectNotFoundError,
     ProjectPublicationRepository,
     SqliteProjectPublicationRepository,
     default_project_publication_repository,
+)
+from app.repositories.search_result_snapshot_repository import (
+    SearchResultSnapshot,
+    SearchResultSnapshotRepository,
+    SqliteSearchResultSnapshotRepository,
+    default_search_result_snapshot_repository,
 )
 from app.repositories.search_strategy_repository import (
     SearchStrategyNotFoundError,
@@ -84,16 +91,14 @@ def get_normalization_execution_repository() -> NormalizationExecutionRepository
     return default_normalization_execution_repository()
 
 
+def get_search_result_snapshot_repository() -> SearchResultSnapshotRepository:
+    return default_search_result_snapshot_repository()
+
+
 def get_project_import_service(
-    pub_repo: ProjectPublicationRepository = Depends(
-        get_project_publication_repository
-    ),
-    history_repo: ImportHistoryRepository = Depends(
-        get_import_history_repository
-    ),
-    norm_repo: NormalizationExecutionRepository = Depends(
-        get_normalization_execution_repository
-    ),
+    pub_repo: ProjectPublicationRepository = Depends(get_project_publication_repository),
+    history_repo: ImportHistoryRepository = Depends(get_import_history_repository),
+    norm_repo: NormalizationExecutionRepository = Depends(get_normalization_execution_repository),
 ) -> ProjectImportService:
     tx_manager = None
     if isinstance(history_repo, SqliteImportHistoryRepository):
@@ -108,6 +113,15 @@ def get_project_import_service(
         import_history_repository=history_repo,
         normalization_repository=norm_repo,
         transaction_manager=tx_manager,
+        snapshot_repository=(
+            None
+            if isinstance(pub_repo, DemoProjectPublicationRepository)
+            else (
+                SqliteSearchResultSnapshotRepository(pub_repo._database_path)
+                if isinstance(pub_repo, SqliteProjectPublicationRepository)
+                else default_search_result_snapshot_repository()
+            )
+        ),
     )
 
 
@@ -144,12 +158,8 @@ def get_search_strategy(
 def put_search_strategy(
     project_id: str,
     payload: SearchStrategyPutRequest,
-    strategy_repository: SearchStrategyRepository = Depends(
-        get_search_strategy_repository
-    ),
-    project_repository: ProjectPublicationRepository = Depends(
-        get_project_publication_repository
-    ),
+    strategy_repository: SearchStrategyRepository = Depends(get_search_strategy_repository),
+    project_repository: ProjectPublicationRepository = Depends(get_project_publication_repository),
 ) -> SearchStrategy:
     """Validate and atomically replace one project's persisted strategy."""
 
@@ -167,10 +177,7 @@ def put_search_strategy(
         existing_strategy = None
 
     strategy = SearchStrategy(
-        strategy_id=(
-            payload.strategy_id
-            or (existing_strategy.strategy_id if existing_strategy else uuid4())
-        ),
+        strategy_id=(payload.strategy_id or (existing_strategy.strategy_id if existing_strategy else uuid4())),
         project_id=project_id,
         name=payload.name,
         description=payload.description,
@@ -182,12 +189,7 @@ def put_search_strategy(
         queries=payload.queries,
         version=payload.version,
         created_at=(
-            payload.created_at
-            or (
-                existing_strategy.created_at
-                if existing_strategy
-                else payload.creation_time()
-            )
+            payload.created_at or (existing_strategy.created_at if existing_strategy else payload.creation_time())
         ),
         updated_at=datetime.now(timezone.utc),
     )
@@ -211,9 +213,10 @@ def _map_result(
     publication: Publication,
     *,
     provider: str,
+    result_id: str | None = None,
 ) -> SearchResultRecordResponse:
     return SearchResultRecordResponse(
-        id=str(publication.record_id),
+        id=result_id or str(publication.record_id),
         title=publication.title,
         authors=[author.display_name for author in publication.authors],
         year=cast(int, publication.publication_year),
@@ -236,8 +239,7 @@ def _matches_execution_constraints(
     if payload.languages and publication.language not in payload.languages:
         return False
     if payload.publication_types and publication.document_type not in {
-        _PUBLICATION_TYPE_DOMAIN_MAP[value]
-        for value in payload.publication_types
+        _PUBLICATION_TYPE_DOMAIN_MAP[value] for value in payload.publication_types
     }:
         return False
     if payload.open_access and publication.open_access is not True:
@@ -254,6 +256,7 @@ async def execute_search_strategy(
     project_id: str,
     payload: SearchStrategyExecutionRequest,
     executor: LiveSearchExecutor = Depends(get_live_search_executor),
+    snapshot_repository: SearchResultSnapshotRepository = Depends(get_search_result_snapshot_repository),
 ) -> SearchStrategyExecutionResponse:
     """Execute the validated strategy through the selected live providers."""
 
@@ -266,33 +269,38 @@ async def execute_search_strategy(
         ) from exc
 
     publications_by_provider = [
-        (provider_result.search_run.provider, publication)
+        (provider_result.search_run, publication)
         for provider_result in execution.provider_results
         if provider_result.publications is not None
         for publication in provider_result.publications
         if _matches_execution_constraints(publication, payload)
     ]
-    results = [
-        _map_result(publication, provider=provider)
-        for provider, publication in publications_by_provider
-    ]
+    results = []
+    for search_run, publication in publications_by_provider:
+        source_id = _source_id(publication)
+        snapshot = snapshot_repository.save(
+            SearchResultSnapshot.create(
+                project_id=project_id,
+                search_run_id=search_run.run_id,
+                provider=search_run.provider,
+                source_id=source_id,
+                publication=publication,
+            )
+        )
+        results.append(_map_result(publication, provider=search_run.provider, result_id=str(snapshot.snapshot_id)))
     provider_errors = [
         SearchProviderErrorResponse(
             provider=cast(
                 Literal["openalex", "crossref"],
                 provider_result.search_run.provider,
             ),
-            message=(
-                f"{type(provider_result.error).__name__}: {provider_result.error}"
-            ),
+            message=(f"{type(provider_result.error).__name__}: {provider_result.error}"),
         )
         for provider_result in execution.provider_results
         if provider_result.error is not None
     ]
     successful_provider_results = [
-        provider_result
-        for provider_result in execution.provider_results
-        if provider_result.error is None
+        provider_result for provider_result in execution.provider_results if provider_result.error is None
     ]
     total_count = sum(
         provider_result.total_count
@@ -300,11 +308,7 @@ async def execute_search_strategy(
         else len(provider_result.publications or [])
         for provider_result in successful_provider_results
     )
-    next_cursor = (
-        successful_provider_results[0].next_cursor
-        if len(successful_provider_results) == 1
-        else None
-    )
+    next_cursor = successful_provider_results[0].next_cursor if len(successful_provider_results) == 1 else None
     query = build_search_query(payload)
     provider_queries = [
         ProviderQueryResponse(
@@ -326,10 +330,7 @@ async def execute_search_strategy(
         total_count=total_count,
         returned_count=len(results),
         next_cursor=next_cursor,
-        has_more=any(
-            provider_result.has_more
-            for provider_result in successful_provider_results
-        ),
+        has_more=any(provider_result.has_more for provider_result in successful_provider_results),
         results=results,
         provider_errors=provider_errors,
     )
@@ -343,12 +344,8 @@ async def execute_search_strategy(
 def import_search_results(
     project_id: str,
     payload: SearchResultsImportRequest,
-    repository: ProjectPublicationRepository = Depends(
-        get_project_publication_repository
-    ),
-    import_service: ProjectImportService = Depends(
-        get_project_import_service
-    ),
+    repository: ProjectPublicationRepository = Depends(get_project_publication_repository),
+    import_service: ProjectImportService = Depends(get_project_import_service),
 ) -> SearchResultsImportResponse:
     """Append the explicitly selected result records to the Working Collection."""
 
@@ -425,12 +422,8 @@ def import_search_results(
 async def import_bibliographic_file(
     project_id: str,
     file: UploadFile | None = File(default=None),
-    repository: ProjectPublicationRepository = Depends(
-        get_project_publication_repository
-    ),
-    import_service: ProjectImportService = Depends(
-        get_project_import_service
-    ),
+    repository: ProjectPublicationRepository = Depends(get_project_publication_repository),
+    import_service: ProjectImportService = Depends(get_project_import_service),
 ) -> BibliographicImportResponse:
     """Parse one RIS/BibTeX file and append its publications to a project."""
 
@@ -457,15 +450,11 @@ async def import_bibliographic_file(
 
         if suffix == ".ris":
             parsed_ris = parse_ris(content)
-            publications = [
-                normalize_publication(map_ris_record(record, source="ris"))
-                for record in parsed_ris
-            ]
+            publications = [normalize_publication(map_ris_record(record, source="ris")) for record in parsed_ris]
         else:
             parsed_bibtex = parse_bibtex(content)
             publications = [
-                normalize_publication(map_bibtex_record(record, source="bibtex"))
-                for record in parsed_bibtex
+                normalize_publication(map_bibtex_record(record, source="bibtex")) for record in parsed_bibtex
             ]
 
         if not publications:
@@ -507,12 +496,8 @@ async def import_bibliographic_file(
 )
 def list_bibliographic_imports(
     project_id: str,
-    project_repository: ProjectPublicationRepository = Depends(
-        get_project_publication_repository
-    ),
-    history_repository: ImportHistoryRepository = Depends(
-        get_import_history_repository
-    ),
+    project_repository: ProjectPublicationRepository = Depends(get_project_publication_repository),
+    history_repository: ImportHistoryRepository = Depends(get_import_history_repository),
 ) -> list[BibliographicImportHistoryResponse]:
     """Return durable bibliographic import history for one project."""
 
@@ -540,12 +525,8 @@ def list_bibliographic_imports(
 
 
 def get_sources_summary_service(
-    pub_repo: ProjectPublicationRepository = Depends(
-        get_project_publication_repository
-    ),
-    history_repo: ImportHistoryRepository = Depends(
-        get_import_history_repository
-    ),
+    pub_repo: ProjectPublicationRepository = Depends(get_project_publication_repository),
+    history_repo: ImportHistoryRepository = Depends(get_import_history_repository),
 ) -> SourcesSummaryService:
     return SourcesSummaryService(
         publication_repository=pub_repo,
@@ -560,12 +541,8 @@ def get_sources_summary_service(
 )
 def get_sources_summary(
     project_id: str,
-    project_repository: ProjectPublicationRepository = Depends(
-        get_project_publication_repository
-    ),
-    service: SourcesSummaryService = Depends(
-        get_sources_summary_service
-    ),
+    project_repository: ProjectPublicationRepository = Depends(get_project_publication_repository),
+    service: SourcesSummaryService = Depends(get_sources_summary_service),
 ) -> SourcesSummaryResponse:
     """Return read model summary for Sources & Imports screen."""
 

@@ -136,6 +136,15 @@ def test_merge_is_commutative_and_deterministic() -> None:
     assert policy.merge(first, second) == policy.merge(first, second)
 
 
+def test_merged_record_id_is_smallest_existing_member_id() -> None:
+    smallest = _publication(record_id=_EARLY_ID)
+    largest = _publication(record_id=_LATE_ID)
+    policy = PublicationMergePolicy()
+
+    assert policy.merge(largest, smallest).record_id == _EARLY_ID
+    assert policy.merge(smallest, largest).record_id == _EARLY_ID
+
+
 def test_merge_is_idempotent_and_returns_valid_new_publication() -> None:
     publication = _publication(
         title="Complete title",
@@ -225,9 +234,7 @@ def test_same_identifier_from_different_sources_preserves_both_attributions() ->
 def test_conflicting_unique_identifiers_are_explicit(
     identifier_type: IdentifierType,
 ) -> None:
-    first = _publication(
-        identifiers=[Identifier(type=identifier_type, value="first")]
-    )
+    first = _publication(identifiers=[Identifier(type=identifier_type, value="first")])
     second = _publication(
         record_id=_LATE_ID,
         identifiers=[Identifier(type=identifier_type, value="second")],

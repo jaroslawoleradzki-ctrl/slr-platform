@@ -26,6 +26,9 @@ from app.repositories.project_publication_repository import (
     SqliteProjectPublicationRepository,
     default_project_publication_repository,
 )
+from app.repositories.search_result_snapshot_repository import (
+    SearchResultSnapshotRepository,
+)
 from app.repositories.transaction_manager import (
     SqliteTransactionManager,
     default_transaction_manager,
@@ -41,15 +44,13 @@ class ProjectImportService:
         import_history_repository: ImportHistoryRepository | None = None,
         normalization_repository: NormalizationExecutionRepository | None = None,
         transaction_manager: SqliteTransactionManager | None = None,
+        snapshot_repository: SearchResultSnapshotRepository | None = None,
     ) -> None:
         self._pub_repo = publication_repository or default_project_publication_repository()
-        self._history_repo = (
-            import_history_repository or default_import_history_repository()
-        )
-        self._norm_repo = (
-            normalization_repository or default_normalization_execution_repository()
-        )
+        self._history_repo = import_history_repository or default_import_history_repository()
+        self._norm_repo = normalization_repository or default_normalization_execution_repository()
         self._tx_manager = transaction_manager or default_transaction_manager()
+        self._snapshot_repo = snapshot_repository
 
     def import_provider_results_group(
         self,
@@ -63,27 +64,25 @@ class ProjectImportService:
     ) -> PublicationImportResult:
         publications = []
         for record in records_group:
+            if self._snapshot_repo is not None:
+                snapshot = self._snapshot_repo.get(project_id, UUID(record.id))
+                if snapshot.provider != record.provider or snapshot.source_id != record.source_id:
+                    raise ValueError("search result identity does not match authoritative snapshot")
+                if snapshot.provider != provider_name:
+                    raise ValueError("snapshot provider does not match import group")
+                publications.append(snapshot.publication)
+                continue
             identifiers = []
             if record.doi is not None:
-                identifiers.append(
-                    Identifier(type=IdentifierType.DOI, value=record.doi)
-                )
+                identifiers.append(Identifier(type=IdentifierType.DOI, value=record.doi))
             publications.append(
                 Publication(
                     record_id=UUID(record.id),
                     title=record.title,
-                    authors=[
-                        Author(display_name=display_name)
-                        for display_name in record.authors
-                    ],
+                    authors=[Author(display_name=name) for name in record.authors],
                     publication_year=record.year,
                     identifiers=identifiers,
-                    provenance=[
-                        ProvenanceEntry(
-                            source=record.provider,
-                            source_record_id=record.source_id,
-                        )
-                    ],
+                    provenance=[ProvenanceEntry(source=record.provider, source_record_id=record.source_id)],
                 )
             )
 
@@ -117,13 +116,9 @@ class ProjectImportService:
         group_total_available: int | None,
     ) -> PublicationImportResult:
         if isinstance(self._pub_repo, SqliteProjectPublicationRepository):
-            group_result = self._pub_repo.import_source_publications(
-                project_id, publications, connection=conn
-            )
+            group_result = self._pub_repo.import_source_publications(project_id, publications, connection=conn)
         else:
-            group_result = self._pub_repo.import_source_publications(
-                project_id, publications
-            )
+            group_result = self._pub_repo.import_source_publications(project_id, publications)
 
         history_record = ImportHistoryRecord(
             import_id=uuid4(),
@@ -164,14 +159,10 @@ class ProjectImportService:
         connection: sqlite3.Connection | None = None,
     ) -> tuple[PublicationImportResult, ImportHistoryRecord]:
         if connection is not None:
-            return self._import_file_with_conn(
-                connection, project_id, filename, file_format, publications
-            )
+            return self._import_file_with_conn(connection, project_id, filename, file_format, publications)
 
         with self._tx_manager.transaction() as conn:
-            return self._import_file_with_conn(
-                conn, project_id, filename, file_format, publications
-            )
+            return self._import_file_with_conn(conn, project_id, filename, file_format, publications)
 
     def _import_file_with_conn(
         self,
@@ -182,19 +173,13 @@ class ProjectImportService:
         publications: list[Publication],
     ) -> tuple[PublicationImportResult, ImportHistoryRecord]:
         if isinstance(self._pub_repo, SqliteProjectPublicationRepository):
-            import_result = self._pub_repo.import_source_publications(
-                project_id, publications, connection=conn
-            )
+            import_result = self._pub_repo.import_source_publications(project_id, publications, connection=conn)
         else:
-            import_result = self._pub_repo.import_source_publications(
-                project_id, publications
-            )
+            import_result = self._pub_repo.import_source_publications(project_id, publications)
 
         warnings: list[str] = []
         if import_result.skipped_count:
-            warnings.append(
-                f"Skipped {import_result.skipped_count} duplicate record(s) already in the project."
-            )
+            warnings.append(f"Skipped {import_result.skipped_count} duplicate record(s) already in the project.")
 
         import_id = uuid4()
         history_record = ImportHistoryRecord(

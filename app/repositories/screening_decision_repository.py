@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import sqlite3
 from datetime import datetime, timezone
@@ -212,8 +213,9 @@ class SqliteScreeningDecisionRepository:
                 """
                 INSERT INTO screening_criterion_assessments (
                     decision_id, criterion_id, criterion_name, criterion_type,
-                    criterion_stage, criterion_is_required, assessment_value, notes
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    criterion_stage, criterion_is_required, assessment_value, notes,
+                    evaluation_mode, metadata_rule, evaluated_metadata_value
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     str(decision.decision_id),
@@ -224,6 +226,17 @@ class SqliteScreeningDecisionRepository:
                     1 if assessment.criterion_is_required else 0,
                     assessment.assessment_value.value,
                     assessment.notes,
+                    assessment.evaluation_mode.value,
+                    (
+                        assessment.metadata_rule.model_dump_json()
+                        if assessment.metadata_rule is not None
+                        else None
+                    ),
+                    (
+                        json.dumps(assessment.evaluated_metadata_value)
+                        if assessment.evaluation_mode.value == "metadata_rule"
+                        else None
+                    ),
                 ),
             )
 
@@ -338,7 +351,8 @@ class SqliteScreeningDecisionRepository:
         assessment_rows = connection.execute(
             """
             SELECT criterion_id, criterion_name, criterion_type, criterion_stage,
-                   criterion_is_required, assessment_value, notes
+                   criterion_is_required, assessment_value, notes,
+                   evaluation_mode, metadata_rule, evaluated_metadata_value
             FROM screening_criterion_assessments
             WHERE decision_id = ?
             ORDER BY criterion_id ASC
@@ -355,6 +369,11 @@ class SqliteScreeningDecisionRepository:
                 criterion_is_required=bool(a_row[4]),
                 assessment_value=CriterionAssessmentValue(a_row[5]),
                 notes=a_row[6],
+                evaluation_mode=a_row[7],
+                metadata_rule=json.loads(a_row[8]) if a_row[8] is not None else None,
+                evaluated_metadata_value=(
+                    json.loads(a_row[9]) if a_row[9] is not None else None
+                ),
             )
             for a_row in assessment_rows
         ]

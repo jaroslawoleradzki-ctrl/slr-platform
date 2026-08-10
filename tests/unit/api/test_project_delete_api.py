@@ -11,7 +11,11 @@ Coverage:
 """
 from __future__ import annotations
 
+import json
+import sqlite3
+from datetime import datetime, timezone
 from pathlib import Path
+from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
@@ -19,6 +23,8 @@ from fastapi.testclient import TestClient
 from app.api.main import app
 from app.api.routers.projects import get_project_deletion_service, get_project_repository
 from app.domain.duplicate_review import DuplicateDecision, DuplicateGroupReviewDecision
+from app.domain.provenance import ProvenanceEntry
+from app.domain.publication import Publication
 from app.repositories.duplicate_review_decision_repository import SqliteDuplicateReviewDecisionRepository
 from app.repositories.import_history_repository import SqliteImportHistoryRepository
 from app.repositories.normalization_execution_repository import SqliteNormalizationExecutionRepository
@@ -26,6 +32,11 @@ from app.repositories.project_publication_repository import SqliteProjectPublica
 from app.repositories.project_repository import SqliteProjectRepository
 from app.repositories.screening_criterion_repository import SqliteScreeningCriterionRepository
 from app.repositories.screening_decision_repository import SqliteScreeningDecisionRepository
+from app.repositories.search_result_snapshot_repository import (
+    SearchResultSnapshot,
+    SearchResultSnapshotNotFoundError,
+    SqliteSearchResultSnapshotRepository,
+)
 from app.repositories.search_strategy_repository import SqliteSearchStrategyRepository
 from app.repositories.transaction_manager import SqliteTransactionManager
 from app.services.project_deletion_service import SqliteProjectDeletionService
@@ -69,6 +80,7 @@ def _make_service(db_path: Path) -> SqliteProjectDeletionService:
         screening_decision_repo=SqliteScreeningDecisionRepository(db_path),
         screening_criterion_repo=SqliteScreeningCriterionRepository(db_path),
         search_strategy_repo=SqliteSearchStrategyRepository(db_path),
+        search_result_snapshot_repo=SqliteSearchResultSnapshotRepository(db_path),
         tx_manager=SqliteTransactionManager(db_path),
     )
 
@@ -180,6 +192,9 @@ def test_delete_rolls_back_all_cleanup_on_failure(
         "rollback-group",
         DuplicateGroupReviewDecision(decision=DuplicateDecision.APPROVE),
     )
+    snapshots = SqliteSearchResultSnapshotRepository(db_path)
+    snapshot = _snapshot(created_project_id, "rollback-source")
+    snapshots.save(snapshot)
 
     class FailingSearchStrategyRepository(SqliteSearchStrategyRepository):
         def delete_for_project(self, project_id, *, connection=None):
@@ -194,6 +209,7 @@ def test_delete_rolls_back_all_cleanup_on_failure(
         screening_decision_repo=SqliteScreeningDecisionRepository(db_path),
         screening_criterion_repo=SqliteScreeningCriterionRepository(db_path),
         search_strategy_repo=FailingSearchStrategyRepository(db_path),
+        search_result_snapshot_repo=snapshots,
         tx_manager=SqliteTransactionManager(db_path),
     )
 
@@ -202,6 +218,7 @@ def test_delete_rolls_back_all_cleanup_on_failure(
 
     assert repo.get(created_project_id).project_id == created_project_id
     assert "rollback-group" in duplicate_reviews.list_decisions_for_project(created_project_id)
+    assert snapshots.get(created_project_id, snapshot.snapshot_id) == snapshot
 
 
 def test_delete_is_project_scoped_and_accepts_archived_project(
@@ -224,6 +241,11 @@ def test_delete_is_project_scoped_and_accepts_archived_project(
         "project-b-group",
         DuplicateGroupReviewDecision(decision=DuplicateDecision.REJECT),
     )
+    snapshots = SqliteSearchResultSnapshotRepository(db_path)
+    project_a_snapshot = snapshots.save(_snapshot(created_project_id, "project-a-source"))
+    project_b_snapshot = snapshots.save(_snapshot(other_id, "project-b-source"))
+    _seed_project_owned_rows(db_path, created_project_id, "a")
+    _seed_project_owned_rows(db_path, other_id, "b")
     repo.archive(created_project_id)
 
     response = client.delete(f"/projects/{created_project_id}")
@@ -231,3 +253,81 @@ def test_delete_is_project_scoped_and_accepts_archived_project(
     assert response.status_code == 204
     assert repo.get(other_id).project_id == other_id
     assert "project-b-group" in duplicate_reviews.list_decisions_for_project(other_id)
+    with pytest.raises(SearchResultSnapshotNotFoundError):
+        snapshots.get(created_project_id, project_a_snapshot.snapshot_id)
+    assert snapshots.get(other_id, project_b_snapshot.snapshot_id) == project_b_snapshot
+    with sqlite3.connect(db_path) as connection:
+        for table in (
+            "import_history",
+            "project_publications",
+            "screening_criteria",
+            "screening_decisions",
+        ):
+            assert connection.execute(
+                f"SELECT COUNT(*) FROM {table} WHERE project_id = ?",  # noqa: S608 - fixed table allowlist
+                (created_project_id,),
+            ).fetchone()[0] == 0
+            assert connection.execute(
+                f"SELECT COUNT(*) FROM {table} WHERE project_id = ?",  # noqa: S608 - fixed table allowlist
+                (other_id,),
+            ).fetchone()[0] == 1
+
+
+def _snapshot(project_id: str, source_id: str) -> SearchResultSnapshot:
+    run_id = uuid4()
+    publication = Publication(
+        title=f"Publication from {source_id}",
+        provenance=[
+            ProvenanceEntry(
+                source="openalex",
+                source_record_id=source_id,
+                run_id=run_id,
+            )
+        ],
+    )
+    return SearchResultSnapshot.create(
+        project_id=project_id,
+        search_run_id=run_id,
+        provider="openalex",
+        source_id=source_id,
+        publication=publication,
+    )
+
+
+def _seed_project_owned_rows(database: Path, project_id: str, suffix: str) -> None:
+    now = datetime.now(timezone.utc).isoformat()
+    publication = Publication(title=f"Publication {suffix}")
+    with sqlite3.connect(database) as connection:
+        connection.execute(
+            """INSERT INTO import_history
+            (import_id, project_id, source_type, records_count, status, warnings, created_at)
+            VALUES (?, ?, 'provider', 1, 'success', '[]', ?)""",
+            (f"import-{suffix}", project_id, now),
+        )
+        connection.execute(
+            """INSERT INTO project_publications
+            (project_id, record_id, position, title, title_normalized, publication_year,
+             authors, identifiers, provenance, created_at, document)
+            VALUES (?, ?, 0, ?, ?, NULL, '[]', '[]', '[]', ?, ?)""",
+            (
+                project_id,
+                str(publication.record_id),
+                publication.title,
+                publication.title_normalized,
+                publication.created_at.isoformat(),
+                json.dumps(publication.model_dump(mode="json")),
+            ),
+        )
+        connection.execute(
+            """INSERT INTO screening_criteria
+            (criterion_id, project_id, name, criterion_type, screening_stage,
+             display_order, is_active, is_required)
+            VALUES (?, ?, 'Criterion', 'inclusion', 'title_abstract', 0, 1, 0)""",
+            (f"criterion-{suffix}", project_id),
+        )
+        connection.execute(
+            """INSERT INTO screening_decisions
+            (decision_id, project_id, publication_id, stage, outcome, reviewer_id, decided_at)
+            VALUES (?, ?, ?, 'title_abstract', 'include', 'reviewer', ?)""",
+            (f"decision-{suffix}", project_id, str(publication.record_id), now),
+        )
