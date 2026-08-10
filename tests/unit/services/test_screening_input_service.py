@@ -7,7 +7,7 @@ from app.domain.provenance import ProvenanceEntry
 from app.domain.publication import Publication
 from app.repositories.duplicate_review_decision_repository import InMemoryDuplicateReviewDecisionRepository
 from app.services.duplicate_group_builder import DuplicateGroupBuilder
-from app.services.screening_input_service import ScreeningInputService
+from app.services.screening_input_service import ScreeningInputReadinessStatus, ScreeningInputService
 
 
 class _Publications:
@@ -50,6 +50,7 @@ def test_pending_blocks_the_entire_input_set() -> None:
     result = service.get_readiness("a")
     assert not result.ready and result.unresolved_groups_count == 1
     assert result.publications == () and result.canonical_records_count == 0
+    assert result.readiness_status is ScreeningInputReadinessStatus.UNRESOLVED_DUPLICATES
 
 
 def test_approve_merges_once_with_stable_id_metadata_and_provenance() -> None:
@@ -84,3 +85,29 @@ def test_project_isolation() -> None:
     service, repo = _service([_pub(1)])
     repo.projects["b"] = [_pub(9)]
     assert service.get_input_set("a").publications != service.get_input_set("b").publications
+
+
+def test_merge_conflict_has_typed_readiness_reason() -> None:
+    first = _pub(1, "10.1/first").model_copy(
+        update={
+            "identifiers": [
+                Identifier(type=IdentifierType.DOI, value="10.1/first"),
+                Identifier(type=IdentifierType.PMID, value="shared"),
+            ]
+        }
+    )
+    second = _pub(2, "10.1/second").model_copy(
+        update={
+            "identifiers": [
+                Identifier(type=IdentifierType.DOI, value="10.1/second"),
+                Identifier(type=IdentifierType.PMID, value="shared"),
+            ]
+        }
+    )
+    service, _ = _service([first, second], [DuplicateDecision.APPROVE])
+
+    result = service.get_input_set("a")
+
+    assert not result.ready
+    assert result.unresolved_groups_count == 0
+    assert result.readiness_status is ScreeningInputReadinessStatus.MERGE_CONFLICT

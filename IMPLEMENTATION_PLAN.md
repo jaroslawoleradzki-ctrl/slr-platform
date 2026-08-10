@@ -528,7 +528,7 @@ Zakres:
 - deterministic canonical identity and ordering without changing Working Collection
 (Bez GUI, queue i decyzji screeningowych)
 
-Status: 🚧 Implemented on feature branch; pending integration review
+Status: ✅ Completed
 
 ---
 
@@ -541,7 +541,7 @@ Zakres:
 - save/resume, latest decision, filtering and progress counters
 - project-scoped backend API
 
-Status: ⬜ Planned
+Status: ✅ Completed
 
 ---
 

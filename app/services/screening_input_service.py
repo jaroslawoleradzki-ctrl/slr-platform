@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import StrEnum
 from functools import reduce
 from uuid import UUID
 
@@ -21,6 +22,12 @@ from app.services.publication_merge_policy import (
 )
 
 
+class ScreeningInputReadinessStatus(StrEnum):
+    READY = "ready"
+    UNRESOLVED_DUPLICATES = "unresolved_duplicates"
+    MERGE_CONFLICT = "merge_conflict"
+
+
 @dataclass(frozen=True, slots=True)
 class ScreeningInput:
     project_id: str
@@ -29,6 +36,7 @@ class ScreeningInput:
     canonical_records_count: int
     unresolved_groups_count: int
     publications: tuple[Publication, ...]
+    readiness_status: ScreeningInputReadinessStatus
 
 
 class ScreeningInputService:
@@ -53,7 +61,15 @@ class ScreeningInputService:
         decisions = self._decisions.list_decisions_for_project(project_id)
         unresolved = [group for group in groups if str(group.group_id) not in decisions]
         if unresolved:
-            return ScreeningInput(project_id, False, len(publications), 0, len(unresolved), ())
+            return ScreeningInput(
+                project_id,
+                False,
+                len(publications),
+                0,
+                len(unresolved),
+                (),
+                ScreeningInputReadinessStatus.UNRESOLVED_DUPLICATES,
+            )
 
         grouped_ids: set[UUID] = set()
         canonical: list[Publication] = []
@@ -68,7 +84,15 @@ class ScreeningInputService:
                 try:
                     canonical.append(reduce(self._merge_policy.merge, members))
                 except PublicationMergeConflict:
-                    return ScreeningInput(project_id, False, len(publications), 0, 0, ())
+                    return ScreeningInput(
+                        project_id,
+                        False,
+                        len(publications),
+                        0,
+                        0,
+                        (),
+                        ScreeningInputReadinessStatus.MERGE_CONFLICT,
+                    )
             else:
                 canonical.extend(members)
 
@@ -81,6 +105,7 @@ class ScreeningInputService:
             len(ordered),
             0,
             ordered,
+            ScreeningInputReadinessStatus.READY,
         )
 
     def get_readiness(self, project_id: str) -> ScreeningInput:
