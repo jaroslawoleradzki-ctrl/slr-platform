@@ -10,11 +10,11 @@ Unlike ROADMAP.md, this file is intentionally technical and may change frequentl
 
 Current milestone:
 
-Version 0.2.8 — Screening Criteria Persistence and API (completed)
+Version 0.2.9 — Screening Configuration GUI (completed)
 
 Next milestone:
 
-Phase 7 — Screening (Phase 7.3 — Screening Configuration GUI next)
+Phase 7 — Screening (Phase 7.4 — Screening Decision Domain and Persistence next)
 
 ---
 
@@ -497,7 +497,7 @@ Zakres:
 - loading, empty, error, and validation states
 (Zero hardcoded criteria)
 
-Status: ⬜ Planned
+Status: ✅ Completed (ScreeningCriteriaList, ScreeningCriterionCard, ScreeningCriterionModal, projectApiService 4 API methods, error/loading/empty/validation states, zero hardcoded criteria, 22 frontend tests)
 
 ---
 

@@ -4,6 +4,20 @@ This document records important project decisions that do not require a full ADR
 
 ## 2026-08-10
 
+### Phase 7.3 — Screening Configuration GUI Architecture (v0.2.9)
+
+The graphical user interface for managing screening criteria (`ScreeningPage`, `ScreeningCriterionCard`, `ScreeningCriterionModal`, `ScreeningCriteriaList`) was designed and implemented based on the real Phase 7.2 backend API.
+
+Key architectural decisions:
+- **Backend API as Single Source of Truth**: The GUI fetches criteria directly from `GET /projects/{project_id}/screening/criteria` and performs all modifications via real backend REST endpoints (`POST`, `PUT`, `PATCH /deactivate`). Zero mock or hardcoded criteria exist in the frontend code.
+- **Explicit Active Creation**: Newly created criteria are explicitly sent with `is_active: true` in the creation payload. The active/inactive toggle is excluded from the Create form to prevent immediate creation of inactive criteria. In Edit mode, `is_active` remains fully configurable.
+- **Soft Deactivation & Reactivation UI**: Deactivating a criterion invokes `PATCH /deactivate` without deleting the component or record. Inactive criteria remain visible with a distinct dashed/muted visual treatment and a prominent "Dezaktywowane" status badge. An "Aktywuj" action button enables reactivation via `PUT` with `is_active: true`.
+- **Workflow Navigation Decoupling**: Creating or configuring criteria does NOT alter `computeWorkflowStatus` or mark the Screening stage as completed or in progress. Screening decisions (`ScreeningDecision`) and publication screening workflows remain deferred to subsequent increments (Phase 7.4–7.6).
+
+---
+
+## 2026-08-10
+
 ### Phase 7.2 — Screening Criteria Persistence and API Architecture
 
 Durable SQLite persistence and project-scoped REST API for `ScreeningCriterion` were designed and implemented in `app.repositories.screening_criterion_repository` and `app.api.routers.screening`.

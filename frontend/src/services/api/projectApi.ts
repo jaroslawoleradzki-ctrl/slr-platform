@@ -14,6 +14,10 @@ import {
   SearchStrategy,
   SearchStrategyWriteRequest,
   NormalizationResponse,
+  ScreeningCriterionResponse,
+  ScreeningCriterionListResponse,
+  ScreeningCriterionCreatePayload,
+  ScreeningCriterionUpdatePayload,
 } from '../../types';
 import { MOCK_PROJECTS } from '../../mocks/projectData';
 import { API_BASE_URL } from '../../config/api';
@@ -96,6 +100,23 @@ export interface ProjectApiService {
   getSourcesSummary(projectId: string): Promise<SourcesSummaryResponse>;
   getNormalization(projectId: string): Promise<NormalizationResponse | null>;
   runNormalization(projectId: string): Promise<NormalizationResponse>;
+  listScreeningCriteria(
+    projectId: string,
+    activeOnly?: boolean
+  ): Promise<ScreeningCriterionListResponse>;
+  createScreeningCriterion(
+    projectId: string,
+    payload: ScreeningCriterionCreatePayload
+  ): Promise<ScreeningCriterionResponse>;
+  updateScreeningCriterion(
+    projectId: string,
+    criterionId: string,
+    payload: ScreeningCriterionUpdatePayload
+  ): Promise<ScreeningCriterionResponse>;
+  deactivateScreeningCriterion(
+    projectId: string,
+    criterionId: string
+  ): Promise<ScreeningCriterionResponse>;
 }
 
 class MixedProjectApiService implements ProjectApiService {
@@ -268,6 +289,91 @@ class MixedProjectApiService implements ProjectApiService {
     }
     if (!response.ok) throw new Error(await formatFastApiError(response, 'uruchomić normalizacji'));
     return response.json() as Promise<NormalizationResponse>;
+  }
+
+  async listScreeningCriteria(
+    projectId: string,
+    activeOnly?: boolean
+  ): Promise<ScreeningCriterionListResponse> {
+    const url = `${API_BASE_URL}/projects/${projectId}/screening/criteria${activeOnly ? '?active_only=true' : ''}`;
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        headers: { Accept: 'application/json' },
+      });
+    } catch {
+      throw new Error('Nie udało się pobrać kryteriów screeningu.');
+    }
+    if (!response.ok) {
+      throw new Error(await formatFastApiError(response, 'pobrać kryteriów screeningu'));
+    }
+    return response.json() as Promise<ScreeningCriterionListResponse>;
+  }
+
+  async createScreeningCriterion(
+    projectId: string,
+    payload: ScreeningCriterionCreatePayload
+  ): Promise<ScreeningCriterionResponse> {
+    let response: Response;
+    try {
+      response = await fetch(`${API_BASE_URL}/projects/${projectId}/screening/criteria`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify(payload),
+      });
+    } catch {
+      throw new Error('Nie udało się utworzyć kryterium screeningu.');
+    }
+    if (!response.ok) {
+      throw new Error(await formatFastApiError(response, 'utworzyć kryterium screeningu'));
+    }
+    return response.json() as Promise<ScreeningCriterionResponse>;
+  }
+
+  async updateScreeningCriterion(
+    projectId: string,
+    criterionId: string,
+    payload: ScreeningCriterionUpdatePayload
+  ): Promise<ScreeningCriterionResponse> {
+    let response: Response;
+    try {
+      response = await fetch(
+        `${API_BASE_URL}/projects/${projectId}/screening/criteria/${criterionId}`,
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify(payload),
+        }
+      );
+    } catch {
+      throw new Error('Nie udało się zaktualizować kryterium screeningu.');
+    }
+    if (!response.ok) {
+      throw new Error(await formatFastApiError(response, 'zaktualizować kryterium screeningu'));
+    }
+    return response.json() as Promise<ScreeningCriterionResponse>;
+  }
+
+  async deactivateScreeningCriterion(
+    projectId: string,
+    criterionId: string
+  ): Promise<ScreeningCriterionResponse> {
+    let response: Response;
+    try {
+      response = await fetch(
+        `${API_BASE_URL}/projects/${projectId}/screening/criteria/${criterionId}/deactivate`,
+        {
+          method: 'PATCH',
+          headers: { Accept: 'application/json' },
+        }
+      );
+    } catch {
+      throw new Error('Nie udało się dezaktywować kryterium screeningu.');
+    }
+    if (!response.ok) {
+      throw new Error(await formatFastApiError(response, 'dezaktywować kryterium screeningu'));
+    }
+    return response.json() as Promise<ScreeningCriterionResponse>;
   }
 
   async getProjectById(id: string): Promise<SLRProject | null> {

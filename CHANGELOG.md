@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.2.9] — 2026-08-10
+
+### Added / Improved
+
+- **Phase 7.3 Screening Configuration GUI**: Added project-scoped GUI for configuring screening criteria based on real Phase 7.2 REST API endpoints (`/projects/{project_id}/screening/criteria`).
+- Added `ScreeningCriterionCard` component rendering criterion metadata (display order `#N`, name, description, Inclusion/Exclusion badges, stage badges, required/optional status, active/inactive state) and action buttons (`Edytuj`, `Dezaktywuj`, `Aktywuj`).
+- Added `ScreeningCriterionModal` component supporting Create & Edit modes with form validation (empty name, negative display order), explicit `is_active: true` payload on creation without active toggle, and configurable active/inactive state on edit.
+- Added `ScreeningCriteriaList` component handling loading (`LoadingSpinner`), error alert with retry button (`ErrorAlert`), empty state (`EmptyState` with info banner and action), and deterministic list rendering.
+- Updated `ScreeningPage` to integrate criteria management GUI connected to `projectApiService` (`listScreeningCriteria`, `createScreeningCriterion`, `updateScreeningCriterion`, `deactivateScreeningCriterion`).
+- Added 22 frontend unit and integration tests in `frontend/tests/ScreeningCriteria.test.tsx`.
+
 ## [0.2.8] — 2026-08-10
 
 ### Added

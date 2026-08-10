@@ -325,6 +325,46 @@ export interface ApiDuplicateGroupListResponse {
   groups: ApiDuplicateGroup[];
 }
 
+export type ScreeningCriterionType = 'inclusion' | 'exclusion';
+export type ScreeningCriterionStage = 'title_abstract' | 'full_text' | 'both';
+
+export interface ScreeningCriterionResponse {
+  criterion_id: string;
+  project_id: string;
+  name: string;
+  description: string | null;
+  criterion_type: ScreeningCriterionType;
+  screening_stage: ScreeningCriterionStage;
+  display_order: number;
+  is_active: boolean;
+  is_required: boolean;
+}
+
+export interface ScreeningCriterionListResponse {
+  items: ScreeningCriterionResponse[];
+  total: number;
+}
+
+export interface ScreeningCriterionCreatePayload {
+  name: string;
+  description?: string | null;
+  criterion_type: ScreeningCriterionType;
+  screening_stage: ScreeningCriterionStage;
+  display_order: number;
+  is_active?: boolean;
+  is_required?: boolean;
+}
+
+export interface ScreeningCriterionUpdatePayload {
+  name: string;
+  description?: string | null;
+  criterion_type: ScreeningCriterionType;
+  screening_stage: ScreeningCriterionStage;
+  display_order: number;
+  is_active: boolean;
+  is_required: boolean;
+}
+
 export interface ScreeningStatus {
   titleAbstract: {
     pending: number;
