@@ -50,6 +50,26 @@ Key architectural decisions:
 
 ## 2026-08-10
 
+### Phase 7.4 — Screening Decision Domain and Persistence (v0.3.0)
+
+Phase 7.4 establishes the domain model, application service, SQLite persistence layer, and REST API for publication screening decisions (`ScreeningDecision`).
+
+Key architectural decisions:
+- **Project Isolation & Required `project_id`**: Every `ScreeningDecision` is strictly scoped to a project (`project_id: str` is a required non-blank invariant).
+- **Single Decision Stage**: Each decision record corresponds to exactly one screening stage (`TITLE_ABSTRACT` or `FULL_TEXT`). The criteria scope `BOTH` is an applicability scope for criteria, NOT a valid decision stage.
+- **Explicit Human Outcome Selection**: The final outcome (`INCLUDE`, `EXCLUDE`, `UNCERTAIN`) is explicitly selected by the human reviewer. Criterion-level assessments do NOT automatically derive or compute the decision outcome.
+- **Append-Only History Trail**: Recording a new screening decision for a publication creates a new immutable record with an updated UTC timestamp (`decided_at`). Decisions are never destructively overwritten in-place.
+- **Latest Decision Resolution**: Current/latest decision resolution operates over the logical tuple `(project_id, publication_id, stage, reviewer_id)` by selecting the record with the most recent `decided_at` timestamp.
+- **Authoritative Server-Side Criterion Snapshot**: Client API input payloads supply only criterion evaluation inputs (`criterion_id`, `assessment_value`, `notes`). `ScreeningDecisionService` fetches the active `ScreeningCriterion` from `ScreeningCriterionRepository` and constructs an immutable `CriterionAssessment` snapshot (`criterion_id`, `criterion_name`, `criterion_type`, `criterion_stage`, `criterion_is_required`, `assessment_value`, `notes`). Historical assessment snapshots cannot be forged by clients.
+- **Inactive Criteria & Stage Incompatibility Rejection**: New decisions cannot assess inactive criteria (`is_active == False`). Criteria stages must match the decision stage (`TITLE_ABSTRACT` decision permits `TITLE_ABSTRACT` or `BOTH` criteria; `FULL_TEXT` decision permits `FULL_TEXT` or `BOTH` criteria).
+- **Required Criteria Completeness**: Every active required criterion (`is_required == True`) matching the decision stage must receive an assessment other than `NOT_ASSESSED`.
+- **Composite Primary Key in Persistence**: Table `screening_criterion_assessments` uses `PRIMARY KEY (decision_id, criterion_id)` without a redundant surrogate key.
+- **100% AI-Free Design**: Phase 7.4 decision structures contain no AI recommendations, LLM outputs, or model metadata.
+
+---
+
+## 2026-08-10
+
 ### Phase 7 — Screening Architecture & Incremental Workflow Plan
 
 Before initiating Phase 7 implementation, the architecture and implementation sequence for Systematic Review Screening were formalized.

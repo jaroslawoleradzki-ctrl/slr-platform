@@ -11,6 +11,8 @@ from app.domain.provenance import ProvenanceEntry
 from app.domain.publication import DocumentType, Publication
 from app.domain.screening import (
     AIRecommendation,
+    CriterionAssessment,
+    CriterionAssessmentValue,
     ScreeningCriterion,
     ScreeningCriterionStage,
     ScreeningCriterionType,
@@ -36,6 +38,8 @@ __all__ = [
     "Affiliation",
     "Author",
     "BooleanOperator",
+    "CriterionAssessment",
+    "CriterionAssessmentValue",
     "DocumentType",
     "DuplicateDecision",
     "DuplicateDecisionType",

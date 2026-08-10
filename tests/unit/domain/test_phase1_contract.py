@@ -87,18 +87,18 @@ def test_human_screening_decision_and_ai_recommendation_remain_separate() -> Non
         rationale="The abstract does not concern manufacturing.",
     )
     decision = ScreeningDecision(
+        project_id="proj-1",
         publication_id=Publication(title="Example").record_id,
         stage=ScreeningStage.TITLE_ABSTRACT,
-        human_outcome=ScreeningOutcome.INCLUDE,
+        outcome=ScreeningOutcome.INCLUDE,
         reviewer_id="reviewer-1",
-        ai_recommendation=recommendation,
     )
 
-    restored = ScreeningDecision.model_validate_json(decision.model_dump_json())
+    restored_decision = ScreeningDecision.model_validate_json(decision.model_dump_json())
+    restored_rec = AIRecommendation.model_validate_json(recommendation.model_dump_json())
 
-    assert restored.human_outcome is ScreeningOutcome.INCLUDE
-    assert restored.ai_recommendation is not None
-    assert restored.ai_recommendation.outcome is ScreeningOutcome.EXCLUDE
+    assert restored_decision.outcome is ScreeningOutcome.INCLUDE
+    assert restored_rec.outcome is ScreeningOutcome.EXCLUDE
 
 
 def test_domain_models_reject_unknown_fields() -> None:

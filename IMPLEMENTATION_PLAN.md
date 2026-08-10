@@ -10,11 +10,11 @@ Unlike ROADMAP.md, this file is intentionally technical and may change frequentl
 
 Current milestone:
 
-Version 0.2.9 — Screening Configuration GUI (completed)
+Version 0.3.0 — Screening Decision Domain and Persistence (completed)
 
 Next milestone:
 
-Phase 7 — Screening (Phase 7.4 — Screening Decision Domain and Persistence next)
+Phase 7 — Screening (Phase 7.5 — Title & Abstract Screening next)
 
 ---
 
@@ -513,7 +513,7 @@ Zakres:
 - SQLite persistence (`SqliteScreeningDecisionRepository`) and database migration
 - REST API and contract tests
 
-Status: ⬜ Planned
+Status: ✅ Completed (ScreeningDecision, CriterionAssessment, CriterionAssessmentValue, authoritative criterion snapshot, ScreeningDecisionService validation rules, SqliteScreeningDecisionRepository, migration 0008_screening_decisions.sql, REST API endpoints, 22 backend test cases, 100% AI-free)
 
 ---
 

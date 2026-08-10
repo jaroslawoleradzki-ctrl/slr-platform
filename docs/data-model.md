@@ -107,6 +107,53 @@ Pola:
 - rozpoczęcie i zakończenie;
 - wersja konfiguracji lub commit Git.
 
+### ScreeningCriterion
+
+Kryterium kwalifikacji lub wykluczenia dla projektu (tabela `screening_criteria`, migracja `0007_screening_criteria.sql`):
+- `criterion_id` (TEXT PRIMARY KEY, UUID);
+- `project_id` (TEXT NOT NULL);
+- `name` (TEXT NOT NULL);
+- `description` (TEXT);
+- `criterion_type` (TEXT NOT NULL, `inclusion` / `exclusion`);
+- `screening_stage` (TEXT NOT NULL, `title_abstract` / `full_text` / `both`);
+- `display_order` (INTEGER NOT NULL DEFAULT 0);
+- `is_active` (INTEGER NOT NULL DEFAULT 1);
+- `is_required` (INTEGER NOT NULL DEFAULT 1);
+- `created_at` (TEXT NOT NULL);
+- `updated_at` (TEXT NOT NULL).
+
+### ScreeningDecision
+
+Decyzja screeningowa dla publikacji (tabela `screening_decisions`, migracja `0008_screening_decisions.sql`):
+- `decision_id` (TEXT PRIMARY KEY, UUID);
+- `project_id` (TEXT NOT NULL);
+- `publication_id` (TEXT NOT NULL);
+- `stage` (TEXT NOT NULL, `title_abstract` / `full_text`);
+- `outcome` (TEXT NOT NULL, `include` / `exclude` / `uncertain`);
+- `reviewer_id` (TEXT NOT NULL);
+- `rationale` (TEXT);
+- `decided_at` (TEXT NOT NULL).
+
+Indeksy:
+- `idx_screening_decisions_lookup`: `(project_id, publication_id, stage, reviewer_id, decided_at DESC)` dla szybkiej rozdzielczości najnowszej decyzji (`latest`);
+- `idx_screening_decisions_project_stage`: `(project_id, stage)`.
+
+Semantyka: Append-only history — rejestracja nowej decyzji dla tej samej publikacji, etapu i reviewera tworzy nowy rekord z bieżącym timestampem `decided_at`.
+
+### ScreeningCriterionAssessment
+
+Autorytatywny snapshot oceny jednostkowego kryterium w chwili podjęcia decyzji (tabela `screening_criterion_assessments`, migracja `0008_screening_decisions.sql`):
+- `decision_id` (TEXT NOT NULL REFERENCES `screening_decisions(decision_id)` ON DELETE CASCADE);
+- `criterion_id` (TEXT NOT NULL);
+- `criterion_name` (TEXT NOT NULL, migawka z `ScreeningCriterion.name`);
+- `criterion_type` (TEXT NOT NULL, `inclusion` / `exclusion`);
+- `criterion_stage` (TEXT NOT NULL, `title_abstract` / `full_text` / `both`);
+- `criterion_is_required` (INTEGER NOT NULL, 1/0);
+- `assessment_value` (TEXT NOT NULL, `met` / `not_met` / `uncertain` / `not_assessed`);
+- `notes` (TEXT).
+
+Klucz główny: Kompozytowy `PRIMARY KEY (decision_id, criterion_id)`.
+
 ## 2. Zasady
 
 1. Dane surowe są niezmienne.
@@ -115,3 +162,4 @@ Pola:
 4. Rekord kanoniczny może mieć wiele źródeł.
 5. Decyzje człowieka i AI są przechowywane oddzielnie.
 6. Usunięcie duplikatu nie usuwa danych źródłowych.
+7. Migawka kryteriów w ocenach decyzji jest imutowalna i tworzona po stronie serwera z autorytatywnych kryteriów projektu.

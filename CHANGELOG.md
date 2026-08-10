@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.3.0] — 2026-08-10
+
+### Added
+
+- **Phase 7.4 Screening Decision Domain and Persistence**: Added project-scoped screening decision domain model (`ScreeningDecision`), `ScreeningOutcome` (`INCLUDE`, `EXCLUDE`, `UNCERTAIN`), `CriterionAssessmentValue` (`MET`, `NOT_MET`, `UNCERTAIN`, `NOT_ASSESSED`), and `CriterionAssessment`.
+- Added server-side authoritative criterion snapshot construction in `ScreeningDecisionService` to capture immutable criterion metadata (`criterion_id`, `criterion_name`, `criterion_type`, `criterion_stage`, `criterion_is_required`) at decision time.
+- Added business rule validations in `ScreeningDecisionService`: publication existence and project ownership, criteria project ownership, inactive criterion rejection for new decisions, stage compatibility (`TITLE_ABSTRACT` or `FULL_TEXT`), required active criteria completeness, duplicate assessment input rejection, and explicit human outcome selection (no automatic outcome derivation).
+- Added durable SQLite persistence in `SqliteScreeningDecisionRepository` and migration `0008_screening_decisions.sql` with composite primary key `(decision_id, criterion_id)` on `screening_criterion_assessments`.
+- Implemented append-only decision history and deterministic latest decision resolution per `(project_id, publication_id, stage, reviewer_id)`.
+- Added project-scoped REST API endpoints (`/projects/{project_id}/screening/decisions`, `GET .../latest`, `GET .../history`, `GET .../{decision_id}`) and DTOs.
+- 100% AI-free design with 22 backend test cases.
+
 ## [0.2.9] — 2026-08-10
 
 ### Added / Improved

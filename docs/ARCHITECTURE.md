@@ -55,3 +55,21 @@ Podsystem kryteriów screeningu zapewnia rejestrację i zarządzanie kryteriami 
 
 3. **Warstwa API (`app.api.routers.screening`, `app.api.dto.screening`)**:
    - Project-scoped REST API (`/projects/{project_id}/screening/criteria`) obsługujące operacje `POST` (tworzenie), `GET` (pobieranie pojedyncze i lista), `PUT` (edycja atrybutów bez zmiany tożsamości `criterion_id` ani własności `project_id`) oraz `PATCH /deactivate` (soft-lifecycle).
+
+4. **Podsystem Decyzji Screeningowych (`ScreeningDecision`, `ScreeningDecisionService`, `SqliteScreeningDecisionRepository`)**:
+   - **Model domenowy**: `ScreeningDecision` rejestruje imutowalne zdarzenie decyzji dla publikacji, etapu (`TITLE_ABSTRACT` / `FULL_TEXT`) i reviewera. Przechowuje wybór wyniku (`INCLUDE` / `EXCLUDE` / `UNCERTAIN`), uzasadnienie (`rationale`), przypisanie reviewera (`reviewer_id`), znacznik czasu (`decided_at`) oraz autorytatywną migawkę ocen poszczególnych kryteriów (`CriterionAssessment`).
+   - **Autorytatywny snapshot kryterium**: Klient API dostarcza w payloadzie wyłącznie id ocenianego kryterium, wartość oceny (`MET` / `NOT_MET` / `UNCERTAIN` / `NOT_ASSESSED`) i opcjonalne notatki. Warstwa serwisu `ScreeningDecisionService` pobiera aktualny obiekt `ScreeningCriterion` z `ScreeningCriterionRepository` i buduje imutowalny snapshot (`criterion_name`, `criterion_type`, `criterion_stage`, `criterion_is_required`), uniemożliwiając sfałszowanie danych historycznych przez klienta API.
+   - **Reguły biznesowe w serwisie**: `ScreeningDecisionService` stanowi granicę (boundary) dla integralności decyzji. Weryfikuje istnienie i przynależność publikacji do projektu (`ProjectPublicationRepository`), przynależność i aktywność kryteriów (`is_active == True`), zgodność etapów, kompletność ocen dla aktywnych i wymaganych kryteriów etapu oraz odrzuca duplikaty. Serwis NIE wylicza wyniku `outcome` automatycznie z ocen kryteriów — wynik jest jawnie określany przez człowieka.
+   - **Wzorzec persystencji decyzji**: `SqliteScreeningDecisionRepository` (tabela `screening_decisions` oraz `screening_criterion_assessments` z kompozytowym kluczem głównym `PRIMARY KEY (decision_id, criterion_id)` w migracji `migrations/0008_screening_decisions.sql`). Rejestracja decyzji ma charakter **append-only history** — zmiana decyzji tworzy nowy rekord z aktualnym timestampem. Najnowsza decyzja ustalana jest dla klucza `(project_id, publication_id, stage, reviewer_id)`.
+   - **Zależności architektoniczne podsystemu**:
+     ```text
+     REST API (/projects/{project_id}/screening/decisions)
+            ↓
+     ScreeningDecisionService (weryfikacja integralności biznesowej)
+            ↙                        ↘
+     ProjectPublicationRepository   ScreeningCriterionRepository (authoritative snapshot)
+            ↘                        ↙
+          SqliteScreeningDecisionRepository
+            ↓
+          SQLite (migracja 0008_screening_decisions.sql)
+     ```
