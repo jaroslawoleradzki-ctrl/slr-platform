@@ -51,6 +51,12 @@ class ImportHistoryRepository(Protocol):
         """Find an existing import history record by project ID and fingerprint."""
         ...
 
+    def delete_for_project(
+        self, project_id: str, *, connection: sqlite3.Connection | None = None
+    ) -> None:
+        """Delete all import history records for the given project."""
+        ...
+
 
 class SqliteImportHistoryRepository:
     def __init__(self, database_path: str | Path) -> None:
@@ -145,6 +151,19 @@ class SqliteImportHistoryRepository:
         if row is None:
             return None
         return self._record_from_row(row)
+
+    def delete_for_project(
+        self, project_id: str, *, connection: sqlite3.Connection | None = None
+    ) -> None:
+        if connection is not None:
+            connection.execute(
+                "DELETE FROM import_history WHERE project_id = ?", (project_id,)
+            )
+        else:
+            with self._connect() as conn:
+                conn.execute(
+                    "DELETE FROM import_history WHERE project_id = ?", (project_id,)
+                )
 
     @staticmethod
     def _record_from_row(row: tuple[object, ...]) -> ImportHistoryRecord:

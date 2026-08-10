@@ -31,6 +31,12 @@ class SearchStrategyRepository(Protocol):
         """Save or replace the persisted SearchStrategy for a project."""
         ...
 
+    def delete_for_project(
+        self, project_id: str, *, connection: sqlite3.Connection | None = None
+    ) -> None:
+        """Delete the search strategy for the given project, if any."""
+        ...
+
 
 class SqliteSearchStrategyRepository:
     """SQLite adapter storing the complete versioned domain document atomically."""
@@ -100,6 +106,19 @@ class SqliteSearchStrategyRepository:
                 strategy.updated_at.isoformat(),
             ),
         )
+
+    def delete_for_project(
+        self, project_id: str, *, connection: sqlite3.Connection | None = None
+    ) -> None:
+        if connection is not None:
+            connection.execute(
+                "DELETE FROM search_strategies WHERE project_id = ?", (project_id,)
+            )
+        else:
+            with self._connect() as conn:
+                conn.execute(
+                    "DELETE FROM search_strategies WHERE project_id = ?", (project_id,)
+                )
 
     def _connect(self) -> sqlite3.Connection:
         return sqlite3.connect(self._database_path)

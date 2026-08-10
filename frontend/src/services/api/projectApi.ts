@@ -70,6 +70,7 @@ export interface ProjectApiService {
   updateProject(id: string, payload: ProjectUpdatePayload): Promise<SLRProject>;
   archiveProject(id: string): Promise<SLRProject>;
   restoreProject(id: string): Promise<SLRProject>;
+  deleteProject(id: string): Promise<void>;
   getDuplicateGroups(projectId: string): Promise<ApiDuplicateGroupListResponse>;
   postDuplicateGroupDecision(
     projectId: string,
@@ -296,6 +297,20 @@ class MixedProjectApiService implements ProjectApiService {
     const data = (await response.json()) as ApiProjectResponse;
     return mapApiProjectToSLRProject(data);
   }
+  async deleteProject(id: string): Promise<void> {
+    let response: Response;
+    try {
+      response = await fetch(`${API_BASE_URL}/projects/${id}`, {
+        method: 'DELETE',
+        headers: { Accept: 'application/json' },
+      });
+    } catch {
+      throw new Error('Nie udało się połączyć z backendem. Sprawdź połączenie.');
+    }
+    if (!response.ok) throw new Error(await formatFastApiError(response, 'usunąć projekt'));
+    // No content expected
+  }
+
 
   async restoreProject(id: string): Promise<SLRProject> {
     let response: Response;

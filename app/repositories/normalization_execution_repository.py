@@ -29,7 +29,7 @@ class NormalizationExecutionRepository(Protocol):
         """Retrieve the latest normalization execution for a project, or None if never run."""
         ...
 
-    def delete_for_project(self, project_id: str) -> None:
+    def delete_for_project(self, project_id: str, *, connection: sqlite3.Connection | None = None) -> None:
         """Delete normalization execution summary for a project."""
         ...
 

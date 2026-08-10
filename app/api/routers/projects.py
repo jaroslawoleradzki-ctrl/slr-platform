@@ -16,12 +16,20 @@ from app.repositories.project_repository import (
     ProjectRepository,
     default_project_repository,
 )
+from app.services.project_deletion_service import (
+    ProjectDeletionService,
+    default_project_deletion_service,
+)
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
 
 def get_project_repository() -> ProjectRepository:
     return default_project_repository()
+
+
+def get_project_deletion_service() -> ProjectDeletionService:
+    return default_project_deletion_service()
 
 
 def generate_project_id(title: str) -> str:
@@ -194,3 +202,18 @@ def restore_project(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(exc),
         ) from exc
+
+@router.delete(
+    "/{project_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Hard delete a project",
+    description="Permanently deletes a project and all its data. This action is irreversible.",
+)
+def delete_project(
+    project_id: str,
+    service: ProjectDeletionService = Depends(get_project_deletion_service),
+) -> None:
+    try:
+        service.delete_project(project_id)
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc

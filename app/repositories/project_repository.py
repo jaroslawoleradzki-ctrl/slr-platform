@@ -47,6 +47,7 @@ class ProjectRepository(Protocol):
     def archive(self, project_id: str) -> Project: ...
 
     def restore(self, project_id: str) -> Project: ...
+    def delete(self, project_id: str, *, connection: sqlite3.Connection | None = None) -> None: ...
 
 
 class SqliteProjectRepository:
@@ -127,6 +128,20 @@ class SqliteProjectRepository:
             return self._set_status_with_conn(connection, project_id, ProjectStatus.ACTIVE)
         with self._connect() as conn:
             return self._set_status_with_conn(conn, project_id, ProjectStatus.ACTIVE)
+
+    def delete(
+        self, project_id: str, *, connection: sqlite3.Connection | None = None
+    ) -> None:
+        if connection is not None:
+            self._delete_with_conn(connection, project_id)
+        else:
+            with self._connect() as conn:
+                self._delete_with_conn(conn, project_id)
+
+    def _delete_with_conn(self, connection: sqlite3.Connection, project_id: str) -> None:
+        # Ensure project exists before deletion
+        self._get_with_conn(connection, project_id)  # raise if not found
+        connection.execute("DELETE FROM projects WHERE project_id = ?", (project_id,))
 
     def _create_with_conn(self, connection: sqlite3.Connection, project: Project) -> None:
         try:

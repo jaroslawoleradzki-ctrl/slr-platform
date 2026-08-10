@@ -140,6 +140,7 @@ interface ProjectContextType {
   updateProject: (id: string, payload: ProjectUpdatePayload) => Promise<SLRProject>;
   archiveProject: (id: string) => Promise<SLRProject>;
   restoreProject: (id: string) => Promise<SLRProject>;
+  deleteProject: (id: string) => Promise<void>;
   refreshProjects: () => Promise<void>;
   refreshWorkflowStatus: (projectId?: string) => Promise<void>;
   runDeduplication: () => Promise<ApiDuplicateGroupListResponse>;
@@ -305,7 +306,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
       const currentActiveObj = list.find((p) => p.id === targetId);
       if (!currentActiveObj || currentActiveObj.status !== 'active') {
-        targetId = activeList.length > 0 ? activeList[0].id : (list.length > 0 ? list[0].id : '');
+        targetId = activeList.length > 0 ? activeList[0].id : '';
       }
 
       if (targetId) {
@@ -313,6 +314,10 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
         activeProjectIdRef.current = targetId;
         localStorage.setItem('slr_active_project_id', targetId);
         void refreshWorkflowStatus(targetId);
+      } else {
+        setActiveProjectIdState('');
+        activeProjectIdRef.current = '';
+        localStorage.removeItem('slr_active_project_id');
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Błąd pobierania projektów');
@@ -373,6 +378,11 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const restored = await projectApiService.restoreProject(id);
     await refreshProjects();
     return restored;
+  };
+
+  const deleteProject = async (id: string): Promise<void> => {
+    await projectApiService.deleteProject(id);
+    await refreshProjects();
   };
 
   const executeSearchStrategy = async (strategy: EditableSearchStrategy): Promise<SearchExecutionResult> => {
@@ -586,6 +596,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
         updateProject,
         archiveProject,
         restoreProject,
+        deleteProject,
         refreshProjects,
         refreshWorkflowStatus,
         runDeduplication,

@@ -1,5 +1,9 @@
 import React, { useState, useEffect } from 'react';
+import { Modal } from '../common/Modal';
+import { Button } from '../common/Button';
+import { ErrorAlert } from '../common/ErrorAlert';
 import { SLRProject } from '../../types';
+import { FileText, Tag, AlignLeft } from 'lucide-react';
 
 interface ProjectModalProps {
   isOpen: boolean;
@@ -35,13 +39,11 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
     setError(null);
   }, [projectToEdit, isOpen]);
 
-  if (!isOpen) return null;
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const cleanTitle = title.trim();
     if (!cleanTitle) {
-      setError('Nazwa projektu nie może być pusta.');
+      setError('Tytuł projektu jest wymagany i nie może być pusty.');
       return;
     }
 
@@ -57,94 +59,124 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
     }
   };
 
+  const inputStyle: React.CSSProperties = {
+    width: '100%',
+    backgroundColor: 'var(--bg-primary)',
+    border: '1px solid var(--border-strong)',
+    borderRadius: 'var(--radius-md)',
+    padding: '10px 14px',
+    color: 'var(--text-primary)',
+    fontSize: '0.9rem',
+    transition: 'border-color 0.15s ease, box-shadow 0.15s ease',
+  };
+
+  const labelStyle: React.CSSProperties = {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    fontSize: '0.85rem',
+    fontWeight: 600,
+    color: 'var(--text-secondary)',
+    marginBottom: '6px',
+  };
+
   return (
-    <div
-      tabIndex={-1}
-      aria-modal="true"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm"
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title={isEditMode ? 'Edycja Metadanych Projektu' : 'Utwórz Nowy Projekt SLR'}
     >
-      <div className="w-full max-w-lg rounded-xl border border-slate-700 bg-slate-800 p-6 shadow-2xl">
-        <div className="mb-4 flex items-center justify-between border-b border-slate-700 pb-3">
-          <h2 className="text-xl font-semibold text-slate-100">
-            {isEditMode ? 'Edycja Projektu' : 'Utwórz Nowy Projekt SLR'}
-          </h2>
-          <button
-            onClick={onClose}
+      {error && (
+        <div style={{ marginBottom: '16px' }}>
+          <ErrorAlert title="Niepoprawny formularz" message={error} />
+        </div>
+      )}
+
+      <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+        <div>
+          <label style={labelStyle}>
+            <FileText size={15} style={{ color: 'var(--accent-primary)' }} />
+            <span>Tytuł / Nazwa Projektu</span>
+            <span style={{ color: 'var(--status-error-text)' }}>*</span>
+          </label>
+          <input
+            type="text"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="np. Lean Management in Industrial Manufacturing"
             disabled={submitting}
-            className="text-slate-400 hover:text-slate-200"
-          >
-            ✕
-          </button>
+            style={inputStyle}
+            autoFocus
+          />
         </div>
 
-        {error && (
-          <div className="mb-4 rounded-lg bg-rose-500/10 p-3 text-sm text-rose-400 border border-rose-500/20">
-            {error}
-          </div>
-        )}
+        <div>
+          <label style={labelStyle}>
+            <AlignLeft size={15} style={{ color: 'var(--accent-primary)' }} />
+            <span>Opis Zakresu / Cel Badawczy</span>
+          </label>
+          <textarea
+            rows={3}
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder="Opisz zakres merytoryczny, cele lub specyfikę tego przeglądu literatury..."
+            disabled={submitting}
+            style={{
+              ...inputStyle,
+              resize: 'vertical',
+              minHeight: '80px',
+            }}
+          />
+        </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-slate-300 mb-1">
-              Tytuł / Nazwa Projektu <span className="text-rose-400">*</span>
-            </label>
-            <input
-              type="text"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="np. Lean Management in Industrial Manufacturing"
-              className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-slate-100 focus:border-indigo-500 focus:outline-none"
-              disabled={submitting}
-            />
-          </div>
+        <div>
+          <label style={labelStyle}>
+            <Tag size={15} style={{ color: 'var(--accent-primary)' }} />
+            <span>Wersja Protokołu Badawczego</span>
+          </label>
+          <input
+            type="text"
+            value={protocolVersion}
+            onChange={(e) => setProtocolVersion(e.target.value)}
+            placeholder="np. 1.0"
+            disabled={submitting}
+            style={{
+              ...inputStyle,
+              fontFamily: 'var(--font-mono)',
+              width: '180px',
+            }}
+          />
+        </div>
 
-          <div>
-            <label className="block text-sm font-medium text-slate-300 mb-1">
-              Opis Zakresu / Cel Badawczy
-            </label>
-            <textarea
-              rows={3}
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="np. Systematyczny przegląd literatury dotyczący wdrożeń Kaizen..."
-              className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-slate-100 focus:border-indigo-500 focus:outline-none"
-              disabled={submitting}
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-slate-300 mb-1">
-              Wersja Protokołu Przeglądu
-            </label>
-            <input
-              type="text"
-              value={protocolVersion}
-              onChange={(e) => setProtocolVersion(e.target.value)}
-              placeholder="1.0"
-              className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-slate-100 focus:border-indigo-500 focus:outline-none"
-              disabled={submitting}
-            />
-          </div>
-
-          <div className="mt-6 flex items-center justify-end gap-3 pt-3 border-t border-slate-700">
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={submitting}
-              className="rounded-lg border border-slate-600 px-4 py-2 text-sm font-medium text-slate-300 hover:bg-slate-700"
-            >
-              Anuluj
-            </button>
-            <button
-              type="submit"
-              disabled={submitting}
-              className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
-            >
-              {submitting ? 'Zapisywanie...' : isEditMode ? 'Zapisz Zmiany' : 'Utwórz Projekt'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'flex-end',
+            gap: '12px',
+            marginTop: '8px',
+            paddingTop: '16px',
+            borderTop: '1px solid var(--border-subtle)',
+          }}
+        >
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={onClose}
+            disabled={submitting}
+          >
+            Anuluj
+          </Button>
+          <Button
+            type="submit"
+            variant="primary"
+            isLoading={submitting}
+            loadingText={isEditMode ? 'Zapisywanie...' : 'Tworzenie...'}
+          >
+            {isEditMode ? 'Zapisz Zmiany' : 'Utwórz Projekt'}
+          </Button>
+        </div>
+      </form>
+    </Modal>
   );
 };
