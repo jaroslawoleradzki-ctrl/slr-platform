@@ -327,6 +327,16 @@ export interface ApiDuplicateGroupListResponse {
 
 export type ScreeningCriterionType = 'inclusion' | 'exclusion';
 export type ScreeningCriterionStage = 'title_abstract' | 'full_text' | 'both';
+export type ScreeningCriterionEvaluationMode = 'manual' | 'metadata_rule';
+export type MetadataRuleField = 'publication_year' | 'language' | 'document_type' | 'open_access' | 'doi' | 'abstract';
+export type MetadataRuleOperator = 'equals' | 'not_equals' | 'in' | 'not_in' | 'greater_than' | 'greater_than_or_equal' | 'less_than' | 'less_than_or_equal' | 'exists' | 'not_exists';
+export type MetadataRuleValue = number | string | boolean | Array<number | string | boolean>;
+
+export interface MetadataRule {
+  field: MetadataRuleField;
+  operator: MetadataRuleOperator;
+  value?: MetadataRuleValue | null;
+}
 
 export interface ScreeningCriterionResponse {
   criterion_id: string;
@@ -338,6 +348,8 @@ export interface ScreeningCriterionResponse {
   display_order: number;
   is_active: boolean;
   is_required: boolean;
+  evaluation_mode?: ScreeningCriterionEvaluationMode;
+  metadata_rule?: MetadataRule | null;
 }
 
 export interface ScreeningCriterionListResponse {
@@ -353,6 +365,8 @@ export interface ScreeningCriterionCreatePayload {
   display_order: number;
   is_active?: boolean;
   is_required?: boolean;
+  evaluation_mode?: ScreeningCriterionEvaluationMode;
+  metadata_rule?: MetadataRule | null;
 }
 
 export interface ScreeningCriterionUpdatePayload {
@@ -363,6 +377,8 @@ export interface ScreeningCriterionUpdatePayload {
   display_order: number;
   is_active: boolean;
   is_required: boolean;
+  evaluation_mode?: ScreeningCriterionEvaluationMode;
+  metadata_rule?: MetadataRule | null;
 }
 
 export interface ScreeningStatus {
@@ -403,11 +419,41 @@ export interface PrismaFunnelMetrics {
   studiesIncludedSynthesis: number;
 }
 
+export type ProjectStatusType = 'active' | 'archived';
+
+export interface ApiProjectResponse {
+  project_id: string;
+  title: string;
+  description: string | null;
+  protocol_version: string;
+  status: ProjectStatusType;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ApiProjectListResponse {
+  items: ApiProjectResponse[];
+  total: number;
+}
+
+export interface ProjectCreatePayload {
+  title: string;
+  description?: string | null;
+  protocol_version?: string;
+}
+
+export interface ProjectUpdatePayload {
+  title: string;
+  description?: string | null;
+  protocol_version: string;
+}
+
 export interface SLRProject {
   id: string;
   title: string;
   description: string;
   protocolVersion: string;
+  status: ProjectStatusType;
   createdAt: string;
   updatedAt: string;
   nextAction: {

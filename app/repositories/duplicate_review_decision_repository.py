@@ -54,6 +54,12 @@ class DuplicateReviewDecisionRepository(Protocol):
         """List all stored decisions for a project mapped by group_id."""
         ...
 
+    def delete_for_project(
+        self, project_id: str, *, connection: sqlite3.Connection | None = None
+    ) -> None:
+        """Delete all decisions for the given project."""
+        ...
+
 
 class InMemoryDuplicateReviewDecisionRepository:
     """In-memory repository for human duplicate review decisions, keyed by composite (project_id, group_id).
@@ -165,6 +171,21 @@ class SqliteDuplicateReviewDecisionRepository:
             )
             for row in rows
         }
+
+    def delete_for_project(
+        self, project_id: str, *, connection: sqlite3.Connection | None = None
+    ) -> None:
+        if connection is not None:
+            connection.execute(
+                "DELETE FROM duplicate_review_decisions WHERE project_id = ?",
+                (project_id,),
+            )
+        else:
+            with self._connect() as conn:
+                conn.execute(
+                    "DELETE FROM duplicate_review_decisions WHERE project_id = ?",
+                    (project_id,),
+                )
 
     def _connect(self) -> sqlite3.Connection:
         return sqlite3.connect(self._database_path)

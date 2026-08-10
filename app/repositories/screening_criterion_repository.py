@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import sqlite3
 from pathlib import Path
@@ -8,6 +9,7 @@ from uuid import UUID
 
 from app.domain.screening import (
     ScreeningCriterion,
+    ScreeningCriterionEvaluationMode,
     ScreeningCriterionStage,
     ScreeningCriterionType,
 )
@@ -56,6 +58,12 @@ class ScreeningCriterionRepository(Protocol):
 
     def deactivate(self, project_id: str, criterion_id: UUID) -> ScreeningCriterion:
         """Deactivate a screening criterion (setting is_active=False) for a project."""
+        ...
+
+    def delete_for_project(
+        self, project_id: str, *, connection: sqlite3.Connection | None = None
+    ) -> None:
+        """Hard delete all screening criteria for the given project."""
         ...
 
 
@@ -127,6 +135,19 @@ class SqliteScreeningCriterionRepository:
         with self._connect() as conn:
             return self._deactivate_with_conn(conn, project_id, criterion_id)
 
+    def delete_for_project(
+        self, project_id: str, *, connection: sqlite3.Connection | None = None
+    ) -> None:
+        if connection is not None:
+            connection.execute(
+                "DELETE FROM screening_criteria WHERE project_id = ?", (project_id,)
+            )
+        else:
+            with self._connect() as conn:
+                conn.execute(
+                    "DELETE FROM screening_criteria WHERE project_id = ?", (project_id,)
+                )
+
     # Internal database operations
 
     def _create_with_conn(
@@ -136,8 +157,9 @@ class SqliteScreeningCriterionRepository:
             """
             INSERT INTO screening_criteria (
                 criterion_id, project_id, name, description,
-                criterion_type, screening_stage, display_order, is_active, is_required
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                criterion_type, screening_stage, display_order, is_active, is_required,
+                evaluation_mode, metadata_rule
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 str(criterion.criterion_id),
@@ -149,6 +171,12 @@ class SqliteScreeningCriterionRepository:
                 criterion.display_order,
                 1 if criterion.is_active else 0,
                 1 if criterion.is_required else 0,
+                criterion.evaluation_mode.value,
+                (
+                    criterion.metadata_rule.model_dump_json()
+                    if criterion.metadata_rule is not None
+                    else None
+                ),
             ),
         )
 
@@ -161,7 +189,8 @@ class SqliteScreeningCriterionRepository:
         row = connection.execute(
             """
             SELECT criterion_id, project_id, name, description,
-                   criterion_type, screening_stage, display_order, is_active, is_required
+                   criterion_type, screening_stage, display_order, is_active, is_required,
+                   evaluation_mode, metadata_rule
             FROM screening_criteria
             WHERE project_id = ? AND criterion_id = ?
             """,
@@ -181,7 +210,8 @@ class SqliteScreeningCriterionRepository:
     ) -> list[ScreeningCriterion]:
         query = """
             SELECT criterion_id, project_id, name, description,
-                   criterion_type, screening_stage, display_order, is_active, is_required
+                   criterion_type, screening_stage, display_order, is_active, is_required,
+                   evaluation_mode, metadata_rule
             FROM screening_criteria
             WHERE project_id = ?
         """
@@ -208,7 +238,9 @@ class SqliteScreeningCriterionRepository:
                 screening_stage = ?,
                 display_order = ?,
                 is_active = ?,
-                is_required = ?
+                is_required = ?,
+                evaluation_mode = ?,
+                metadata_rule = ?
             WHERE project_id = ? AND criterion_id = ?
             """,
             (
@@ -219,6 +251,12 @@ class SqliteScreeningCriterionRepository:
                 criterion.display_order,
                 1 if criterion.is_active else 0,
                 1 if criterion.is_required else 0,
+                criterion.evaluation_mode.value,
+                (
+                    criterion.metadata_rule.model_dump_json()
+                    if criterion.metadata_rule is not None
+                    else None
+                ),
                 criterion.project_id,
                 str(criterion.criterion_id),
             ),
@@ -249,6 +287,8 @@ class SqliteScreeningCriterionRepository:
             display_order=existing.display_order,
             is_active=False,
             is_required=existing.is_required,
+            evaluation_mode=existing.evaluation_mode,
+            metadata_rule=existing.metadata_rule,
         )
         return self._update_with_conn(connection, updated)
 
@@ -263,6 +303,8 @@ class SqliteScreeningCriterionRepository:
             display_order,
             is_active_int,
             is_required_int,
+            evaluation_mode_str,
+            metadata_rule_json,
         ) = row
 
         return ScreeningCriterion(
@@ -275,6 +317,8 @@ class SqliteScreeningCriterionRepository:
             display_order=display_order,
             is_active=bool(is_active_int),
             is_required=bool(is_required_int),
+            evaluation_mode=ScreeningCriterionEvaluationMode(evaluation_mode_str),
+            metadata_rule=(json.loads(metadata_rule_json) if metadata_rule_json is not None else None),
         )
 
     def _connect(self) -> sqlite3.Connection:

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, act, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { ProjectProvider } from '../src/context/ProjectContext';
 import { AppShell } from '../src/components/layout/AppShell';
@@ -186,6 +186,23 @@ describe('Screening Criteria Configuration GUI (Phase 7.3)', () => {
         is_required: true,
       });
     });
+  });
+
+  it('configures an automatic metadata rule and hides its value for EXISTS', async () => {
+    vi.spyOn(projectApiService, 'listScreeningCriteria').mockResolvedValue({ items: [], total: 0 });
+    const createSpy = vi.spyOn(projectApiService, 'createScreeningCriterion').mockResolvedValue(mockCriterionActive);
+    renderComponent();
+    await screen.findByText(/Nie zdefiniowano jeszcze kryteriów/i);
+    fireEvent.click(screen.getAllByRole('button', { name: /Dodaj/i })[0]);
+    fireEvent.change(screen.getByLabelText(/Nazwa kryterium/i), { target: { value: 'Prace po 2021' } });
+    fireEvent.click(within(screen.getByRole('group', { name: 'Sposób oceny' })).getByRole('button', { name: 'Automatyczna na podstawie metadanych' }));
+    fireEvent.change(screen.getByLabelText('Pole reguły'), { target: { value: 'abstract' } });
+    expect(screen.queryByLabelText('Wartość reguły')).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Pole reguły'), { target: { value: 'publication_year' } });
+    fireEvent.change(screen.getByLabelText('Operator reguły'), { target: { value: 'greater_than' } });
+    fireEvent.change(screen.getByLabelText('Wartość reguły'), { target: { value: '2021' } });
+    fireEvent.click(screen.getByRole('button', { name: /Utwórz kryterium/i }));
+    await waitFor(() => expect(createSpy).toHaveBeenCalledWith('lean_energy', expect.objectContaining({ evaluation_mode: 'metadata_rule', metadata_rule: { field: 'publication_year', operator: 'greater_than', value: 2021 } })));
   });
 
   // Test 9: Edit criterion

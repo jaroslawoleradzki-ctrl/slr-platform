@@ -10,8 +10,13 @@ from app.api.dto.screening import (
     ScreeningDecisionCreateRequest,
     ScreeningDecisionListResponse,
     ScreeningDecisionResponse,
+    TitleAbstractDecisionRequest,
+    TitleAbstractScreeningListResponse,
+    TitleAbstractScreeningOverviewResponse,
+    TitleAbstractScreeningRecordResponse,
 )
 from app.domain.screening import ScreeningCriterion, ScreeningStage
+from app.repositories.project_publication_repository import ProjectNotFoundError
 from app.repositories.screening_criterion_repository import (
     CriterionNotFoundError,
     ScreeningCriterionRepository,
@@ -24,6 +29,12 @@ from app.services.screening_decision_service import (
     CriterionAssessmentInput,
     ScreeningDecisionService,
 )
+from app.services.title_abstract_screening_service import (
+    ScreeningPublicationNotEligibleError,
+    ScreeningWorkflowNotReadyError,
+    TitleAbstractScreeningService,
+    TitleAbstractScreeningStatus,
+)
 
 router = APIRouter(prefix="/projects", tags=["screening"])
 
@@ -34,6 +45,124 @@ def get_screening_repository() -> ScreeningCriterionRepository:
 
 def get_screening_decision_service() -> ScreeningDecisionService:
     return ScreeningDecisionService()
+
+
+def get_title_abstract_screening_service() -> TitleAbstractScreeningService:
+    return TitleAbstractScreeningService()
+
+
+def _workflow_error(exc: Exception) -> HTTPException:
+    if isinstance(exc, ProjectNotFoundError):
+        return HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+    if isinstance(exc, ScreeningWorkflowNotReadyError):
+        return HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "screening_input_not_ready",
+                "readiness_status": exc.readiness_status.value,
+            },
+        )
+    if isinstance(exc, ScreeningPublicationNotEligibleError):
+        return HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Publication is not in the canonical screening input set.",
+        )
+    if isinstance(exc, ValueError):
+        return HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
+    return HTTPException(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        detail="Unable to process the title and abstract screening workflow.",
+    )
+
+
+@router.get(
+    "/{project_id}/screening/title-abstract",
+    response_model=TitleAbstractScreeningOverviewResponse,
+)
+def get_title_abstract_overview(
+    project_id: str,
+    reviewer_id: str = Query(..., min_length=1),
+    service: TitleAbstractScreeningService = Depends(get_title_abstract_screening_service),
+) -> TitleAbstractScreeningOverviewResponse:
+    try:
+        return TitleAbstractScreeningOverviewResponse.from_read_model(service.get_overview(project_id, reviewer_id))
+    except Exception as exc:
+        raise _workflow_error(exc) from exc
+
+
+@router.get(
+    "/{project_id}/screening/title-abstract/records",
+    response_model=TitleAbstractScreeningListResponse,
+)
+def list_title_abstract_records(
+    project_id: str,
+    reviewer_id: str = Query(..., min_length=1),
+    screening_status: TitleAbstractScreeningStatus | None = Query(default=None, alias="status"),
+    offset: int = Query(default=0, ge=0),
+    limit: int = Query(default=50, ge=1, le=100),
+    service: TitleAbstractScreeningService = Depends(get_title_abstract_screening_service),
+) -> TitleAbstractScreeningListResponse:
+    try:
+        return TitleAbstractScreeningListResponse.from_read_model(
+            service.list_records(
+                project_id,
+                reviewer_id,
+                status_filter=screening_status,
+                offset=offset,
+                limit=limit,
+            )
+        )
+    except Exception as exc:
+        raise _workflow_error(exc) from exc
+
+
+@router.get(
+    "/{project_id}/screening/title-abstract/records/{publication_id}",
+    response_model=TitleAbstractScreeningRecordResponse,
+)
+def get_title_abstract_record(
+    project_id: str,
+    publication_id: UUID,
+    reviewer_id: str = Query(..., min_length=1),
+    service: TitleAbstractScreeningService = Depends(get_title_abstract_screening_service),
+) -> TitleAbstractScreeningRecordResponse:
+    try:
+        return TitleAbstractScreeningRecordResponse.from_read_model(
+            service.get_record(project_id, publication_id, reviewer_id)
+        )
+    except Exception as exc:
+        raise _workflow_error(exc) from exc
+
+
+@router.post(
+    "/{project_id}/screening/title-abstract/decisions",
+    response_model=ScreeningDecisionResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def record_title_abstract_decision(
+    project_id: str,
+    payload: TitleAbstractDecisionRequest,
+    service: TitleAbstractScreeningService = Depends(get_title_abstract_screening_service),
+) -> ScreeningDecisionResponse:
+    try:
+        decision = service.record_decision(
+            project_id,
+            payload.publication_id,
+            payload.reviewer_id,
+            payload.outcome,
+            payload.rationale,
+            [
+                CriterionAssessmentInput(
+                    criterion_id=item.criterion_id,
+                    assessment_value=item.assessment_value,
+                    notes=item.notes,
+                )
+                for item in payload.criterion_assessments
+            ],
+        )
+        return ScreeningDecisionResponse.from_domain(decision)
+    except Exception as exc:
+        raise _workflow_error(exc) from exc
 
 
 @router.post(
@@ -58,6 +187,8 @@ def create_screening_criterion(
             display_order=payload.display_order,
             is_active=payload.is_active,
             is_required=payload.is_required,
+            evaluation_mode=payload.evaluation_mode,
+            metadata_rule=payload.metadata_rule,
         )
         saved = repo.create(criterion)
         return ScreeningCriterionResponse.from_domain(saved)
@@ -149,6 +280,8 @@ def update_screening_criterion(
             display_order=payload.display_order,
             is_active=payload.is_active,
             is_required=payload.is_required,
+            evaluation_mode=payload.evaluation_mode,
+            metadata_rule=payload.metadata_rule,
         )
         saved = repo.update(updated_domain)
         return ScreeningCriterionResponse.from_domain(saved)
@@ -211,6 +344,14 @@ def record_screening_decision(
     payload: ScreeningDecisionCreateRequest,
     service: ScreeningDecisionService = Depends(get_screening_decision_service),
 ) -> ScreeningDecisionResponse:
+    if payload.stage is ScreeningStage.TITLE_ABSTRACT:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "title_abstract_workflow_required",
+                "dedicated_endpoint": f"/projects/{project_id}/screening/title-abstract/decisions",
+            },
+        )
     try:
         assessment_inputs = [
             CriterionAssessmentInput(

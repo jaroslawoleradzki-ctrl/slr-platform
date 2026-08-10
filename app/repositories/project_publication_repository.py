@@ -72,6 +72,12 @@ class ProjectPublicationRepository(Protocol):
         """Replace a project's collection after a normalization or cleanup transformation."""
         ...
 
+    def delete_for_project(
+        self, project_id: str, *, connection: sqlite3.Connection | None = None
+    ) -> None:
+        """Delete all publications for the given project."""
+        ...
+
 
 class DemoProjectPublicationRepository:
     """Temporary in-memory demo repository providing sample SLR project publications.
@@ -368,6 +374,19 @@ class SqliteProjectPublicationRepository:
         for position, publication in enumerate(publications):
             self._insert_or_replace(connection, project_id, publication, position)
 
+    def delete_for_project(
+        self, project_id: str, *, connection: sqlite3.Connection | None = None
+    ) -> None:
+        if connection is not None:
+            connection.execute(
+                "DELETE FROM project_publications WHERE project_id = ?", (project_id,)
+            )
+        else:
+            with self._connect() as conn:
+                conn.execute(
+                    "DELETE FROM project_publications WHERE project_id = ?", (project_id,)
+                )
+
     def _ensure_project(
         self, project_id: str, *, connection: sqlite3.Connection | None = None
     ) -> None:
@@ -375,13 +394,13 @@ class SqliteProjectPublicationRepository:
             return
         if connection is not None:
             exists = connection.execute(
-                "SELECT 1 FROM project_publications WHERE project_id = ? LIMIT 1",
+                "SELECT 1 FROM projects WHERE project_id = ? LIMIT 1",
                 (project_id,),
             ).fetchone()
         else:
             with self._connect() as conn:
                 exists = conn.execute(
-                    "SELECT 1 FROM project_publications WHERE project_id = ? LIMIT 1",
+                    "SELECT 1 FROM projects WHERE project_id = ? LIMIT 1",
                     (project_id,),
                 ).fetchone()
         if exists is None:

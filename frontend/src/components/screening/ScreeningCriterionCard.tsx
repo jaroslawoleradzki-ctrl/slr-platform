@@ -129,6 +129,11 @@ export const ScreeningCriterionCard: React.FC<ScreeningCriterionCardProps> = ({
 
       {/* Badges / Metadata */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginTop: '4px' }}>
+        {criterion.evaluation_mode === 'metadata_rule' && criterion.metadata_rule && (
+          <span style={{ fontSize: '0.75rem', fontWeight: 600, padding: '3px 10px', borderRadius: 'var(--radius-full)', backgroundColor: 'var(--bg-primary)', color: 'var(--accent-primary)', border: '1px solid var(--accent-primary)' }}>
+            Automatyczne: {criterion.metadata_rule.field} {criterion.metadata_rule.operator}{criterion.metadata_rule.value === null ? '' : ` ${Array.isArray(criterion.metadata_rule.value) ? criterion.metadata_rule.value.join(', ') : String(criterion.metadata_rule.value)}`}
+          </span>
+        )}
         {/* Inclusion vs Exclusion */}
         <span
           style={{

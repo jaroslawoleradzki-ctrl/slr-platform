@@ -45,7 +45,10 @@ const Harness = () => {
 };
 
 describe('ProjectContext cursor pagination', () => {
-  afterEach(() => vi.restoreAllMocks());
+  afterEach(() => {
+    localStorage.clear();
+    vi.restoreAllMocks();
+  });
 
   it('forwards the cursor, appends pages, and removes duplicate source records', async () => {
     const execute = vi.spyOn(projectApiService, 'executeSearchStrategy')

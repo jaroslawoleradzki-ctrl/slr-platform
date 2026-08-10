@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import sqlite3
 from datetime import datetime, timezone
@@ -65,6 +66,12 @@ class ScreeningDecisionRepository(Protocol):
         self, project_id: str, stage: ScreeningStage | None = None
     ) -> list[ScreeningDecision]:
         """List all screening decisions for a project, optionally filtered by screening stage."""
+        ...
+
+    def delete_for_project(
+        self, project_id: str, *, connection: sqlite3.Connection | None = None
+    ) -> None:
+        """Delete all screening decisions (and criterion assessments) for the given project."""
         ...
 
 
@@ -149,6 +156,33 @@ class SqliteScreeningDecisionRepository:
         with self._connect() as conn:
             return self._list_by_project_with_conn(conn, project_id, stage)
 
+    def delete_for_project(
+        self, project_id: str, *, connection: sqlite3.Connection | None = None
+    ) -> None:
+        if connection is not None:
+            self._delete_for_project_with_conn(connection, project_id)
+        else:
+            with self._connect() as conn:
+                self._delete_for_project_with_conn(conn, project_id)
+
+    def _delete_for_project_with_conn(
+        self, connection: sqlite3.Connection, project_id: str
+    ) -> None:
+        # Delete criterion assessments first (foreign-key dependency on decision_id)
+        connection.execute(
+            """
+            DELETE FROM screening_criterion_assessments
+            WHERE decision_id IN (
+                SELECT decision_id FROM screening_decisions WHERE project_id = ?
+            )
+            """,
+            (project_id,),
+        )
+        connection.execute(
+            "DELETE FROM screening_decisions WHERE project_id = ?",
+            (project_id,),
+        )
+
     # Internal database operations
 
     def _save_with_conn(
@@ -179,8 +213,9 @@ class SqliteScreeningDecisionRepository:
                 """
                 INSERT INTO screening_criterion_assessments (
                     decision_id, criterion_id, criterion_name, criterion_type,
-                    criterion_stage, criterion_is_required, assessment_value, notes
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    criterion_stage, criterion_is_required, assessment_value, notes,
+                    evaluation_mode, metadata_rule, evaluated_metadata_value
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     str(decision.decision_id),
@@ -191,6 +226,17 @@ class SqliteScreeningDecisionRepository:
                     1 if assessment.criterion_is_required else 0,
                     assessment.assessment_value.value,
                     assessment.notes,
+                    assessment.evaluation_mode.value,
+                    (
+                        assessment.metadata_rule.model_dump_json()
+                        if assessment.metadata_rule is not None
+                        else None
+                    ),
+                    (
+                        json.dumps(assessment.evaluated_metadata_value)
+                        if assessment.evaluation_mode.value == "metadata_rule"
+                        else None
+                    ),
                 ),
             )
 
@@ -305,7 +351,8 @@ class SqliteScreeningDecisionRepository:
         assessment_rows = connection.execute(
             """
             SELECT criterion_id, criterion_name, criterion_type, criterion_stage,
-                   criterion_is_required, assessment_value, notes
+                   criterion_is_required, assessment_value, notes,
+                   evaluation_mode, metadata_rule, evaluated_metadata_value
             FROM screening_criterion_assessments
             WHERE decision_id = ?
             ORDER BY criterion_id ASC
@@ -322,6 +369,11 @@ class SqliteScreeningDecisionRepository:
                 criterion_is_required=bool(a_row[4]),
                 assessment_value=CriterionAssessmentValue(a_row[5]),
                 notes=a_row[6],
+                evaluation_mode=a_row[7],
+                metadata_rule=json.loads(a_row[8]) if a_row[8] is not None else None,
+                evaluated_metadata_value=(
+                    json.loads(a_row[9]) if a_row[9] is not None else None
+                ),
             )
             for a_row in assessment_rows
         ]

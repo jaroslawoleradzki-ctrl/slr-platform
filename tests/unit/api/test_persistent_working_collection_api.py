@@ -1,4 +1,5 @@
 from pathlib import Path
+from uuid import uuid4
 
 from fastapi.testclient import TestClient
 
@@ -8,12 +9,18 @@ from app.api.routers.search_strategy import (
     get_import_history_repository,
     get_project_publication_repository,
 )
+from app.domain.provenance import ProvenanceEntry
+from app.domain.publication import Publication
 from app.repositories.import_history_repository import SqliteImportHistoryRepository
 from app.repositories.normalization_execution_repository import (
     SqliteNormalizationExecutionRepository,
 )
 from app.repositories.project_publication_repository import (
     SqliteProjectPublicationRepository,
+)
+from app.repositories.search_result_snapshot_repository import (
+    SearchResultSnapshot,
+    SqliteSearchResultSnapshotRepository,
 )
 
 
@@ -28,7 +35,9 @@ def teardown_function() -> None:
 def _client(database: Path) -> TestClient:
     app.dependency_overrides[get_project_publication_repository] = lambda: SqliteProjectPublicationRepository(database)
     app.dependency_overrides[get_import_history_repository] = lambda: SqliteImportHistoryRepository(database)
-    app.dependency_overrides[get_normalization_execution_repository] = lambda: SqliteNormalizationExecutionRepository(database)
+    app.dependency_overrides[get_normalization_execution_repository] = lambda: SqliteNormalizationExecutionRepository(
+        database
+    )
     return TestClient(app)
 
 
@@ -60,13 +69,27 @@ def test_file_import_and_normalization_use_same_durable_collection(tmp_path: Pat
 def test_selected_openalex_import_is_written_to_working_collection(tmp_path: Path) -> None:
     database = tmp_path / "project.db"
     client = _client(database)
+    run_id = uuid4()
+    snapshot = SqliteSearchResultSnapshotRepository(database).save(
+        SearchResultSnapshot.create(
+            project_id="ai_architecture",
+            search_run_id=run_id,
+            provider="openalex",
+            source_id="W901",
+            publication=Publication(
+                title="OpenAlex imported record",
+                publication_year=2024,
+                provenance=[ProvenanceEntry(source="openalex", source_record_id="W901", run_id=run_id)],
+            ),
+        )
+    )
     payload = {
         "provider": "openalex",
         "query": '"lean manufacturing"',
         "total_available": 100,
         "records": [
             {
-                "id": "00000000-0000-0000-0000-000000000901",
+                "id": str(snapshot.snapshot_id),
                 "title": "OpenAlex imported record",
                 "authors": ["Author"],
                 "year": 2024,
@@ -77,9 +100,7 @@ def test_selected_openalex_import_is_written_to_working_collection(tmp_path: Pat
         ],
     }
 
-    imported = client.post(
-        "/projects/ai_architecture/search-results/imports", json=payload
-    )
+    imported = client.post("/projects/ai_architecture/search-results/imports", json=payload)
     assert imported.status_code == 200
     assert imported.json()["imported_count"] == 1
     normalized = client.post("/projects/ai_architecture/normalization")

@@ -4,6 +4,45 @@ This document records important project decisions that do not require a full ADR
 
 ## 2026-08-10
 
+### v0.3.1 — Project Management and Title & Abstract Screening
+
+- **Project is a first-class persistent resource**: Projects have a durable
+  repository and project-scoped API. Archive/restore preserve the resource;
+  permanent deletion is explicitly confirmed in the UI.
+- **Atomic hard delete**: Project deletion runs in one SQLite transaction,
+  removes only data scoped to that project (including live-search snapshots),
+  and deletes the project row last so a failure rolls all cleanup back.
+- **Authoritative live-search import**: `SearchResultSnapshot` has its own
+  stable identity and retains the exact canonical `Publication` and provenance
+  of one search execution. Later imports resolve the backend snapshot instead
+  of trusting round-tripped client metadata.
+- **Canonical, non-destructive screening input**: `ScreeningInputService`
+  derives stable representative publication identities from Working Collection
+  and duplicate-review decisions. APPROVE collapses records through the
+  existing merge policy; REJECT leaves them independent; PENDING and merge
+  conflict states block executable screening.
+- **Latest decision is operational status**: Title & Abstract status and
+  reviewer-specific progress are derived from the latest append-only decision,
+  not persisted as a separate queue or status table.
+- **Deterministic automatic criteria**: A `ScreeningCriterion` is either
+  `MANUAL` or `METADATA_RULE`. Metadata rules operate only on an explicit
+  allow-list of canonical publication fields and typed operators, so they are
+  reproducible and cannot execute arbitrary expressions.
+- **Server-authoritative automatic assessment**: The backend evaluates
+  automatic criteria at decision time. The frontend cannot submit or spoof an
+  automatic result.
+- **Assessment is not outcome**: Automatic `MET` / `NOT_MET` evaluates only
+  the criterion condition. It never automatically creates an `INCLUDE` or
+  `EXCLUDE` outcome; the reviewer chooses the final outcome.
+- **Historical rule auditability**: An automatic criterion assessment stores
+  its evaluation mode, rule, evaluated metadata value and result in the
+  append-only decision snapshot, without requiring a full criterion-versioning
+  system.
+
+---
+
+## 2026-08-10
+
 ### Phase 7.3 — Screening Configuration GUI Architecture (v0.2.9)
 
 The graphical user interface for managing screening criteria (`ScreeningPage`, `ScreeningCriterionCard`, `ScreeningCriterionModal`, `ScreeningCriteriaList`) was designed and implemented based on the real Phase 7.2 backend API.
@@ -112,7 +151,7 @@ Key architectural decisions:
 
 ## 2026-08-10
 
-### Phase 6.8 Reconciliation & Technical Debt Prerequisites for Executable Screening
+### Phase 6.8 Reconciliation & Resolved Prerequisites for Executable Screening
 
 A comprehensive codebase audit reconciled the documentation with the actual implementation state of Phase 6.7 and Phase 6.8 on the `development` branch.
 
@@ -128,10 +167,14 @@ Key decisions & status reconciliation:
   - `6.8.7 Sources Search Execution GUI`: ↪ Superseded by Search Strategy execution workflow
   - `6.8.8 GUI Import Integration`: ✅ Completed (`POST /imports` RIS/BibTeX upload & history)
   - `6.8.9 Publication Intake Summary`: ✅ Completed (`SourcesSummaryService` read model & GET endpoint)
-- **Technical Debt & Executable Screening Prerequisites**:
-  1. *Live Search Import Metadata Loss*: `SearchResultRecordResponse` DTO passes a trimmed subset (`id`, `title`, `authors`, `year`, `provider`, `source_id`, `doi`), omitting `abstract`, `venue`, `publisher`, `document_type`, `language`, `keywords`, `urls`, `open_access`, `provenance`. `ProjectImportService` constructs imported `Publication` objects from this DTO, causing abstract to be lost on import. Preserving abstract is a mandatory blocker for executable Phase 7.5 (Title & Abstract Screening).
-  2. *Deduplicated Screening Input Set*: Current deduplication records human `APPROVE`/`REJECT` decisions without physical publication merging. Approved duplicates remain as separate records in Working Collection. An explicit screening input set pipeline (`Working Collection` → `Duplicate Decisions` → `Canonical / Deduplicated Screening Set` → `Screening`) is a prerequisite for executable Phase 7.5.
-- **Phase 7 Decoupling**: Phase 7.1–7.4 (domain models, persistence, API, criteria GUI, ScreeningDecision) can proceed independently of these open Phase 6.8 technical debts. Executable screening (7.5) requires resolving prerequisites 1 and 2.
+- **Resolved screening prerequisites**: v0.3.1 replaces the trimmed client
+  import path with authoritative `SearchResultSnapshot` lookup, preserving
+  available canonical metadata and provenance. `ScreeningInputService` now
+  derives a canonical/deduplicated screening set from Working Collection and
+  human duplicate decisions without physical deletion.
+- **Phase 7 decoupling**: Phase 7.1–7.4 remained independently deliverable;
+  executable 7.5 became available after the two prerequisites above were
+  resolved. Full durable SearchRun history remains an independent 6.8.5 scope.
 
 ---
 

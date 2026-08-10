@@ -12,23 +12,10 @@ import {
   DuplicateDecisionStatus,
   BibliographicImportHistoryRecord,
   SearchStrategy,
+  ProjectUpdatePayload,
 } from '../types';
-import { projectApiService } from '../services/api/projectApi';
 import { MOCK_PROJECTS } from '../mocks/projectData';
-
-const neutralizeSourceData = (project: SLRProject): SLRProject => ({
-  ...project,
-  imports: [],
-  normalization: [],
-  providers: project.providers.map((provider) => ({
-    ...provider,
-    connected: false,
-    status: 'idle',
-    resultsCount: 0,
-    lastRunTimestamp: null,
-    errorMessage: undefined,
-  })),
-});
+import { projectApiService } from '../services/api/projectApi';
 
 const computeWorkflowStatus = (
   searchStrategy: SearchStrategy | null,
@@ -150,6 +137,10 @@ interface ProjectContextType {
   duplicateGroupError: string | null;
   setActiveProjectId: (id: string) => void;
   createNewProject: (title: string, description: string, protocolVersion: string) => Promise<SLRProject>;
+  updateProject: (id: string, payload: ProjectUpdatePayload) => Promise<SLRProject>;
+  archiveProject: (id: string) => Promise<SLRProject>;
+  restoreProject: (id: string) => Promise<SLRProject>;
+  deleteProject: (id: string) => Promise<void>;
   refreshProjects: () => Promise<void>;
   refreshWorkflowStatus: (projectId?: string) => Promise<void>;
   runDeduplication: () => Promise<ApiDuplicateGroupListResponse>;
@@ -173,10 +164,12 @@ interface ProjectContextType {
 const ProjectContext = createContext<ProjectContextType | undefined>(undefined);
 
 export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [projects, setProjects] = useState<SLRProject[]>(MOCK_PROJECTS.map(neutralizeSourceData));
-  const [activeProjectId, setActiveProjectIdState] = useState<string>('lean_energy');
+  const [projects, setProjects] = useState<SLRProject[]>(() => [...MOCK_PROJECTS]);
+  const [activeProjectId, setActiveProjectIdState] = useState<string>(
+    () => localStorage.getItem('slr_active_project_id') || 'lean_energy'
+  );
   const activeProjectIdRef = useRef(activeProjectId);
-  const [loading, setLoading] = useState<boolean>(false);
+  const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
   const [workflowStatus, setWorkflowStatus] = useState<WorkflowNavigationStatus | null>(null);
@@ -301,252 +294,270 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setWorkflowStatusLoading(false);
   }, []);
 
-  const updateGroupDecision = useCallback(
-    (groupId: string, newStatus: DuplicateDecisionStatus, newRationale?: string | null) => {
-      setDuplicateData((prev) => {
-        if (!prev) return prev;
-        const nextGroups = prev.groups.map((g) =>
-          g.group_id === groupId
-            ? { ...g, status: newStatus, rationale: newRationale ?? g.rationale }
-            : g
-        );
-        const nextDuplicateData = { ...prev, groups: nextGroups };
+  const refreshProjects = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const list = await projectApiService.getProjects(true);
+      setProjects(list);
 
-        setWorkflowStatus((prevStatus) => {
-          if (!prevStatus) return prevStatus;
-          const totalGroups = nextDuplicateData.total_groups_count;
-          const pendingGroups = nextGroups.filter((g) => g.status === 'PENDING').length;
-          const approvedGroups = nextGroups.filter((g) => g.status === 'APPROVE').length;
-          const rejectedGroups = nextGroups.filter((g) => g.status === 'REJECT').length;
+      const activeList = list.filter((p) => p.status === 'active');
+      let targetId = activeProjectIdRef.current;
 
-          let dedupState: WorkflowStageState = 'not_started';
-          let dedupLabel: string | null = null;
+      const currentActiveObj = list.find((p) => p.id === targetId);
+      if (!currentActiveObj || currentActiveObj.status !== 'active') {
+        targetId = activeList.length > 0 ? activeList[0].id : '';
+      }
 
-          if (pendingGroups > 0) {
-            dedupState = 'pending_action';
-            dedupLabel = `${pendingGroups} do oceny`;
-          } else {
-            dedupState = 'completed';
-            dedupLabel = 'Oceniono';
-          }
+      if (targetId) {
+        setActiveProjectIdState(targetId);
+        activeProjectIdRef.current = targetId;
+        localStorage.setItem('slr_active_project_id', targetId);
+        void refreshWorkflowStatus(targetId);
+      } else {
+        setActiveProjectIdState('');
+        activeProjectIdRef.current = '';
+        localStorage.removeItem('slr_active_project_id');
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Błąd pobierania projektów');
+    } finally {
+      setLoading(false);
+    }
+  }, [refreshWorkflowStatus]);
 
-          return {
-            ...prevStatus,
-            deduplication: {
-              state: dedupState,
-              totalGroups,
-              pendingGroups,
-              approvedGroups,
-              rejectedGroups,
-              label: dedupLabel,
-            },
-          };
-        });
+  useEffect(() => {
+    void refreshProjects();
+  }, [refreshProjects]);
 
-        return nextDuplicateData;
-      });
-    },
-    []
-  );
+  const setActiveProjectId = useCallback((id: string) => {
+    if (activeProjectIdRef.current === id) return;
+    setActiveProjectIdState(id);
+    activeProjectIdRef.current = id;
+    localStorage.setItem('slr_active_project_id', id);
 
-  const changeActiveProject = useCallback((id: string) => {
-    if (id === activeProjectIdRef.current && workflowStatusRef.current !== null) return;
     setCurrentSearchStrategy(null);
     setLastExecutedSearchStrategy(null);
     setSearchExecutionResult(null);
-    setSearchPaginationError(null);
-    setSearchLoadingMore(false);
-    searchLoadingMoreRef.current = false;
-    searchExecutionVersionRef.current += 1;
     setSelectedSearchResultIds([]);
     setLastSearchImportResult(null);
 
     setWorkflowStatus(null);
-    setDuplicateData(null);
-    setDuplicateGroupError(null);
-    setWorkflowStatusLoading(true);
-
-    activeProjectIdRef.current = id;
-    setActiveProjectIdState(id);
     void refreshWorkflowStatus(id);
   }, [refreshWorkflowStatus]);
 
-  const refreshProjects = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const data = await projectApiService.getProjects();
-      setProjects(data.map(neutralizeSourceData));
-      await refreshWorkflowStatus(activeProjectIdRef.current);
-      if (data.length > 0 && !data.some((p) => p.id === activeProjectIdRef.current)) {
-        changeActiveProject(data[0].id);
-      }
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Nie udało się pobrać listy projektów');
-    } finally {
-      setLoading(false);
-    }
-  }, [changeActiveProject, refreshWorkflowStatus]);
+  const activeProject = projects.find((p) => p.id === activeProjectId) || null;
 
-  useEffect(() => {
-    void refreshProjects();
-  }, []); // Run initial load once on mount
-
-  const activeProject = projects.find((p) => p.id === activeProjectId) || projects[0] || null;
-
-  const setActiveProjectId = useCallback((id: string) => {
-    if (projects.some((p) => p.id === id) || id) {
-      changeActiveProject(id);
-    }
-  }, [changeActiveProject, projects]);
-
-  const createNewProject = async (title: string, description: string, protocolVersion: string) => {
+  const createNewProject = async (
+    title: string,
+    description: string,
+    protocolVersion: string
+  ): Promise<SLRProject> => {
     const created = await projectApiService.createProject(title, description, protocolVersion);
     await refreshProjects();
-    changeActiveProject(created.id);
+    setActiveProjectId(created.id);
     return created;
   };
 
-  const executeSearchStrategy = async (strategy: EditableSearchStrategy) => {
-    if (!activeProject) throw new Error('Brak aktywnego projektu.');
+  const updateProject = async (
+    id: string,
+    payload: ProjectUpdatePayload
+  ): Promise<SLRProject> => {
+    const updated = await projectApiService.updateProject(id, payload);
+    await refreshProjects();
+    return updated;
+  };
+
+  const archiveProject = async (id: string): Promise<SLRProject> => {
+    const archived = await projectApiService.archiveProject(id);
+    await refreshProjects();
+    return archived;
+  };
+
+  const restoreProject = async (id: string): Promise<SLRProject> => {
+    const restored = await projectApiService.restoreProject(id);
+    await refreshProjects();
+    return restored;
+  };
+
+  const deleteProject = async (id: string): Promise<void> => {
+    await projectApiService.deleteProject(id);
+    await refreshProjects();
+  };
+
+  const executeSearchStrategy = async (strategy: EditableSearchStrategy): Promise<SearchExecutionResult> => {
     const targetProjectId = activeProjectIdRef.current;
-    const executionStrategy = structuredClone(strategy);
-    const executionVersion = searchExecutionVersionRef.current + 1;
-    searchExecutionVersionRef.current = executionVersion;
-    setSearchExecutionResult(null);
-    setSearchPaginationError(null);
-    setLastExecutedSearchStrategy(null);
+    searchExecutionVersionRef.current += 1;
+    const currentVersion = searchExecutionVersionRef.current;
     setSearchLoadingMore(false);
-    searchLoadingMoreRef.current = false;
+    setSearchPaginationError(null);
     setSelectedSearchResultIds([]);
-    const result = await projectApiService.executeSearchStrategy(targetProjectId, executionStrategy);
-    if (
-      activeProjectIdRef.current !== targetProjectId
-      || searchExecutionVersionRef.current !== executionVersion
-    ) return result;
-    setLastExecutedSearchStrategy(executionStrategy);
+    setLastSearchImportResult(null);
+
+    const result = await projectApiService.executeSearchStrategy(targetProjectId, strategy);
+    if (activeProjectIdRef.current !== targetProjectId || searchExecutionVersionRef.current !== currentVersion) {
+      return result;
+    }
+    setLastExecutedSearchStrategy(strategy);
     setSearchExecutionResult(result);
+    void refreshWorkflowStatus(targetProjectId);
     return result;
   };
 
   const loadMoreSearchResults = async (): Promise<SearchExecutionResult | null> => {
-    const current = searchExecutionResult;
-    if (!current || !current.has_more || searchLoadingMoreRef.current) return null;
-    if (!current.next_cursor) {
-      setSearchPaginationError('Nie można pobrać kolejnych wyników: brak cursoru.');
-      setSearchExecutionResult({ ...current, next_cursor: null, has_more: false });
-      return null;
-    }
-    const strategy = lastExecutedSearchStrategy;
-    if (!strategy) {
-      setSearchPaginationError('Nie można pobrać kolejnych wyników: brak strategii.');
-      return null;
-    }
     const targetProjectId = activeProjectIdRef.current;
-    const executionVersion = searchExecutionVersionRef.current;
+    if (!lastExecutedSearchStrategy || !searchExecutionResult?.next_cursor || searchLoadingMoreRef.current) {
+      return null;
+    }
+
+    const currentVersion = searchExecutionVersionRef.current;
     searchLoadingMoreRef.current = true;
     setSearchLoadingMore(true);
     setSearchPaginationError(null);
+
     try {
-      const page = await projectApiService.executeSearchStrategy(
+      const pageResult = await projectApiService.executeSearchStrategy(
         targetProjectId,
-        strategy,
-        current.next_cursor,
+        lastExecutedSearchStrategy,
+        searchExecutionResult.next_cursor
       );
-      if (
-        activeProjectIdRef.current !== targetProjectId
-        || searchExecutionVersionRef.current !== executionVersion
-      ) return page;
-      if (page.has_more && !page.next_cursor) {
-        throw new Error('Nie można pobrać kolejnych wyników: brak cursoru.');
+
+      if (activeProjectIdRef.current !== targetProjectId || searchExecutionVersionRef.current !== currentVersion) {
+        return null;
       }
-      const seen = new Set<string>();
-      const merged = [...current.results, ...page.results].filter((record) => {
-        const key = record.source_id
-          ? `${record.provider}:${record.source_id}`
-          : record.doi
-            ? `doi:${record.doi.toLowerCase()}`
-            : `id:${record.id}`;
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      });
-      const mergedResult = {
-        ...page,
-        results: merged,
-        returned_count: merged.length,
+
+      const existingSourceIds = new Set(searchExecutionResult.results.map((r) => r.source_id));
+      const newResults = pageResult.results.filter((r) => !existingSourceIds.has(r.source_id));
+      const mergedResults = [...searchExecutionResult.results, ...newResults];
+
+      const mergedResult: SearchExecutionResult = {
+        ...pageResult,
+        results: mergedResults,
+        returned_count: mergedResults.length,
       };
+
       setSearchExecutionResult(mergedResult);
-      return mergedResult;
-    } catch (error) {
-      if (searchExecutionVersionRef.current !== executionVersion) return null;
-      setSearchPaginationError(
-        error instanceof Error ? error.message : 'Nie udało się pobrać kolejnych wyników.',
-      );
-      return null;
+      return pageResult;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Nie udało się pobrać kolejnych wyników.';
+      if (activeProjectIdRef.current === targetProjectId && searchExecutionVersionRef.current === currentVersion) {
+        setSearchPaginationError(message);
+      }
+      throw err;
     } finally {
-      if (searchExecutionVersionRef.current === executionVersion) {
+      if (activeProjectIdRef.current === targetProjectId && searchExecutionVersionRef.current === currentVersion) {
         searchLoadingMoreRef.current = false;
         setSearchLoadingMore(false);
       }
     }
   };
 
-  const importSelectedSearchResults = async () => {
-    if (!activeProject || !searchExecutionResult) return null;
+  const importSelectedSearchResults = async (): Promise<SearchResultsImportResponse | null> => {
     const targetProjectId = activeProjectIdRef.current;
-    const selected = searchExecutionResult.results.filter((record) =>
-      selectedSearchResultIds.includes(record.id)
+    if (!searchExecutionResult || selectedSearchResultIds.length === 0) return null;
+
+    const selectedRecords = searchExecutionResult.results.filter((rec) =>
+      selectedSearchResultIds.includes(rec.id)
     );
-    if (selected.length === 0) return null;
-    const result = await projectApiService.importSearchResults(
-      targetProjectId,
-      selected,
-      {
-        provider: (searchExecutionResult.providers && searchExecutionResult.providers.length > 0)
-          ? (searchExecutionResult.providers[0] as 'openalex' | 'crossref')
-          : (selected[0]?.provider as 'openalex' | 'crossref' | undefined),
-        query: searchExecutionResult.rendered_query,
-        total_available: searchExecutionResult.total_count,
-      },
-    );
-    if (activeProjectIdRef.current !== targetProjectId) return result;
-    setSelectedSearchResultIds([]);
-    setLastSearchImportResult(result);
-    await refreshProjects();
-    await refreshWorkflowStatus(targetProjectId);
+    if (selectedRecords.length === 0) return null;
+
+    const metadata = {
+      query: lastExecutedSearchStrategy
+        ? lastExecutedSearchStrategy.conceptGroups
+            .map((g) => `(${g.terms.join(' OR ')})`)
+            .join(' AND ')
+        : undefined,
+      providers: lastExecutedSearchStrategy ? lastExecutedSearchStrategy.providers : undefined,
+    };
+
+    const importResult = await projectApiService.importSearchResults(targetProjectId, selectedRecords, metadata);
+    if (activeProjectIdRef.current === targetProjectId) {
+      setLastSearchImportResult(importResult);
+      setSelectedSearchResultIds([]);
+      void refreshWorkflowStatus(targetProjectId);
+    }
+    return importResult;
+  };
+
+  const importBibliographicFile = async (file: File): Promise<BibliographicImportResponse> => {
+    const targetProjectId = activeProjectIdRef.current;
+    const result = await projectApiService.importBibliographicFile(targetProjectId, file);
+    if (activeProjectIdRef.current === targetProjectId) {
+      void refreshWorkflowStatus(targetProjectId);
+    }
     return result;
   };
 
-  const importBibliographicFile = async (file: File) => {
-    const targetProjectId = activeProjectIdRef.current;
-    const result = await projectApiService.importBibliographicFile(
-      targetProjectId,
-      file,
-    );
-    await refreshWorkflowStatus(targetProjectId);
-    return result;
-  };
-
-  const runNormalization = async () => {
+  const runNormalization = async (): Promise<NormalizationResponse> => {
     const targetProjectId = activeProjectIdRef.current;
     const result = await projectApiService.runNormalization(targetProjectId);
-    await refreshWorkflowStatus(targetProjectId);
+    if (activeProjectIdRef.current === targetProjectId) {
+      void refreshWorkflowStatus(targetProjectId);
+    }
     return result;
+  };
+
+  const updateGroupDecision = (
+    groupId: string,
+    newStatus: DuplicateDecisionStatus,
+    newRationale?: string | null
+  ) => {
+    setDuplicateData((current) => {
+      if (!current) return current;
+      const updatedGroups = current.groups.map((group) =>
+        group.group_id === groupId
+          ? {
+              ...group,
+              status: newStatus,
+              rationale: newRationale !== undefined ? newRationale : group.rationale,
+            }
+          : group
+      );
+      const pendingCount = updatedGroups.filter((g) => g.status === 'PENDING').length;
+      return {
+        ...current,
+        groups: updatedGroups,
+        pending_review_count: pendingCount,
+      };
+    });
+
+    setWorkflowStatus((current) => {
+      if (!current || !duplicateData) return current;
+      const updatedGroups = duplicateData.groups.map((group) =>
+        group.group_id === groupId ? { ...group, status: newStatus } : group
+      );
+      const pendingGroups = updatedGroups.filter((g) => g.status === 'PENDING').length;
+      const approvedGroups = updatedGroups.filter((g) => g.status === 'APPROVE').length;
+      const rejectedGroups = updatedGroups.filter((g) => g.status === 'REJECT').length;
+
+      return {
+        ...current,
+        deduplication: {
+          ...current.deduplication,
+          state: pendingGroups > 0 ? 'pending_action' : 'completed',
+          pendingGroups,
+          approvedGroups,
+          rejectedGroups,
+          label: pendingGroups > 0 ? `${pendingGroups} do oceny` : 'Oceniono',
+        },
+      };
+    });
   };
 
   const runDeduplication = async (): Promise<ApiDuplicateGroupListResponse> => {
     const targetProjectId = activeProjectIdRef.current;
     setWorkflowStatusLoading(true);
     setDuplicateGroupError(null);
+
     try {
       const result = await projectApiService.getDuplicateGroups(targetProjectId);
       if (activeProjectIdRef.current !== targetProjectId) return result;
 
       setDuplicateData(result);
-      const pendingGroups = result.groups.filter((group) => group.status === 'PENDING').length;
-      const approvedGroups = result.groups.filter((group) => group.status === 'APPROVE').length;
-      const rejectedGroups = result.groups.filter((group) => group.status === 'REJECT').length;
+      const pendingGroups = result.groups.filter((g) => g.status === 'PENDING').length;
+      const approvedGroups = result.groups.filter((g) => g.status === 'APPROVE').length;
+      const rejectedGroups = result.groups.filter((g) => g.status === 'REJECT').length;
+
       setWorkflowStatus((current) => current ? {
         ...current,
         deduplication: {
@@ -559,10 +570,10 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
         },
       } : current);
       return result;
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Nie udało się uruchomić deduplikacji.';
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Nie udało się uruchomić deduplikacji.';
       if (activeProjectIdRef.current === targetProjectId) setDuplicateGroupError(message);
-      throw error;
+      throw err;
     } finally {
       if (activeProjectIdRef.current === targetProjectId) setWorkflowStatusLoading(false);
     }
@@ -582,6 +593,10 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
         duplicateGroupError,
         setActiveProjectId,
         createNewProject,
+        updateProject,
+        archiveProject,
+        restoreProject,
+        deleteProject,
         refreshProjects,
         refreshWorkflowStatus,
         runDeduplication,

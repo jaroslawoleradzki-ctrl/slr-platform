@@ -1,4 +1,3 @@
-
 import pytest
 from fastapi.testclient import TestClient
 
@@ -49,7 +48,7 @@ def test_api_record_and_get_screening_decision(service_env: ScreeningDecisionSer
         project_id=project_id,
         name="API Criterion",
         criterion_type=ScreeningCriterionType.INCLUSION,
-        screening_stage=ScreeningCriterionStage.TITLE_ABSTRACT,
+        screening_stage=ScreeningCriterionStage.FULL_TEXT,
         is_active=True,
         is_required=True,
     )
@@ -57,7 +56,7 @@ def test_api_record_and_get_screening_decision(service_env: ScreeningDecisionSer
 
     payload = {
         "publication_id": str(pub.record_id),
-        "stage": "title_abstract",
+        "stage": "full_text",
         "outcome": "include",
         "reviewer_id": "reviewer-api",
         "rationale": "High quality paper",
@@ -85,7 +84,7 @@ def test_api_record_and_get_screening_decision(service_env: ScreeningDecisionSer
         f"/projects/{project_id}/screening/decisions/latest",
         params={
             "publication_id": str(pub.record_id),
-            "stage": "title_abstract",
+            "stage": "full_text",
             "reviewer_id": "reviewer-api",
         },
     )
@@ -110,7 +109,7 @@ def test_api_list_decision_history(service_env: ScreeningDecisionService) -> Non
     # Post decision 1
     payload1 = {
         "publication_id": str(pub.record_id),
-        "stage": "title_abstract",
+        "stage": "full_text",
         "outcome": "uncertain",
         "reviewer_id": "reviewer-api",
     }
@@ -120,7 +119,7 @@ def test_api_list_decision_history(service_env: ScreeningDecisionService) -> Non
     # Post decision 2
     payload2 = {
         "publication_id": str(pub.record_id),
-        "stage": "title_abstract",
+        "stage": "full_text",
         "outcome": "include",
         "reviewer_id": "reviewer-api",
     }
@@ -131,7 +130,7 @@ def test_api_list_decision_history(service_env: ScreeningDecisionService) -> Non
         f"/projects/{project_id}/screening/decisions/history",
         params={
             "publication_id": str(pub.record_id),
-            "stage": "title_abstract",
+            "stage": "full_text",
             "reviewer_id": "reviewer-api",
         },
     )

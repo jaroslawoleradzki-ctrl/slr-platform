@@ -44,8 +44,8 @@ export const WorkflowStepper: React.FC = () => {
     {
       id: 'screen',
       label: 'Screening',
-      path: `/projects/${currentId}/screen`,
-      status: 'not_available' as const,
+      path: `/projects/${currentId}/screen/title-abstract`,
+      status: 'not_started' as const,
       alertCount: null,
     },
     {
