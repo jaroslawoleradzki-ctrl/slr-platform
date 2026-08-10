@@ -14,7 +14,7 @@ Version 0.3.0 — Screening Decision Domain and Persistence (completed)
 
 Next milestone:
 
-Phase 7 — Screening (Phase 7.5 — Title & Abstract Screening next)
+Phase 7 — Screening (Phase 7.5C — Title & Abstract Screening GUI next)
 
 ---
 
@@ -553,7 +553,7 @@ Zakres:
 - INCLUDE / EXCLUDE / UNCERTAIN controls
 - previous/next, save/resume, progress and state handling
 
-Status: ⬜ Planned
+Status: ➡️ Next
 
 ---
 
