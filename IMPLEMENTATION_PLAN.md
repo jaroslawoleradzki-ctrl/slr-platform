@@ -517,16 +517,41 @@ Status: ✅ Completed (ScreeningDecision, CriterionAssessment, CriterionAssessme
 
 ---
 
-## 7.5 Title & Abstract Screening
+## 7.5A Screening Input Prerequisites
 
 Zakres:
-- queue management for post-deduplication Working Collection
-- publication title, abstract, and metadata presentation
-- `TITLE_ABSTRACT` and `BOTH` criteria filtering and assessment
-- `INCLUDE` / `EXCLUDE` / `UNCERTAIN` decision recording with rationale
-- previous/next navigation, save & resume, filtering, progress tracking
-- GUI and backend integration
-(Bez AI screening decisions)
+- authoritative, durable snapshots of canonical live-search results
+- preservation of screening-relevant metadata and provenance during import
+- project-scoped canonical/deduplicated Screening Input Set
+- APPROVE collapse through `PublicationMergePolicy`; REJECT records remain separate
+- PENDING duplicate groups block readiness
+- deterministic canonical identity and ordering without changing Working Collection
+(Bez GUI, queue i decyzji screeningowych)
+
+Status: 🚧 Implemented on feature branch; pending integration review
+
+---
+
+## 7.5B Title & Abstract Screening Backend Workflow
+
+Zakres:
+- screening queue, eligibility and publication retrieval
+- `TITLE_ABSTRACT` and `BOTH` criteria assessment
+- integration with `ScreeningDecisionService`
+- save/resume, latest decision, filtering and progress counters
+- project-scoped backend API
+
+Status: ⬜ Planned
+
+---
+
+## 7.5C Title & Abstract Screening GUI
+
+Zakres:
+- title, abstract and metadata presentation
+- criterion-level assessment and rationale
+- INCLUDE / EXCLUDE / UNCERTAIN controls
+- previous/next, save/resume, progress and state handling
 
 Status: ⬜ Planned
 

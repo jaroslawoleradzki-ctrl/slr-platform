@@ -53,8 +53,18 @@ class _Provider:
         self.cursors.append(cursor)
         if self.error is not None:
             raise self.error
+        publications = [
+            publication.model_copy(
+                update={
+                    "provenance": [
+                        entry.model_copy(update={"run_id": search_run.run_id}) for entry in publication.provenance
+                    ]
+                }
+            )
+            for publication in self.publications
+        ]
         return ProviderSearchOutput(
-            publications=self.publications,
+            publications=publications,
             raw_responses=[],
             total_count=self.total_count,
             next_cursor=self.next_cursor,
@@ -93,9 +103,7 @@ def _publication(
         title=title,
         authors=[Author(display_name="Ada Author")],
         publication_year=year,
-        provenance=[
-            ProvenanceEntry(source=provider, source_record_id=source_id)
-        ],
+        provenance=[ProvenanceEntry(source=provider, source_record_id=source_id)],
     )
 
 
@@ -104,9 +112,7 @@ def _payload(providers: list[str] | None = None) -> dict[str, object]:
         "publication_year_from": 2018,
         "publication_year_to": 2026,
         "providers": providers or ["openalex", "crossref"],
-        "concept_groups": [
-            {"id": "group-1", "name": "Lean", "terms": ["Kaizen", "Lean"]}
-        ],
+        "concept_groups": [{"id": "group-1", "name": "Lean", "terms": ["Kaizen", "Lean"]}],
     }
 
 
@@ -189,9 +195,7 @@ def test_one_provider_failure_returns_other_results_and_partial_error(
 
     assert response.status_code == 200
     body = response.json()
-    assert [item["provider"] for item in body["results"]] == [
-        successful_provider
-    ]
+    assert [item["provider"] for item in body["results"]] == [successful_provider]
     assert body["provider_errors"] == [
         {
             "provider": failed_provider,
@@ -206,9 +210,7 @@ def test_execution_timestamp_is_real_and_remaining_response_is_stable() -> None:
         provider="openalex",
         source_id="W-stable",
     )
-    client = _client_with_executor(
-        _Executor([_Provider("openalex", [publication])])
-    )
+    client = _client_with_executor(_Executor([_Provider("openalex", [publication])]))
     started_at = datetime.now(timezone.utc)
     first = client.post(
         "/projects/lean_energy/search-strategy/executions",
@@ -231,7 +233,7 @@ def test_execution_timestamp_is_real_and_remaining_response_is_stable() -> None:
     assert first["providers"] == second["providers"] == ["openalex"]
     assert first["results"][0]["title"] == second["results"][0]["title"]
     assert first["results"][0]["source_id"] == second["results"][0]["source_id"]
-    assert first["results"][0]["id"] == second["results"][0]["id"]
+    assert first["results"][0]["id"] != second["results"][0]["id"]
 
 
 def test_openalex_metadata_is_exposed_without_confusing_total_and_returned() -> None:
@@ -325,9 +327,7 @@ def _import_record(
 def _client_with_repository(
     repository: DemoProjectPublicationRepository,
 ) -> TestClient:
-    app.dependency_overrides[get_project_publication_repository] = (
-        lambda: repository
-    )
+    app.dependency_overrides[get_project_publication_repository] = lambda: repository
     return TestClient(app)
 
 
