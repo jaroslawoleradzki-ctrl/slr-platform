@@ -10,7 +10,11 @@ Unlike ROADMAP.md, this file is intentionally technical and may change frequentl
 
 Current milestone:
 
-Phase 5 — Deduplication (completed)
+Version 0.2.5 — Data Integrity Cleanup (completed)
+
+Next milestone:
+
+Phase 7 — Screening (Phase 7.1 — Screening Criteria Domain Model, not started)
 
 ---
 
@@ -389,78 +393,142 @@ Status: ⬜ Planned
 
 # Phase 7 — Screening
 
-## 7.1 Screening Domain and Workflow
+## 7.1 Screening Criteria Domain Model
 
 Zakres:
+- `ScreeningCriterion` domain object
+- criterion identifier
+- project association (`project_id`)
+- name, description
+- type: `INCLUSION` / `EXCLUSION`
+- screening stage: `TITLE_ABSTRACT` / `FULL_TEXT` / `BOTH`
+- display order, active/inactive flag, required/optional flag
+- domain validation rules
+- deterministic JSON serialization
+- unit test suite
+(Bez persistence i GUI)
 
-- screening state
-- inclusion and exclusion decisions
-- screening stage
-- rationale
-- reviewer attribution
-- decision history
-- conflict representation
-
-Status:
-
-⬜ Planned
+Status: ⬜ Planned
 
 ---
 
-## 7.2 Screening Application Services and API
+## 7.2 Screening Criteria Persistence and API
 
 Zakres:
+- SQLite persistence (`SqliteScreeningCriterionRepository`)
+- database migration
+- abstract repository contract (`ScreeningCriterionRepository` decorated with `@runtime_checkable`)
+- CRUD / lifecycle operations
+- project isolation and order preservation
+- REST API (`/projects/{project_id}/screening/criteria`)
+- validation and API contract tests
 
-- screening queues
-- publication assignment
-- decision submission
-- history retrieval
-- conflict visibility
-- progress information
-
-Status:
-
-⬜ Planned
+Status: ⬜ Planned
 
 ---
 
-## 7.3 Screening UI
+## 7.3 Screening Configuration GUI
 
 Zakres:
+- list criteria, add/edit/remove/deactivate controls
+- inclusion/exclusion and stage selection
+- required/optional toggles and reordering
+- description / instructions input
+- backend API persistence integration
+- loading, empty, error, and validation states
+(Zero hardcoded criteria)
 
-- title and abstract screening view
-- full-text screening view
-- inclusion and exclusion controls
-- rationale input
-- publication metadata and provenance
-- progress and queue navigation
-
-Status:
-
-⬜ Planned
+Status: ⬜ Planned
 
 ---
 
-## 7.4 Screening Conflict and Review UI
+## 7.4 Screening Decision Domain and Persistence
 
 Zakres:
+- `ScreeningDecision` domain model
+- project ID, publication ID, stage
+- outcome: `INCLUDE` / `EXCLUDE` / `UNCERTAIN`
+- criterion-level assessments
+- decision rationale, reviewer attribution, timestamps
+- decision history trail and criteria version/snapshot reference
+- SQLite persistence (`SqliteScreeningDecisionRepository`) and database migration
+- REST API and contract tests
 
-- conflicting decisions
-- reviewer comparison
-- resolution workflow
-- decision history
-
-Status:
-
-⬜ Planned
+Status: ⬜ Planned
 
 ---
 
-## 7.5 Screening Integration and Contract Tests
+## 7.5 Title & Abstract Screening
 
-Status:
+Zakres:
+- queue management for post-deduplication Working Collection
+- publication title, abstract, and metadata presentation
+- `TITLE_ABSTRACT` and `BOTH` criteria filtering and assessment
+- `INCLUDE` / `EXCLUDE` / `UNCERTAIN` decision recording with rationale
+- previous/next navigation, save & resume, filtering, progress tracking
+- GUI and backend integration
+(Bez AI screening decisions)
 
-⬜ Planned
+Status: ⬜ Planned
+
+---
+
+## 7.6 Full-Text Screening
+
+Zakres:
+- queue of publications eligible after Title & Abstract Screening
+- `FULL_TEXT` and `BOTH` criteria assessment
+- technical full-text availability status (URL, DOI link, external access) as workflow metadata (project-scoped criteria define whether lack of full text leads to exclusion)
+- explicit exclusion reason and decision rationale
+- `INCLUDE` / `EXCLUDE` / `UNCERTAIN` decision recording
+- history view, save & resume, progress tracking
+- GUI and backend integration
+(Brak wymagania przechowywania chronionych plików PDF w aplikacji)
+
+Status: ⬜ Planned
+
+---
+
+## 7.7 Screening Audit Trail and Progress
+
+Zakres:
+- complete decision history audit trail
+- reviewer attribution, timestamps, criteria version snapshot used
+- decision change / override tracking
+- stage-specific progress metrics (included, excluded, uncertain counts)
+- exclusion-reason aggregation and project screening summary
+- data extraction required for PRISMA flow chart
+(Modyfikacja kryteriów nie powoduje utraty interpretacji decyzji historycznych)
+
+Status: ⬜ Planned
+
+---
+
+## 7.8 Multi-Reviewer Screening and Conflict Detection
+
+Zakres:
+- independent reviewer decisions for multiple reviewers
+- disagreement detection algorithm and conflict queue
+- conflict resolution workflow and resolution rationale
+- reviewer agreement metrics
+- audit history tracking
+(Single-reviewer workflow zachowuje pełną funkcjonalność)
+
+Status: ⬜ Planned
+
+---
+
+## 7.9 Screening Integration and Release
+
+Zakres:
+- Project Dashboard integration
+- workflow stage status transitions (Deduplication → Screening → Quality Assessment)
+- empty, loading, and error states
+- backend and frontend integration test suites
+- end-to-end verification and documentation reconciliation
+- release verification
+
+Status: ⬜ Planned
 
 ---
 

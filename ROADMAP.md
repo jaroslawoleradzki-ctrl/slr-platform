@@ -260,22 +260,47 @@ Key outcomes:
 
 ---
 
-## Phase 7 — Screening
+## Phase 7 — Screening ⬜
 
 Support systematic review screening through a backend workflow and a dedicated user interface.
 
-Features:
+### Key Architectural Principles
 
-- inclusion and exclusion decisions
-- screening criteria
-- screening rationale
-- title and abstract screening
-- full-text screening
-- screening history
-- conflict detection
-- multiple reviewers
-- screening queue and progress view
-- screening decision interface
+- **Universal Application**: SLR Platform is a domain-agnostic tool. Screening criteria are never hardcoded for any specific literature review (e.g. Lean Management or energy efficiency).
+- **Project-Scoped Criteria**: Every research project defines its own custom, user-configurable screening criteria.
+- **Workflow Position**:
+  Working Collection → Normalization → Deduplication → **Title & Abstract Screening** → **Full-Text Screening** → Quality Assessment → Data Extraction
+- **Historical Interpretation Stability**: Modifying screening criteria must preserve full interpretability of historical decisions by recording criteria snapshots or version references alongside decision audit records.
+- **No Copyrighted PDF Storage Requirement**: Full-text screening architecture treats full-text availability and status (URL, DOI link, external access status) as technical publication/workflow metadata rather than a built-in qualification criterion. A project's configurable `ScreeningCriterion` defines whether lack of full text leads to exclusion, without requiring local storage of copyrighted PDF documents.
+- **Reviewer Model Flexibility**: Single-reviewer mode is fully supported as the operational default, with multi-reviewer agreement and conflict resolution built as an optional extension layer.
+- **PRISMA Readiness**: Screening decisions and exclusion rationale aggregations natively record all metrics required for subsequent PRISMA flow diagram generation.
+
+### Increments
+
+- **7.1 — Screening Criteria Domain Model** ⬜ — Infrastructure-independent `ScreeningCriterion` domain object, criterion identifier, project association, name, description, criterion type (`INCLUSION` / `EXCLUSION`), screening stage (`TITLE_ABSTRACT` / `FULL_TEXT` / `BOTH`), display order, active/inactive flag, required/optional flag, domain validation rules, deterministic JSON serialization, and unit test suite. No persistence or GUI.
+- **7.2 — Screening Criteria Persistence and API** ⬜ — SQLite persistence layer (`SqliteScreeningCriterionRepository`), database migration, abstract repository contract (`ScreeningCriterionRepository` decorated with `@runtime_checkable`), full CRUD and lifecycle management, strict project isolation, order preservation, REST API endpoints (`/projects/{project_id}/screening/criteria`), payload validation, and API contract test suite.
+- **7.3 — Screening Configuration GUI** ⬜ — Graphical management interface for screening criteria: listing criteria, create/edit/delete/deactivate actions, inclusion vs. exclusion selection, stage targeting (`TITLE_ABSTRACT` / `FULL_TEXT` / `BOTH`), required/optional toggles, reordering controls, description/instruction fields, backend API persistence integration, and full loading, empty, error, and validation state handling. Zero hardcoded criteria.
+- **7.4 — Screening Decision Domain and Persistence** ⬜ — `ScreeningDecision` domain model capturing project ID, publication ID, screening stage, outcome decision (`INCLUDE` / `EXCLUDE` / `UNCERTAIN`), criterion-level assessments, decision rationale, reviewer attribution, timestamps, append-only history trail, and immutable criteria version/snapshot reference. SQLite persistence (`SqliteScreeningDecisionRepository`), database migration, REST API endpoints, and contract tests.
+- **7.5 — Title & Abstract Screening** ⬜ — Queue management for post-deduplication Working Collection records, presentation of title, abstract, and bibliographic metadata, evaluation against `TITLE_ABSTRACT` and `BOTH` criteria, criterion-level assessment, `INCLUDE` / `EXCLUDE` / `UNCERTAIN` decision recording with rationale, previous/next queue navigation, save & resume capabilities, queue filtering, progress tracking, and full GUI & backend integration. No AI screening decisions.
+- **7.6 — Full-Text Screening** ⬜ — Queue management for publications eligible after Title & Abstract Screening, evaluation against `FULL_TEXT` and `BOTH` criteria (with technical full-text availability/status presented as workflow metadata, and project-scoped criteria determining whether unretrievable full text leads to exclusion), explicit selection of exclusion reasons, decision recording (`INCLUDE` / `EXCLUDE` / `UNCERTAIN`) with rationale, history view, save & resume, progress metrics, and GUI & backend integration. No requirement for local storage of copyrighted PDF files.
+- **7.7 — Screening Audit Trail and Progress** ⬜ — Complete decision audit trail capturing reviewer, timestamps, exact criteria version used, decision changes, stage-specific progress metrics (included, excluded, uncertain counts), exclusion-reason aggregations, overall project screening summary, and structured data extraction necessary for subsequent PRISMA flow charts. Changes to criteria do not invalidate or obscure historical decisions.
+- **7.8 — Multi-Reviewer Screening and Conflict Detection** ⬜ — Independent multi-reviewer decision recording for the same publication and stage, conflict detection algorithm identifying reviewer disagreements, dedicated conflict resolution queue, resolution workflow with reviewer agreement metrics, resolution rationale recording, and audit trail. Single-reviewer workflow remains fully operational.
+- **7.9 — Screening Integration and Release** ⬜ — Integration into Project Dashboard, workflow stage status transitions (Deduplication → Screening and Screening → Quality Assessment), handling empty/loading/error states, backend integration test suite, frontend integration test suite, end-to-end verification, documentation reconciliation, and release verification.
+
+### Definition of Done for Phase 7
+
+Phase 7 is complete when a user can:
+1. Create arbitrary, custom screening criteria for a project.
+2. Assign criteria to Title & Abstract, Full-Text, or both screening stages.
+3. Perform Title & Abstract Screening on post-deduplication records.
+4. Perform Full-Text Screening on eligible studies.
+5. Record `INCLUDE`, `EXCLUDE`, or `UNCERTAIN` decisions with explicit rationale.
+6. Resume screening seamlessly after application restarts.
+7. Inspect the complete historical audit trail of screening decisions.
+8. Monitor real-time progress for both screening stages.
+9. Work efficiently in single-reviewer mode.
+10. Optionally utilize multi-reviewer screening and conflict resolution workflows.
+11. Retrieve aggregated decision and exclusion-reason data ready for PRISMA reporting.
 
 ---
 

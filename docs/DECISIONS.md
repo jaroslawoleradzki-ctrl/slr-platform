@@ -2,6 +2,30 @@
 
 This document records important project decisions that do not require a full ADR.
 
+## 2026-08-10
+
+### Phase 7 — Screening Architecture & Incremental Workflow Plan
+
+Before initiating Phase 7 implementation, the architecture and implementation sequence for Systematic Review Screening were formalized.
+
+Key decisions:
+- **Universal & Configurable Criteria**: SLR Platform is a domain-independent application. Screening criteria MUST NOT be hardcoded for specific literature reviews (e.g. Lean Management or energy efficiency). Each project maintains its own user-configurable `ScreeningCriterion` models scoped by `project_id`.
+- **Screening Stages**: Screening is split into two distinct stages: `TITLE_ABSTRACT` and `FULL_TEXT`. Criteria specify target stage (`TITLE_ABSTRACT`, `FULL_TEXT`, or `BOTH`) and type (`INCLUSION` or `EXCLUSION`).
+- **Historical Interpretation Stability**: Criteria modifications must never invalidate or render uninterpretable existing screening decisions. `ScreeningDecision` objects store a reference/snapshot of the criteria version active at decision time.
+- **Copyrighted Content Boundaries & Technical Metadata**: Full-text availability and status (URL, DOI link, external access) are treated as technical publication/workflow metadata, NOT a built-in qualification criterion. A project's configurable `ScreeningCriterion` determines whether unretrievable full text leads to exclusion, without requiring local storage of copyrighted PDF documents in the application database or file system.
+- **Reviewer & Conflict Architecture**: Single-reviewer operation is the standard baseline. Multi-reviewer screening operates via independent reviewer decision logs, disagreement detection algorithms, conflict resolution queues, and agreement metric calculations.
+- **PRISMA Readiness**: Decision persistence and exclusion aggregation natively collect metrics needed for subsequent PRISMA flow diagram generation (records screened, excluded with reasons, full-text assessed, included studies).
+- **Incremental Order**: Phase 7 is divided into 9 sequential increments:
+  1. 7.1 — Screening Criteria Domain Model (domain logic & validation, no DB/GUI)
+  2. 7.2 — Screening Criteria Persistence and API (SQLite repository, migration, REST API)
+  3. 7.3 — Screening Configuration GUI (criteria management interface, zero hardcoded criteria)
+  4. 7.4 — Screening Decision Domain and Persistence (decision model, criteria versioning, SQLite repository, REST API)
+  5. 7.5 — Title & Abstract Screening (queue, metadata presentation, decision recording, progress, no AI)
+  6. 7.6 — Full-Text Screening (eligible queue, full-text status, exclusion reason mapping)
+  7. 7.7 — Screening Audit Trail and Progress (history, reviewer attribution, metrics, PRISMA readiness)
+  8. 7.8 — Multi-Reviewer Screening and Conflict Detection (independent decisions, conflict resolution, agreement metrics)
+  9. 7.9 — Screening Integration and Release (Dashboard integration, stage transitions, e2e test suite, docs)
+
 ---
 
 ## 2026-08-03

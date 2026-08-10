@@ -22,7 +22,11 @@ Version 0.2.5 — Data Integrity Cleanup (Completed).
 
 The Data Integrity Cleanup initiative (Tasks 1–7) is fully completed and verified. This release stabilizes data consistency, introduces a deterministic integrity audit engine (`ProjectIntegrityAuditService`), enforces explicit transaction boundaries (`SqliteTransactionManager`), separates read models (`SourcesSummaryService`), standardizes repository contracts and runtime typing (`Protocol` + `@runtime_checkable`), establishes deterministic test fixtures/factories (`factories.py`, `project_fixtures.py`), and provides a standalone CLI integrity check tool (`python -m app.tools.integrity PROJECT_ID`).
 
-The next planned product phase is Phase 7 — Screening (not yet started).
+State of Phase 7 — Screening:
+- Version 0.2.5 is completed.
+- Phase 7 — Screening is the next product phase.
+- Phase 7.1 — Screening Criteria Domain Model is the next implementation increment.
+- Phase 7 implementation has not started.
 
 ---
 
@@ -808,9 +812,11 @@ The Phase 5 regression suite now verifies:
 No duplicate decision or publication merge is performed automatically.
 
 Phase 5 — Deduplication: Completed.
+Phase 6 — GUI Foundation and Duplicate Review: Completed.
+Version 0.2.5 — Data Integrity Cleanup: Completed.
 
-The next planned increment is Phase 6.1 — Frontend Architecture and Application
-Shell. It has not started.
+The next planned product phase is Phase 7 — Screening (not yet started).
+The next implementation increment is Phase 7.1 — Screening Criteria Domain Model.
 
 ---
 
@@ -863,7 +869,7 @@ Every feature must:
 
 # Next milestone
 
-Phase 6.1 — Frontend Architecture and Application Shell. Not started.
+Phase 7.1 — Screening Criteria Domain Model (Phase 7 — Screening). Not started.
 
 ---
 

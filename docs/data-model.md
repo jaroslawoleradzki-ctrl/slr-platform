@@ -59,15 +59,38 @@ Informacja o pochodzeniu konkretnego pola lub rekordu:
 - osoba lub agent podejmujący decyzję;
 - znacznik czasu.
 
+### ScreeningCriterion
+
+Kryterium włączenia lub wyłączenia zdefiniowane dla konkretnego projektu (project-scoped).
+
+Pola:
+- `criterion_id`
+- `project_id`
+- `name`
+- `description`
+- `type`: `INCLUSION` / `EXCLUSION`
+- `stage`: `TITLE_ABSTRACT` / `FULL_TEXT` / `BOTH`
+- `display_order`
+- `is_active`
+- `is_required`
+
+Uwaga: Dostępność pełnego tekstu (full-text availability/status) jest informacją techniczną o publikacji w workflow (np. URL, link DOI), a NIE wbudowanym kryterium kwalifikacji. To konfigurowalne ScreeningCriterion danego projektu określa, czy brak pełnego tekstu prowadzi do wykluczenia.
+
 ### ScreeningDecision
 
-- etap: title/abstract albo full text;
-- decyzja: include, exclude, uncertain;
-- powód;
-- decyzja człowieka;
-- rekomendacja AI;
-- pewność AI;
-- znacznik czasu.
+Decyzja screeningu podjęta dla konkretnej publikacji na danym etapie.
+
+Pola:
+- `decision_id`
+- `project_id`
+- `publication_id` (`record_id`)
+- `stage`: `TITLE_ABSTRACT` / `FULL_TEXT`
+- `outcome`: `INCLUDE` / `EXCLUDE` / `UNCERTAIN`
+- `criterion_assessments`: oceny według poszczególnych kryteriów
+- `rationale`: uzasadnienie decyzji
+- `reviewer_id`: identyfikator osoby podejmującej decyzję
+- `criteria_version`: referencja do wersji/migawki użytych kryteriów
+- `created_at`: znacznik czasu
 
 ### SearchRun
 

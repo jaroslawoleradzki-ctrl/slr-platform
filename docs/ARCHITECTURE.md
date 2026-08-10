@@ -12,13 +12,11 @@ Moduły MVP:
 6. Web/API
 
 Przyszłe moduły:
-- screening,
-- full text,
-- quality assessment,
-- extraction,
-- bibliometrics,
-- synthesis,
-- PRISMA.
+- screening (Phase 7: Title & Abstract oraz Full-Text Screening na podstawie konfigurowalnych kryteriów projektu, podzielony na przyrosty 7.1–7.9),
+- quality assessment (Phase 8),
+- extraction (Phase 9),
+- evidence synthesis (Phase 10),
+- PRISMA (Phase 12).
 
 Zadania jednoznaczne realizuje kod deterministyczny. Agenci wspierają zadania
 interpretacyjne, lecz nie podejmują ostatecznych decyzji naukowych.
