@@ -15,6 +15,7 @@ from app.domain.search_provenance import (
 )
 from app.normalization import normalize_publication
 from app.providers.search.base import ProviderSearchOutput
+from app.rendering import get_query_renderer
 from app.services.duplicate_group_builder import DuplicateGroupBuilder
 from app.services.result_merger import ResultMerger
 from app.storage.raw_response_archive import (
@@ -121,12 +122,16 @@ class SearchEngine:
         result_provenance: list[PublicationSearchProvenance] = []
         for provider in self._providers:
             provider_started_at = self._clock()
+            renderer = get_query_renderer(provider.name)
+            rendered_query_obj = renderer.render(search_query)
             search_run = SearchRun(
                 run_id=self._run_id_factory(),
                 query_id=search_query.query_id,
                 query_version=search_query.version,
                 provider=provider.name,
-                rendered_query=search_query.to_boolean_query(),
+                rendered_query=rendered_query_obj.query_string,
+                is_lossless=rendered_query_obj.is_lossless,
+                warnings=list(rendered_query_obj.warnings),
                 status=SearchRunStatus.RUNNING,
                 started_at=provider_started_at,
             )

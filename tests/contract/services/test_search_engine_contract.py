@@ -18,6 +18,7 @@ from app.domain.search import (
     SearchTerm,
 )
 from app.providers.search.base import JsonObject, ProviderSearchOutput
+from app.rendering import get_query_renderer
 from app.services.publication_merge_policy import PublicationMergePolicy
 from app.services.search_engine import SearchEngine
 from app.storage.raw_response_archive import (
@@ -186,14 +187,15 @@ async def test_single_provider_success_contract() -> None:
     assert running_run.query_id == query.query_id
     assert running_run.query_version == query.version
     assert running_run.provider == provider.name
-    assert running_run.rendered_query == query.to_boolean_query()
+    expected_rendered_query = get_query_renderer(provider.name).render(query).query_string
+    assert running_run.rendered_query == expected_rendered_query
     assert running_run.started_at == times[1]
     assert len(archive.saved_entries) == 1
     entry = archive.saved_entries[0]
     assert entry.archive_id == archive_id
     assert entry.search_run_id == run_id
     assert entry.provider == provider.name
-    assert entry.rendered_query == query.to_boolean_query()
+    assert entry.rendered_query == expected_rendered_query
     assert entry.captured_at == times[2]
     assert entry.status is RawResponseStatus.SUCCESS
     assert entry.responses is raw_pages
@@ -302,7 +304,7 @@ async def test_multi_provider_order_and_association_contract() -> None:
         assert running_run.query_id == final_run.query_id == query.query_id
         assert running_run.query_version == final_run.query_version == query.version
         assert running_run.rendered_query == final_run.rendered_query
-        assert final_run.rendered_query == query.to_boolean_query()
+        assert final_run.rendered_query == get_query_renderer(provider.name).render(query).query_string
         assert running_run.provider == final_run.provider == provider.name
 
 

@@ -30,6 +30,22 @@ Key decisions:
 
 ## 2026-08-10
 
+### Phase 6.8.2 — Provider-Specific Query Rendering Architecture (v0.2.6)
+
+A provider-specific search query rendering subsystem (`app.rendering`) was introduced to decouple canonical `SearchQuery` representations from physical provider query syntax.
+
+Key architectural decisions:
+- **Canonical vs Physical Query Separation**: Canonical `SearchQuery` remains provider-independent and domain-pure. Physical queries sent to external search APIs are produced by provider-specific renderers implementing `QueryRenderer`.
+- **RenderedQuery Audit Contract**: `RenderedQuery` value object encapsulates `provider`, `query_string`, `is_lossless: bool`, `warnings: tuple[str, ...]`, and `metadata: dict`.
+- **OpenAlex Query Rendering**: `OpenAlexQueryRenderer` translates canonical expressions to OpenAlex `search` string syntax with exact phrase quotes `"..."`, uppercase Boolean operators (`AND`, `OR`, `NOT`), and nested grouping `()`. Full Boolean syntax is supported losslessly (`is_lossless=True`).
+- **Crossref Query Rendering**: `CrossrefQueryRenderer` translates canonical expressions to Crossref free-text keyword syntax. Because Crossref `query` parameter does not support `NOT` or `OR` operators, the renderer flattens expressions into space-separated terms, excludes `NOT` clauses from physical keywords, flags `is_lossless=False`, and records explicit human-readable warnings (`warnings`) and canonical query metadata (`metadata["canonical_query"]`) for scientific auditability.
+- **Search Engine & Provenance Integration**: `SearchEngine.execute()` uses provider-specific renderers. `SearchRun.rendered_query`, `ProvenanceEntry.rendered_query`, and raw response archive entries store the exact physical query executed per provider.
+- **REST API & GUI Contract**: `POST /projects/{project_id}/search-strategy/executions` exposes `provider_queries` list alongside `rendered_query` preview, and frontend UI renders executed queries per provider.
+
+---
+
+## 2026-08-10
+
 ### Phase 6.8 Reconciliation & Technical Debt Prerequisites for Executable Screening
 
 A comprehensive codebase audit reconciled the documentation with the actual implementation state of Phase 6.7 and Phase 6.8 on the `development` branch.

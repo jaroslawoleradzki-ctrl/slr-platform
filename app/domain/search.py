@@ -273,6 +273,8 @@ class SearchRun(BaseModel):
     provider: str = Field(min_length=1)
     provider_version: str | None = None
     rendered_query: str = Field(min_length=1)
+    is_lossless: bool = True
+    warnings: list[str] = Field(default_factory=list)
     date_from: date | None = None
     date_to: date | None = None
     status: SearchRunStatus = SearchRunStatus.PENDING
@@ -300,14 +302,14 @@ class SearchRun(BaseModel):
             raise ValueError("text fields must not be blank")
         return stripped
 
-    @field_validator("errors")
+    @field_validator("errors", "warnings")
     @classmethod
-    def validate_errors(cls, values: list[str]) -> list[str]:
+    def validate_string_lists(cls, values: list[str]) -> list[str]:
         normalized: list[str] = []
         for value in values:
             stripped = value.strip()
             if not stripped:
-                raise ValueError("errors must not contain blank values")
+                raise ValueError("list values must not contain blank strings")
             normalized.append(stripped)
         return normalized
 

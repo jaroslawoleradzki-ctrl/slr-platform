@@ -18,15 +18,15 @@ v0.2.5
 
 Current development phase:
 
-Version 0.2.5 — Data Integrity Cleanup (Completed).
+Version 0.2.6 — Provider-Specific Query Rendering (Completed).
 
-The Data Integrity Cleanup initiative (Tasks 1–7) is fully completed and verified. This release stabilizes data consistency, introduces a deterministic integrity audit engine (`ProjectIntegrityAuditService`), enforces explicit transaction boundaries (`SqliteTransactionManager`), separates read models (`SourcesSummaryService`), standardizes repository contracts and runtime typing (`Protocol` + `@runtime_checkable`), establishes deterministic test fixtures/factories (`factories.py`, `project_fixtures.py`), and provides a standalone CLI integrity check tool (`python -m app.tools.integrity PROJECT_ID`).
+Version 0.2.6 introduces dedicated provider-specific search query renderers (`OpenAlexQueryRenderer`, `CrossrefQueryRenderer`). Canonical `SearchQuery` objects are translated into physical provider query strings with explicit lossy/lossless tracking (`is_lossless`) and limitation warnings (`warnings`). `SearchEngine.execute()` executes exact physical queries per provider, storing them in `SearchRun`, publication provenance, and raw response archives. The REST API exposes `provider_queries` and frontend displays physical queries per provider.
 
 Phase 6.7 & Phase 6.8 Workflow State:
 - **Phase 6.7 (Modules 1–4 Functional Workflow)**: ✅ Completed (6.7.1, 6.7.2a, 6.7.2b).
 - **Phase 6.8 (End-to-End Search Workflow)**: 🟨 Partial / In Progress
   - 6.8.1 Search Strategy Backend — ✅ Completed
-  - 6.8.2 Provider-Specific Query Rendering — ⬜ Outstanding (`SearchEngine` uses generic `to_boolean_query()`)
+  - 6.8.2 Provider-Specific Query Rendering — ✅ Completed (`OpenAlexQueryRenderer`, `CrossrefQueryRenderer`, `RenderedQuery` lossy tracking)
   - 6.8.3 Search Orchestrator — ✅ Completed (`SearchEngine` multi-provider execution, merging, provenance)
   - 6.8.4 Search Execution API — 🟨 Partial (`POST /executions` live execution without durable run GET by ID)
   - 6.8.5 Search Execution Persistence — 🟨 Partial (publications & strategy durable; `SearchRun` & raw response archive transient)
@@ -40,7 +40,7 @@ Technical Debt & Prerequisites for Executable Screening:
 2. **Deduplicated Screening Input Set**: Current deduplication records human `APPROVE`/`REJECT` decisions without physical publication merging. Approved duplicates remain as separate records in Working Collection. An explicit screening input set pipeline (`Working Collection` → `Duplicate Decisions` → `Canonical / Deduplicated Screening Set` → `Screening`) is a prerequisite for executable Phase 7.5.
 
 State of Phase 7 — Screening:
-- Version 0.2.5 is completed.
+- Version 0.2.6 is completed.
 - Phase 7 — Screening is the next product phase (implementation not started).
 - Phase 7.1 — Screening Criteria Domain Model is the next implementation increment.
 - Phase 7.1–7.4 are decoupled from 6.8 debt and can proceed independently.

@@ -131,12 +131,27 @@ class SearchStrategyPutRequest(BaseModel):
         return self.created_at or datetime.now(timezone.utc)
 
 
+class ProviderQueryResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    provider: str
+    rendered_query: str
+    is_lossless: bool = True
+    warnings: list[str] = Field(default_factory=list)
+
+
 class SearchStrategyExecutionResponse(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     project_id: str
     status: Literal["validated"] = "validated"
-    rendered_query: str
+    rendered_query: str = Field(
+        description="Canonical provider-independent Boolean query tree preview"
+    )
+    provider_queries: list[ProviderQueryResponse] = Field(
+        default_factory=list,
+        description="Physical executed provider queries derived from execution SearchRun objects",
+    )
     providers: list[str]
     publication_year_from: int
     publication_year_to: int

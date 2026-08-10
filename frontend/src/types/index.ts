@@ -90,10 +90,18 @@ export interface SearchStrategy extends Omit<SearchStrategyWriteRequest, 'querie
   updated_at: string;
 }
 
+export interface ProviderQuery {
+  provider: string;
+  rendered_query: string;
+  is_lossless?: boolean;
+  warnings?: string[];
+}
+
 export interface SearchExecutionResult {
   project_id: string;
   status: 'validated';
   rendered_query: string;
+  provider_queries?: ProviderQuery[];
   providers: string[];
   publication_year_from: number;
   publication_year_to: number;

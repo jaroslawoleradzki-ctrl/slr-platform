@@ -53,6 +53,21 @@ export const SearchResultsSection: React.FC<Props> = ({
       }
       subtitle={`Znaleziono ${result.total_count} rekordów. Zwrócono ${result.returned_count}. Wybrano ${selectedIds.length}.`}
     >
+      {result.provider_queries && result.provider_queries.length > 0 && (
+        <div style={{ marginBottom: 12, padding: 10, borderRadius: 'var(--radius-md)', backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-subtle)', fontSize: '0.8rem' }}>
+          <div style={{ fontWeight: 700, marginBottom: 4 }}>Wykonane zapytania providerów:</div>
+          {result.provider_queries.map((pq) => (
+            <div key={pq.provider} style={{ marginTop: 4 }}>
+              <span style={{ fontWeight: 600 }}>{pq.provider}:</span> <code>{pq.rendered_query}</code>
+              {pq.is_lossless === false && (
+                <span style={{ marginLeft: 6, color: 'var(--status-warning-text)', fontSize: '0.75rem' }}>
+                  (Dostosowano składnię/ograniczenia)
+                </span>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
       {result.results.length === 0 && (
         <div style={{ color: 'var(--text-secondary)', marginBottom: 12 }}>
           Nie znaleziono rekordów dla tej strategii.

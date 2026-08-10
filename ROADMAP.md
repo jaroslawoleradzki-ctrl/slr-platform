@@ -138,9 +138,9 @@ is deferred until Search Strategy and Sources Ingestion use durable backend
 capabilities.
 
 - **6.8.1 Search Strategy Backend** ✅ — Durable strategy storage in SQLite (`0001_search_strategies.sql`), REST GET/PUT endpoints (`/projects/{project_id}/search-strategy`), provider-independent `SearchStrategy` and `SearchQuery` domain models, validation, and provider selection.
-- **6.8.2 Provider-Specific Query Rendering** ⬜ — Adaptation of canonical `SearchQuery` to provider-specific query syntax and capabilities. Currently, `SearchEngine` uses generic `search_query.to_boolean_query()` passed as `rendered_query` to providers. Dedicated provider-specific query renderers (`OpenAlexQueryRenderer`, `CrossrefQueryRenderer`, `SemanticScholarQueryRenderer`) remain outstanding.
+- **6.8.2 Provider-Specific Query Rendering** ✅ — Provider-specific translation of canonical `SearchQuery` expressions into physical provider queries (`OpenAlexQueryRenderer`, `CrossrefQueryRenderer`). `SearchEngine` executes exact provider queries, stores physical queries in `SearchRun` / provenance / raw response archive, and exposes `provider_queries` in REST API with lossy/lossless tracking.
 - **6.8.3 Search Orchestrator** ✅ — Multi-provider execution via `SearchEngine`, separate `SearchRun` per provider, provider error isolation / partial failure handling, normalized results, result aggregation / merging (`ResultMerger`), search provenance, execution provenance, and candidate duplicate group generation (`DuplicateGroupBuilder`).
-- **6.8.4 Search Execution API** 🟨 — `POST /projects/{project_id}/search-strategy/executions` executes search strategies live, returning `rendered_query`, selected providers, execution timestamp, total/returned record counts, pagination metadata (`next_cursor`, `has_more`), results list, and provider error diagnostics. Lacks a durable execution resource for subsequent GET retrieval of run status, saved execution results, or historical runs by ID.
+- **6.8.4 Search Execution API** 🟨 — `POST /projects/{project_id}/search-strategy/executions` executes search strategies live, returning `rendered_query`, `provider_queries`, selected providers, execution timestamp, total/returned record counts, pagination metadata (`next_cursor`, `has_more`), results list, and provider error diagnostics. Lacks a durable execution resource for subsequent GET retrieval of run status, saved execution results, or historical runs by ID.
 - **6.8.5 Search Execution Persistence** 🟨 — Working Collection publications, Search Strategy, import history, normalization state, and duplicate review decisions are durable in SQLite. Full search execution history is not durable: `SearchRun` database records, complete execution history, and durable raw provider response archiving (`live_search.py` relies on transient `_InMemoryRawResponseArchive`) remain partial.
 - **6.8.6 Search Strategy GUI Integration** ✅ — Search Strategy UI reads and writes the real backend resource, supports the authored form and generic Boolean preview, executes live searches, presents results and provider errors on the same page, and provides the result import workflow. **Szukaj** does not navigate to Sources & Imports.
 - **6.8.7 Sources Search Execution GUI** ↪ — **Superseded by current Search Strategy execution workflow**. Search Strategy page executes searches and presents results/errors directly. Sources & Imports presents durable intake state, import history, source summaries, Working Collection summary, and bibliographic file uploads.
@@ -157,8 +157,16 @@ A comprehensive reconciliation of Phase 6.8 identifies two technical prerequisit
 **Phase 7 Implementation Scope**:
 - **Phases 7.1–7.4** (Screening Criteria Domain Model, Persistence & API, Configuration GUI, Screening Decision Domain & Persistence) CAN proceed independently of these open Phase 6.8 technical debts.
 - **Phase 7.5 — Title & Abstract Screening** MUST NOT enter executable implementation until Metadata Preservation (1) and Deduplicated Screening Input Set (2) are resolved.
-- **Provider-Specific Query Rendering (6.8.2)** should be completed prior to executing actual SLR literature searches for scientific reproducibility and provider query syntax adaptation.
+- **Provider-Specific Query Rendering (6.8.2)** is COMPLETED in v0.2.6.
 - **Search Execution Persistence (6.8.5)** is important for reproducibility, but does not block Phase 7.1–7.4 domain model development.
+
+### Version 0.2.6 — Provider-Specific Query Rendering ✅
+
+- **QueryRenderer Contract** ✅ — Clean, decoupled protocol (`QueryRenderer`) and value object (`RenderedQuery`) supporting physical query strings, lossy/lossless flags (`is_lossless`), explicit limitation warnings (`warnings`), and diagnostic metadata (`metadata`).
+- **OpenAlexQueryRenderer** ✅ — Translates canonical `SearchQuery` into OpenAlex `search` string syntax with exact phrase quotes `"..."`, uppercase Boolean operators (`AND`, `OR`, `NOT`), and nested grouping `()`.
+- **CrossrefQueryRenderer** ✅ — Translates canonical `SearchQuery` into Crossref free-text keyword string syntax with exact phrase quotes `"..."`, space-separated terms, explicit lossy tracking (`is_lossless=False`), and audit warnings for unsupported `NOT` / `OR` operators.
+- **SearchEngine Integration** ✅ — Provider-specific query rendering integrated into `SearchEngine.execute()`, ensuring `SearchRun.rendered_query`, `ProvenanceEntry.rendered_query`, and raw response archive entries store the exact physical query executed per provider.
+- **API & GUI Contract** ✅ — REST API `POST /projects/{project_id}/search-strategy/executions` exposes `provider_queries`, and frontend presents physical provider queries alongside canonical preview.
 
 ### Version 0.2.5 — Data Integrity Cleanup ✅
 

@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from app.api.dto.search_strategy import (
     BibliographicImportHistoryResponse,
     BibliographicImportResponse,
+    ProviderQueryResponse,
     SearchProviderErrorResponse,
     SearchResultRecordResponse,
     SearchResultsImportRequest,
@@ -305,9 +306,19 @@ async def execute_search_strategy(
         else None
     )
     query = build_search_query(payload)
+    provider_queries = [
+        ProviderQueryResponse(
+            provider=provider_result.search_run.provider,
+            rendered_query=provider_result.search_run.rendered_query,
+            is_lossless=provider_result.search_run.is_lossless,
+            warnings=provider_result.search_run.warnings,
+        )
+        for provider_result in execution.provider_results
+    ]
     return SearchStrategyExecutionResponse(
         project_id=project_id,
         rendered_query=query.to_boolean_query(),
+        provider_queries=provider_queries,
         providers=list(payload.providers),
         publication_year_from=payload.publication_year_from,
         publication_year_to=payload.publication_year_to,

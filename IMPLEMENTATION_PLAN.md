@@ -318,13 +318,14 @@ Status:
 
 Zakres:
 
-- adaptacja canonical `SearchQuery` do składni i możliwości konkretnego providera
-- obecnie `SearchEngine` wykorzystuje `search_query.to_boolean_query()` i przekazuje jako `rendered_query`
-- brak dedykowanych rendererów (`OpenAlexQueryRenderer`, `CrossrefQueryRenderer`, `SemanticScholarQueryRenderer`)
+- dedykowane renderery `OpenAlexQueryRenderer` oraz `CrossrefQueryRenderer` tłumaczace kanoniczny `SearchQuery` do fizycznej składni zapytań providera
+- śledzenie zachowania semantyki (`is_lossless`) oraz rejestracja ostrzeżeń audytowych (`warnings`) przy uproszczeniu zapytania dla Crossref
+- integracja w `SearchEngine.execute()` — każdy `SearchRun`, provenancja oraz surowe archiwum przechowują dokładnie wykonane zapytanie fizyczne
+- rozszerzenie kontraktu API `POST /executions` o `provider_queries` oraz prezentacja w interfejsie użytkownika
 
 Status:
 
-⬜ Outstanding
+✅ Completed
 
 ---
 

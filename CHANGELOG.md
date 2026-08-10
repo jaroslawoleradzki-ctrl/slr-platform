@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.2.6] — 2026-08-10
+
+### Added / Improved
+
+- Added `app.rendering` package with `QueryRenderer` protocol and `RenderedQuery` value object supporting provider-specific physical queries, lossy/lossless tracking (`is_lossless`), and audit warnings (`warnings`).
+- Added `OpenAlexQueryRenderer` converting canonical `SearchQuery` expressions to OpenAlex `search` string syntax with exact phrase quotes `"..."`, uppercase Boolean operators (`AND`, `OR`, `NOT`), and nested grouping `()`.
+- Added `CrossrefQueryRenderer` converting canonical `SearchQuery` expressions to Crossref free-text keyword syntax with phrase quotes `"..."`, space-separated terms, lossy tracking (`is_lossless=False`), and audit warnings for unsupported `NOT` / `OR` operators.
+- Integrated query rendering into `SearchEngine.execute()`, ensuring `SearchRun.rendered_query`, `ProvenanceEntry.rendered_query`, and raw response archive entries record the exact physical query executed per provider.
+- Extended REST API `POST /projects/{project_id}/search-strategy/executions` response DTO (`SearchStrategyExecutionResponse`) with `provider_queries`.
+- Updated frontend types and `SearchResultsSection` UI to present physical provider queries alongside canonical query preview.
+
 ## [0.2.5] — 2026-08-06
 
 ### Improved
