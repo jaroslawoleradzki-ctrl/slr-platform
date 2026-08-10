@@ -403,11 +403,41 @@ export interface PrismaFunnelMetrics {
   studiesIncludedSynthesis: number;
 }
 
+export type ProjectStatusType = 'active' | 'archived';
+
+export interface ApiProjectResponse {
+  project_id: string;
+  title: string;
+  description: string | null;
+  protocol_version: string;
+  status: ProjectStatusType;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ApiProjectListResponse {
+  items: ApiProjectResponse[];
+  total: number;
+}
+
+export interface ProjectCreatePayload {
+  title: string;
+  description?: string | null;
+  protocol_version?: string;
+}
+
+export interface ProjectUpdatePayload {
+  title: string;
+  description?: string | null;
+  protocol_version: string;
+}
+
 export interface SLRProject {
   id: string;
   title: string;
   description: string;
   protocolVersion: string;
+  status: ProjectStatusType;
   createdAt: string;
   updatedAt: string;
   nextAction: {

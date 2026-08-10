@@ -3,7 +3,13 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routers import deduplication, normalization, screening, search_strategy
+from app.api.routers import (
+    deduplication,
+    normalization,
+    projects,
+    screening,
+    search_strategy,
+)
 from app.core.config import load_project_config
 
 
@@ -29,6 +35,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(projects.router)
 app.include_router(deduplication.router)
 app.include_router(search_strategy.router)
 app.include_router(normalization.router)

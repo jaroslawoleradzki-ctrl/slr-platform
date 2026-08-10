@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Database, Plus, ChevronDown, Info } from 'lucide-react';
 import { useProject } from '../../context/ProjectContext';
 import { Modal } from '../common/Modal';
@@ -6,6 +7,7 @@ import { AboutModal } from '../common/AboutModal';
 import { APP_VERSION, RUNTIME_MODE } from '../../config/version';
 
 export const Header: React.FC = () => {
+  const navigate = useNavigate();
   const { projects, activeProject, setActiveProjectId, createNewProject } = useProject();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isAboutOpen, setIsAboutOpen] = useState(false);
@@ -109,6 +111,25 @@ export const Header: React.FC = () => {
               color: 'var(--text-muted)',
             }}
           />
+
+          <button
+            onClick={() => navigate('/projects')}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+              padding: '6px 10px',
+              borderRadius: 'var(--radius-md)',
+              backgroundColor: 'var(--bg-surface-elevated)',
+              color: 'var(--text-primary)',
+              fontSize: '0.8rem',
+              fontWeight: 500,
+              border: '1px solid var(--border-strong)',
+            }}
+            title="Wszystkie Projekty i Zarządzanie"
+          >
+            <span>Wszystkie Projekty</span>
+          </button>
 
           <button
             onClick={() => setIsModalOpen(true)}
