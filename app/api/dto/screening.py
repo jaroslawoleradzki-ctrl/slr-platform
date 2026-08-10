@@ -10,7 +10,9 @@ from app.domain.publication import DocumentType
 from app.domain.screening import (
     CriterionAssessment,
     CriterionAssessmentValue,
+    MetadataRule,
     ScreeningCriterion,
+    ScreeningCriterionEvaluationMode,
     ScreeningCriterionStage,
     ScreeningCriterionType,
     ScreeningDecision,
@@ -42,6 +44,8 @@ class ScreeningCriterionCreateRequest(BaseModel):
     display_order: int = Field(default=0, ge=0, description="Non-negative sorting order index.")
     is_active: bool = Field(default=True, description="Whether the criterion is currently active.")
     is_required: bool = Field(default=True, description="Whether evaluation of this criterion is required.")
+    evaluation_mode: ScreeningCriterionEvaluationMode = ScreeningCriterionEvaluationMode.MANUAL
+    metadata_rule: MetadataRule | None = None
 
 
 class ScreeningCriterionUpdateRequest(BaseModel):
@@ -58,6 +62,8 @@ class ScreeningCriterionUpdateRequest(BaseModel):
     display_order: int = Field(default=0, ge=0, description="Non-negative sorting order index.")
     is_active: bool = Field(default=True, description="Whether the criterion is currently active.")
     is_required: bool = Field(default=True, description="Whether evaluation of this criterion is required.")
+    evaluation_mode: ScreeningCriterionEvaluationMode = ScreeningCriterionEvaluationMode.MANUAL
+    metadata_rule: MetadataRule | None = None
 
 
 class ScreeningCriterionResponse(BaseModel):
@@ -76,6 +82,8 @@ class ScreeningCriterionResponse(BaseModel):
     display_order: int = Field(description="Sorting order index.")
     is_active: bool = Field(description="Active status indicator.")
     is_required: bool = Field(description="Required status indicator.")
+    evaluation_mode: ScreeningCriterionEvaluationMode
+    metadata_rule: MetadataRule | None
 
     @classmethod
     def from_domain(cls, criterion: ScreeningCriterion) -> ScreeningCriterionResponse:
@@ -89,6 +97,8 @@ class ScreeningCriterionResponse(BaseModel):
             display_order=criterion.display_order,
             is_active=criterion.is_active,
             is_required=criterion.is_required,
+            evaluation_mode=criterion.evaluation_mode,
+            metadata_rule=criterion.metadata_rule,
         )
 
 
@@ -146,6 +156,9 @@ class CriterionAssessmentResponse(BaseModel):
     criterion_is_required: bool = Field(description="Whether criterion was required at decision time.")
     assessment_value: CriterionAssessmentValue = Field(description="Assessment value.")
     notes: str | None = Field(description="Reviewer notes.")
+    evaluation_mode: ScreeningCriterionEvaluationMode
+    metadata_rule: MetadataRule | None
+    evaluated_metadata_value: object | None
 
     @classmethod
     def from_domain(cls, assessment: CriterionAssessment) -> CriterionAssessmentResponse:
@@ -157,6 +170,9 @@ class CriterionAssessmentResponse(BaseModel):
             criterion_is_required=assessment.criterion_is_required,
             assessment_value=assessment.assessment_value,
             notes=assessment.notes,
+            evaluation_mode=assessment.evaluation_mode,
+            metadata_rule=assessment.metadata_rule,
+            evaluated_metadata_value=assessment.evaluated_metadata_value,
         )
 
 
@@ -235,6 +251,7 @@ class TitleAbstractScreeningRecordResponse(BaseModel):
     open_access: bool | None
     status: TitleAbstractScreeningStatus
     latest_decision: ScreeningDecisionResponse | None
+    automatic_assessments: list["AutomaticCriterionAssessmentResponse"]
 
     @classmethod
     def from_read_model(cls, record: TitleAbstractRecord) -> TitleAbstractScreeningRecordResponse:
@@ -278,7 +295,23 @@ class TitleAbstractScreeningRecordResponse(BaseModel):
                 if record.latest_decision is not None
                 else None
             ),
+            automatic_assessments=[
+                AutomaticCriterionAssessmentResponse(
+                    criterion_id=item.criterion_id,
+                    assessment_value=item.assessment_value,
+                    evaluated_metadata_value=item.evaluated_metadata_value,
+                )
+                for item in record.automatic_assessments
+            ],
         )
+
+
+class AutomaticCriterionAssessmentResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    criterion_id: UUID
+    assessment_value: CriterionAssessmentValue
+    evaluated_metadata_value: object | None
 
 
 class TitleAbstractScreeningProgressResponse(BaseModel):

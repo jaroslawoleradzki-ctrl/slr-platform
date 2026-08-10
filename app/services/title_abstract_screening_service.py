@@ -6,7 +6,9 @@ from uuid import UUID
 
 from app.domain.publication import Publication
 from app.domain.screening import (
+    CriterionAssessmentValue,
     ScreeningCriterion,
+    ScreeningCriterionEvaluationMode,
     ScreeningCriterionStage,
     ScreeningDecision,
     ScreeningOutcome,
@@ -19,6 +21,9 @@ from app.repositories.screening_criterion_repository import (
 from app.repositories.screening_decision_repository import (
     ScreeningDecisionRepository,
     default_screening_decision_repository,
+)
+from app.services.screening_criterion_rule_evaluator import (
+    ScreeningCriterionRuleEvaluator,
 )
 from app.services.screening_decision_service import (
     CriterionAssessmentInput,
@@ -66,6 +71,14 @@ class TitleAbstractRecord:
     publication: Publication
     status: TitleAbstractScreeningStatus
     latest_decision: ScreeningDecision | None
+    automatic_assessments: tuple["AutomaticCriterionAssessment", ...]
+
+
+@dataclass(frozen=True, slots=True)
+class AutomaticCriterionAssessment:
+    criterion_id: UUID
+    assessment_value: CriterionAssessmentValue
+    evaluated_metadata_value: object | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -102,11 +115,13 @@ class TitleAbstractScreeningService:
         criterion_repository: ScreeningCriterionRepository | None = None,
         decision_repository: ScreeningDecisionRepository | None = None,
         decision_service: ScreeningDecisionService | None = None,
+        rule_evaluator: ScreeningCriterionRuleEvaluator | None = None,
     ) -> None:
         self._input = input_service or ScreeningInputService()
         self._criteria = criterion_repository or default_screening_criterion_repository()
         self._decisions = decision_repository or default_screening_decision_repository()
         self._decision_service = decision_service or ScreeningDecisionService()
+        self._rule_evaluator = rule_evaluator or ScreeningCriterionRuleEvaluator()
 
     @staticmethod
     def _reviewer_id(reviewer_id: str) -> str:
@@ -127,15 +142,36 @@ class TitleAbstractScreeningService:
         return TitleAbstractScreeningStatus.UNSCREENED if decision is None else _OUTCOME_STATUS[decision.outcome]
 
     def _records(
-        self, screening_input: ScreeningInput, latest: dict[UUID, ScreeningDecision]
+        self,
+        screening_input: ScreeningInput,
+        latest: dict[UUID, ScreeningDecision],
+        criteria: tuple[ScreeningCriterion, ...],
     ) -> tuple[TitleAbstractRecord, ...]:
         return tuple(
             TitleAbstractRecord(
                 publication,
                 self._status(latest.get(publication.record_id)),
                 latest.get(publication.record_id),
+                tuple(
+                    AutomaticCriterionAssessment(
+                        criterion.criterion_id,
+                        evaluation.assessment_value,
+                        evaluation.evaluated_metadata_value,
+                    )
+                    for criterion in criteria
+                    if criterion.evaluation_mode is ScreeningCriterionEvaluationMode.METADATA_RULE
+                    for evaluation in [self._rule_evaluator.evaluate(criterion, publication)]
+                ),
             )
             for publication in screening_input.publications
+        )
+
+    def _active_title_abstract_criteria(self, project_id: str) -> tuple[ScreeningCriterion, ...]:
+        return tuple(
+            criterion
+            for criterion in self._criteria.list_by_project(project_id, active_only=True)
+            if criterion.screening_stage
+            in (ScreeningCriterionStage.TITLE_ABSTRACT, ScreeningCriterionStage.BOTH)
         )
 
     @staticmethod
@@ -146,14 +182,14 @@ class TitleAbstractScreeningService:
     def get_overview(self, project_id: str, reviewer_id: str) -> TitleAbstractOverview:
         reviewer = self._reviewer_id(reviewer_id)
         screening_input = self._input.get_input_set(project_id)
-        criteria = tuple(
-            criterion
-            for criterion in self._criteria.list_by_project(project_id, active_only=True)
-            if criterion.screening_stage in (ScreeningCriterionStage.TITLE_ABSTRACT, ScreeningCriterionStage.BOTH)
-        )
+        criteria = self._active_title_abstract_criteria(project_id)
         progress = None
         if screening_input.ready:
-            records = self._records(screening_input, self._latest_by_publication(project_id, reviewer))
+            records = self._records(
+                screening_input,
+                self._latest_by_publication(project_id, reviewer),
+                criteria,
+            )
             counts = {status: 0 for status in TitleAbstractScreeningStatus}
             for record in records:
                 counts[record.status] += 1
@@ -178,7 +214,11 @@ class TitleAbstractScreeningService:
         reviewer = self._reviewer_id(reviewer_id)
         screening_input = self._input.get_input_set(project_id)
         self._require_ready(screening_input)
-        records = self._records(screening_input, self._latest_by_publication(project_id, reviewer))
+        records = self._records(
+            screening_input,
+            self._latest_by_publication(project_id, reviewer),
+            self._active_title_abstract_criteria(project_id),
+        )
         if status_filter is not None:
             records = tuple(item for item in records if item.status is status_filter)
         return TitleAbstractRecordPage(
@@ -202,7 +242,17 @@ class TitleAbstractScreeningService:
         if publication is None:
             raise ScreeningPublicationNotEligibleError(str(publication_id))
         latest = self._latest_by_publication(project_id, reviewer).get(publication_id)
-        return TitleAbstractRecord(publication, self._status(latest), latest)
+        automatic_assessments = tuple(
+            AutomaticCriterionAssessment(
+                criterion.criterion_id,
+                evaluation.assessment_value,
+                evaluation.evaluated_metadata_value,
+            )
+            for criterion in self._active_title_abstract_criteria(project_id)
+            if criterion.evaluation_mode is ScreeningCriterionEvaluationMode.METADATA_RULE
+            for evaluation in [self._rule_evaluator.evaluate(criterion, publication)]
+        )
+        return TitleAbstractRecord(publication, self._status(latest), latest, automatic_assessments)
 
     def record_decision(
         self,

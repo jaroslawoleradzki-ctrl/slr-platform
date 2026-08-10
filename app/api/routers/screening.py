@@ -187,6 +187,8 @@ def create_screening_criterion(
             display_order=payload.display_order,
             is_active=payload.is_active,
             is_required=payload.is_required,
+            evaluation_mode=payload.evaluation_mode,
+            metadata_rule=payload.metadata_rule,
         )
         saved = repo.create(criterion)
         return ScreeningCriterionResponse.from_domain(saved)
@@ -278,6 +280,8 @@ def update_screening_criterion(
             display_order=payload.display_order,
             is_active=payload.is_active,
             is_required=payload.is_required,
+            evaluation_mode=payload.evaluation_mode,
+            metadata_rule=payload.metadata_rule,
         )
         saved = repo.update(updated_domain)
         return ScreeningCriterionResponse.from_domain(saved)

@@ -147,18 +147,35 @@ capabilities.
 - **6.8.8 GUI Import Integration** ✅ — Upload of `.ris` and `.bib` files via GUI control to `POST /projects/{project_id}/imports`, reusing existing RIS/BibTeX parsers and normalizers, durable publication import into Working Collection, durable import history, and Sources Summary UI updates.
 - **6.8.9 Publication Intake Summary** ✅ — `SourcesSummaryService` backend read model exposed via `GET /projects/{project_id}/sources-summary`, providing Working Collection total, source summaries (successful/warning/failed import counts, records added, last import status), and import history consumed by frontend.
 
-### Technical Debt & Prerequisites for Executable Screening
+### Screening Prerequisites Resolved in v0.3.1
 
-A comprehensive reconciliation of Phase 6.8 identifies two technical prerequisites that must be addressed before Phase 7.5 (Title & Abstract Screening) can enter executable implementation:
+Phase 7.5 now has a durable, auditable input path. Live search results are stored
+as authoritative `SearchResultSnapshot` records and import preserves the canonical
+publication metadata and provenance already obtained from providers. The
+project-scoped `ScreeningInputService` derives a non-destructive canonical input
+set: approved duplicate groups collapse through `PublicationMergePolicy`, rejected
+groups remain separate, and pending groups or merge conflicts block readiness.
 
-1. **Live Search Import Metadata Loss**: The canonical `Publication` domain model supports rich metadata (`abstract`, `venue`, `publisher`, `document_type`, `language`, `keywords`, `urls`, `open_access`, `provenance`). While search providers (e.g. OpenAlex) fetch abstract and metadata, `SearchResultRecordResponse` DTO exposes a trimmed subset (`id`, `title`, `authors`, `year`, `provider`, `source_id`, `doi`). `ProjectImportService` constructs imported publications from this DTO, causing abstract and other screening-relevant metadata to be lost upon import. Preserving complete metadata (especially `abstract`) during search result import is a mandatory blocker for executable Phase 7.5.
-2. **Deduplicated Screening Input Set**: Current deduplication records human `APPROVE` / `REJECT` decisions for candidate duplicate groups, but physical publication merging is deferred. Consequently, approved duplicate publications still exist as separate records in the Working Collection. Before Phase 7.5, an explicit screening input set pipeline must be established (`Working Collection` → `Duplicate Decisions` → `Canonical / Deduplicated Screening Set` → `Screening`) so a single publication is not screened multiple times.
+Full durable `SearchRun` history remains a separate Phase 6.8.5 concern; it does
+not block Title & Abstract Screening.
 
-**Phase 7 Implementation Scope**:
-- **Phases 7.1–7.4** (Screening Criteria Domain Model, Persistence & API, Configuration GUI, Screening Decision Domain & Persistence) CAN proceed independently of these open Phase 6.8 technical debts.
-- **Phase 7.5 — Title & Abstract Screening** MUST NOT enter executable implementation until Metadata Preservation (1) and Deduplicated Screening Input Set (2) are resolved.
-- **Provider-Specific Query Rendering (6.8.2)** is COMPLETED in v0.2.6.
-- **Search Execution Persistence (6.8.5)** is important for reproducibility, but does not block Phase 7.1–7.4 domain model development.
+### Version 0.3.1 — Project Management and Title & Abstract Screening ✅
+
+- **Project Management** ✅ — Persistent project resource with list, create,
+  open, edit, archive, restore and atomic hard delete. Active-project selection
+  persists in the GUI; deletion also cleans project-scoped live-search snapshots.
+- **Phase 7.5A — Screening Input Prerequisites** ✅ — Authoritative snapshots,
+  metadata/provenance preservation, canonical deduplicated input and typed
+  readiness.
+- **Phase 7.5B — Title & Abstract Screening Backend Workflow** ✅ —
+  reviewer-specific records, statuses and progress derived from latest append-only
+  decisions; eligibility, filtering, pagination and decision API.
+- **Phase 7.5C — Title & Abstract Screening GUI** ✅ — Reviewer identity,
+  readiness states, progress, filtering, record navigation, criterion assessment,
+  Save and Save & Next.
+- **Phase 7.5D — Automatic Metadata-Based Screening Criteria** ✅ — Manual or
+  deterministic metadata-rule evaluation, authoritative server-side assessments,
+  and auditable rule/value/result snapshots.
 
 ### Version 0.3.0 — Screening Decision Domain and Persistence ✅
 
@@ -304,7 +321,9 @@ Support systematic review screening through a backend workflow and a dedicated u
 - **7.4 — Screening Decision Domain and Persistence** ✅ — `ScreeningDecision` domain model capturing project ID, publication ID, screening stage, outcome decision (`INCLUDE` / `EXCLUDE` / `UNCERTAIN`), criterion-level assessments (`CriterionAssessment`) with authoritative server-side snapshot of criterion metadata, decision rationale, reviewer attribution, timestamps, append-only history trail, and latest decision resolution. Synchronous SQLite persistence (`SqliteScreeningDecisionRepository`, migration `0008_screening_decisions.sql`), application service (`ScreeningDecisionService`), REST API endpoints (`/projects/{project_id}/screening/decisions`), and test suite. 100% AI-free. No GUI or screening queue.
 - **7.5A — Screening Input Prerequisites** ✅ — Preserve authoritative canonical live-search metadata and provenance during import, and derive a project-scoped canonical/deduplicated screening input set. APPROVE groups collapse through the existing merge policy, REJECT records remain separate, and unresolved groups block readiness. No queue, GUI, or screening decisions.
 - **7.5B — Title & Abstract Screening Backend Workflow** ✅ — Deterministic project-scoped records read model, typed readiness reasons, reviewer-specific status/progress derived from batch-loaded latest decisions, active `TITLE_ABSTRACT`/`BOTH` criteria, canonical publication eligibility, stable pagination/filtering, and append-only decision writes delegated to `ScreeningDecisionService`. No GUI or queue persistence.
-- **7.5C — Title & Abstract Screening GUI** ➡️ **Next** — Title, abstract and metadata presentation, criteria and criterion-level assessment, INCLUDE/EXCLUDE/UNCERTAIN decisions, rationale, previous/next, save/resume, progress, and loading/error/empty states.
+- **7.5C — Title & Abstract Screening GUI** ✅ — Project-scoped executable UI with explicit reviewer identity, typed readiness blocking states, progress, filtering, deterministic record navigation, criterion-level assessment, manual decisions, Save / Save & Next, and resume from persisted decisions.
+- **7.5D — Automatic Metadata-Based Screening Criteria** ✅ — Configurable `MANUAL` and `METADATA_RULE` criteria; deterministic safe rules over publication metadata; server-authoritative automatic assessments with historical rule/value/result snapshots. The final screening outcome remains a human reviewer decision.
+- **Next increment: 7.6 — Full-Text Screening** ➡️
 - **7.6 — Full-Text Screening** ⬜ — Queue management for publications eligible after Title & Abstract Screening, evaluation against `FULL_TEXT` and `BOTH` criteria (with technical full-text availability/status presented as workflow metadata, and project-scoped criteria determining whether unretrievable full text leads to exclusion), explicit selection of exclusion reasons, decision recording (`INCLUDE` / `EXCLUDE` / `UNCERTAIN`) with rationale, history view, save & resume, progress metrics, and GUI & backend integration. No requirement for local storage of copyrighted PDF files.
 - **7.7 — Screening Audit Trail and Progress** ⬜ — Complete decision audit trail capturing reviewer, timestamps, exact criteria version used, decision changes, stage-specific progress metrics (included, excluded, uncertain counts), exclusion-reason aggregations, overall project screening summary, and structured data extraction necessary for subsequent PRISMA flow charts. Changes to criteria do not invalidate or obscure historical decisions.
 - **7.8 — Multi-Reviewer Screening and Conflict Detection** ⬜ — Independent multi-reviewer decision recording for the same publication and stage, conflict detection algorithm identifying reviewer disagreements, dedicated conflict resolution queue, resolution workflow with reviewer agreement metrics, resolution rationale recording, and audit trail. Single-reviewer workflow remains fully operational.
@@ -421,7 +440,7 @@ Examples:
 
 Research project management.
 
-Status: ✅ Integrated on `development` (persistent project resource, list/create/open/edit,
+Status: ✅ Completed (persistent project resource, list/create/open/edit,
 archive/restore, active-project persistence and atomic hard delete).
 
 Examples:

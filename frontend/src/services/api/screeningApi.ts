@@ -1,0 +1,191 @@
+import { API_BASE_URL } from '../../config/api';
+
+export type TitleAbstractStatus = 'unscreened' | 'included' | 'excluded' | 'uncertain';
+export type ScreeningOutcome = 'include' | 'exclude' | 'uncertain';
+export type AssessmentValue = 'met' | 'not_met' | 'uncertain' | 'not_assessed';
+export type ReadinessStatus = 'ready' | 'unresolved_duplicates' | 'merge_conflict';
+export type EvaluationMode = 'manual' | 'metadata_rule';
+export type MetadataRuleField = 'publication_year' | 'language' | 'document_type' | 'open_access' | 'doi' | 'abstract';
+export type MetadataRuleOperator = 'equals' | 'not_equals' | 'in' | 'not_in' | 'greater_than' | 'greater_than_or_equal' | 'less_than' | 'less_than_or_equal' | 'exists' | 'not_exists';
+export interface MetadataRule { field: MetadataRuleField; operator: MetadataRuleOperator; value: number | string | boolean | Array<number | string | boolean> | null; }
+
+export interface ScreeningCriterion {
+  criterion_id: string;
+  project_id: string;
+  name: string;
+  description: string | null;
+  criterion_type: 'inclusion' | 'exclusion';
+  screening_stage: 'title_abstract' | 'full_text' | 'both';
+  display_order: number;
+  is_active: boolean;
+  is_required: boolean;
+  evaluation_mode?: EvaluationMode;
+  metadata_rule?: MetadataRule | null;
+}
+
+export interface CriterionAssessment {
+  criterion_id: string;
+  criterion_name: string;
+  criterion_type: 'inclusion' | 'exclusion';
+  criterion_stage: 'title_abstract' | 'full_text' | 'both';
+  criterion_is_required: boolean;
+  assessment_value: AssessmentValue;
+  notes: string | null;
+  evaluation_mode?: EvaluationMode;
+  metadata_rule?: MetadataRule | null;
+  evaluated_metadata_value?: number | string | boolean | Array<number | string | boolean> | null;
+}
+
+export interface ScreeningDecision {
+  decision_id: string;
+  project_id: string;
+  publication_id: string;
+  stage: 'title_abstract' | 'full_text';
+  outcome: ScreeningOutcome;
+  reviewer_id: string;
+  rationale: string | null;
+  criterion_assessments: CriterionAssessment[];
+  decided_at: string;
+}
+
+export interface TitleAbstractRecord {
+  publication_id: string;
+  title: string;
+  abstract: string | null;
+  authors: string[];
+  publication_year: number | null;
+  publication_date: string | null;
+  identifiers: Array<{ type: string; value: string; source: string | null }>;
+  doi: string | null;
+  venue: { name: string; type: string | null; publisher: string | null } | null;
+  publisher: string | null;
+  document_type: string | null;
+  language: string | null;
+  keywords: string[];
+  urls: string[];
+  open_access: boolean | null;
+  status: TitleAbstractStatus;
+  latest_decision: ScreeningDecision | null;
+  automatic_assessments?: Array<{
+    criterion_id: string;
+    assessment_value: AssessmentValue;
+    evaluated_metadata_value: number | string | boolean | Array<number | string | boolean> | null;
+  }>;
+}
+
+export interface TitleAbstractOverview {
+  project_id: string;
+  reviewer_id: string;
+  ready: boolean;
+  readiness_status: ReadinessStatus;
+  working_collection_count: number;
+  canonical_records_count: number;
+  unresolved_duplicate_groups: number;
+  criteria: ScreeningCriterion[];
+  progress: {
+    total: number;
+    unscreened: number;
+    included: number;
+    excluded: number;
+    uncertain: number;
+    completed: number;
+  } | null;
+}
+
+export interface TitleAbstractRecordList {
+  project_id: string;
+  reviewer_id: string;
+  ready: boolean;
+  status_filter: TitleAbstractStatus | null;
+  total: number;
+  offset: number;
+  limit: number;
+  items: TitleAbstractRecord[];
+}
+
+export interface TitleAbstractDecisionRequest {
+  publication_id: string;
+  reviewer_id: string;
+  outcome: ScreeningOutcome;
+  rationale?: string | null;
+  criterion_assessments: Array<{
+    criterion_id: string;
+    assessment_value: AssessmentValue;
+    notes?: string | null;
+  }>;
+}
+
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    public readonly status: number,
+    public readonly code?: string,
+    public readonly readinessStatus?: ReadinessStatus,
+    public readonly validationDetail?: unknown,
+  ) {
+    super(message);
+    this.name = 'ApiError';
+  }
+}
+
+const request = async <T>(path: string, init?: RequestInit): Promise<T> => {
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE_URL}${path}`, {
+      ...init,
+      headers: { Accept: 'application/json', ...init?.headers },
+    });
+  } catch {
+    throw new ApiError('Nie udało się połączyć z backendem. Sprawdź połączenie i spróbuj ponownie.', 0);
+  }
+  if (response.ok) return response.json() as Promise<T>;
+
+  let detail: unknown;
+  try {
+    detail = (await response.json() as { detail?: unknown }).detail;
+  } catch {
+    detail = undefined;
+  }
+  const objectDetail = detail && typeof detail === 'object' && !Array.isArray(detail)
+    ? detail as { code?: string; readiness_status?: ReadinessStatus }
+    : undefined;
+  const message = typeof detail === 'string'
+    ? detail
+    : response.status === 422
+      ? 'Niepoprawne lub niekompletne dane decyzji.'
+      : `Żądanie screeningu nie powiodło się (HTTP ${response.status}).`;
+  throw new ApiError(message, response.status, objectDetail?.code, objectDetail?.readiness_status, detail);
+};
+
+const query = (values: Record<string, string | number | null | undefined>) => {
+  const params = new URLSearchParams();
+  Object.entries(values).forEach(([key, value]) => {
+    if (value !== null && value !== undefined) params.set(key, String(value));
+  });
+  return params.toString();
+};
+
+export const screeningApi = {
+  getOverview(projectId: string, reviewerId: string) {
+    return request<TitleAbstractOverview>(
+      `/projects/${projectId}/screening/title-abstract?${query({ reviewer_id: reviewerId })}`,
+    );
+  },
+  listRecords(projectId: string, reviewerId: string, status: TitleAbstractStatus | null, offset: number, limit: number) {
+    return request<TitleAbstractRecordList>(
+      `/projects/${projectId}/screening/title-abstract/records?${query({ reviewer_id: reviewerId, status, offset, limit })}`,
+    );
+  },
+  getRecord(projectId: string, publicationId: string, reviewerId: string) {
+    return request<TitleAbstractRecord>(
+      `/projects/${projectId}/screening/title-abstract/records/${publicationId}?${query({ reviewer_id: reviewerId })}`,
+    );
+  },
+  saveDecision(projectId: string, payload: TitleAbstractDecisionRequest) {
+    return request<ScreeningDecision>(`/projects/${projectId}/screening/title-abstract/decisions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+  },
+};

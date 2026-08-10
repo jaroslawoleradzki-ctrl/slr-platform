@@ -35,6 +35,7 @@ Pola podstawowe:
 - `language`
 - `keywords`
 - `urls`
+- `open_access`
 
 ### ProvenanceEntry
 
@@ -59,6 +60,30 @@ Informacja o pochodzeniu konkretnego pola lub rekordu:
 - osoba lub agent podejmujący decyzję;
 - znacznik czasu.
 
+### Project
+
+Trwały zasób projektu (`projects`, migracja `0009_projects.sql`):
+- `project_id` (TEXT PRIMARY KEY);
+- `title` (TEXT NOT NULL);
+- `description` (TEXT);
+- `protocol_version` (TEXT NOT NULL);
+- `status` (`active` / `archived`);
+- `created_at`, `updated_at` (TEXT NOT NULL).
+
+### SearchResultSnapshot
+
+Autorytatywna migawka wyniku jednego wykonania live search
+(`search_result_snapshots`, migracja `0010_search_result_snapshots.sql`):
+- `snapshot_id` (TEXT PRIMARY KEY, niezależna identity snapshotu);
+- `project_id`, `search_run_id`, `publication_id`, `provider`, `source_id`;
+- `publication_document` (TEXT NOT NULL, serializowany canonical `Publication`
+  z metadanymi i provenance);
+- `created_at`.
+
+Unikalność `(project_id, search_run_id, publication_id)` chroni przed drugim
+snapshotem tej samej publikacji w tym samym wykonaniu, ale ten sam record źródłowy
+może występować w różnych executions.
+
 ### ScreeningCriterion
 
 Kryterium włączenia lub wyłączenia zdefiniowane dla konkretnego projektu (project-scoped).
@@ -73,6 +98,15 @@ Pola modelu domenowego i schematu tabeli SQLite (`screening_criteria` w `migrati
 - `display_order`: `int` (ge=0) / `INTEGER NOT NULL DEFAULT 0` (kolejność wyświetlania)
 - `is_active`: `bool` / `INTEGER NOT NULL DEFAULT 1` (wartości `1` dla True, `0` dla False)
 - `is_required`: `bool` / `INTEGER NOT NULL DEFAULT 1` (wartości `1` dla True, `0` dla False)
+- `evaluation_mode`: `manual` / `metadata_rule` (dodane w migracji
+  `0011_screening_metadata_rules.sql`, domyślnie `manual` dla istniejących
+  kryteriów)
+- `metadata_rule`: `TEXT | NULL`, serializowana typed reguła `{field, operator,
+  value}`; wymagana tylko dla `metadata_rule`.
+
+Reguły automatyczne używają jawnej allow-listy: `publication_year`, `language`,
+`document_type`, `open_access`, obecność `doi` i obecność `abstract`. Nie są
+ogólnym mechanizmem wykonywania kodu.
 
 Indeks bazodanowy:
 - `idx_screening_criteria_project` na `(project_id, display_order, criterion_id)` zapewniający optymalną izolację projektową oraz deterministyczne sortowanie `ORDER BY display_order ASC, criterion_id ASC`.
@@ -107,21 +141,6 @@ Pola:
 - rozpoczęcie i zakończenie;
 - wersja konfiguracji lub commit Git.
 
-### ScreeningCriterion
-
-Kryterium kwalifikacji lub wykluczenia dla projektu (tabela `screening_criteria`, migracja `0007_screening_criteria.sql`):
-- `criterion_id` (TEXT PRIMARY KEY, UUID);
-- `project_id` (TEXT NOT NULL);
-- `name` (TEXT NOT NULL);
-- `description` (TEXT);
-- `criterion_type` (TEXT NOT NULL, `inclusion` / `exclusion`);
-- `screening_stage` (TEXT NOT NULL, `title_abstract` / `full_text` / `both`);
-- `display_order` (INTEGER NOT NULL DEFAULT 0);
-- `is_active` (INTEGER NOT NULL DEFAULT 1);
-- `is_required` (INTEGER NOT NULL DEFAULT 1);
-- `created_at` (TEXT NOT NULL);
-- `updated_at` (TEXT NOT NULL).
-
 ### ScreeningDecision
 
 Decyzja screeningowa dla publikacji (tabela `screening_decisions`, migracja `0008_screening_decisions.sql`):
@@ -151,6 +170,11 @@ Autorytatywny snapshot oceny jednostkowego kryterium w chwili podjęcia decyzji 
 - `criterion_is_required` (INTEGER NOT NULL, 1/0);
 - `assessment_value` (TEXT NOT NULL, `met` / `not_met` / `uncertain` / `not_assessed`);
 - `notes` (TEXT).
+- `evaluation_mode` (TEXT NOT NULL, `manual` / `metadata_rule`, migracja
+  `0011_screening_metadata_rules.sql`);
+- `metadata_rule` (TEXT, immutable rule snapshot dla automatic assessment);
+- `evaluated_metadata_value` (TEXT, snapshot wartości canonical metadata użytej
+  podczas oceny automatic assessment).
 
 Klucz główny: Kompozytowy `PRIMARY KEY (decision_id, criterion_id)`.
 

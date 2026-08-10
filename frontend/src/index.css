@@ -90,6 +90,22 @@ button {
 input, select, textarea {
   font-family: inherit;
   color: inherit;
+  caret-color: var(--text-primary);
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--text-muted);
+  opacity: 1;
+}
+
+input:disabled,
+select:disabled,
+textarea:disabled {
+  background-color: var(--bg-surface-elevated);
+  color: var(--text-muted);
+  border-color: var(--border-subtle);
+  opacity: 0.8;
 }
 
 input:focus-visible,

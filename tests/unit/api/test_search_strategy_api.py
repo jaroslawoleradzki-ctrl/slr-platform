@@ -6,19 +6,37 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.api.main import app
+from app.api.routers.projects import get_project_repository
 from app.api.routers.search_strategy import (
     get_live_search_executor,
+    get_project_import_service,
     get_project_publication_repository,
+    get_search_result_snapshot_repository,
+    get_search_strategy_repository,
 )
 from app.domain.author import Author
+from app.domain.identifiers import Identifier, IdentifierType
 from app.domain.provenance import ProvenanceEntry
 from app.domain.publication import Publication
+from app.domain.venue import Venue, VenueType
 from app.providers.search.base import ProviderSearchOutput
+from app.repositories.import_history_repository import SqliteImportHistoryRepository
+from app.repositories.normalization_execution_repository import (
+    SqliteNormalizationExecutionRepository,
+)
 from app.repositories.project_publication_repository import (
     DemoProjectPublicationRepository,
     ProjectNotFoundError,
+    SqliteProjectPublicationRepository,
 )
+from app.repositories.project_repository import SqliteProjectRepository
+from app.repositories.search_result_snapshot_repository import (
+    SqliteSearchResultSnapshotRepository,
+)
+from app.repositories.search_strategy_repository import SqliteSearchStrategyRepository
+from app.repositories.transaction_manager import SqliteTransactionManager
 from app.services.live_search import build_search_query
+from app.services.project_import_service import ProjectImportService
 from app.services.search_engine import SearchEngine
 
 
@@ -305,6 +323,119 @@ def test_unknown_project_and_invalid_strategy_are_rejected() -> None:
 
     assert missing.status_code == 404
     assert invalid.status_code == 422
+
+
+def test_new_project_accepts_frontend_search_contract_and_preserves_snapshot_metadata(
+    tmp_path,
+) -> None:
+    """Exercise the exact browser contract through search, snapshot, and import.
+
+    `providers` is intentionally part of both the persisted-strategy and execution
+    requests.  A newly created project has an empty Working Collection, so its
+    existence must come from the durable project resource rather than a
+    publication row.
+    """
+    database = tmp_path / "frontend-search-contract.db"
+    project_repository = SqliteProjectRepository(database)
+    publication_repository = SqliteProjectPublicationRepository(database)
+    strategy_repository = SqliteSearchStrategyRepository(database)
+    snapshot_repository = SqliteSearchResultSnapshotRepository(database)
+    import_service = ProjectImportService(
+        publication_repository,
+        SqliteImportHistoryRepository(database),
+        SqliteNormalizationExecutionRepository(database),
+        SqliteTransactionManager(database),
+        snapshot_repository,
+    )
+    publication = Publication(
+        title="Fresh OpenAlex result",
+        abstract="An abstract retained from the provider response.",
+        authors=[Author(display_name="Ada Author")],
+        publication_year=2024,
+        identifiers=[Identifier(type=IdentifierType.DOI, value="10.1000/fresh")],
+        venue=Venue(name="Journal of Fresh Results", type=VenueType.JOURNAL),
+        publisher="Provider Publisher",
+        language="en",
+        keywords=["lean", "energy"],
+        urls=["https://example.test/fresh"],
+        open_access=True,
+        provenance=[ProvenanceEntry(source="openalex", source_record_id="W-fresh")],
+    )
+
+    app.dependency_overrides[get_project_repository] = lambda: project_repository
+    app.dependency_overrides[get_project_publication_repository] = lambda: publication_repository
+    app.dependency_overrides[get_search_strategy_repository] = lambda: strategy_repository
+    app.dependency_overrides[get_search_result_snapshot_repository] = lambda: snapshot_repository
+    app.dependency_overrides[get_project_import_service] = lambda: import_service
+    app.dependency_overrides[get_live_search_executor] = lambda: _Executor(
+        [_Provider("openalex", [publication])]
+    )
+    client = TestClient(app)
+
+    created = client.post(
+        "/projects",
+        json={"title": "Frontend search contract", "description": None, "protocol_version": "1.0"},
+    )
+    assert created.status_code == 201
+    project_id = created.json()["project_id"]
+
+    # This is the canonical payload emitted by SearchStrategyPage/projectApi.
+    saved = client.put(
+        f"/projects/{project_id}/search-strategy",
+        json={
+            "name": "Fresh strategy",
+            "description": None,
+            "research_questions": ["RQ"],
+            "concept_groups": [
+                {"group_id": "lean", "name": "Lean", "terms": ["lean"], "operator": "or"}
+            ],
+            "group_operator": "and",
+            "constraints": {
+                "publication_year_from": 2024,
+                "publication_year_to": 2024,
+                "languages": [],
+                "publication_types": [],
+                "additional_limits": {},
+            },
+            "providers": ["openalex"],
+            "queries": [{"name": "Lean", "expression": {"node_type": "term", "value": "lean"}}],
+            "version": 1,
+        },
+    )
+    assert saved.status_code == 200
+    assert saved.json()["providers"] == ["openalex"]
+
+    executed = client.post(
+        f"/projects/{project_id}/search-strategy/executions",
+        json={
+            "publication_year_from": 2024,
+            "publication_year_to": 2024,
+            "languages": [],
+            "publication_types": [],
+            "open_access": False,
+            "providers": ["openalex"],
+            "concept_groups": [{"id": "lean", "name": "Lean", "terms": ["lean"]}],
+        },
+    )
+    assert executed.status_code == 200
+    record = executed.json()["results"][0]
+    assert record["source_id"] == "W-fresh"
+
+    imported = client.post(
+        f"/projects/{project_id}/search-results/imports",
+        json={"records": [record]},
+    )
+    assert imported.status_code == 200
+    stored = publication_repository.get_publications(project_id)
+    assert len(stored) == 1
+    assert stored[0].abstract == "An abstract retained from the provider response."
+    assert stored[0].venue == publication.venue
+    assert stored[0].publisher == "Provider Publisher"
+    assert stored[0].language == "en"
+    assert stored[0].urls == ["https://example.test/fresh"]
+    assert stored[0].open_access is True
+    assert stored[0].identifiers == publication.identifiers
+    assert stored[0].provenance[0].source_record_id == "W-fresh"
 
 
 def _import_record(

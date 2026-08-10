@@ -5,6 +5,7 @@ from pydantic import BaseModel, ConfigDict, field_validator
 from app.domain.screening import (
     CriterionAssessment,
     CriterionAssessmentValue,
+    ScreeningCriterionEvaluationMode,
     ScreeningCriterionStage,
     ScreeningDecision,
     ScreeningOutcome,
@@ -22,6 +23,7 @@ from app.repositories.screening_decision_repository import (
     ScreeningDecisionRepository,
     default_screening_decision_repository,
 )
+from app.services.screening_criterion_rule_evaluator import ScreeningCriterionRuleEvaluator
 
 
 class CriterionAssessmentInput(BaseModel):
@@ -63,6 +65,7 @@ class ScreeningDecisionService:
         decision_repository: ScreeningDecisionRepository | None = None,
         criterion_repository: ScreeningCriterionRepository | None = None,
         publication_repository: ProjectPublicationRepository | None = None,
+        rule_evaluator: ScreeningCriterionRuleEvaluator | None = None,
     ) -> None:
         self.decision_repo = (
             decision_repository
@@ -79,6 +82,7 @@ class ScreeningDecisionService:
             if publication_repository is not None
             else default_project_publication_repository()
         )
+        self._rule_evaluator = rule_evaluator or ScreeningCriterionRuleEvaluator()
 
     def record_decision(
         self,
@@ -105,8 +109,8 @@ class ScreeningDecisionService:
         except Exception:
             publications = []
 
-        pub_ids = {p.record_id for p in publications}
-        if publication_id not in pub_ids:
+        publication = next((item for item in publications if item.record_id == publication_id), None)
+        if publication is None:
             raise ValueError(
                 f"Publication '{publication_id}' not found in project '{stripped_project_id}'."
             )
@@ -132,6 +136,11 @@ class ScreeningDecisionService:
             if not criterion.is_active:
                 raise ValueError(
                     f"Cannot assess inactive criterion '{criterion.name}' ({criterion.criterion_id}) in a new decision."
+                )
+
+            if criterion.evaluation_mode is ScreeningCriterionEvaluationMode.METADATA_RULE:
+                raise ValueError(
+                    f"Automatic criterion '{criterion.name}' ({criterion.criterion_id}) is evaluated server-side and must not be sent by the client."
                 )
 
             # Stage compatibility check
@@ -167,20 +176,42 @@ class ScreeningDecisionService:
                     criterion_is_required=criterion.is_required,
                     assessment_value=inp.assessment_value,
                     notes=inp.notes,
+                    evaluation_mode=criterion.evaluation_mode,
                 )
             )
 
-        # 4. Validate required criteria completeness for stage
+        # 4. Automatic criteria are evaluated from the authoritative persisted
+        # publication. Client payloads are deliberately unable to override them.
+        for criterion in project_criteria:
+            if (
+                not criterion.is_active
+                or criterion.evaluation_mode is not ScreeningCriterionEvaluationMode.METADATA_RULE
+                or not self._applies_to_stage(criterion.screening_stage, stage)
+            ):
+                continue
+            evaluation = self._rule_evaluator.evaluate(criterion, publication)
+            assessments.append(
+                CriterionAssessment(
+                    criterion_id=criterion.criterion_id,
+                    criterion_name=criterion.name,
+                    criterion_type=criterion.criterion_type,
+                    criterion_stage=criterion.screening_stage,
+                    criterion_is_required=criterion.is_required,
+                    assessment_value=evaluation.assessment_value,
+                    evaluation_mode=criterion.evaluation_mode,
+                    metadata_rule=criterion.metadata_rule,
+                    evaluated_metadata_value=evaluation.evaluated_metadata_value,
+                )
+            )
+
+        # 5. Validate required criteria completeness for stage
         assessed_map = {a.criterion_id: a for a in assessments}
         for criterion in project_criteria:
             if not criterion.is_active or not criterion.is_required:
                 continue
 
             # Check if required criterion applies to decision stage
-            applies_to_stage = (
-                (stage == ScreeningStage.TITLE_ABSTRACT and criterion.screening_stage in (ScreeningCriterionStage.TITLE_ABSTRACT, ScreeningCriterionStage.BOTH))
-                or (stage == ScreeningStage.FULL_TEXT and criterion.screening_stage in (ScreeningCriterionStage.FULL_TEXT, ScreeningCriterionStage.BOTH))
-            )
+            applies_to_stage = self._applies_to_stage(criterion.screening_stage, stage)
             if not applies_to_stage:
                 continue
 
@@ -190,7 +221,7 @@ class ScreeningDecisionService:
                     f"Missing required assessment for active required criterion '{criterion.name}' ({criterion.criterion_id})."
                 )
 
-        # 5. Construct decision and save to repository
+        # 6. Construct decision and save to repository
         decision = ScreeningDecision(
             project_id=stripped_project_id,
             publication_id=publication_id,
@@ -202,6 +233,20 @@ class ScreeningDecisionService:
         )
 
         return self.decision_repo.save(decision)
+
+    @staticmethod
+    def _applies_to_stage(
+        criterion_stage: ScreeningCriterionStage, stage: ScreeningStage
+    ) -> bool:
+        return (
+            stage is ScreeningStage.TITLE_ABSTRACT
+            and criterion_stage
+            in (ScreeningCriterionStage.TITLE_ABSTRACT, ScreeningCriterionStage.BOTH)
+        ) or (
+            stage is ScreeningStage.FULL_TEXT
+            and criterion_stage
+            in (ScreeningCriterionStage.FULL_TEXT, ScreeningCriterionStage.BOTH)
+        )
 
     def get_decision(self, project_id: str, decision_id: UUID) -> ScreeningDecision:
         """Retrieve a screening decision by ID."""

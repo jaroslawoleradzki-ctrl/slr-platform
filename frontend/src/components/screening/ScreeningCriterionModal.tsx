@@ -8,6 +8,10 @@ import {
   ScreeningCriterionStage,
   ScreeningCriterionCreatePayload,
   ScreeningCriterionUpdatePayload,
+  ScreeningCriterionEvaluationMode,
+  MetadataRuleField,
+  MetadataRuleOperator,
+  MetadataRule,
 } from '../../types';
 
 interface ScreeningCriterionModalProps {
@@ -36,6 +40,10 @@ export const ScreeningCriterionModal: React.FC<ScreeningCriterionModalProps> = (
   const [displayOrder, setDisplayOrder] = useState<number>(0);
   const [isRequired, setIsRequired] = useState(true);
   const [isActive, setIsActive] = useState(true);
+  const [evaluationMode, setEvaluationMode] = useState<ScreeningCriterionEvaluationMode>('manual');
+  const [ruleField, setRuleField] = useState<MetadataRuleField>('publication_year');
+  const [ruleOperator, setRuleOperator] = useState<MetadataRuleOperator>('greater_than');
+  const [ruleValue, setRuleValue] = useState('');
 
   const [validationError, setValidationError] = useState<string | null>(null);
   const [apiError, setApiError] = useState<string | null>(null);
@@ -55,6 +63,10 @@ export const ScreeningCriterionModal: React.FC<ScreeningCriterionModalProps> = (
         setDisplayOrder(criterion.display_order);
         setIsRequired(criterion.is_required);
         setIsActive(criterion.is_active);
+        setEvaluationMode(criterion.evaluation_mode || 'manual');
+        setRuleField(criterion.metadata_rule?.field || 'publication_year');
+        setRuleOperator(criterion.metadata_rule?.operator || 'greater_than');
+        setRuleValue(criterion.metadata_rule?.value === null || criterion.metadata_rule?.value === undefined ? '' : Array.isArray(criterion.metadata_rule.value) ? criterion.metadata_rule.value.join(', ') : String(criterion.metadata_rule.value));
       } else {
         setName('');
         setDescription('');
@@ -63,11 +75,37 @@ export const ScreeningCriterionModal: React.FC<ScreeningCriterionModalProps> = (
         setDisplayOrder(defaultDisplayOrder);
         setIsRequired(true);
         setIsActive(true);
+        setEvaluationMode('manual');
+        setRuleField('publication_year');
+        setRuleOperator('greater_than');
+        setRuleValue('');
       }
     }
   }, [isOpen, mode, criterion, defaultDisplayOrder]);
 
   if (!isOpen) return null;
+
+  const requiresValue = !['exists', 'not_exists'].includes(ruleOperator);
+  const parseRule = (): MetadataRule | null => {
+    if (evaluationMode === 'manual') return null;
+    if (!requiresValue) return { field: ruleField, operator: ruleOperator, value: null };
+    if (!ruleValue.trim()) throw new Error('Podaj wartość reguły automatycznej.');
+    const entries = ruleValue.split(',').map((item) => item.trim()).filter(Boolean);
+    const isList = ruleOperator === 'in' || ruleOperator === 'not_in';
+    const raw = isList ? entries : entries[0];
+    if (ruleField === 'publication_year') {
+      const values = (Array.isArray(raw) ? raw : [raw]).map(Number);
+      if (values.some((value) => !Number.isInteger(value))) throw new Error('Rok publikacji musi być liczbą całkowitą.');
+      return { field: ruleField, operator: ruleOperator, value: isList ? values : values[0] };
+    }
+    if (ruleField === 'open_access') {
+      const values = (Array.isArray(raw) ? raw : [raw]).map((value) => value.toLowerCase());
+      if (values.some((value) => value !== 'true' && value !== 'false')) throw new Error('Dostęp otwarty przyjmuje wartość true lub false.');
+      const booleans = values.map((value) => value === 'true');
+      return { field: ruleField, operator: ruleOperator, value: isList ? booleans : booleans[0] };
+    }
+    return { field: ruleField, operator: ruleOperator, value: isList ? entries : entries[0] };
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -85,6 +123,8 @@ export const ScreeningCriterionModal: React.FC<ScreeningCriterionModalProps> = (
       return;
     }
 
+    let metadataRule: MetadataRule | null;
+    try { metadataRule = parseRule(); } catch (error) { setValidationError(error instanceof Error ? error.message : 'Niepoprawna reguła automatyczna.'); return; }
     setIsSubmitting(true);
 
     try {
@@ -97,6 +137,7 @@ export const ScreeningCriterionModal: React.FC<ScreeningCriterionModalProps> = (
           display_order: Number(displayOrder),
           is_active: true, // Always active on creation
           is_required: isRequired,
+          ...(evaluationMode === 'metadata_rule' ? { evaluation_mode: evaluationMode, metadata_rule: metadataRule } : {}),
         });
       } else if (mode === 'edit' && criterion) {
         await onSubmitUpdate(criterion.criterion_id, {
@@ -107,6 +148,7 @@ export const ScreeningCriterionModal: React.FC<ScreeningCriterionModalProps> = (
           display_order: Number(displayOrder),
           is_active: isActive,
           is_required: isRequired,
+          ...(evaluationMode === 'metadata_rule' ? { evaluation_mode: evaluationMode, metadata_rule: metadataRule } : {}),
         });
       }
       onClose();
@@ -236,6 +278,30 @@ export const ScreeningCriterionModal: React.FC<ScreeningCriterionModalProps> = (
               <option value="both">Both (Oba etapy)</option>
             </select>
           </div>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '12px', border: '1px solid var(--border-strong)', borderRadius: 'var(--radius-md)', background: 'var(--bg-surface-elevated)' }}>
+          <label style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)' }}>Sposób oceny</label>
+          <div role="group" aria-label="Sposób oceny" style={{ display: 'flex', gap: '8px' }}>
+            {[['manual', 'Ręczna'], ['metadata_rule', 'Automatyczna na podstawie metadanych']].map(([value, label]) => <button key={value} type="button" aria-pressed={evaluationMode === value} disabled={isSubmitting} onClick={() => setEvaluationMode(value as ScreeningCriterionEvaluationMode)} style={{ padding: '7px 10px', borderRadius: 'var(--radius-md)', border: `1px solid ${evaluationMode === value ? 'var(--accent-primary)' : 'var(--border-strong)'}`, background: evaluationMode === value ? 'var(--accent-primary)' : 'var(--bg-primary)', color: 'var(--text-primary)', cursor: 'pointer' }}>{label}</button>)}
+          </div>
+          {evaluationMode === 'metadata_rule' && <>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '12px' }}>
+              <label style={{ fontSize: '0.85rem', color: 'var(--text-primary)' }}>Pole
+                <select aria-label="Pole reguły" value={ruleField} disabled={isSubmitting} onChange={(event) => { const field = event.target.value as MetadataRuleField; setRuleField(field); if (field === 'doi' || field === 'abstract') setRuleOperator('exists'); }} style={{ width: '100%', marginTop: '4px', padding: '8px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-strong)', background: 'var(--bg-primary)', color: 'var(--text-primary)' }}>
+                  <option value="publication_year">Rok publikacji</option><option value="language">Język</option><option value="document_type">Typ dokumentu</option><option value="open_access">Otwarty dostęp</option><option value="doi">DOI</option><option value="abstract">Abstrakt</option>
+                </select>
+              </label>
+              <label style={{ fontSize: '0.85rem', color: 'var(--text-primary)' }}>Operator
+                <select aria-label="Operator reguły" value={ruleOperator} disabled={isSubmitting} onChange={(event) => setRuleOperator(event.target.value as MetadataRuleOperator)} style={{ width: '100%', marginTop: '4px', padding: '8px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-strong)', background: 'var(--bg-primary)', color: 'var(--text-primary)' }}>
+                  {(ruleField === 'doi' || ruleField === 'abstract') ? <><option value="exists">Istnieje</option><option value="not_exists">Nie istnieje</option></> : <><option value="equals">Równe</option><option value="not_equals">Różne od</option><option value="in">Należy do listy</option><option value="not_in">Nie należy do listy</option>{ruleField === 'publication_year' && <><option value="greater_than">Większy niż</option><option value="greater_than_or_equal">Większy lub równy</option><option value="less_than">Mniejszy niż</option><option value="less_than_or_equal">Mniejszy lub równy</option></>}<option value="exists">Istnieje</option><option value="not_exists">Nie istnieje</option></>}
+                </select>
+              </label>
+            </div>
+            {requiresValue && <label style={{ fontSize: '0.85rem', color: 'var(--text-primary)' }}>Wartość{ruleOperator === 'in' || ruleOperator === 'not_in' ? ' (oddziel przecinkami)' : ''}
+              <input aria-label="Wartość reguły" value={ruleValue} disabled={isSubmitting} onChange={(event) => setRuleValue(event.target.value)} placeholder={ruleField === 'publication_year' ? 'np. 2021' : ruleField === 'open_access' ? 'true lub false' : 'np. en'} style={{ width: '100%', marginTop: '4px', boxSizing: 'border-box', padding: '8px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-strong)', background: 'var(--bg-primary)', color: 'var(--text-primary)' }} />
+            </label>}
+          </>}
         </div>
 
         {/* Display Order */}

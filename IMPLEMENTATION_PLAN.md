@@ -8,13 +8,29 @@ Unlike ROADMAP.md, this file is intentionally technical and may change frequentl
 
 # Current Status
 
-Current milestone:
+Current release:
 
-Version 0.3.0 — Screening Decision Domain and Persistence (completed)
+v0.3.1 — Project Management and Title & Abstract Screening
+
+Status:
+
+✅ Completed
+
+Release scope:
+
+- persistent Project resource with archive, restore and atomic hard delete;
+- authoritative `SearchResultSnapshot` records and preservation of provider
+  metadata/provenance during live-search import;
+- canonical deduplicated Screening Input Set with typed readiness;
+- Title & Abstract backend workflow and reviewer-specific append-only decision
+  progress;
+- executable Title & Abstract Screening GUI;
+- manual and metadata-rule screening criteria with server-authoritative
+  automatic assessments and auditable rule/value/result snapshots.
 
 Next milestone:
 
-Phase 7 — Screening (Phase 7.5C — Title & Abstract Screening GUI next)
+Phase 7.6 — Full-Text Screening
 
 ---
 
@@ -435,18 +451,14 @@ Status:
 
 ---
 
-### Technical Debt & Prerequisites for Executable Screening
+### Screening Prerequisites and 7.5 Completion
 
-W ramach reconciliation Phase 6.8 zidentyfikowano dwa długi techniczne wymagające rozwiązania przed uruchomieniem wykonawczego etapu Phase 7.5 — Title & Abstract Screening:
-
-1. **Live Search Import Metadata Loss**: Kanoniczny model `Publication` obsługuje bogate metadane (`abstract`, `venue`, `publisher`, `document_type`, `language`, `keywords`, `urls`, `open_access`, `provenance`). Dostawca OpenAlex pozyskuje m.in. abstract, jednak DTO `SearchResultRecordResponse` przekazuje zredukowany zestaw pól (`id`, `title`, `authors`, `year`, `provider`, `source_id`, `doi`). `ProjectImportService` przy imporcie wyników tworzy obiekt `Publication` z DTO, tracąc abstract oraz pozostałe metadane. Zachowanie pełnych metadanych jest warunkiem koniecznym (blockerem) dla Phase 7.5.
-2. **Deduplicated Screening Input Set**: System zapisuje decyzje ludzkie `APPROVE` / `REJECT` dla grup duplikatów, ale nie wykonuje fizycznego scalania publikacji. Zdublowane publikacje nadal istnieją w Working Collection jako osobne rekordy. Przed Phase 7.5 konieczne jest zdefiniowanie potoku danych wejściowych do screeningu (`Working Collection` → `Duplicate Decisions` → `Canonical / Deduplicated Screening Set` → `Screening`), aby zapobiec wielokrotnej ocenie tej samej publikacji.
-
-**Relacja z Phase 7**:
-- **Phase 7.1–7.4** (Screening Criteria Domain Model, Persistence & API, Configuration GUI, Screening Decision Domain & Persistence) MOGĄ być realizowane niezależnie od otwartego długu Phase 6.8.
-- **Phase 7.5 — Title & Abstract Screening** NIE MOŻE wejść do implementacji wykonawczej przed rozwiązaniem problemów (1) Metadata Loss oraz (2) Deduplicated Screening Input Set.
-- **Provider-Specific Query Rendering (6.8.2)** jest zakończone w v0.2.6.
-- **Search Execution Persistence (6.8.5)** jest istotne dla pełnej reprodukowalności, ale nie blokuje prac nad modelem domenowym Phase 7.1–7.4.
+W v0.3.1 rozwiązano oba warunki wejściowe dla wykonywalnego screeningu:
+`SearchResultSnapshot` zachowuje autorytatywny canonical `Publication` wraz z
+provenance dla importu live search, a `ScreeningInputService` tworzy stabilny,
+niedestrukcyjny canonical/deduplicated input set. Nieobsłużone grupy duplikatów
+oraz konflikty merge blokują gotowość screeningu. Pełna durable historia
+`SearchRun` pozostaje odrębnym zakresem 6.8.5.
 
 ---
 
@@ -553,7 +565,23 @@ Zakres:
 - INCLUDE / EXCLUDE / UNCERTAIN controls
 - previous/next, save/resume, progress and state handling
 
-Status: ➡️ Next
+Status: ✅ Completed
+
+---
+
+## 7.5D Automatic Metadata-Based Screening Criteria
+
+Zakres:
+- `MANUAL` i `METADATA_RULE` evaluation mode dla `ScreeningCriterion`
+- bezpieczne, typed metadata rules dla roku publikacji, języka, typu dokumentu,
+  open access oraz obecności DOI i abstractu
+- czysty deterministic `ScreeningCriterionRuleEvaluator`
+- server-authoritative automatic CriterionAssessment przy zapisie decyzji
+- snapshot rule, evaluated metadata value i result w append-only historii
+- konfiguracja rules w GUI oraz read-only automatyczne assessmenty w Title &
+  Abstract Screening
+
+Status: ✅ Completed
 
 ---
 

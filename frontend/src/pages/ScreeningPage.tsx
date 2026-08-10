@@ -99,6 +99,9 @@ export const ScreeningPage: React.FC = () => {
         display_order: criterion.display_order,
         is_active: true,
         is_required: criterion.is_required,
+        ...(criterion.evaluation_mode === 'metadata_rule'
+          ? { evaluation_mode: criterion.evaluation_mode, metadata_rule: criterion.metadata_rule || null }
+          : {}),
       });
       await loadCriteria();
     } catch (err: unknown) {
@@ -135,7 +138,7 @@ export const ScreeningPage: React.FC = () => {
         </Button>
       </div>
 
-      {/* Scope banner explaining that 7.3 is configuration only */}
+      {/* Configuration remains separate from the executable screening workflow. */}
       <div
         style={{
           padding: '12px 16px',
@@ -151,7 +154,7 @@ export const ScreeningPage: React.FC = () => {
       >
         <Info size={18} style={{ color: 'var(--accent-primary)', flexShrink: 0 }} />
         <span>
-          <strong>Informacja o etapie:</strong> Ten ekran służy do konfiguracji kryteriów kwalifikacji i wykluczenia (Phase 7.3). Właściwy screening publikacji (Triage Tytułów i Abstraktów oraz Kwalifikacja Pełnotekstowa) zostanie udostępniony w kolejnych przyrostach.
+          <strong>Informacja o etapie:</strong> Ten ekran służy do konfiguracji kryteriów kwalifikacji i wykluczenia. Właściwy Title &amp; Abstract Screening jest dostępny w sekcji <em>Title &amp; Abstract Screening</em> powyżej.
         </span>
       </div>
 
