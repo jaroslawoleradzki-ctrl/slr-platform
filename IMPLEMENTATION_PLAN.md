@@ -211,7 +211,7 @@ Status:
 
 ---
 
-# Phase 6.7 — Functional Workflow for Modules 1–4 🚧
+# Phase 6.7 — Functional Workflow for Modules 1–4 ✅
 
 Before extending the SLR workflow with additional product phases, the existing
 user-facing workflow must become fully functional and manually verifiable.
@@ -285,7 +285,7 @@ Notes:
 
 ---
 
-# Phase 6.8 — End-to-End Literature Search Workflow 🚧
+# Phase 6.8 — End-to-End Literature Search Workflow 🟨
 
 Cel:
 
@@ -302,92 +302,151 @@ Zakres:
 - pytania badawcze, grupy pojęć, terminy i operatory logiczne
 - ograniczenia lat, języków, typów publikacji i dodatkowych limitów
 - wybór OpenAlex, Crossref i Semantic Scholar
-- migracja SQLite
+- migracja SQLite (`0001_search_strategies.sql`)
 - `GET /projects/{project_id}/search-strategy`
 - `PUT /projects/{project_id}/search-strategy`
 - walidacja i pełna serializacja
 - testy domeny, repozytorium i API
 
-Poza zakresem:
+Status:
 
-- wykonywanie wyszukiwania
-- renderowanie zapytań providerów
-- orkiestracja, GUI, import i deduplikacja
+✅ Completed
+
+---
+
+## 6.8.2 Provider-Specific Query Rendering
+
+Zakres:
+
+- adaptacja canonical `SearchQuery` do składni i możliwości konkretnego providera
+- obecnie `SearchEngine` wykorzystuje `search_query.to_boolean_query()` i przekazuje jako `rendered_query`
+- brak dedykowanych rendererów (`OpenAlexQueryRenderer`, `CrossrefQueryRenderer`, `SemanticScholarQueryRenderer`)
+
+Status:
+
+⬜ Outstanding
+
+---
+
+## 6.8.3 Search Orchestrator
+
+Zakres:
+
+- wielowątkowa/sekwencyjna egzekucja providerów w `SearchEngine`
+- wydzielony `SearchRun` per provider z dedykowanymi znacznikami czasu i statusami
+- izolacja błędów providerów (partial failure handling)
+- ujednolicona normalizacja wyników i scalanie duplikatów DOI (`ResultMerger`)
+- rejestracja provenancji wyszukiwania i egzekucji (`SearchExecutionProvenance`)
+- generowanie kandydatów na duplikaty (`DuplicateGroupBuilder`)
 
 Status:
 
 ✅ Completed
 
-## 6.8.2 Query Rendering
-
-- OpenAlex Query Renderer
-- Crossref Query Renderer
-- Semantic Scholar Query Renderer
-
-Status: ⬜ Planned
-
-## 6.8.3 Search Orchestrator
-
-- uruchamianie wielu providerów
-- agregacja wyników
-- partial failures
-- provenance
-- SearchRun
-
-Status: ⬜ Planned
+---
 
 ## 6.8.4 Search Execution API
 
-- execute search
-- search status
-- search results
+Zakres:
 
-Status: ⬜ Planned
+- `POST /projects/{project_id}/search-strategy/executions` realizuje na żywo wyszukiwanie u providerów
+- zwraca `rendered_query`, wybrane providery, timestamp wykonania, całkowitą i zwróconą liczbę wyników
+- zwraca metadane stronicowania (`next_cursor`, `has_more`), listę wyników i błędy providerów
+- ograniczenie: brak trwałego zasobu wykonania do późniejszego odczytu statusu `SearchRun` lub wyników po ID execution
 
-## 6.8.5 Persistence
+Status:
 
-- SearchRun
-- Publications
-- provenance
-- search history
+🟨 Partial
 
-Status: ⬜ Planned
+---
+
+## 6.8.5 Search Execution Persistence
+
+Zakres:
+
+- publikacje Working Collection, Search Strategy, historia importu, normalizacja i decyzje deduplikacji są trwałe w SQLite
+- brak trwałej bazy wykonania wyszukiwań: obiekty `SearchRun` nie posiadają tabeli w DB, historia egzekucji nie jest zapisywana
+- archiwum surowych odpowiedzi providerów wykorzystuje nietrwały `_InMemoryRawResponseArchive` w `live_search.py`
+
+Status:
+
+🟨 Partial
+
+---
 
 ## 6.8.6 Search Strategy GUI Integration
 
-- Search Strategy uses backend `GET` and `PUT` as its only source of truth
-- empty state for projects without a strategy
-- complete editing of research questions, concepts, Boolean operators,
-  constraints and provider selection
-- generic, provider-independent Boolean preview
-- loading, dirty, saving, saved, validation and failure states
-- `Szukaj` saves the current strategy before navigating to Sources Ingestion
-- no provider execution and no provider-specific renderer
+Zakres:
 
-Status: ✅ Completed
+- Search Strategy UI korzysta wyłącznie z backendowego `GET` i `PUT`
+- stan pusty dla projektów bez strategii
+- edycja pytań badawczych, grup pojęć, operatorów Boolean, ograniczeń i wyboru providerów
+- generyczny podgląd wyrażenia Boolean
+- stany loading, dirty, saving, saved, validation oraz failure
+- akcja `Szukaj` zapisuje strategię, wykonuje search na żywo i prezentuje wyniki/błędy na tym samym ekranie bez przechodzenia do Sources
 
-## 6.8.7 Sources Ingestion GUI Integration
+Status:
 
-- uruchomienie wyszukiwania
-- progress i liczba rekordów
-- błędy providerów
+✅ Completed
 
-Status: ⬜ Planned
+---
+
+## 6.8.7 Sources Search Execution GUI
+
+Zakres:
+
+- skonsolidowanie uruchamiania wyszukiwania na ekranie Search Strategy
+- ekran Sources & Imports dedykowany do prezentacji trwałego stanu intake, historii importu, podsumowań źródeł oraz uploadu plików bibliograficznych (.ris / .bib)
+
+Status:
+
+↪ Superseded by current Search Strategy execution workflow
+
+---
 
 ## 6.8.8 GUI Import Integration
 
-- RIS
-- BibTeX
-- wykorzystanie istniejących importerów
+Zakres:
 
-Status: ⬜ Planned
+- obsługa uploadu plików `.ris` i `.bib` w interfejsie użytkownika
+- obsługa punktu końcowego `POST /projects/{project_id}/imports`
+- ponowne wykorzystanie parserów RIS i BibTeX oraz mapperów i normalizatorów
+- trwały zapis pobranych publikacji w Working Collection oraz wpisu w historii importu
+- automatyczne odświeżanie widoku Sources Summary
+
+Status:
+
+✅ Completed
+
+---
 
 ## 6.8.9 Publication Intake Summary
 
-- podsumowanie wszystkich źródeł
-- przejście do kolejnych etapów workflow
+Zakres:
 
-Status: ⬜ Planned
+- dedykowany serwis read model `SourcesSummaryService`
+- punkt końcowy `GET /projects/{project_id}/sources-summary`
+- zagregowane metryki Working Collection, podsumowania per źródło (sukcesy, ostrzeżenia, błędy, dodane rekordy, ostatni status)
+- chronologiczna historia importów zwrócona do interfejsu graficznego
+
+Status:
+
+✅ Completed
+
+---
+
+### Technical Debt & Prerequisites for Executable Screening
+
+W ramach reconciliation Phase 6.8 zidentyfikowano dwa długi techniczne wymagające rozwiązania przed uruchomieniem wykonawczego etapu Phase 7.5 — Title & Abstract Screening:
+
+1. **Live Search Import Metadata Loss**: Kanoniczny model `Publication` obsługuje bogate metadane (`abstract`, `venue`, `publisher`, `document_type`, `language`, `keywords`, `urls`, `open_access`, `provenance`). Dostawca OpenAlex pozyskuje m.in. abstract, jednak DTO `SearchResultRecordResponse` przekazuje zredukowany zestaw pól (`id`, `title`, `authors`, `year`, `provider`, `source_id`, `doi`). `ProjectImportService` przy imporcie wyników tworzy obiekt `Publication` z DTO, tracąc abstract oraz pozostałe metadane. Zachowanie pełnych metadanych jest warunkiem koniecznym (blockerem) dla Phase 7.5.
+2. **Deduplicated Screening Input Set**: System zapisuje decyzje ludzkie `APPROVE` / `REJECT` dla grup duplikatów, ale nie wykonuje fizycznego scalania publikacji. Zdublowane publikacje nadal istnieją w Working Collection jako osobne rekordy. Przed Phase 7.5 konieczne jest zdefiniowanie potoku danych wejściowych do screeningu (`Working Collection` → `Duplicate Decisions` → `Canonical / Deduplicated Screening Set` → `Screening`), aby zapobiec wielokrotnej ocenie tej samej publikacji.
+
+**Relacja z Phase 7**:
+- **Phase 7.1–7.4** (Screening Criteria Domain Model, Persistence & API, Configuration GUI, Screening Decision Domain & Persistence) MOGĄ być realizowane niezależnie od otwartego długu Phase 6.8.
+- **Phase 7.5 — Title & Abstract Screening** NIE MOŻE wejść do implementacji wykonawczej przed rozwiązaniem problemów (1) Metadata Loss oraz (2) Deduplicated Screening Input Set.
+- **Provider-Specific Query Rendering (6.8.2)** powinno zostać ukończone przed docelowym wyszukiwaniem dla właściwego SLR (reprodukujalność i adaptacja zapytań).
+- **Search Execution Persistence (6.8.5)** jest istotne dla pełnej reprodukowalności, ale nie blokuje prac nad modelem domenowym Phase 7.1–7.4.
 
 ---
 

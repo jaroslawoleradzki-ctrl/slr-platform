@@ -104,7 +104,7 @@ This phase does not represent the full GUI MVP. Its purpose is to establish the 
 
 ---
 
-## Phase 6.7 — Functional Workflow for Modules 1–4 🚧
+## Phase 6.7 — Functional Workflow for Modules 1–4 ✅
 
 Before extending the SLR workflow with additional product phases, the existing
 user-facing workflow must become fully functional and manually verifiable.
@@ -126,42 +126,39 @@ Phase 6.7.2a established the frontend/API workflow in v0.1.6. Phase 6.7.2b
 connected the workflow to live providers and the project Working Collection in
 v0.1.7 (historically using a process-local demonstrator collection). As of v0.2.0,
 the Working Collection is fully durable in SQLite (`SqliteProjectPublicationRepository`)
-and survives backend restarts.
+and survives backend restarts. Phase 6.7 is completed.
 
 ---
 
-## Phase 6.8 — End-to-End Literature Search Workflow 🚧
+## Phase 6.8 — End-to-End Literature Search Workflow 🟨
 
 The product priority from v0.1.8 is a complete literature-search workflow that
 can be performed without leaving the GUI. Work on further mock-driven screens
 is deferred until Search Strategy and Sources Ingestion use durable backend
 capabilities.
 
-- **6.8.1 Search Strategy Backend** ✅ — durable strategy storage, REST GET/PUT,
-  provider-independent Search Strategy and Search Query models, validation, and
-  provider selection.
-- **6.8.2 Query Rendering** ⬜ — OpenAlex, Crossref, and Semantic Scholar query
-  renderers.
-- **6.8.3 Search Orchestrator** ⬜ — multi-provider execution, result
-  aggregation, partial failures, provenance, and SearchRun.
-- **6.8.4 Search Execution API** ⬜ — execute search, search status, and search
-  results.
-- **6.8.5 Persistence** ⬜ — SearchRun, publications, provenance, and search
-  history.
-- **6.8.6 Search Strategy GUI Integration — Completed (functional)** ✅ — Search Strategy reads and
-  writes the real backend resource, no longer uses project mocks as strategy
-  data, supports the complete authored form and generic Boolean preview,
-  executes live searches, presents results on the same page, and provides the
-  result import workflow. **Szukaj** does not navigate to Sources & Imports.
-- **6.8.7 Sources Ingestion GUI Integration** ⬜ — start searches, show
-  progress, record counts, and provider errors.
-- **6.8.8 GUI Import Integration** ⬜ — RIS and BibTeX through the existing
-  import providers.
-- **6.8.9 Publication Intake Summary** ⬜ — summarize every intake source and
-  provide the transition to later workflow stages.
+- **6.8.1 Search Strategy Backend** ✅ — Durable strategy storage in SQLite (`0001_search_strategies.sql`), REST GET/PUT endpoints (`/projects/{project_id}/search-strategy`), provider-independent `SearchStrategy` and `SearchQuery` domain models, validation, and provider selection.
+- **6.8.2 Provider-Specific Query Rendering** ⬜ — Adaptation of canonical `SearchQuery` to provider-specific query syntax and capabilities. Currently, `SearchEngine` uses generic `search_query.to_boolean_query()` passed as `rendered_query` to providers. Dedicated provider-specific query renderers (`OpenAlexQueryRenderer`, `CrossrefQueryRenderer`, `SemanticScholarQueryRenderer`) remain outstanding.
+- **6.8.3 Search Orchestrator** ✅ — Multi-provider execution via `SearchEngine`, separate `SearchRun` per provider, provider error isolation / partial failure handling, normalized results, result aggregation / merging (`ResultMerger`), search provenance, execution provenance, and candidate duplicate group generation (`DuplicateGroupBuilder`).
+- **6.8.4 Search Execution API** 🟨 — `POST /projects/{project_id}/search-strategy/executions` executes search strategies live, returning `rendered_query`, selected providers, execution timestamp, total/returned record counts, pagination metadata (`next_cursor`, `has_more`), results list, and provider error diagnostics. Lacks a durable execution resource for subsequent GET retrieval of run status, saved execution results, or historical runs by ID.
+- **6.8.5 Search Execution Persistence** 🟨 — Working Collection publications, Search Strategy, import history, normalization state, and duplicate review decisions are durable in SQLite. Full search execution history is not durable: `SearchRun` database records, complete execution history, and durable raw provider response archiving (`live_search.py` relies on transient `_InMemoryRawResponseArchive`) remain partial.
+- **6.8.6 Search Strategy GUI Integration** ✅ — Search Strategy UI reads and writes the real backend resource, supports the authored form and generic Boolean preview, executes live searches, presents results and provider errors on the same page, and provides the result import workflow. **Szukaj** does not navigate to Sources & Imports.
+- **6.8.7 Sources Search Execution GUI** ↪ — **Superseded by current Search Strategy execution workflow**. Search Strategy page executes searches and presents results/errors directly. Sources & Imports presents durable intake state, import history, source summaries, Working Collection summary, and bibliographic file uploads.
+- **6.8.8 GUI Import Integration** ✅ — Upload of `.ris` and `.bib` files via GUI control to `POST /projects/{project_id}/imports`, reusing existing RIS/BibTeX parsers and normalizers, durable publication import into Working Collection, durable import history, and Sources Summary UI updates.
+- **6.8.9 Publication Intake Summary** ✅ — `SourcesSummaryService` backend read model exposed via `GET /projects/{project_id}/sources-summary`, providing Working Collection total, source summaries (successful/warning/failed import counts, records added, last import status), and import history consumed by frontend.
 
-Phase 6.8.1 and the functional Search Strategy workflow are available. Further
-work before Phase 2 focuses on result completeness and presentation quality.
+### Technical Debt & Prerequisites for Executable Screening
+
+A comprehensive reconciliation of Phase 6.8 identifies two technical prerequisites that must be addressed before Phase 7.5 (Title & Abstract Screening) can enter executable implementation:
+
+1. **Live Search Import Metadata Loss**: The canonical `Publication` domain model supports rich metadata (`abstract`, `venue`, `publisher`, `document_type`, `language`, `keywords`, `urls`, `open_access`, `provenance`). While search providers (e.g. OpenAlex) fetch abstract and metadata, `SearchResultRecordResponse` DTO exposes a trimmed subset (`id`, `title`, `authors`, `year`, `provider`, `source_id`, `doi`). `ProjectImportService` constructs imported publications from this DTO, causing abstract and other screening-relevant metadata to be lost upon import. Preserving complete metadata (especially `abstract`) during search result import is a mandatory blocker for executable Phase 7.5.
+2. **Deduplicated Screening Input Set**: Current deduplication records human `APPROVE` / `REJECT` decisions for candidate duplicate groups, but physical publication merging is deferred. Consequently, approved duplicate publications still exist as separate records in the Working Collection. Before Phase 7.5, an explicit screening input set pipeline must be established (`Working Collection` → `Duplicate Decisions` → `Canonical / Deduplicated Screening Set` → `Screening`) so a single publication is not screened multiple times.
+
+**Phase 7 Implementation Scope**:
+- **Phases 7.1–7.4** (Screening Criteria Domain Model, Persistence & API, Configuration GUI, Screening Decision Domain & Persistence) CAN proceed independently of these open Phase 6.8 technical debts.
+- **Phase 7.5 — Title & Abstract Screening** MUST NOT enter executable implementation until Metadata Preservation (1) and Deduplicated Screening Input Set (2) are resolved.
+- **Provider-Specific Query Rendering (6.8.2)** should be completed prior to executing actual SLR literature searches for scientific reproducibility and provider query syntax adaptation.
+- **Search Execution Persistence (6.8.5)** is important for reproducibility, but does not block Phase 7.1–7.4 domain model development.
 
 ### Version 0.2.5 — Data Integrity Cleanup ✅
 
