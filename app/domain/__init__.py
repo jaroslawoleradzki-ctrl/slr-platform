@@ -11,6 +11,9 @@ from app.domain.provenance import ProvenanceEntry
 from app.domain.publication import DocumentType, Publication
 from app.domain.screening import (
     AIRecommendation,
+    ScreeningCriterion,
+    ScreeningCriterionStage,
+    ScreeningCriterionType,
     ScreeningDecision,
     ScreeningOutcome,
     ScreeningStage,
@@ -43,6 +46,9 @@ __all__ = [
     "InvalidDuplicateGroupTransition",
     "ProvenanceEntry",
     "Publication",
+    "ScreeningCriterion",
+    "ScreeningCriterionStage",
+    "ScreeningCriterionType",
     "ScreeningDecision",
     "ScreeningOutcome",
     "ScreeningStage",

@@ -160,6 +160,10 @@ A comprehensive reconciliation of Phase 6.8 identifies two technical prerequisit
 - **Provider-Specific Query Rendering (6.8.2)** is COMPLETED in v0.2.6.
 - **Search Execution Persistence (6.8.5)** is important for reproducibility, but does not block Phase 7.1–7.4 domain model development.
 
+### Version 0.2.7 — Screening Criteria Domain Model ✅
+
+- **Phase 7.1 Screening Criteria Domain Model** ✅ — Infrastructure-independent `ScreeningCriterion` domain model (`criterion_id: UUID`, `project_id: str`, `name`, `description`, `criterion_type: ScreeningCriterionType` (`INCLUSION`/`EXCLUSION`), `screening_stage: ScreeningCriterionStage` (`TITLE_ABSTRACT`/`FULL_TEXT`/`BOTH`), `display_order: int`, `is_active: bool`, `is_required: bool`), domain validation rules, deterministic JSON serialization, and unit test suite. No persistence, API, or GUI.
+
 ### Version 0.2.6 — Provider-Specific Query Rendering ✅
 
 - **QueryRenderer Contract** ✅ — Clean, decoupled protocol (`QueryRenderer`) and value object (`RenderedQuery`) supporting physical query strings, lossy/lossless flags (`is_lossless`), explicit limitation warnings (`warnings`), and diagnostic metadata (`metadata`).
@@ -265,7 +269,7 @@ Key outcomes:
 
 ---
 
-## Phase 7 — Screening ⬜
+## Phase 7 — Screening 🟨
 
 Support systematic review screening through a backend workflow and a dedicated user interface.
 
@@ -282,8 +286,8 @@ Support systematic review screening through a backend workflow and a dedicated u
 
 ### Increments
 
-- **7.1 — Screening Criteria Domain Model** ⬜ — Infrastructure-independent `ScreeningCriterion` domain object, criterion identifier, project association, name, description, criterion type (`INCLUSION` / `EXCLUSION`), screening stage (`TITLE_ABSTRACT` / `FULL_TEXT` / `BOTH`), display order, active/inactive flag, required/optional flag, domain validation rules, deterministic JSON serialization, and unit test suite. No persistence or GUI.
-- **7.2 — Screening Criteria Persistence and API** ⬜ — SQLite persistence layer (`SqliteScreeningCriterionRepository`), database migration, abstract repository contract (`ScreeningCriterionRepository` decorated with `@runtime_checkable`), full CRUD and lifecycle management, strict project isolation, order preservation, REST API endpoints (`/projects/{project_id}/screening/criteria`), payload validation, and API contract test suite.
+- **7.1 — Screening Criteria Domain Model** ✅ — Infrastructure-independent `ScreeningCriterion` domain model (`criterion_id: UUID`, `project_id: str`, `name`, `description`, `criterion_type: ScreeningCriterionType` (`INCLUSION`/`EXCLUSION`), `screening_stage: ScreeningCriterionStage` (`TITLE_ABSTRACT`/`FULL_TEXT`/`BOTH`), `display_order: int`, `is_active: bool`, `is_required: bool`), domain validation rules, deterministic JSON serialization, and unit test suite. No persistence, API, or GUI.
+- **7.2 — Screening Criteria Persistence and API** ⬜ — Next implementation increment. SQLite persistence layer (`SqliteScreeningCriterionRepository`), database migration, abstract repository contract (`ScreeningCriterionRepository` decorated with `@runtime_checkable`), full CRUD and lifecycle management, strict project isolation, order preservation, REST API endpoints (`/projects/{project_id}/screening/criteria`), payload validation, and API contract test suite.
 - **7.3 — Screening Configuration GUI** ⬜ — Graphical management interface for screening criteria: listing criteria, create/edit/delete/deactivate actions, inclusion vs. exclusion selection, stage targeting (`TITLE_ABSTRACT` / `FULL_TEXT` / `BOTH`), required/optional toggles, reordering controls, description/instruction fields, backend API persistence integration, and full loading, empty, error, and validation state handling. Zero hardcoded criteria.
 - **7.4 — Screening Decision Domain and Persistence** ⬜ — `ScreeningDecision` domain model capturing project ID, publication ID, screening stage, outcome decision (`INCLUDE` / `EXCLUDE` / `UNCERTAIN`), criterion-level assessments, decision rationale, reviewer attribution, timestamps, append-only history trail, and immutable criteria version/snapshot reference. SQLite persistence (`SqliteScreeningDecisionRepository`), database migration, REST API endpoints, and contract tests.
 - **7.5 — Title & Abstract Screening** ⬜ — Queue management for post-deduplication Working Collection records, presentation of title, abstract, and bibliographic metadata, evaluation against `TITLE_ABSTRACT` and `BOTH` criteria, criterion-level assessment, `INCLUDE` / `EXCLUDE` / `UNCERTAIN` decision recording with rationale, previous/next queue navigation, save & resume capabilities, queue filtering, progress tracking, and full GUI & backend integration. No AI screening decisions.

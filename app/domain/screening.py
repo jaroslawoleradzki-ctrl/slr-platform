@@ -12,6 +12,53 @@ class ScreeningStage(StrEnum):
     FULL_TEXT = "full_text"
 
 
+class ScreeningCriterionStage(StrEnum):
+    """Stage in the systematic review process where a screening criterion applies."""
+
+    TITLE_ABSTRACT = "title_abstract"
+    FULL_TEXT = "full_text"
+    BOTH = "both"
+
+
+class ScreeningCriterionType(StrEnum):
+    """Type of screening criterion (inclusion vs exclusion)."""
+
+    INCLUSION = "inclusion"
+    EXCLUSION = "exclusion"
+
+
+class ScreeningCriterion(BaseModel):
+    """Domain model representing a configurable screening criterion for a project."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    criterion_id: UUID = Field(default_factory=uuid4)
+    project_id: str = Field(min_length=1)
+    name: str = Field(min_length=1)
+    description: str | None = None
+    criterion_type: ScreeningCriterionType
+    screening_stage: ScreeningCriterionStage
+    display_order: int = Field(default=0, ge=0)
+    is_active: bool = True
+    is_required: bool = True
+
+    @field_validator("project_id", "name")
+    @classmethod
+    def validate_non_blank(cls, value: str) -> str:
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("text fields must not be blank")
+        return stripped
+
+    @field_validator("description")
+    @classmethod
+    def normalize_description(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        stripped = value.strip()
+        return stripped if stripped else None
+
+
 class ScreeningOutcome(StrEnum):
     """Possible inclusion decision at a screening stage."""
 

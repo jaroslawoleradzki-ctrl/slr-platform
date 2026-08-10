@@ -64,15 +64,15 @@ Informacja o pochodzeniu konkretnego pola lub rekordu:
 Kryterium włączenia lub wyłączenia zdefiniowane dla konkretnego projektu (project-scoped).
 
 Pola:
-- `criterion_id`
-- `project_id`
-- `name`
-- `description`
-- `type`: `INCLUSION` / `EXCLUSION`
-- `stage`: `TITLE_ABSTRACT` / `FULL_TEXT` / `BOTH`
-- `display_order`
-- `is_active`
-- `is_required`
+- `criterion_id`: `UUID`
+- `project_id`: `str`
+- `name`: `str`
+- `description`: `str | None`
+- `criterion_type` (`ScreeningCriterionType`): `INCLUSION` / `EXCLUSION`
+- `screening_stage` (`ScreeningCriterionStage`): `TITLE_ABSTRACT` / `FULL_TEXT` / `BOTH`
+- `display_order`: `int` (ge=0)
+- `is_active`: `bool`
+- `is_required`: `bool`
 
 Uwaga: Dostępność pełnego tekstu (full-text availability/status) jest informacją techniczną o publikacji w workflow (np. URL, link DOI), a NIE wbudowanym kryterium kwalifikacji. To konfigurowalne ScreeningCriterion danego projektu określa, czy brak pełnego tekstu prowadzi do wykluczenia.
 

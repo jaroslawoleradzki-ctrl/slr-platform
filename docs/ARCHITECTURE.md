@@ -37,3 +37,13 @@ Obiekty `SearchRun`, provenancja publikacji (`ProvenanceEntry`) oraz surowe odpo
 W punkcie końcowym API `POST /projects/{project_id}/search-strategy/executions`:
 - `SearchStrategyExecutionResponse.rendered_query`: Kanoniczny podgląd zapytania Boolean (`search_query.to_boolean_query()`), stanowiący niezależną od dostawcy reprezentację podglądową.
 - `SearchStrategyExecutionResponse.provider_queries`: Lista faktycznie wykonanych zapytań fizycznych dla poszczególnych providerów odczytana z obiektów `SearchRun` (wraz z flagą `is_lossless` oraz ostrzeżeniami `warnings`).
+
+### Screening Subsystem (`app.domain.screening`)
+
+W Phase 7.1 zaimplementowano czysty model domenowy konfigurowalnych kryteriów screeningu:
+
+- `ScreeningCriterion`: Niemutowalny obiekt domenowy reprezentujący jednostkowe kryterium kwalifikacji lub wykluczenia publikacji w ramach projektu (`criterion_id: UUID`, `project_id: str`, `name`, `description`, `criterion_type`, `screening_stage`, `display_order`, `is_active`, `is_required`).
+- `ScreeningCriterionType`: Enum `INCLUSION` / `EXCLUSION`.
+- `ScreeningCriterionStage`: Enum określający zakres stosowania kryterium: `TITLE_ABSTRACT`, `FULL_TEXT` lub `BOTH`.
+- **Decyzja architektoniczna dot. etapu**: Istniejący enum `ScreeningStage` (`TITLE_ABSTRACT`, `FULL_TEXT`) pozostaje przeznaczony wyłącznie dla konkretnych zdarzeń decyzji screeningowych (`ScreeningDecision`), które nie mogą zachodzić na etapie `BOTH`. Dla zakresu stosowania kryteriów wprowadzono osobny `ScreeningCriterionStage`.
+- **Granice przyrostu 7.1**: Model jest czysto domenowy — nie definiuje persystencji SQLite, endpointów REST API, komponentów GUI, scoringu ani automatycznego wyliczania decyzji.

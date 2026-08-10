@@ -10,11 +10,11 @@ Unlike ROADMAP.md, this file is intentionally technical and may change frequentl
 
 Current milestone:
 
-Version 0.2.6 — Provider-Specific Query Rendering (completed)
+Version 0.2.7 — Screening Criteria Domain Model (completed)
 
 Next milestone:
 
-Phase 7 — Screening (Phase 7.1 — Screening Criteria Domain Model, not started)
+Phase 7 — Screening (Phase 7.2 — Screening Criteria Persistence and API next)
 
 ---
 
@@ -467,7 +467,7 @@ Zakres:
 - unit test suite
 (Bez persistence i GUI)
 
-Status: ⬜ Planned
+Status: ✅ Completed (`ScreeningCriterion`, `ScreeningCriterionType`, `ScreeningCriterionStage`, validation, unit tests)
 
 ---
 

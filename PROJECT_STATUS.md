@@ -14,13 +14,13 @@ development
 
 Current version (working tree):
 
-v0.2.6
+v0.2.7
 
 Current development phase:
 
-Version 0.2.6 — Provider-Specific Query Rendering (Completed).
+Version 0.2.7 — Screening Criteria Domain Model (Completed).
 
-Version 0.2.6 introduces dedicated provider-specific search query renderers (`OpenAlexQueryRenderer`, `CrossrefQueryRenderer`). Canonical `SearchQuery` objects are translated into physical provider query strings with explicit lossy/lossless tracking (`is_lossless`) and limitation warnings (`warnings`). `SearchEngine.execute()` executes exact physical queries per provider, storing them in `SearchRun`, publication provenance, and raw response archives. The REST API exposes `provider_queries` and frontend displays physical queries per provider.
+Version 0.2.7 introduces the infrastructure-independent `ScreeningCriterion` domain model (`criterion_id: UUID`, `project_id: str`, `name`, `description`, `criterion_type`, `screening_stage`, `display_order`, `is_active`, `is_required`), domain validation rules, text normalization, and 21 domain unit tests.
 
 Phase 6.7 & Phase 6.8 Workflow State:
 - **Phase 6.7 (Modules 1–4 Functional Workflow)**: ✅ Completed (6.7.1, 6.7.2a, 6.7.2b).
@@ -40,9 +40,10 @@ Technical Debt & Prerequisites for Executable Screening:
 2. **Deduplicated Screening Input Set**: Current deduplication records human `APPROVE`/`REJECT` decisions without physical publication merging. Approved duplicates remain as separate records in Working Collection. An explicit screening input set pipeline (`Working Collection` → `Duplicate Decisions` → `Canonical / Deduplicated Screening Set` → `Screening`) is a prerequisite for executable Phase 7.5.
 
 State of Phase 7 — Screening:
-- Version 0.2.6 is completed.
-- Phase 7 — Screening is the next product phase (implementation not started).
-- Phase 7.1 — Screening Criteria Domain Model is the next implementation increment.
+- Version 0.2.7 is completed.
+- Phase 7 — Screening is in progress (domain model increment 7.1 completed; persistence, API & GUI not started).
+- Phase 7.1 — Screening Criteria Domain Model is ✅ Completed (`ScreeningCriterion`, `ScreeningCriterionType`, `ScreeningCriterionStage`, validation, unit tests).
+- Phase 7.2 — Screening Criteria Persistence and API is the next implementation increment.
 - Phase 7.1–7.4 are decoupled from 6.8 debt and can proceed independently.
 - Phase 7.5 (Title & Abstract Screening) requires resolving Metadata Loss (1) and Deduplicated Screening Input Set (2).
 
@@ -833,9 +834,9 @@ Phase 5 — Deduplication: Completed.
 Phase 6 — GUI Foundation and Duplicate Review: Completed.
 Version 0.2.5 — Data Integrity Cleanup: Completed.
 Version 0.2.6 — Provider-Specific Query Rendering: Completed.
+Version 0.2.7 — Screening Criteria Domain Model: Completed.
 
-The next planned product phase is Phase 7 — Screening (not yet started).
-The next implementation increment is Phase 7.1 — Screening Criteria Domain Model.
+The next planned implementation increment is Phase 7.2 — Screening Criteria Persistence and API (Phase 7 — Screening in progress).
 
 ---
 
@@ -888,7 +889,7 @@ Every feature must:
 
 # Next milestone
 
-Phase 7.1 — Screening Criteria Domain Model (Phase 7 — Screening). Not started.
+Phase 7.2 — Screening Criteria Persistence and API (Phase 7 — Screening). Not started.
 
 ---
 

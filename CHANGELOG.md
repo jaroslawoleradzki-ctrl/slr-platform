@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.2.7] — 2026-08-10
+
+### Added
+
+- **Phase 7.1 Screening Criteria Domain Model**: Added infrastructure-independent `ScreeningCriterion` domain model (`criterion_id: UUID`, `project_id: str`, `name`, `description`, `criterion_type: ScreeningCriterionType`, `screening_stage: ScreeningCriterionStage`, `display_order`, `is_active`, `is_required`).
+- Added `ScreeningCriterionType` (`INCLUSION`, `EXCLUSION`) and `ScreeningCriterionStage` (`TITLE_ABSTRACT`, `FULL_TEXT`, `BOTH`).
+- Preserved existing `ScreeningStage` (`TITLE_ABSTRACT`, `FULL_TEXT`) for concrete `ScreeningDecision` events.
+- Added validation rules for non-blank text fields, non-negative display order, text normalization, and deterministic JSON serialization.
+- Added 21 unit tests in `tests/unit/domain/test_screening.py`.
+
 ## [0.2.6] — 2026-08-10
 
 ### Added / Improved

@@ -4,6 +4,23 @@ This document records important project decisions that do not require a full ADR
 
 ## 2026-08-10
 
+### Phase 7.1 — Screening Criteria Domain Model Architecture
+
+The domain model for configurable screening criteria (`ScreeningCriterion`) was designed and implemented in `app.domain.screening`.
+
+Key architectural decisions:
+- **Project-Scoped Configurable Criteria**: `ScreeningCriterion` models encapsulate custom screening criteria for a project (`criterion_id: UUID`, `project_id: str`, `name: str`, `description: str | None`, `criterion_type`, `screening_stage`, `display_order: int`, `is_active: bool`, `is_required: bool`).
+- **ScreeningCriterionType**: Enum `INCLUSION` / `EXCLUSION` defines criteria classification without methodology-specific rules.
+- **ScreeningCriterionStage vs ScreeningStage Separation**:
+  - `ScreeningStage` (`TITLE_ABSTRACT`, `FULL_TEXT`) remains reserved for concrete screening decisions (`ScreeningDecision`), which always occur at a specific single stage.
+  - A separate `ScreeningCriterionStage` (`TITLE_ABSTRACT`, `FULL_TEXT`, `BOTH`) was introduced specifically for criteria applicability scoping. This prevents invalid domain states where a `ScreeningDecision` could incorrectly reference stage `BOTH`.
+- **Project Identifier Convention Alignment**: `project_id` uses `str = Field(min_length=1)` to maintain strict consistency with project identifiers across the codebase (e.g. `SearchStrategy`, DTOs, repositories).
+- **Strict Scope Boundaries**: Increment 7.1 is strictly domain-only. It does not introduce database tables, SQLite migrations, repository implementations, REST API endpoints, GUI components, criterion-level assessment structures, or automated scoring rules.
+
+---
+
+## 2026-08-10
+
 ### Phase 7 — Screening Architecture & Incremental Workflow Plan
 
 Before initiating Phase 7 implementation, the architecture and implementation sequence for Systematic Review Screening were formalized.
