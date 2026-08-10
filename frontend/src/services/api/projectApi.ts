@@ -18,6 +18,9 @@ import {
   ScreeningCriterionListResponse,
   ScreeningCriterionCreatePayload,
   ScreeningCriterionUpdatePayload,
+  ApiProjectResponse,
+  ApiProjectListResponse,
+  ProjectUpdatePayload,
 } from '../../types';
 import { MOCK_PROJECTS } from '../../mocks/projectData';
 import { API_BASE_URL } from '../../config/api';
@@ -61,9 +64,13 @@ const formatFastApiError = async (
 };
 
 export interface ProjectApiService {
-  getProjects(): Promise<SLRProject[]>;
+  getProjects(includeArchived?: boolean): Promise<SLRProject[]>;
   getProjectById(id: string): Promise<SLRProject | null>;
   createProject(title: string, description: string, protocolVersion: string): Promise<SLRProject>;
+  updateProject(id: string, payload: ProjectUpdatePayload): Promise<SLRProject>;
+  archiveProject(id: string): Promise<SLRProject>;
+  restoreProject(id: string): Promise<SLRProject>;
+  deleteProject(id: string): Promise<void>;
   getDuplicateGroups(projectId: string): Promise<ApiDuplicateGroupListResponse>;
   postDuplicateGroupDecision(
     projectId: string,
@@ -119,11 +126,205 @@ export interface ProjectApiService {
   ): Promise<ScreeningCriterionResponse>;
 }
 
-class MixedProjectApiService implements ProjectApiService {
-  private projects: SLRProject[] = [...MOCK_PROJECTS];
+const mapApiProjectToSLRProject = (p: ApiProjectResponse): SLRProject => ({
+  id: p.project_id,
+  title: p.title,
+  description: p.description || '',
+  protocolVersion: p.protocol_version,
+  status: p.status,
+  createdAt: p.created_at,
+  updatedAt: p.updated_at,
+  nextAction: {
+    title: 'Konfiguracja Strategii Wyszukiwania',
+    description: 'Brak zdefiniowanych grup pojęciowych.',
+    targetStageId: 'search',
+    actionLabel: 'Edytuj Strategię',
+    severity: 'normal',
+  },
+  conceptGroups: [],
+  searchFilters: {
+    publicationYearFrom: 2018,
+    publicationYearTo: 2026,
+    languages: ['en'],
+    publicationTypes: ['article', 'review'],
+    fullTextOnly: false,
+  },
+  providers: [
+    {
+      id: 'openalex',
+      name: 'OpenAlex Works API',
+      type: 'live_api',
+      connected: true,
+      status: 'idle',
+      resultsCount: 0,
+      lastRunTimestamp: null,
+    },
+    {
+      id: 'crossref',
+      name: 'Crossref REST API',
+      type: 'live_api',
+      connected: true,
+      status: 'idle',
+      resultsCount: 0,
+      lastRunTimestamp: null,
+    },
+    {
+      id: 'semantic_scholar',
+      name: 'Semantic Scholar Graph API',
+      type: 'live_api',
+      connected: true,
+      status: 'idle',
+      resultsCount: 0,
+      lastRunTimestamp: null,
+    },
+  ],
+  imports: [],
+  normalization: [],
+  deduplication: {
+    recordsBeforeDedup: 0,
+    identifierLinkedGroupsCount: 0,
+    recordsAfterResultMerger: 0,
+    candidateGroupsPendingUserReview: 0,
+    status: 'pending',
+  },
+  duplicateGroups: [],
+  screening: {
+    titleAbstract: { pending: 0, included: 0, excluded: 0, unresolved: 0, total: 0 },
+    fullText: { pending: 0, included: 0, excluded: 0, unresolved: 0, total: 0 },
+    status: 'pending',
+  },
+  qualityAssessment: {
+    totalToAssess: 0,
+    completedAssessments: 0,
+    reviewerConflictsCount: 0,
+    status: 'pending',
+  },
+  prismaMetrics: {
+    recordsIdentifiedProviders: 0,
+    recordsIdentifiedImports: 0,
+    totalIdentified: 0,
+    recordsAfterNormalization: 0,
+    recordsBeforeDedup: 0,
+    recordsAfterTechnicalMerger: 0,
+    duplicateGroupsPendingReview: 0,
+    recordsScreenedTitleAbstract: 0,
+    recordsScreenedFullText: 0,
+    studiesIncludedSynthesis: 0,
+  },
+});
 
-  async getProjects(): Promise<SLRProject[]> {
-    return [...this.projects];
+class MixedProjectApiService implements ProjectApiService {
+  async getProjects(includeArchived = true): Promise<SLRProject[]> {
+    let response: Response;
+    try {
+      response = await fetch(`${API_BASE_URL}/projects?include_archived=${includeArchived}`, {
+        headers: { Accept: 'application/json' },
+      });
+    } catch {
+      return [...MOCK_PROJECTS];
+    }
+    if (!response.ok) return [...MOCK_PROJECTS];
+    const data = (await response.json()) as ApiProjectListResponse;
+    return data.items.map(mapApiProjectToSLRProject);
+  }
+
+  async getProjectById(id: string): Promise<SLRProject | null> {
+    let response: Response;
+    try {
+      response = await fetch(`${API_BASE_URL}/projects/${id}`, {
+        headers: { Accept: 'application/json' },
+      });
+    } catch {
+      throw new Error('Nie udało się połączyć z backendem. Sprawdź połączenie.');
+    }
+    if (response.status === 404) return null;
+    if (!response.ok) throw new Error(await formatFastApiError(response, 'pobrać projekt'));
+    const data = (await response.json()) as ApiProjectResponse;
+    return mapApiProjectToSLRProject(data);
+  }
+
+  async createProject(
+    title: string,
+    description: string,
+    protocolVersion: string
+  ): Promise<SLRProject> {
+    let response: Response;
+    try {
+      response = await fetch(`${API_BASE_URL}/projects`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({
+          title,
+          description: description || null,
+          protocol_version: protocolVersion || '1.0',
+        }),
+      });
+    } catch {
+      throw new Error('Nie udało się połączyć z backendem. Sprawdź połączenie.');
+    }
+    if (!response.ok) throw new Error(await formatFastApiError(response, 'utworzyć projekt'));
+    const data = (await response.json()) as ApiProjectResponse;
+    return mapApiProjectToSLRProject(data);
+  }
+
+  async updateProject(id: string, payload: ProjectUpdatePayload): Promise<SLRProject> {
+    let response: Response;
+    try {
+      response = await fetch(`${API_BASE_URL}/projects/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify(payload),
+      });
+    } catch {
+      throw new Error('Nie udało się połączyć z backendem. Sprawdź połączenie.');
+    }
+    if (!response.ok) throw new Error(await formatFastApiError(response, 'zaktualizować projekt'));
+    const data = (await response.json()) as ApiProjectResponse;
+    return mapApiProjectToSLRProject(data);
+  }
+
+  async archiveProject(id: string): Promise<SLRProject> {
+    let response: Response;
+    try {
+      response = await fetch(`${API_BASE_URL}/projects/${id}/archive`, {
+        method: 'PATCH',
+        headers: { Accept: 'application/json' },
+      });
+    } catch {
+      throw new Error('Nie udało się połączyć z backendem. Sprawdź połączenie.');
+    }
+    if (!response.ok) throw new Error(await formatFastApiError(response, 'zarchiwizować projekt'));
+    const data = (await response.json()) as ApiProjectResponse;
+    return mapApiProjectToSLRProject(data);
+  }
+  async deleteProject(id: string): Promise<void> {
+    let response: Response;
+    try {
+      response = await fetch(`${API_BASE_URL}/projects/${id}`, {
+        method: 'DELETE',
+        headers: { Accept: 'application/json' },
+      });
+    } catch {
+      throw new Error('Nie udało się połączyć z backendem. Sprawdź połączenie.');
+    }
+    if (!response.ok) throw new Error(await formatFastApiError(response, 'usunąć projekt'));
+    // No content expected
+  }
+
+
+  async restoreProject(id: string): Promise<SLRProject> {
+    let response: Response;
+    try {
+      response = await fetch(`${API_BASE_URL}/projects/${id}/restore`, {
+        method: 'PATCH',
+        headers: { Accept: 'application/json' },
+      });
+    } catch {
+      throw new Error('Nie udało się połączyć z backendem. Sprawdź połączenie.');
+    }
+    if (!response.ok) throw new Error(await formatFastApiError(response, 'przywrócić projekt'));
+    const data = (await response.json()) as ApiProjectResponse;
+    return mapApiProjectToSLRProject(data);
   }
 
   async getSearchStrategy(projectId: string): Promise<SearchStrategy | null> {
@@ -376,11 +577,6 @@ class MixedProjectApiService implements ProjectApiService {
     return response.json() as Promise<ScreeningCriterionResponse>;
   }
 
-  async getProjectById(id: string): Promise<SLRProject | null> {
-    const project = this.projects.find((p) => p.id === id);
-    return project ? { ...project } : null;
-  }
-
   async getDuplicateGroups(projectId: string): Promise<ApiDuplicateGroupListResponse> {
     const response = await fetch(`${API_BASE_URL}/projects/${projectId}/duplicate-groups`, {
       headers: {
@@ -450,96 +646,6 @@ class MixedProjectApiService implements ProjectApiService {
 
     const data: ApiDuplicateGroupDecisionResponse = await response.json();
     return data;
-  }
-
-  async createProject(title: string, description: string, protocolVersion: string): Promise<SLRProject> {
-    await new Promise((resolve) => setTimeout(resolve, 100));
-    const newId = title.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || `proj_${Date.now()}`;
-    const newProject: SLRProject = {
-      id: newId,
-      title,
-      description,
-      protocolVersion: protocolVersion || '0.1',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      nextAction: {
-        title: 'Zdefiniuj Zapytanie i Grupy Pojęć',
-        description: 'Nowy projekt został utworzony. Przejdź do edytora zapytań i zdefiniuj grupy pojęć dla przeglądu.',
-        targetStageId: 'search',
-        actionLabel: 'Konfiguruj Strategię Wyszukiwania',
-        severity: 'normal',
-      },
-      conceptGroups: [
-        {
-          id: `cg-${Date.now()}-1`,
-          name: 'Main Domain Terms',
-          terms: ['Systematic Review', 'Literature Analysis'],
-        },
-      ],
-      searchFilters: {
-        publicationYearFrom: 2018,
-        publicationYearTo: 2026,
-        languages: ['en'],
-        publicationTypes: ['article', 'review'],
-        fullTextOnly: false,
-      },
-      providers: [
-        {
-          id: 'openalex',
-          name: 'OpenAlex Works API',
-          type: 'live_api',
-          connected: true,
-          status: 'idle',
-          resultsCount: 0,
-          lastRunTimestamp: null,
-        },
-        {
-          id: 'crossref',
-          name: 'Crossref REST API',
-          type: 'live_api',
-          connected: true,
-          status: 'idle',
-          resultsCount: 0,
-          lastRunTimestamp: null,
-        },
-      ],
-      imports: [],
-      normalization: [],
-      deduplication: {
-        recordsBeforeDedup: 0,
-        identifierLinkedGroupsCount: 0,
-        recordsAfterResultMerger: 0,
-        candidateGroupsPendingUserReview: 0,
-        status: 'pending',
-      },
-      duplicateGroups: [],
-      screening: {
-        titleAbstract: { pending: 0, included: 0, excluded: 0, unresolved: 0, total: 0 },
-        fullText: { pending: 0, included: 0, excluded: 0, unresolved: 0, total: 0 },
-        status: 'pending',
-      },
-      qualityAssessment: {
-        totalToAssess: 0,
-        completedAssessments: 0,
-        reviewerConflictsCount: 0,
-        status: 'pending',
-      },
-      prismaMetrics: {
-        recordsIdentifiedProviders: 0,
-        recordsIdentifiedImports: 0,
-        totalIdentified: 0,
-        recordsAfterNormalization: 0,
-        recordsBeforeDedup: 0,
-        recordsAfterTechnicalMerger: 0,
-        duplicateGroupsPendingReview: 0,
-        recordsScreenedTitleAbstract: 0,
-        recordsScreenedFullText: 0,
-        studiesIncludedSynthesis: 0,
-      },
-    };
-
-    this.projects.unshift(newProject);
-    return newProject;
   }
 }
 

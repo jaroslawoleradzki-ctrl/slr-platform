@@ -67,6 +67,12 @@ class ScreeningDecisionRepository(Protocol):
         """List all screening decisions for a project, optionally filtered by screening stage."""
         ...
 
+    def delete_for_project(
+        self, project_id: str, *, connection: sqlite3.Connection | None = None
+    ) -> None:
+        """Delete all screening decisions (and criterion assessments) for the given project."""
+        ...
+
 
 class SqliteScreeningDecisionRepository:
     """Durable SQLite storage for project-scoped screening decisions and criterion assessments."""
@@ -148,6 +154,33 @@ class SqliteScreeningDecisionRepository:
             return self._list_by_project_with_conn(connection, project_id, stage)
         with self._connect() as conn:
             return self._list_by_project_with_conn(conn, project_id, stage)
+
+    def delete_for_project(
+        self, project_id: str, *, connection: sqlite3.Connection | None = None
+    ) -> None:
+        if connection is not None:
+            self._delete_for_project_with_conn(connection, project_id)
+        else:
+            with self._connect() as conn:
+                self._delete_for_project_with_conn(conn, project_id)
+
+    def _delete_for_project_with_conn(
+        self, connection: sqlite3.Connection, project_id: str
+    ) -> None:
+        # Delete criterion assessments first (foreign-key dependency on decision_id)
+        connection.execute(
+            """
+            DELETE FROM screening_criterion_assessments
+            WHERE decision_id IN (
+                SELECT decision_id FROM screening_decisions WHERE project_id = ?
+            )
+            """,
+            (project_id,),
+        )
+        connection.execute(
+            "DELETE FROM screening_decisions WHERE project_id = ?",
+            (project_id,),
+        )
 
     # Internal database operations
 

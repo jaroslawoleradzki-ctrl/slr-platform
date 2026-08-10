@@ -58,6 +58,12 @@ class ScreeningCriterionRepository(Protocol):
         """Deactivate a screening criterion (setting is_active=False) for a project."""
         ...
 
+    def delete_for_project(
+        self, project_id: str, *, connection: sqlite3.Connection | None = None
+    ) -> None:
+        """Hard delete all screening criteria for the given project."""
+        ...
+
 
 class SqliteScreeningCriterionRepository:
     """Durable SQLite storage for project-scoped screening criteria."""
@@ -126,6 +132,19 @@ class SqliteScreeningCriterionRepository:
             return self._deactivate_with_conn(connection, project_id, criterion_id)
         with self._connect() as conn:
             return self._deactivate_with_conn(conn, project_id, criterion_id)
+
+    def delete_for_project(
+        self, project_id: str, *, connection: sqlite3.Connection | None = None
+    ) -> None:
+        if connection is not None:
+            connection.execute(
+                "DELETE FROM screening_criteria WHERE project_id = ?", (project_id,)
+            )
+        else:
+            with self._connect() as conn:
+                conn.execute(
+                    "DELETE FROM screening_criteria WHERE project_id = ?", (project_id,)
+                )
 
     # Internal database operations
 
