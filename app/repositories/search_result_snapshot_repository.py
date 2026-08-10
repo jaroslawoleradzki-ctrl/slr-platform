@@ -63,6 +63,9 @@ class SearchResultSnapshot:
 class SearchResultSnapshotRepository(Protocol):
     def save(self, snapshot: SearchResultSnapshot) -> SearchResultSnapshot: ...
     def get(self, project_id: str, snapshot_id: UUID) -> SearchResultSnapshot: ...
+    def delete_for_project(
+        self, project_id: str, *, connection: sqlite3.Connection | None = None
+    ) -> None: ...
 
 
 class SqliteSearchResultSnapshotRepository:
@@ -115,6 +118,21 @@ class SqliteSearchResultSnapshotRepository:
             Publication.model_validate(json.loads(row[3])),
             datetime.fromisoformat(row[4]),
         )
+
+    def delete_for_project(
+        self, project_id: str, *, connection: sqlite3.Connection | None = None
+    ) -> None:
+        if connection is not None:
+            connection.execute(
+                "DELETE FROM search_result_snapshots WHERE project_id = ?",
+                (project_id,),
+            )
+        else:
+            with sqlite3.connect(self._database_path) as conn:
+                conn.execute(
+                    "DELETE FROM search_result_snapshots WHERE project_id = ?",
+                    (project_id,),
+                )
 
     def _apply_migrations(self) -> None:
         migration_directory = Path(__file__).parents[2] / "migrations"

@@ -929,7 +929,13 @@ Status:
 
 # Phase 13 — Project Management
 
-...
+Status: ✅ Integrated
+
+- persistent SQLite-backed Project resource and project-scoped REST API
+- list, create, open/select, edit, archive and restore workflows
+- project list/table GUI with persisted active-project selection and fallback
+- destructive hard-delete confirmation and atomic cleanup of project-owned data
+- cleanup includes live-search result snapshots after integration with Phase 7.5A
 
 ---
 

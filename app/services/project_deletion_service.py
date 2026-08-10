@@ -24,6 +24,10 @@ from app.repositories.screening_decision_repository import (
     ScreeningDecisionRepository,
     default_screening_decision_repository,
 )
+from app.repositories.search_result_snapshot_repository import (
+    SearchResultSnapshotRepository,
+    default_search_result_snapshot_repository,
+)
 from app.repositories.search_strategy_repository import SearchStrategyRepository, default_search_strategy_repository
 from app.repositories.transaction_manager import SqliteTransactionManager, default_transaction_manager
 
@@ -46,6 +50,7 @@ class SqliteProjectDeletionService:
         screening_decision_repo: ScreeningDecisionRepository | None = None,
         screening_criterion_repo: ScreeningCriterionRepository | None = None,
         search_strategy_repo: SearchStrategyRepository | None = None,
+        search_result_snapshot_repo: SearchResultSnapshotRepository | None = None,
         tx_manager: SqliteTransactionManager | None = None,
     ) -> None:
         self._project_repo = project_repo or default_project_repository()
@@ -56,6 +61,9 @@ class SqliteProjectDeletionService:
         self._screening_decision_repo = screening_decision_repo or default_screening_decision_repository()
         self._screening_criterion_repo = screening_criterion_repo or default_screening_criterion_repository()
         self._search_strategy_repo = search_strategy_repo or default_search_strategy_repository()
+        self._search_result_snapshot_repo = (
+            search_result_snapshot_repo or default_search_result_snapshot_repository()
+        )
         self._tx_manager = tx_manager or default_transaction_manager()
 
     def delete_project(self, project_id: str) -> None:
@@ -67,6 +75,7 @@ class SqliteProjectDeletionService:
             self._duplicate_review_repo.delete_for_project(project_id, connection=conn)
             self._screening_decision_repo.delete_for_project(project_id, connection=conn)
             self._screening_criterion_repo.delete_for_project(project_id, connection=conn)
+            self._search_result_snapshot_repo.delete_for_project(project_id, connection=conn)
             self._search_strategy_repo.delete_for_project(project_id, connection=conn)
             # Delete the project row last. The repository existence check is
             # deliberately inside this transaction so a missing project also

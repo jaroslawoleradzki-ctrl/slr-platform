@@ -421,6 +421,9 @@ Examples:
 
 Research project management.
 
+Status: ✅ Integrated on `development` (persistent project resource, list/create/open/edit,
+archive/restore, active-project persistence and atomic hard delete).
+
 Examples:
 
 - saved searches
