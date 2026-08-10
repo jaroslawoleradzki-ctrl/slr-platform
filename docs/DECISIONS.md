@@ -54,7 +54,7 @@ Key decisions & status reconciliation:
 - **Search Strategy Workflow Consolidation**: Live search execution, result presentation, and provider error reporting are consolidated on the Search Strategy screen. Sources & Imports functions as the durable intake summary view (Working Collection count, source summaries, import history, file uploads). Increment 6.8.7 (Sources Search Execution GUI) is superseded by this architecture.
 - **Phase 6.8 Status Bounds**:
   - `6.8.1 Search Strategy Backend`: ✅ Completed (SQLite storage, GET/PUT endpoints, domain models, validation)
-  - `6.8.2 Provider-Specific Query Rendering`: ⬜ Outstanding (`SearchEngine` uses generic `to_boolean_query()`; dedicated renderers missing)
+  - `6.8.2 Provider-Specific Query Rendering`: ✅ Completed in v0.2.6 (`OpenAlexQueryRenderer`, `CrossrefQueryRenderer`, `RenderedQuery` lossy tracking)
   - `6.8.3 Search Orchestrator`: ✅ Completed (`SearchEngine` multi-provider execution, error isolation, result merging, provenance)
   - `6.8.4 Search Execution API`: 🟨 Partial (`POST /executions` executes live search, lacks durable run GET by ID)
   - `6.8.5 Search Execution Persistence`: 🟨 Partial (publications & strategy durable; `SearchRun` history & raw response archive use `_InMemoryRawResponseArchive`)

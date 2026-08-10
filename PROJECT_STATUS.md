@@ -1,6 +1,6 @@
 # SLR Platform — Project Status
 
-_Last updated: 2026-08-06_
+_Last updated: 2026-08-10_
 
 ## Current status
 
@@ -14,7 +14,7 @@ development
 
 Current version (working tree):
 
-v0.2.5
+v0.2.6
 
 Current development phase:
 
@@ -832,6 +832,7 @@ No duplicate decision or publication merge is performed automatically.
 Phase 5 — Deduplication: Completed.
 Phase 6 — GUI Foundation and Duplicate Review: Completed.
 Version 0.2.5 — Data Integrity Cleanup: Completed.
+Version 0.2.6 — Provider-Specific Query Rendering: Completed.
 
 The next planned product phase is Phase 7 — Screening (not yet started).
 The next implementation increment is Phase 7.1 — Screening Criteria Domain Model.

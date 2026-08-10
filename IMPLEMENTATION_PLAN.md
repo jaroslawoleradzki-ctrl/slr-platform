@@ -10,7 +10,7 @@ Unlike ROADMAP.md, this file is intentionally technical and may change frequentl
 
 Current milestone:
 
-Version 0.2.5 — Data Integrity Cleanup (completed)
+Version 0.2.6 — Provider-Specific Query Rendering (completed)
 
 Next milestone:
 
@@ -272,8 +272,7 @@ Status:
 Notes:
 
 - Module 2 currently does not need to repeat the complete search query.
-- Selected live search records can be imported into the in-memory project
-  Working Collection.
+- At the time of v0.1.7, the demonstrator Working Collection was process-local (in-memory). It was replaced by durable SQLite persistence in v0.2.0.
 - OpenAlex and Crossref failures are isolated and reported as partial errors.
 - Live result IDs use deterministic UUID5 identity based on provider and
   `source_id`.
@@ -446,7 +445,7 @@ W ramach reconciliation Phase 6.8 zidentyfikowano dwa długi techniczne wymagaj�
 **Relacja z Phase 7**:
 - **Phase 7.1–7.4** (Screening Criteria Domain Model, Persistence & API, Configuration GUI, Screening Decision Domain & Persistence) MOGĄ być realizowane niezależnie od otwartego długu Phase 6.8.
 - **Phase 7.5 — Title & Abstract Screening** NIE MOŻE wejść do implementacji wykonawczej przed rozwiązaniem problemów (1) Metadata Loss oraz (2) Deduplicated Screening Input Set.
-- **Provider-Specific Query Rendering (6.8.2)** powinno zostać ukończone przed docelowym wyszukiwaniem dla właściwego SLR (reprodukujalność i adaptacja zapytań).
+- **Provider-Specific Query Rendering (6.8.2)** jest zakończone w v0.2.6.
 - **Search Execution Persistence (6.8.5)** jest istotne dla pełnej reprodukowalności, ale nie blokuje prac nad modelem domenowym Phase 7.1–7.4.
 
 ---
