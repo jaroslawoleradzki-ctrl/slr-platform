@@ -678,15 +678,15 @@ Zakres:
 
 - quality criteria
 - assessment forms
-- rating or scoring schemes
+- response-scale assessment model (tool-specific scoring remains a future extension)
 - reviewer attribution
 - rationale
 - assessment history
-- agreement and disagreement representation
+- append-only assessment history (multi-reviewer agreement remains a future extension)
 
 Status:
 
-⬜ Planned
+✅ Completed
 
 ---
 
@@ -697,13 +697,13 @@ Zakres:
 - assessment assignment
 - form retrieval
 - assessment submission
-- score or rating calculation where configured
+- project configuration, readiness, execution, and history APIs
 - history retrieval
 - progress information
 
 Status:
 
-⬜ Planned
+✅ Completed
 
 ---
 
@@ -713,7 +713,7 @@ Zakres:
 
 - assessment workspace
 - configurable criteria display
-- rating and scoring controls
+- segmented response controls (`YES`, `NO`, `CANNOT_DETERMINE`)
 - rationale input
 - publication context
 - provenance visibility
@@ -721,30 +721,48 @@ Zakres:
 
 Status:
 
-⬜ Planned
+✅ Completed
 
 ---
 
 ## 8.4 Quality Assessment Review UI
 
+Zakres obecnego release'u obejmuje single-reviewer execution history and
+progress. Multi-reviewer comparison, agreement, disagreement, and resolution
+remain future extensions.
+
 Zakres:
 
-- reviewer comparison
-- disagreement visibility
-- assessment history
-- review and resolution support
+- latest assessment history
+- reviewer-specific execution history
+- progress and resume support
 
 Status:
 
-⬜ Planned
+✅ Completed for the delivered single-reviewer execution scope
 
 ---
 
-## 8.5 Quality Assessment Integration and Contract Tests
+## 8.5 Lean Energy QA v1 Production Template & E2E
+
+Zakres:
+
+- Production `lean_energy` v1 template seeded under `casp_inspired` tool
+- Exactly 7 required criteria (QA1–QA7) from SLR Protocol v0.10, Chapter IX
+- Polish-language questions with structured YES/CANNOT_DETERMINE/NO guidance
+- Stable deterministic UUIDs for template and criteria
+- Idempotent INSERT-only seed with `SeedCatalogConflictError` on content drift
+- No scoring engine, no quality class, no automatic exclusion
+- Comprehensive E2E integration test suite (23 tests)
+- Frontend `getTools` enriched with template data
 
 Status:
 
-⬜ Planned
+✅ Completed
+
+Future extensions outside the current Phase 8 delivery include tool-specific
+scoring/rating, a Template Builder, additional tools such as JBI/MMAT, and
+multi-reviewer QA agreement/reconciliation.
 
 ---
 

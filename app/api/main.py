@@ -8,6 +8,7 @@ from app.api.routers import (
     full_text_screening,
     normalization,
     projects,
+    quality_assessment,
     screening,
     search_strategy,
 )
@@ -42,6 +43,7 @@ app.include_router(search_strategy.router)
 app.include_router(normalization.router)
 app.include_router(screening.router)
 app.include_router(full_text_screening.router)
+app.include_router(quality_assessment.router)
 
 
 @app.get("/")

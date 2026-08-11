@@ -46,7 +46,10 @@ export const App: React.FC = () => {
               <Route path="conflicts" element={<ConflictResolutionPage />} />
               <Route path="conflict-resolution" element={<Navigate to="../conflicts" replace />} />
             </Route>
-            <Route path="qa" element={<QualityAssessmentPage />} />
+            <Route path="quality-assessment" element={<QualityAssessmentPage />} />
+            <Route path="quality-assessment/configuration" element={<QualityAssessmentPage />} />
+            <Route path="quality-assessment/:publicationId" element={<QualityAssessmentPage />} />
+            <Route path="qa" element={<Navigate to="../quality-assessment" replace />} />
             <Route path="extract" element={<DataExtractionPlaceholderPage />} />
             <Route path="exports" element={<ExportsPage />} />
           </Route>

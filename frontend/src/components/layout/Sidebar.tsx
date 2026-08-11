@@ -100,7 +100,7 @@ export const Sidebar: React.FC = () => {
       stage: 'screening' as const,
     },
     {
-      to: `/projects/${currentId}/qa`,
+      to: `/projects/${currentId}/quality-assessment`,
       label: '6. Quality Assessment',
       icon: Award,
       stage: 'qualityAssessment' as const,

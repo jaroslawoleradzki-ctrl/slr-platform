@@ -24,6 +24,10 @@ from app.repositories.project_publication_repository import (
     default_project_publication_repository,
 )
 from app.repositories.project_repository import ProjectRepository, default_project_repository
+from app.repositories.quality_assessment_repository import (
+    ProjectQualityAssessmentConfigurationRepository,
+    QualityAssessmentRepository,
+)
 from app.repositories.screening_criterion_repository import (
     ScreeningCriterionRepository,
     default_screening_criterion_repository,
@@ -41,6 +45,10 @@ from app.repositories.search_result_snapshot_repository import (
     default_search_result_snapshot_repository,
 )
 from app.repositories.search_strategy_repository import SearchStrategyRepository, default_search_strategy_repository
+from app.repositories.sqlite_quality_assessment_repository import (
+    default_project_quality_assessment_configuration_repository,
+    default_quality_assessment_repository,
+)
 from app.repositories.transaction_manager import SqliteTransactionManager, default_transaction_manager
 
 
@@ -66,6 +74,8 @@ class SqliteProjectDeletionService:
         full_text_availability_repo: FullTextAvailabilityRepository | None = None,
         screening_reviewer_assignment_repo: SqliteScreeningReviewerAssignmentRepository | None = None,
         conflict_resolution_repo: SqliteConflictResolutionRepository | None = None,
+        quality_assessment_repo: QualityAssessmentRepository | None = None,
+        quality_assessment_config_repo: ProjectQualityAssessmentConfigurationRepository | None = None,
         tx_manager: SqliteTransactionManager | None = None,
     ) -> None:
         self._project_repo = project_repo or default_project_repository()
@@ -74,12 +84,21 @@ class SqliteProjectDeletionService:
         self._publication_repo = publication_repo or default_project_publication_repository()
         self._duplicate_review_repo = duplicate_review_repo or default_duplicate_review_decision_repository()
         self._screening_decision_repo = screening_decision_repo or default_screening_decision_repository()
+        self._full_text_availability_repo = (
+            full_text_availability_repo or default_full_text_availability_repository()
+        )
         self._screening_criterion_repo = screening_criterion_repo or default_screening_criterion_repository()
         self._search_strategy_repo = search_strategy_repo or default_search_strategy_repository()
         self._search_result_snapshot_repo = search_result_snapshot_repo or default_search_result_snapshot_repository()
-        self._full_text_availability_repo = full_text_availability_repo or default_full_text_availability_repository()
         self._screening_reviewer_assignment_repo = (
             screening_reviewer_assignment_repo or default_screening_reviewer_assignment_repository()
+        )
+        self._quality_assessment_repo = (
+            quality_assessment_repo or default_quality_assessment_repository()
+        )
+        self._quality_assessment_config_repo = (
+            quality_assessment_config_repo
+            or default_project_quality_assessment_configuration_repository()
         )
         self._conflict_resolution_repo = conflict_resolution_repo or default_conflict_resolution_repository()
         self._tx_manager = tx_manager or default_transaction_manager()
@@ -98,6 +117,8 @@ class SqliteProjectDeletionService:
             self._screening_criterion_repo.delete_for_project(project_id, connection=conn)
             self._search_result_snapshot_repo.delete_for_project(project_id, connection=conn)
             self._search_strategy_repo.delete_for_project(project_id, connection=conn)
+            self._quality_assessment_repo.delete_for_project(project_id, connection=conn)
+            self._quality_assessment_config_repo.delete_for_project(project_id, connection=conn)
             # Delete the project row last. The repository existence check is
             # deliberately inside this transaction so a missing project also
             # rolls back every preceding cleanup statement.
