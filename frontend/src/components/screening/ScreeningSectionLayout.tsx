@@ -36,6 +36,9 @@ export const ScreeningSectionLayout: React.FC = () => {
           background: isActive ? 'var(--accent-primary)' : 'var(--bg-surface-elevated)',
           color: isActive ? '#fff' : 'var(--text-primary)', border: '1px solid var(--border-strong)', fontWeight: 600,
         })}>Konflikty reviewerów</NavLink>
+        <NavLink to={`${base}/conflict-resolution`} style={({ isActive }) => ({
+          padding: '8px 12px', borderRadius: 'var(--radius-md)', textDecoration: 'none', background: isActive ? 'var(--accent-primary)' : 'var(--bg-surface-elevated)', color: isActive ? '#fff' : 'var(--text-primary)', border: '1px solid var(--border-strong)', fontWeight: 600,
+        })}>Resolution</NavLink>
       </nav>
       <Outlet />
     </div>

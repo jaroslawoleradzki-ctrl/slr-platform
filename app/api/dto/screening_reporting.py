@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
@@ -8,9 +9,11 @@ from app.api.dto.screening import (
     CriterionAssessmentResponse,
     ScreeningDecisionResponse,
 )
-from app.domain.screening import ScreeningOutcome
+from app.domain.conflict_resolution import ResolvedOutcome
+from app.domain.screening import ScreeningOutcome, ScreeningStage
 from app.services.screening_reporting_service import (
     AuditEvent,
+    AuditResolutionEvent,
     ReasonAggregation,
     ScreeningTransitions,
     StageProgress,
@@ -89,7 +92,19 @@ class MultiReviewerStageMetricsResponse(BaseModel):
     incomplete: int
     agreement: int
     conflict: int
+    resolved: int
+    stale_resolution: int
     agreement_rate: float | None
+    resolution_rate: float | None
+
+
+class ProjectOutcomeSummaryResponse(BaseModel):
+    stage: str
+    total: int
+    include: int
+    exclude: int
+    uncertain: int
+    pending: int
 
 
 class ScreeningReportResponse(BaseModel):
@@ -107,6 +122,8 @@ class ScreeningReportResponse(BaseModel):
     full_text_exclusion_reasons: list[ExclusionReasonAggregationResponse]
     title_abstract_multi_reviewer: MultiReviewerStageMetricsResponse | None = None
     full_text_multi_reviewer: MultiReviewerStageMetricsResponse | None = None
+    title_abstract_project_outcomes: ProjectOutcomeSummaryResponse | None = None
+    full_text_project_outcomes: ProjectOutcomeSummaryResponse | None = None
 
 
 class ScreeningAuditEventResponse(BaseModel):
@@ -117,6 +134,7 @@ class ScreeningAuditEventResponse(BaseModel):
     revision_index: int
     previous_outcome: ScreeningOutcome | None
     is_latest_for_reviewer: bool
+    event_type: Literal["DECISION"] = "DECISION"
 
     @classmethod
     def from_domain(cls, value: AuditEvent) -> ScreeningAuditEventResponse:
@@ -129,10 +147,58 @@ class ScreeningAuditEventResponse(BaseModel):
         )
 
 
+class ScreeningAuditResolutionEventResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    event_type: Literal["RESOLUTION"] = "RESOLUTION"
+    resolution_id: UUID
+    publication_id: UUID
+    publication_title: str | None
+    stage: ScreeningStage
+    resolver_id: str
+    resolved_outcome: ResolvedOutcome
+    rationale: str
+    resolved_at: str
+    decision_set_key: str
+    is_current: bool
+    status: Literal["CURRENT", "STALE"]
+    reviewer_outcomes: list["AuditResolutionReviewerOutcomeResponse"]
+
+    @classmethod
+    def from_domain(cls, value: AuditResolutionEvent) -> "ScreeningAuditResolutionEventResponse":
+        r = value.resolution
+        return cls(
+            resolution_id=r.resolution_id,
+            publication_id=r.publication_id,
+            publication_title=value.publication_title,
+            stage=r.stage,
+            resolver_id=r.resolver_id,
+            resolved_outcome=r.resolved_outcome,
+            rationale=r.rationale,
+            resolved_at=r.resolved_at.isoformat(),
+            decision_set_key=r.decision_set_key,
+            is_current=value.is_current,
+            status="CURRENT" if value.is_current else "STALE",
+            reviewer_outcomes=[
+                AuditResolutionReviewerOutcomeResponse(
+                    decision_id=decision_id,
+                    reviewer_id=reviewer_id,
+                    outcome=resolved_outcome,
+                )
+                for decision_id, reviewer_id, resolved_outcome in value.reviewer_outcomes
+            ],
+        )
+
+
+class AuditResolutionReviewerOutcomeResponse(BaseModel):
+    decision_id: UUID
+    reviewer_id: str
+    outcome: ResolvedOutcome
+
+
 class ScreeningAuditPageResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     total: int
     offset: int
     limit: int
-    items: list[ScreeningAuditEventResponse]
+    items: list[ScreeningAuditEventResponse | ScreeningAuditResolutionEventResponse]

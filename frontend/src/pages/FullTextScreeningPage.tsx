@@ -13,8 +13,8 @@ import {
   ApiError, AssessmentValue, FullTextAvailabilityStatus, FullTextOverview, FullTextRecord,
   FullTextStatus, ScreeningDecision, ScreeningOutcome, screeningApi,
 } from '../services/api/screeningApi';
+import { useReviewerIdentity } from '../hooks/useReviewerIdentity';
 
-const REVIEWER_KEY = 'slr_screening_reviewer_id';
 const PAGE_SIZE = 50;
 const filters: Array<{ value: FullTextStatus | null; label: string }> = [
   { value: 'unscreened', label: 'Nieocenione' }, { value: null, label: 'Wszystkie' },
@@ -36,7 +36,7 @@ export const FullTextScreeningPage: React.FC = () => {
   const [params] = useSearchParams();
   const requested = params.get('status');
   const filter: FullTextStatus | null = requested === 'all' ? null : (['unscreened', 'included', 'excluded', 'uncertain'].includes(requested || '') ? requested as FullTextStatus : 'unscreened');
-  const [reviewer, setReviewer] = useState(() => localStorage.getItem(REVIEWER_KEY) || '');
+  const { reviewerId: reviewer, setReviewerId: setReviewer } = useReviewerIdentity();
   const [reviewerDraft, setReviewerDraft] = useState(reviewer);
   const [reviewerModal, setReviewerModal] = useState(!reviewer);
   const [overview, setOverview] = useState<FullTextOverview | null>(null);
@@ -77,7 +77,7 @@ export const FullTextScreeningPage: React.FC = () => {
   }, [filter, navigate, offset, pathFor, projectId, publicationId, query, reviewer, setDraft]);
   useEffect(() => { void load(0); }, [projectId, reviewer, filter]); // eslint-disable-line react-hooks/exhaustive-deps
   const confirmDiscard = () => !dirty || window.confirm('Masz niezapisane zmiany. Czy chcesz je odrzucić?');
-  const saveReviewer = () => { const value = reviewerDraft.trim(); if (!value) { setError('Identyfikator reviewera nie może być pusty.'); return; } localStorage.setItem(REVIEWER_KEY, value); setReviewer(value); setReviewerModal(false); setRecord(null); };
+  const saveReviewer = () => { const value = reviewerDraft.trim(); if (!value) { setError('Identyfikator reviewera nie może być pusty.'); return; } setReviewer(value); setReviewerModal(false); setRecord(null); };
   const chooseFilter = (value: FullTextStatus | null) => { if (confirmDiscard()) { setOffset(0); navigate(`${pathFor()}?status=${value || 'all'}`, { replace: true }); } };
   const move = async (direction: -1 | 1) => { if (!confirmDiscard() || !record) return; const index = records.findIndex((item) => item.publication_id === record.publication_id); const target = index + direction; if (target >= 0 && target < records.length) { const next = records[target]; setRecord(next); setDraft(next); navigate(pathFor(next.publication_id) + query); return; } const nextOffset = offset + direction * PAGE_SIZE; if (nextOffset >= 0 && nextOffset < total) await load(nextOffset); };
   const requiredMissing = overview?.criteria.filter((criterion) => criterion.is_required).some((criterion) => criterion.evaluation_mode === 'metadata_rule' ? record?.automatic_assessments?.find((item) => item.criterion_id === criterion.criterion_id)?.assessment_value === 'not_assessed' : !assessments[criterion.criterion_id]?.value || assessments[criterion.criterion_id]?.value === 'not_assessed') || false;

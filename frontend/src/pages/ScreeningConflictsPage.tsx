@@ -6,9 +6,9 @@ import { EmptyState } from '../components/common/EmptyState';
 import { ErrorAlert } from '../components/common/ErrorAlert';
 import { LoadingSpinner } from '../components/common/LoadingSpinner';
 import { ScreeningConflict, screeningApi } from '../services/api/screeningApi';
+import { useReviewerIdentity } from '../hooks/useReviewerIdentity';
 
 const PAGE_SIZE = 25;
-const REVIEWER_KEY = 'slr_screening_reviewer_id';
 
 type Stage = 'title_abstract' | 'full_text';
 type ConflictFilter = '' | 'incomplete' | 'agreement' | 'conflict';
@@ -31,15 +31,15 @@ export const ScreeningConflictsPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { reviewerId } = useReviewerIdentity();
 
   const load = useCallback(async (nextOffset = 0) => {
     setLoading(true);
     setError(null);
     try {
-      const viewer = localStorage.getItem(REVIEWER_KEY);
       const [roster, conflicts, nextMetrics] = await Promise.all([
         screeningApi.getReviewerRoster(projectId, stage),
-        screeningApi.getConflicts(projectId, stage, filter || null, nextOffset, PAGE_SIZE, viewer),
+        screeningApi.getConflicts(projectId, stage, filter || null, nextOffset, PAGE_SIZE, reviewerId),
         screeningApi.getConflictMetrics(projectId, stage),
       ]);
       setReviewers(roster.filter((item) => item.is_active).map((item) => item.reviewer_id).join(', '));
@@ -52,7 +52,7 @@ export const ScreeningConflictsPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [filter, projectId, stage]);
+  }, [filter, projectId, reviewerId, stage]);
 
   useEffect(() => {
     void load(0);

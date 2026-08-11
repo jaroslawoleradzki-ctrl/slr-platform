@@ -36,7 +36,7 @@ Release scope:
 
 Next milestone:
 
-Phase 7.8B — Conflict Resolution / Adjudication
+Phase 7.9 — Screening Integration and Release (Not Started)
 
 ---
 
@@ -644,7 +644,7 @@ Zakres:
 - immutable resolution history and stale-resolution detection;
 - future project-level resolved outcome, without automatic majority vote.
 
-Status: ⬜ Planned
+Status: ✅ Completed
 
 ---
 
@@ -658,7 +658,7 @@ Zakres:
 - end-to-end verification and documentation reconciliation
 - release verification
 
-Status: ⬜ Planned
+Status: ➡️ Next / Not Started
 
 ---
 

@@ -26,6 +26,7 @@ from app.domain.duplicate_review import DuplicateDecision, DuplicateGroupReviewD
 from app.domain.full_text_screening import FullTextAvailability
 from app.domain.provenance import ProvenanceEntry
 from app.domain.publication import Publication
+from app.repositories.conflict_resolution_repository import SqliteConflictResolutionRepository
 from app.repositories.duplicate_review_decision_repository import SqliteDuplicateReviewDecisionRepository
 from app.repositories.full_text_availability_repository import SqliteFullTextAvailabilityRepository
 from app.repositories.import_history_repository import SqliteImportHistoryRepository
@@ -88,6 +89,7 @@ def _make_service(db_path: Path) -> SqliteProjectDeletionService:
         search_result_snapshot_repo=SqliteSearchResultSnapshotRepository(db_path),
         full_text_availability_repo=SqliteFullTextAvailabilityRepository(db_path),
         screening_reviewer_assignment_repo=SqliteScreeningReviewerAssignmentRepository(db_path),
+        conflict_resolution_repo=SqliteConflictResolutionRepository(db_path),
         tx_manager=SqliteTransactionManager(db_path),
     )
 
@@ -218,6 +220,7 @@ def test_delete_rolls_back_all_cleanup_on_failure(
         search_strategy_repo=FailingSearchStrategyRepository(db_path),
         search_result_snapshot_repo=snapshots,
         screening_reviewer_assignment_repo=SqliteScreeningReviewerAssignmentRepository(db_path),
+        conflict_resolution_repo=SqliteConflictResolutionRepository(db_path),
         tx_manager=SqliteTransactionManager(db_path),
     )
 
@@ -280,6 +283,7 @@ def test_delete_is_project_scoped_and_accepts_archived_project(
             "screening_decisions",
             "full_text_availability",
             "screening_reviewer_assignments",
+            "screening_conflict_resolutions",
         ):
             assert connection.execute(
                 f"SELECT COUNT(*) FROM {table} WHERE project_id = ?",  # noqa: S608 - fixed table allowlist
@@ -289,6 +293,14 @@ def test_delete_is_project_scoped_and_accepts_archived_project(
                 f"SELECT COUNT(*) FROM {table} WHERE project_id = ?",  # noqa: S608 - fixed table allowlist
                 (other_id,),
             ).fetchone()[0] == 1
+        assert connection.execute(
+            "SELECT COUNT(*) FROM screening_conflict_resolution_decisions WHERE resolution_id = ?",
+            ("resolution-a",),
+        ).fetchone()[0] == 0
+        assert connection.execute(
+            "SELECT COUNT(*) FROM screening_conflict_resolution_decisions WHERE resolution_id = ?",
+            ("resolution-b",),
+        ).fetchone()[0] == 1
 
 
 def _snapshot(project_id: str, source_id: str) -> SearchResultSnapshot:
@@ -348,4 +360,17 @@ def _seed_project_owned_rows(database: Path, project_id: str, suffix: str) -> No
             (decision_id, project_id, publication_id, stage, outcome, reviewer_id, decided_at)
             VALUES (?, ?, ?, 'title_abstract', 'include', 'reviewer', ?)""",
             (f"decision-{suffix}", project_id, str(publication.record_id), now),
+        )
+        connection.execute(
+            """INSERT INTO screening_conflict_resolutions
+            (resolution_id, project_id, publication_id, stage, decision_set_key,
+             resolved_outcome, resolver_id, rationale, resolved_at)
+            VALUES (?, ?, ?, 'title_abstract', ?, 'include', 'resolver', 'resolution rationale', ?)""",
+            (f"resolution-{suffix}", project_id, str(publication.record_id), f"key-{suffix}", now),
+        )
+        connection.execute(
+            """INSERT INTO screening_conflict_resolution_decisions
+            (resolution_id, decision_id, reviewer_id, outcome)
+            VALUES (?, ?, 'reviewer', 'include')""",
+            (f"resolution-{suffix}", f"decision-{suffix}"),
         )
