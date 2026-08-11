@@ -176,8 +176,21 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 }
 
 export const qualityAssessmentApi = {
-  getTools: (): Promise<QualityAssessmentTool[]> => {
-    return request<QualityAssessmentTool[]>('/quality-assessment/tools');
+  getTools: async (): Promise<QualityAssessmentTool[]> => {
+    const tools = await request<QualityAssessmentTool[]>('/quality-assessment/tools');
+    const toolsWithTemplates = await Promise.all(
+      tools.map(async (tool) => {
+        try {
+          const templates = await request<QualityAssessmentTemplate[]>(
+            `/quality-assessment/tools/${tool.tool_id}/templates`
+          );
+          return { ...tool, templates };
+        } catch {
+          return { ...tool, templates: [] };
+        }
+      })
+    );
+    return toolsWithTemplates;
   },
 
   getConfiguration: async (projectId: string): Promise<ProjectQualityAssessmentConfiguration | null> => {

@@ -7,6 +7,7 @@ from uuid import UUID
 from app.domain.quality_assessment import (
     ProjectQualityAssessmentConfiguration,
     QualityAssessmentTemplate,
+    QualityAssessmentTemplateCriterion,
     QualityAssessmentTool,
 )
 from app.repositories.project_repository import ProjectRepository, default_project_repository
@@ -20,6 +21,53 @@ from app.repositories.sqlite_quality_assessment_repository import (
 )
 
 CASP_INSPIRED_TOOL_ID = "casp_inspired"
+LEAN_ENERGY_TEMPLATE_ID = UUID("e2e85001-8501-4b11-9a22-000000000001")
+LEAN_ENERGY_TEMPLATE_KEY = "lean_energy"
+
+LEAN_ENERGY_CRITERIA_SPECS = [
+    (
+        UUID("e2e85001-8501-4b11-9a22-000000000011"),
+        1,
+        "Czy cel lub pytanie badawcze zostały jasno określone?",
+        "YES: Cel lub pytanie badawcze zostały jednoznacznie sformułowane. CANNOT_DETERMINE: Brak jasnego sformułowania. NO: Brak celu lub sprzeczne założenia.",
+    ),
+    (
+        UUID("e2e85001-8501-4b11-9a22-000000000012"),
+        2,
+        "Czy zastosowana metoda badawcza jest adekwatna do celu badania i została wystarczająco opisana?",
+        "YES: Opis metody pozwala zrozumieć przebieg badania i jest właściwy. CANNOT_DETERMINE: Pobieżny opis metody. NO: Nieadekwatna metoda lub brak opisu.",
+    ),
+    (
+        UUID("e2e85001-8501-4b11-9a22-000000000013"),
+        3,
+        "Czy sposób pozyskania oraz analizy danych został opisany w sposób umożliwiający ocenę wiarygodności badania?",
+        "YES: Opisana próba, źródła danych oraz metody analizy. CANNOT_DETERMINE: Niepełny opis danych lub metody. NO: Brak opisu pozyskania/analizy.",
+    ),
+    (
+        UUID("e2e85001-8501-4b11-9a22-000000000014"),
+        4,
+        "Czy zastosowane praktyki, narzędzia lub rozwiązania Lean Management zostały jednoznacznie zidentyfikowane i opisane?",
+        "YES: Wskazano konkretne narzędzia Lean (np. 5S, VSM, TPM, Kaizen, Kanban, JIT). CANNOT_DETERMINE: Ogólne powoływanie się na Lean. NO: Brak identyfikacji praktyk Lean.",
+    ),
+    (
+        UUID("e2e85001-8501-4b11-9a22-000000000015"),
+        5,
+        "Czy sposób pomiaru zużycia energii, efektywności energetycznej lub innych analizowanych efektów energetycznych został jasno określony?",
+        "YES: Wskazano wskaźniki (np. SEC, kWh, emisje) lub sposób pomiaru zużycia energii. CANNOT_DETERMINE: Brak precyzyjnych wskaźników energetycznych. NO: Brak pomiaru efektów energetycznych.",
+    ),
+    (
+        UUID("e2e85001-8501-4b11-9a22-000000000016"),
+        6,
+        "Czy przedstawione dane pozwalają ocenić związek pomiędzy Lean Management a obserwowanym efektem energetycznym?",
+        "YES: Dane empiryczne lub jakościowe pokazują wpływ Lean na energię. CANNOT_DETERMINE: Oba aspekty opisane rozdzielnie bez wykazania związku. NO: Brak powiązania.",
+    ),
+    (
+        UUID("e2e85001-8501-4b11-9a22-000000000017"),
+        7,
+        "Czy wnioski autorów znajdują uzasadnienie w przedstawionych wynikach oraz czy wskazano istotne ograniczenia badania?",
+        "YES: Wnioski wynikają bezpośrednio z wyników i omówiono ograniczenia. CANNOT_DETERMINE: Wnioski wykraczają poza wyniki lub brak ograniczeń. NO: Nieuzasadnione wnioski.",
+    ),
+]
 
 
 class ToolNotFoundError(Exception):
@@ -101,26 +149,77 @@ class DefaultQualityAssessmentConfigurationService:
         self._project_repo = project_repo or default_project_repository()
 
     def seed_built_in_catalog(self) -> None:
-        """Idempotent seed for built-in catalog tools (e.g. casp_inspired).
+        """Idempotent seed for built-in catalog tools (casp_inspired) and production Lean Energy QA v1 template.
 
-        If tool exists with different content, raises SeedCatalogConflictError.
-        Does NOT seed any fake or unverified criteria templates.
+        If tool or template exists with different content, raises SeedCatalogConflictError.
         """
-        existing = self._catalog_repo.get_tool(CASP_INSPIRED_TOOL_ID)
+        existing_tool = self._catalog_repo.get_tool(CASP_INSPIRED_TOOL_ID)
         casp_tool = QualityAssessmentTool(
             tool_id=CASP_INSPIRED_TOOL_ID,
             name="CASP-inspired Quality Assessment",
-            description="Critical Appraisal Skills Programme (CASP) inspired methodological assessment tool.",
+            description="Methodological quality appraisal tools adapted from critical appraisal principles for systematic literature reviews.",
             is_active=True,
         )
-        if existing is None:
+        if existing_tool is None:
             self._catalog_repo.create_tool(casp_tool)
         else:
-            if existing.name != casp_tool.name:
+            if existing_tool.name != casp_tool.name:
                 raise SeedCatalogConflictError(
                     CASP_INSPIRED_TOOL_ID,
-                    f"Existing tool name '{existing.name}' conflicts with seed tool name '{casp_tool.name}'",
+                    f"Existing tool name '{existing_tool.name}' conflicts with seed tool name '{casp_tool.name}'",
                 )
+
+        # Seed production template: Lean Energy Quality Assessment v1
+        lean_energy_criteria = [
+            QualityAssessmentTemplateCriterion(
+                criterion_id=c_id,
+                template_id=LEAN_ENERGY_TEMPLATE_ID,
+                display_order=order,
+                question=q,
+                guidance=g,
+                is_required=True,
+            )
+            for c_id, order, q, g in LEAN_ENERGY_CRITERIA_SPECS
+        ]
+
+        lean_energy_template = QualityAssessmentTemplate(
+            template_id=LEAN_ENERGY_TEMPLATE_ID,
+            tool_id=CASP_INSPIRED_TOOL_ID,
+            template_key=LEAN_ENERGY_TEMPLATE_KEY,
+            name="Lean Energy Quality Assessment",
+            version=1,
+            description="Quality assessment template adapted for the systematic review of Lean Management and energy efficiency in manufacturing enterprises.",
+            is_active=True,
+            criteria=lean_energy_criteria,
+        )
+
+        existing_template = self._catalog_repo.get_template_version_by_key(
+            CASP_INSPIRED_TOOL_ID, LEAN_ENERGY_TEMPLATE_KEY, 1
+        )
+        if existing_template is None:
+            self._catalog_repo.create_template_version(lean_energy_template)
+        else:
+            # Verify immutable content equality
+            if (
+                existing_template.name != lean_energy_template.name
+                or existing_template.description != lean_energy_template.description
+                or len(existing_template.criteria) != len(lean_energy_template.criteria)
+            ):
+                raise SeedCatalogConflictError(
+                    f"{CASP_INSPIRED_TOOL_ID}/{LEAN_ENERGY_TEMPLATE_KEY}/v1",
+                    "Existing template content conflicts with seed template definition",
+                )
+            for e_crit, s_crit in zip(existing_template.criteria, lean_energy_template.criteria, strict=True):
+                if (
+                    e_crit.question != s_crit.question
+                    or e_crit.guidance != s_crit.guidance
+                    or e_crit.display_order != s_crit.display_order
+                    or e_crit.is_required != s_crit.is_required
+                ):
+                    raise SeedCatalogConflictError(
+                        f"{CASP_INSPIRED_TOOL_ID}/{LEAN_ENERGY_TEMPLATE_KEY}/v1",
+                        f"Criterion '{e_crit.criterion_id}' content conflicts with seed criterion definition",
+                    )
 
     def list_tools(self, is_active_only: bool = True) -> list[QualityAssessmentTool]:
         tools = self._catalog_repo.list_tools()

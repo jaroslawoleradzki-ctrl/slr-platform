@@ -74,8 +74,9 @@ def test_list_templates_for_tool_api(api_client):
     response = client.get(f"/quality-assessment/tools/{CASP_INSPIRED_TOOL_ID}/templates")
     assert response.status_code == 200
     data = response.json()
-    assert len(data) == 1
-    assert data[0]["template_id"] == str(tid)
+    assert len(data) >= 1
+    template_ids = [t["template_id"] for t in data]
+    assert str(tid) in template_ids
 
     # Missing tool -> 404
     resp_missing = client.get("/quality-assessment/tools/missing_tool/templates")
