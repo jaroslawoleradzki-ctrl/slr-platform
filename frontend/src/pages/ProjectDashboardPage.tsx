@@ -241,11 +241,26 @@ export const ProjectDashboardPage: React.FC = () => {
               }
               route={`/projects/${pid}/dedup`}
             />
+
+            <StageCard
+              id="stage-card-screening"
+              icon={<Filter size={13} style={{ color: 'var(--accent-primary)' }} />}
+              label="5. Title & Abstract Screening"
+              state={s.screening.state}
+              primary={
+                s.screening.state === 'not_started' ? 'Dostępne'
+                  : s.screening.total !== null && s.screening.total > 0
+                    ? `${s.screening.count ?? 0}/${s.screening.total} oceniono`
+                    : 'Dostępne'
+              }
+              secondary={s.screening.label}
+              route={`/projects/${pid}/screen/title-abstract`}
+            />
           </div>
         </div>
       )}
 
-      {/* Stages 5–8: unavailable, no navigation */}
+      {/* Future stages: unavailable, no navigation */}
       <Card
         title={
           <span style={{ fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', fontWeight: 600 }}>
@@ -255,7 +270,7 @@ export const ProjectDashboardPage: React.FC = () => {
         style={{ gap: '6px' }}
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-          <UnavailableRow icon={<Filter size={13} />}        label="5. Screening" />
+          <UnavailableRow icon={<Filter size={13} />}        label="5b. Full-Text Screening (Phase 7.6)" />
           <UnavailableRow icon={<Award size={13} />}         label="6. Quality Assessment" />
           <UnavailableRow icon={<FileSpreadsheet size={13} />} label="7. Data Extraction" />
           <UnavailableRow icon={<FileCheck2 size={13} />}    label="8. Exports & PRISMA" />

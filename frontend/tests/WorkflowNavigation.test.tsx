@@ -253,12 +253,7 @@ describe('v0.2.2 — WorkflowNavigationStatus Unit & Integration Tests', () => {
 
     vi.spyOn(projectApiService, 'getSearchStrategy').mockResolvedValue(null);
     vi.spyOn(projectApiService, 'getBibliographicImports').mockResolvedValue([]);
-    vi.spyOn(projectApiService, 'getNormalization').mockResolvedValue({
-      status: 'not_started',
-      records_count: 0,
-      execution_id: null,
-      executed_at: null,
-    });
+    vi.spyOn(projectApiService, 'getNormalization').mockResolvedValue(null);
     vi.spyOn(projectApiService, 'getDuplicateGroups').mockImplementation(async (projectId) => {
       if (projectId === 'lean_energy') {
         return new Promise((resolve) => {

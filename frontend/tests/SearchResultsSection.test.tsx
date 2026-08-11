@@ -221,4 +221,72 @@ describe('SearchResultsSection', () => {
     );
     expect(screen.getByText('Lean energy result')).toBeInTheDocument();
   });
+
+  it('supports local page navigation over fetched results and preserves selection state across local page switches', () => {
+    const manyResults = Array.from({ length: 25 }, (_, i) => ({
+      id: `rec-${i + 1}`,
+      title: `Publication ${i + 1}`,
+      authors: [`Author ${i + 1}`],
+      year: 2024,
+      provider: 'openalex' as const,
+      source_id: `W${i + 1}`,
+      doi: null,
+    }));
+
+    const paginatedResult: SearchExecutionResult = {
+      ...result,
+      total_count: 50,
+      returned_count: 25,
+      results: manyResults,
+    };
+
+    const Harness = () => {
+      const [selectedIds, setSelectedIds] = useState<string[]>([]);
+      return (
+        <SearchResultsSection
+          result={paginatedResult}
+          loading={false}
+          selectedIds={selectedIds}
+          onSelectionChange={setSelectedIds}
+        />
+      );
+    };
+
+    render(<Harness />);
+
+    // Page 1 should show 20 records (Publication 1 to Publication 20)
+    expect(screen.getByText('Strona 1 z 2 (rekordy 1–20 z 25)')).toBeInTheDocument();
+    expect(screen.getByText('Publication 1')).toBeInTheDocument();
+    expect(screen.queryByText('Publication 21')).not.toBeInTheDocument();
+
+    // Select Publication 1 on page 1
+    const cb1 = screen.getByLabelText('Wybierz rekord Publication 1');
+    fireEvent.click(cb1);
+    expect(cb1).toBeChecked();
+
+    // Navigate to page 2
+    const nextBtn = screen.getByRole('button', { name: 'Następna strona' });
+    fireEvent.click(nextBtn);
+
+    // Page 2 should show 5 records (Publication 21 to Publication 25)
+    expect(screen.getByText('Strona 2 z 2 (rekordy 21–25 z 25)')).toBeInTheDocument();
+    expect(screen.getByText('Publication 21')).toBeInTheDocument();
+    expect(screen.queryByText('Publication 1')).not.toBeInTheDocument();
+
+    // Select Publication 21 on page 2
+    const cb21 = screen.getByLabelText('Wybierz rekord Publication 21');
+    fireEvent.click(cb21);
+    expect(cb21).toBeChecked();
+
+    // Subtitle must show 2 selected records in total
+    expect(screen.getByText(/Wybrano 2/i)).toBeInTheDocument();
+
+    // Navigate back to page 1
+    const prevBtn = screen.getByRole('button', { name: 'Poprzednia strona' });
+    fireEvent.click(prevBtn);
+
+    // Page 1 should show Publication 1 still checked!
+    expect(screen.getByText('Strona 1 z 2 (rekordy 1–20 z 25)')).toBeInTheDocument();
+    expect(screen.getByLabelText('Wybierz rekord Publication 1')).toBeChecked();
+  });
 });
