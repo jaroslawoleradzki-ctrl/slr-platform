@@ -14,8 +14,8 @@ import {
   ApiError, AssessmentValue, ScreeningOutcome, TitleAbstractOverview, TitleAbstractRecord,
   TitleAbstractStatus, screeningApi,
 } from '../services/api/screeningApi';
+import { useReviewerIdentity } from '../hooks/useReviewerIdentity';
 
-const REVIEWER_KEY = 'slr_screening_reviewer_id';
 const PAGE_SIZE = 50;
 const filters: Array<{ value: TitleAbstractStatus | null; label: string }> = [
   { value: 'unscreened', label: 'Nieocenione' }, { value: null, label: 'Wszystkie' },
@@ -44,7 +44,7 @@ export const TitleAbstractScreeningPage: React.FC = () => {
     : (['unscreened', 'included', 'excluded', 'uncertain'].includes(requestedStatus || '')
       ? requestedStatus as TitleAbstractStatus
       : 'unscreened');
-  const [reviewer, setReviewer] = useState(() => localStorage.getItem(REVIEWER_KEY) || '');
+  const { reviewerId: reviewer, setReviewerId: setReviewer } = useReviewerIdentity();
   const [reviewerDraft, setReviewerDraft] = useState(reviewer);
   const [reviewerModal, setReviewerModal] = useState(!reviewer);
   const [overview, setOverview] = useState<TitleAbstractOverview | null>(null);
@@ -104,7 +104,7 @@ export const TitleAbstractScreeningPage: React.FC = () => {
   const submitReviewer = () => {
     const value = reviewerDraft.trim();
     if (!value) { setError('Identyfikator reviewera nie może być pusty.'); return; }
-    localStorage.setItem(REVIEWER_KEY, value); setReviewer(value); setReviewerModal(false); setError(null); setRecord(null); setDraft(null);
+    setReviewer(value); setReviewerModal(false); setError(null); setRecord(null); setDraft(null);
   };
   const chooseFilter = (value: TitleAbstractStatus | null) => {
     if (!confirmDiscard()) return;

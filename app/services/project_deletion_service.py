@@ -2,6 +2,10 @@ from __future__ import annotations
 
 from typing import Protocol, runtime_checkable
 
+from app.repositories.conflict_resolution_repository import (
+    SqliteConflictResolutionRepository,
+    default_conflict_resolution_repository,
+)
 from app.repositories.duplicate_review_decision_repository import (
     DuplicateReviewDecisionRepository,
     default_duplicate_review_decision_repository,
@@ -61,6 +65,7 @@ class SqliteProjectDeletionService:
         search_result_snapshot_repo: SearchResultSnapshotRepository | None = None,
         full_text_availability_repo: FullTextAvailabilityRepository | None = None,
         screening_reviewer_assignment_repo: SqliteScreeningReviewerAssignmentRepository | None = None,
+        conflict_resolution_repo: SqliteConflictResolutionRepository | None = None,
         tx_manager: SqliteTransactionManager | None = None,
     ) -> None:
         self._project_repo = project_repo or default_project_repository()
@@ -76,6 +81,7 @@ class SqliteProjectDeletionService:
         self._screening_reviewer_assignment_repo = (
             screening_reviewer_assignment_repo or default_screening_reviewer_assignment_repository()
         )
+        self._conflict_resolution_repo = conflict_resolution_repo or default_conflict_resolution_repository()
         self._tx_manager = tx_manager or default_transaction_manager()
 
     def delete_project(self, project_id: str) -> None:
@@ -85,6 +91,7 @@ class SqliteProjectDeletionService:
             self._normalization_repo.delete_for_project(project_id, connection=conn)
             self._publication_repo.delete_for_project(project_id, connection=conn)
             self._duplicate_review_repo.delete_for_project(project_id, connection=conn)
+            self._conflict_resolution_repo.delete_for_project(project_id, connection=conn)
             self._screening_decision_repo.delete_for_project(project_id, connection=conn)
             self._screening_reviewer_assignment_repo.delete_for_project(project_id, connection=conn)
             self._full_text_availability_repo.delete_for_project(project_id, connection=conn)

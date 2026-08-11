@@ -2,6 +2,11 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
+from app.api.dto.conflict_resolution import (
+    ConflictResolutionHistoryResponse,
+    ConflictResolutionRequest,
+    ConflictResolutionResponse,
+)
 from app.api.dto.multi_reviewer_screening import (
     ReviewerAssignmentResponse,
     ReviewerRosterRequest,
@@ -25,8 +30,10 @@ from app.api.dto.screening import (
 from app.api.dto.screening_reporting import (
     ExclusionReasonAggregationResponse,
     MultiReviewerStageMetricsResponse,
+    ProjectOutcomeSummaryResponse,
     ScreeningAuditEventResponse,
     ScreeningAuditPageResponse,
+    ScreeningAuditResolutionEventResponse,
     ScreeningReportResponse,
     ScreeningTransitionResponse,
     StageProgressResponse,
@@ -41,6 +48,11 @@ from app.repositories.screening_criterion_repository import (
 from app.repositories.screening_decision_repository import (
     DecisionNotFoundError,
 )
+from app.services.conflict_resolution_service import (
+    ConflictResolutionPublicationNotFoundError,
+    ConflictResolutionService,
+    ConflictResolutionStaleError,
+)
 from app.services.multi_reviewer_screening_service import (
     MultiReviewerScreeningService,
     ScreeningConflictStatus,
@@ -49,7 +61,7 @@ from app.services.screening_decision_service import (
     CriterionAssessmentInput,
     ScreeningDecisionService,
 )
-from app.services.screening_reporting_service import ScreeningReportingService
+from app.services.screening_reporting_service import AuditResolutionEvent, ScreeningReportingService
 from app.services.title_abstract_screening_service import (
     ScreeningPublicationNotEligibleError,
     ScreeningWorkflowNotReadyError,
@@ -78,6 +90,10 @@ def get_screening_reporting_service() -> ScreeningReportingService:
 
 def get_multi_reviewer_screening_service() -> MultiReviewerScreeningService:
     return MultiReviewerScreeningService()
+
+
+def get_conflict_resolution_service() -> ConflictResolutionService:
+    return ConflictResolutionService()
 
 
 @router.get("/{project_id}/screening/reviewers", response_model=list[ReviewerAssignmentResponse])
@@ -111,6 +127,7 @@ def list_screening_conflicts(
     stage: ScreeningStage = Query(...),
     conflict_status: ScreeningConflictStatus | None = Query(None, alias="status"),
     viewer_reviewer_id: str | None = Query(None),
+    adjudication: bool = Query(False),
     offset: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=100),
     service: MultiReviewerScreeningService = Depends(get_multi_reviewer_screening_service),
@@ -121,6 +138,7 @@ def list_screening_conflicts(
             stage,
             status=conflict_status,
             viewer_reviewer_id=viewer_reviewer_id.strip() if viewer_reviewer_id else None,
+            reveal_decisions=adjudication,
             offset=offset,
             limit=limit,
         )
@@ -146,8 +164,88 @@ def get_screening_conflict_metrics(
             incomplete=metrics.incomplete,
             agreement=metrics.agreement,
             conflict=metrics.conflict,
+            resolved=metrics.resolved,
+            stale_resolution=metrics.stale_resolution,
             agreement_rate=metrics.agreement_rate,
+            resolution_rate=metrics.resolution_rate,
         )
+    except Exception as exc:
+        raise _workflow_error(exc) from exc
+
+
+@router.post(
+    "/{project_id}/screening/conflict-resolutions",
+    response_model=ConflictResolutionResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def record_conflict_resolution(
+    project_id: str,
+    payload: ConflictResolutionRequest,
+    service: ConflictResolutionService = Depends(get_conflict_resolution_service),
+):
+    try:
+        return ConflictResolutionResponse.from_domain(
+            service.resolve(
+                project_id,
+                payload.publication_id,
+                payload.stage,
+                payload.resolved_outcome,
+                payload.resolver_id,
+                payload.rationale,
+                payload.expected_decision_set_key,
+            ),
+            is_current=True,
+        )
+    except ConflictResolutionStaleError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "decision_set_changed",
+                "detail": str(exc),
+                "expected_key": exc.expected_key,
+                "current_key": exc.current_key,
+            },
+        ) from exc
+    except ConflictResolutionPublicationNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except Exception as exc:
+        raise _workflow_error(exc) from exc
+
+
+@router.get(
+    "/{project_id}/screening/conflict-resolutions/{publication_id}/history",
+    response_model=ConflictResolutionHistoryResponse,
+)
+def conflict_resolution_history(
+    project_id: str,
+    publication_id: UUID,
+    stage: ScreeningStage = Query(...),
+    offset: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=100),
+    service: ConflictResolutionService = Depends(get_conflict_resolution_service),
+):
+    try:
+        key, values = service.history(project_id, publication_id, stage)
+        links = service.history_links([item.resolution_id for item in values])
+        page = values[offset : offset + limit]
+        return ConflictResolutionHistoryResponse(
+            publication_id=publication_id,
+            stage=stage,
+            current_decision_set_key=key,
+            total=len(values),
+            offset=offset,
+            limit=limit,
+            resolutions=[
+                ConflictResolutionResponse.from_domain(
+                    item,
+                    is_current=item.decision_set_key == key,
+                    reviewer_outcomes=links.get(item.resolution_id, ()),
+                )
+                for item in page
+            ],
+        )
+    except ConflictResolutionPublicationNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except Exception as exc:
         raise _workflow_error(exc) from exc
 
@@ -163,6 +261,19 @@ def get_screening_report(
         input_set, title_abstract, full_text, transitions, reasons = service.report(project_id, reviewer_id)
         title_metrics = multi_reviewer_service.metrics(project_id, ScreeningStage.TITLE_ABSTRACT)
         full_text_metrics = multi_reviewer_service.metrics(project_id, ScreeningStage.FULL_TEXT)
+
+        def project_summary(stage: ScreeningStage) -> ProjectOutcomeSummaryResponse:
+            records, _ = multi_reviewer_service.conflicts(project_id, stage, limit=100000)
+            values = {"include": 0, "exclude": 0, "uncertain": 0, "pending": 0}
+            for record in records:
+                if record.status is ScreeningConflictStatus.AGREEMENT:
+                    values[record.source_decisions[0].outcome.value] += 1
+                elif record.status is ScreeningConflictStatus.RESOLVED and record.resolution:
+                    values[record.resolution.resolved_outcome.value] += 1
+                else:
+                    values["pending"] += 1
+            return ProjectOutcomeSummaryResponse(stage=stage.value, total=len(records), **values)
+
         return ScreeningReportResponse(
             project_id=project_id,
             reviewer_id=reviewer_id.strip(),
@@ -178,7 +289,10 @@ def get_screening_report(
                 incomplete=title_metrics.incomplete,
                 agreement=title_metrics.agreement,
                 conflict=title_metrics.conflict,
+                resolved=title_metrics.resolved,
+                stale_resolution=title_metrics.stale_resolution,
                 agreement_rate=title_metrics.agreement_rate,
+                resolution_rate=title_metrics.resolution_rate,
             )
             if input_set.ready
             else None,
@@ -186,10 +300,15 @@ def get_screening_report(
                 incomplete=full_text_metrics.incomplete,
                 agreement=full_text_metrics.agreement,
                 conflict=full_text_metrics.conflict,
+                resolved=full_text_metrics.resolved,
+                stale_resolution=full_text_metrics.stale_resolution,
                 agreement_rate=full_text_metrics.agreement_rate,
+                resolution_rate=full_text_metrics.resolution_rate,
             )
             if input_set.ready
             else None,
+            title_abstract_project_outcomes=project_summary(ScreeningStage.TITLE_ABSTRACT) if input_set.ready else None,
+            full_text_project_outcomes=project_summary(ScreeningStage.FULL_TEXT) if input_set.ready else None,
         )
     except Exception as exc:
         raise _workflow_error(exc) from exc
@@ -220,7 +339,12 @@ def get_screening_audit(
             total=total,
             offset=offset,
             limit=limit,
-            items=[ScreeningAuditEventResponse.from_domain(item) for item in items],
+            items=[
+                ScreeningAuditResolutionEventResponse.from_domain(item)
+                if isinstance(item, AuditResolutionEvent)
+                else ScreeningAuditEventResponse.from_domain(item)
+                for item in items
+            ],
         )
     except Exception as exc:
         raise _workflow_error(exc) from exc

@@ -27,4 +27,41 @@ describe('Screening audit page', () => {
     expect(screen.getByText('1 / 2 ocenionych')).toBeInTheDocument();
     expect(screen.getByText('Brak historii')).toBeInTheDocument();
   });
+
+  it('renders decision and resolution event variants in one timeline', async () => {
+    vi.mocked(screeningApi.getAudit).mockResolvedValueOnce({
+      total: 2, offset: 0, limit: 25,
+      items: [
+        {
+          event_type: 'RESOLUTION', resolution_id: 'resolution-1', publication_id: 'paper-1',
+          publication_title: 'Unified paper', stage: 'title_abstract', resolver_id: 'adjudicator',
+          resolved_outcome: 'include', rationale: 'Resolution rationale',
+          resolved_at: '2026-08-11T12:00:00Z', decision_set_key: 'key', is_current: false,
+          status: 'STALE', reviewer_outcomes: [
+            { decision_id: 'decision-1', reviewer_id: 'alice', outcome: 'include' },
+            { decision_id: 'decision-2', reviewer_id: 'bob', outcome: 'exclude' },
+          ],
+        },
+        {
+          event_type: 'DECISION', publication_title: 'Unified paper', revision_index: 1,
+          previous_outcome: null, is_latest_for_reviewer: true,
+          decision: {
+            decision_id: 'decision-1', project_id: 'project-a', publication_id: 'paper-1',
+            stage: 'title_abstract', outcome: 'include', reviewer_id: 'alice',
+            rationale: 'Decision rationale', criterion_snapshot_schema_version: 2,
+            criterion_assessments: [], exclusion_reason_criterion_ids: [],
+            decided_at: '2026-08-11T11:00:00Z',
+          },
+        },
+      ],
+    });
+    render(<MemoryRouter initialEntries={['/projects/project-a/screen/audit']}><Routes>
+      <Route path="/projects/:projectId/screen/audit" element={<ScreeningAuditPage />} />
+    </Routes></MemoryRouter>);
+    expect(await screen.findByText(/Resolution: Włącz/)).toBeInTheDocument();
+    expect(screen.getByText('Resolver: adjudicator · stale')).toBeInTheDocument();
+    expect(screen.getByText('Uzasadnienie resolution: Resolution rationale')).toBeInTheDocument();
+    expect(screen.getByText('Reviewer outcomes: alice: include, bob: exclude')).toBeInTheDocument();
+    expect(screen.getByText('Uzasadnienie: Decision rationale')).toBeInTheDocument();
+  });
 });

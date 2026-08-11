@@ -11,8 +11,8 @@ import {
   ScreeningStageProgress,
   screeningApi,
 } from '../services/api/screeningApi';
+import { useReviewerIdentity } from '../hooks/useReviewerIdentity';
 
-const REVIEWER_KEY = 'slr_screening_reviewer_id';
 const PAGE_SIZE = 25;
 
 const stageLabel: Record<string, string> = {
@@ -42,7 +42,7 @@ const StageCard: React.FC<{
 
 export const ScreeningAuditPage: React.FC = () => {
   const { projectId = '' } = useParams<{ projectId: string }>();
-  const [reviewer, setReviewer] = useState(() => localStorage.getItem(REVIEWER_KEY) || '');
+  const { reviewerId: reviewer, setReviewerId: setReviewer } = useReviewerIdentity();
   const [reviewerDraft, setReviewerDraft] = useState(reviewer);
   const [editingReviewer, setEditingReviewer] = useState(!reviewer);
   const [report, setReport] = useState<ScreeningReport | null>(null);
@@ -75,7 +75,6 @@ export const ScreeningAuditPage: React.FC = () => {
   const saveReviewer = () => {
     const value = reviewerDraft.trim();
     if (!value) return;
-    localStorage.setItem(REVIEWER_KEY, value);
     setReviewer(value);
     setEditingReviewer(false);
     setOffset(0);
@@ -155,7 +154,16 @@ export const ScreeningAuditPage: React.FC = () => {
             <option value="uncertain">Niepewne</option>
           </select></label>
         </div>
-        {audit.items.length ? <ul>{audit.items.map((item) => (
+        {audit.items.length ? <ul>{audit.items.map((item) => item.event_type === 'RESOLUTION' ? (
+          <li key={item.resolution_id} style={{ marginBottom: 12 }}>
+            <strong>{item.publication_title || item.publication_id}</strong>
+            {' · '}{stageLabel[item.stage]} · Resolution: {outcomeLabel[item.resolved_outcome]}
+            {' · '}{new Date(item.resolved_at).toLocaleString()}
+            <div>Resolver: {item.resolver_id} · {item.status === 'CURRENT' ? 'current' : 'stale'}</div>
+            <div>Uzasadnienie resolution: {item.rationale}</div>
+            <div>Reviewer outcomes: {item.reviewer_outcomes.map((value) => `${value.reviewer_id}: ${value.outcome}`).join(', ')}</div>
+          </li>
+        ) : (
           <li key={item.decision.decision_id} style={{ marginBottom: 12 }}>
             <strong>{item.publication_title || item.decision.publication_id}</strong>
             {' · '}{stageLabel[item.decision.stage]} · {outcomeLabel[item.decision.outcome]}

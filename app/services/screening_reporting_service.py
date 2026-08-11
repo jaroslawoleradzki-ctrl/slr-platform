@@ -5,12 +5,14 @@ import json
 from dataclasses import dataclass
 from uuid import UUID
 
+from app.domain.conflict_resolution import ConflictResolution, ResolvedOutcome
 from app.domain.screening import (
     CriterionAssessment,
     ScreeningDecision,
     ScreeningOutcome,
     ScreeningStage,
 )
+from app.repositories.conflict_resolution_repository import SqliteConflictResolutionRepository
 from app.repositories.project_publication_repository import (
     ProjectPublicationRepository,
     default_project_publication_repository,
@@ -18,6 +20,9 @@ from app.repositories.project_publication_repository import (
 from app.repositories.screening_reporting_repository import (
     ScreeningReportingRepository,
     default_screening_reporting_repository,
+)
+from app.repositories.screening_reviewer_assignment_repository import (
+    SqliteScreeningReviewerAssignmentRepository,
 )
 from app.services.screening_input_service import ScreeningInput, ScreeningInputService
 
@@ -61,16 +66,26 @@ class AuditEvent:
     is_latest_for_reviewer: bool
 
 
+@dataclass(frozen=True, slots=True)
+class AuditResolutionEvent:
+    resolution: ConflictResolution
+    publication_title: str | None
+    is_current: bool
+    reviewer_outcomes: tuple[tuple[UUID, str, ResolvedOutcome], ...]
+
+
 class ScreeningReportingService:
     def __init__(
         self,
         input_service: ScreeningInputService | None = None,
         reporting_repository: ScreeningReportingRepository | None = None,
         publication_repository: ProjectPublicationRepository | None = None,
+        resolution_repository: SqliteConflictResolutionRepository | None = None,
     ) -> None:
         self._input = input_service or ScreeningInputService()
         self._reporting = reporting_repository or default_screening_reporting_repository()
         self._publications = publication_repository or default_project_publication_repository()
+        self._resolutions = resolution_repository or SqliteConflictResolutionRepository(self._reporting._database_path)
 
     @staticmethod
     def _reviewer(reviewer_id: str) -> str:
@@ -196,20 +211,22 @@ class ScreeningReportingService:
         outcome: ScreeningOutcome | None = None,
         offset: int = 0,
         limit: int = 50,
-    ) -> tuple[list[AuditEvent], int]:
+    ) -> tuple[list[AuditEvent | AuditResolutionEvent], int]:
         if reviewer_id is not None:
             reviewer_id = self._reviewer(reviewer_id)
-        rows, total = self._reporting.audit_page(
+        # Decisions and resolutions are loaded in batches, merged chronologically,
+        # and only then paginated as one audit timeline.
+        rows, _ = self._reporting.audit_page(
             project_id,
             reviewer_id=reviewer_id,
             publication_id=publication_id,
             stage=stage,
             outcome=outcome,
-            offset=offset,
-            limit=limit,
+            offset=0,
+            limit=1_000_000,
         )
         titles = {item.record_id: item.title for item in self._publications.get_publications(project_id)}
-        return [
+        events: list[AuditEvent | AuditResolutionEvent] = [
             AuditEvent(
                 decision=row.decision,
                 publication_title=titles.get(row.decision.publication_id),
@@ -218,4 +235,53 @@ class ScreeningReportingService:
                 is_latest_for_reviewer=row.is_latest_for_reviewer,
             )
             for row in rows
-        ], total
+        ]
+        resolutions = self._resolutions.audit_events(project_id, stage)
+        if publication_id is not None:
+            resolutions = [item for item in resolutions if item.publication_id == publication_id]
+        # Reviewer filtering remains decision-specific; project resolution events
+        # stay visible in the unified trail. Outcome filtering applies to both types.
+        if outcome is not None:
+            resolutions = [
+                item for item in resolutions if item.resolved_outcome.value == outcome.value
+            ]
+
+        from app.services.multi_reviewer_screening_service import MultiReviewerScreeningService
+
+        multi = MultiReviewerScreeningService(
+            assignments=SqliteScreeningReviewerAssignmentRepository(self._reporting._database_path),
+            reporting=self._reporting,
+            input_service=self._input,
+            resolutions=self._resolutions,
+        )
+        stages = [stage] if stage else [ScreeningStage.TITLE_ABSTRACT, ScreeningStage.FULL_TEXT]
+        current_ids: set[UUID] = set()
+        for current_stage in stages:
+            records, _ = multi.conflicts(project_id, current_stage, limit=1_000_000)
+            current_ids.update(
+                record.resolution.resolution_id
+                for record in records
+                if record.resolution is not None and record.status.value == "resolved"
+            )
+        links = self._resolutions.links_batch([item.resolution_id for item in resolutions])
+        events.extend(
+            AuditResolutionEvent(
+                item,
+                titles.get(item.publication_id),
+                item.resolution_id in current_ids,
+                links.get(item.resolution_id, ()),
+            )
+            for item in resolutions
+        )
+        events.sort(
+            key=lambda value: (
+                value.resolution.resolved_at if isinstance(value, AuditResolutionEvent) else value.decision.decided_at,
+                str(
+                    value.resolution.resolution_id
+                    if isinstance(value, AuditResolutionEvent)
+                    else value.decision.decision_id
+                ),
+            ),
+            reverse=True,
+        )
+        return events[offset : offset + limit], len(events)

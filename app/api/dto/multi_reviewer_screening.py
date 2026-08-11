@@ -4,6 +4,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.api.dto.conflict_resolution import ConflictResolutionResponse
+from app.api.dto.screening import ScreeningDecisionResponse
 from app.domain.screening import ScreeningOutcome, ScreeningStage
 from app.repositories.screening_reviewer_assignment_repository import ScreeningReviewerAssignment
 from app.services.multi_reviewer_screening_service import ScreeningConflictRecord, ScreeningConflictStatus
@@ -32,6 +34,7 @@ class ReviewerLatestDecisionResponse(BaseModel):
     outcome: ScreeningOutcome
     decision_id: UUID
     decided_at: str
+    decision: ScreeningDecisionResponse | None = None
 
 
 class ScreeningConflictResponse(BaseModel):
@@ -43,6 +46,8 @@ class ScreeningConflictResponse(BaseModel):
     expected_reviewers: list[str]
     pending_reviewers: list[str]
     latest_decisions: list[ReviewerLatestDecisionResponse]
+    current_decision_set_key: str
+    resolution: ConflictResolutionResponse | None = None
 
     @classmethod
     def from_domain(cls, value: ScreeningConflictRecord):
@@ -60,9 +65,18 @@ class ScreeningConflictResponse(BaseModel):
                     outcome=item.outcome,
                     decision_id=item.decision_id,
                     decided_at=item.decided_at,
+                    decision=ScreeningDecisionResponse.from_domain(next(
+                        decision for decision in value.source_decisions if decision.decision_id == item.decision_id
+                    )) if value.source_decisions else None,
                 )
                 for item in value.latest_decisions
             ],
+            current_decision_set_key=value.current_decision_set_key,
+            resolution=ConflictResolutionResponse.from_domain(
+                value.resolution, is_current=value.status is ScreeningConflictStatus.RESOLVED
+            )
+            if value.resolution
+            else None,
         )
 
 
@@ -77,4 +91,7 @@ class ScreeningConflictMetricsResponse(BaseModel):
     incomplete: int
     agreement: int
     conflict: int
+    resolved: int
+    stale_resolution: int
     agreement_rate: float | None
+    resolution_rate: float | None
