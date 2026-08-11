@@ -10,7 +10,7 @@ Unlike ROADMAP.md, this file is intentionally technical and may change frequentl
 
 Current release:
 
-v0.3.5 — Multi-Reviewer Screening and Conflict Detection
+v0.3.6 — Conflict Resolution and Adjudication
 
 Status:
 
@@ -31,6 +31,9 @@ Release scope:
   structured exclusion reasons, and append-only decisions;
 - Screening audit/report read models with criterion snapshot schema v2,
   reviewer-specific progress, transitions, and exclusion-reason aggregation;
+- Multi-reviewer conflict resolution with append-only resolution history,
+  stale/current semantics, unified audit events, project-level outcome read
+  model, and optimistic concurrency;
 - Dashboard/Search polish: corrected search import contract, provider Load More,
   append-only result pagination, local pagination, and cross-page selection.
 

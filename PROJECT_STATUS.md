@@ -14,7 +14,7 @@ development
 
 Current version:
 
-v0.3.5
+v0.3.6
 
 Current release status:
 
@@ -23,8 +23,8 @@ Completed
 Current development phase:
 
 Phase 7 — Screening remains in progress. Title & Abstract and Full-Text
-Screening (7.5A–7.8A), Project Management, and Dashboard/Search polish are
-completed; the next planned increment is 7.8B — Conflict Resolution / Adjudication.
+Screening (7.5A–7.8B), Project Management, and Dashboard/Search polish are
+completed; the next planned increment is 7.9 — Screening Integration and Release.
 
 Phase 6.7 & Phase 6.8 Workflow State:
 - **Phase 6.7 (Modules 1–4 Functional Workflow)**: ✅ Completed (6.7.1, 6.7.2a, 6.7.2b).
@@ -46,8 +46,8 @@ Screening prerequisites resolved in v0.3.3:
   pending duplicate groups and merge conflicts explicitly block readiness.
 
 State of Phase 7 — Screening:
-- v0.3.5 is completed.
-- Phase 7 — Screening is in progress; 7.1–7.8A are completed and 7.8B is next.
+- v0.3.6 is completed.
+- Phase 7 — Screening is in progress; 7.1–7.8B are completed and 7.9 is next.
 - Phase 7.1 — Screening Criteria Domain Model is ✅ Completed (`ScreeningCriterion`, `ScreeningCriterionType`, `ScreeningCriterionStage`, validation, unit tests).
 - Phase 7.2 — Screening Criteria Persistence and API is ✅ Completed (SQLite schema `0007_screening_criteria.sql`, repository, project isolation, REST API, DTOs, tests).
 - Phase 7.3 — Screening Configuration GUI is ✅ Completed (ScreeningCriteriaList, ScreeningCriterionCard, ScreeningCriterionModal, projectApiService adapter, validation, 22 frontend tests).
@@ -63,7 +63,16 @@ State of Phase 7 — Screening:
 - Phase 7.8A — Multi-Reviewer Screening and Conflict Detection is ✅ Completed
   (project/stage reviewer roster, conflict derivation, conflict queue,
   agreement metrics, pending-reviewer visibility, and blind-aware display).
-- Next: Phase 7.8B — Conflict Resolution / Adjudication.
+- Phase 7.8B — Conflict Resolution / Adjudication is ✅ Completed (explicit
+  resolver workflow, append-only resolution history, stale/current semantics,
+  unified audit events, project-level outcome read model, and optimistic
+  concurrency).
+- Next: Phase 7.9 — Screening Integration and Release.
+
+Completed in v0.3.6:
+- Conflict resolution and adjudication with explicit resolver identity and
+  rationale, append-only history, stale-resolution handling, unified audit
+  events, project-level outcome reporting, and resolution workspace.
 
 Completed in v0.3.5:
 - Multi-reviewer screening and conflict detection with roster lifecycle,
