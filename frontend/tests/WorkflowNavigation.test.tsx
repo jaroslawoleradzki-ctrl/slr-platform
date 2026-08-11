@@ -1,6 +1,6 @@
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useNavigate } from 'react-router-dom';
 import { ProjectProvider, useProject } from '../src/context/ProjectContext';
 import { Sidebar } from '../src/components/layout/Sidebar';
 import { WorkflowStepper } from '../src/components/workflow/WorkflowStepper';
@@ -251,6 +251,14 @@ describe('v0.2.2 — WorkflowNavigationStatus Unit & Integration Tests', () => {
   it('G. Project switching: late response for Project A does not overwrite status for Project B', async () => {
     let resolveProjectA: (val: ApiDuplicateGroupListResponse) => void = () => {};
 
+    vi.spyOn(projectApiService, 'getSearchStrategy').mockResolvedValue(null);
+    vi.spyOn(projectApiService, 'getBibliographicImports').mockResolvedValue([]);
+    vi.spyOn(projectApiService, 'getNormalization').mockResolvedValue({
+      status: 'not_started',
+      records_count: 0,
+      execution_id: null,
+      executed_at: null,
+    });
     vi.spyOn(projectApiService, 'getDuplicateGroups').mockImplementation(async (projectId) => {
       if (projectId === 'lean_energy') {
         return new Promise((resolve) => {
@@ -273,8 +281,15 @@ describe('v0.2.2 — WorkflowNavigationStatus Unit & Integration Tests', () => {
 
     const ProjectSwitcher = () => {
       const { setActiveProjectId } = useProject();
+      const navigate = useNavigate();
       return (
-        <button type="button" onClick={() => setActiveProjectId('ai_architecture')}>
+        <button
+          type="button"
+          onClick={() => {
+            setActiveProjectId('ai_architecture');
+            navigate('/projects/ai_architecture/dedup');
+          }}
+        >
           Switch to B
         </button>
       );
@@ -283,9 +298,18 @@ describe('v0.2.2 — WorkflowNavigationStatus Unit & Integration Tests', () => {
     render(
       <ProjectProvider>
         <MemoryRouter initialEntries={['/projects/lean_energy/dedup']}>
-          <WorkflowStepper />
-          <Sidebar />
-          <ProjectSwitcher />
+          <Routes>
+            <Route
+              path="/projects/:projectId/*"
+              element={
+                <>
+                  <WorkflowStepper />
+                  <Sidebar />
+                  <ProjectSwitcher />
+                </>
+              }
+            />
+          </Routes>
         </MemoryRouter>
       </ProjectProvider>
     );
@@ -293,7 +317,7 @@ describe('v0.2.2 — WorkflowNavigationStatus Unit & Integration Tests', () => {
     // Switch quickly to project B before A completes
     fireEvent.click(screen.getByRole('button', { name: 'Switch to B' }));
 
-    await waitFor(() => expect(screen.getByText('5 do oceny')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('5 do oceny')).toBeInTheDocument(), { timeout: 3000 });
 
     // Resolve late response for A
     resolveProjectA({

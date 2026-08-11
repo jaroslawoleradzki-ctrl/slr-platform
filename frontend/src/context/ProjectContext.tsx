@@ -461,13 +461,20 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
     );
     if (selectedRecords.length === 0) return null;
 
-    const metadata = {
+    const singleProvider =
+      selectedRecords.length > 0 &&
+      selectedRecords.every((rec) => rec.provider === selectedRecords[0].provider)
+        ? selectedRecords[0].provider
+        : undefined;
+
+    const metadata: SearchResultsImportMetadata = {
       query: lastExecutedSearchStrategy
         ? lastExecutedSearchStrategy.conceptGroups
             .map((g) => `(${g.terms.join(' OR ')})`)
             .join(' AND ')
         : undefined,
-      providers: lastExecutedSearchStrategy ? lastExecutedSearchStrategy.providers : undefined,
+      provider: singleProvider,
+      total_available: searchExecutionResult ? searchExecutionResult.total_count : undefined,
     };
 
     const importResult = await projectApiService.importSearchResults(targetProjectId, selectedRecords, metadata);
