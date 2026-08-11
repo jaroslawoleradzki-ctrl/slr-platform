@@ -159,6 +159,15 @@ groups remain separate, and pending groups or merge conflicts block readiness.
 Full durable `SearchRun` history remains a separate Phase 6.8.5 concern; it does
 not block Title & Abstract Screening.
 
+### Version 0.3.4 — Screening Audit Trail and Progress ✅
+
+- **Phase 7.7 — Screening Audit Trail and Progress** ✅ — Unified,
+  project-scoped decision audit history; reviewer-specific progress and
+  pipeline transitions; Full-Text exclusion-reason aggregation; criterion
+  snapshot schema v2; and paginated audit/report APIs with screening summary
+  and history UI.
+- **Next increment: 7.8 — Multi-Reviewer Screening and Conflict Detection** ➡️
+
 ### Version 0.3.3 — Full-Text Screening and Dashboard/Search Polish ✅
 
 - **Phase 7.6 — Full-Text Screening** ✅ — Reviewer-specific eligibility,
@@ -167,7 +176,7 @@ not block Title & Abstract Screening.
 - **Dashboard and Search Polish** ✅ — Corrected Search → Import contract,
   provider pagination with append semantics, local pagination of loaded results,
   and selection preserved across local pages.
-- **Next increment: 7.8 — Multi-Reviewer Screening and Conflict Detection** ➡️
+- **Phase 7.7 was delivered in v0.3.4.**
 
 ### Version 0.3.1 — Project Management and Title & Abstract Screening ✅
 

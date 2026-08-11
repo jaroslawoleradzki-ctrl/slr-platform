@@ -10,7 +10,7 @@ Unlike ROADMAP.md, this file is intentionally technical and may change frequentl
 
 Current release:
 
-v0.3.3 — Project Management, Screening, and Dashboard/Search Polish
+v0.3.4 — Screening Audit Trail and Progress
 
 Status:
 
