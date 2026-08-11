@@ -124,6 +124,7 @@ export const SearchStrategyPage: React.FC = () => {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [executionError, setExecutionError] = useState<string | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
 
   useEffect(() => {
@@ -159,6 +160,7 @@ export const SearchStrategyPage: React.FC = () => {
     setSaved(false);
     setSaveError(null);
     setExecutionError(null);
+    setImportError(null);
   };
 
   const saveStrategy = async (): Promise<boolean> => {
@@ -166,6 +168,8 @@ export const SearchStrategyPage: React.FC = () => {
     const errors = validate(strategy);
     setValidationErrors(errors);
     setSaveError(null);
+    setExecutionError(null);
+    setImportError(null);
     if (errors.length > 0) return false;
 
     const expression = expressionFromStrategy(strategy);
@@ -206,6 +210,7 @@ export const SearchStrategyPage: React.FC = () => {
 
   const handleSearch = async () => {
     setExecutionError(null);
+    setImportError(null);
     const saveSuccess = await saveStrategy();
     if (!saveSuccess || !strategy) return;
 
@@ -365,7 +370,13 @@ export const SearchStrategyPage: React.FC = () => {
       )}
       {saveError && <ErrorAlert title="Nie udało się zapisać strategii" message={saveError} />}
       {executionError && <ErrorAlert title="Nie udało się wykonać wyszukiwania" message={executionError} />}
-      {saved && !saveError && !executionError && (
+      {importError && (
+        <ErrorAlert
+          title="Wyszukiwanie zakończone, ale nie udało się zaimportować wyników"
+          message={importError}
+        />
+      )}
+      {saved && !saveError && !executionError && !importError && (
         <div
           role="status"
           style={{
@@ -478,11 +489,11 @@ export const SearchStrategyPage: React.FC = () => {
         onLoadMore={() => void loadMoreSearchResults()}
         onImport={async () => {
           setImporting(true);
-          setExecutionError(null);
+          setImportError(null);
           try {
             await importSelectedSearchResults();
           } catch (error) {
-            setExecutionError(error instanceof Error ? error.message : 'Nie udało się zaimportować rekordów.');
+            setImportError(error instanceof Error ? error.message : 'Nie udało się zaimportować rekordów.');
           } finally {
             setImporting(false);
           }

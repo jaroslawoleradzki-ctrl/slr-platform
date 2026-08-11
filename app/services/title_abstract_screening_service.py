@@ -266,8 +266,10 @@ class TitleAbstractScreeningService:
         reviewer = self._reviewer_id(reviewer_id)
         screening_input = self._input.get_input_set(project_id)
         self._require_ready(screening_input)
-        eligible_ids = {item.record_id for item in screening_input.publications}
-        if publication_id not in eligible_ids:
+        publication = next(
+            (item for item in screening_input.publications if item.record_id == publication_id), None
+        )
+        if publication is None:
             raise ScreeningPublicationNotEligibleError(str(publication_id))
         return self._decision_service.record_decision(
             project_id=project_id,
@@ -277,4 +279,5 @@ class TitleAbstractScreeningService:
             reviewer_id=reviewer,
             rationale=rationale,
             assessment_inputs=assessment_inputs,
+            canonical_publication=publication,
         )

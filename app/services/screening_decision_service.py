@@ -2,6 +2,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
+from app.domain.publication import Publication
 from app.domain.screening import (
     CriterionAssessment,
     CriterionAssessmentValue,
@@ -93,6 +94,8 @@ class ScreeningDecisionService:
         reviewer_id: str,
         rationale: str | None = None,
         assessment_inputs: list[CriterionAssessmentInput] | None = None,
+        exclusion_reason_criterion_ids: list[UUID] | None = None,
+        canonical_publication: Publication | None = None,
     ) -> ScreeningDecision:
         """Record a new screening decision after validating publication, criteria, stage, and required inputs."""
         stripped_project_id = project_id.strip()
@@ -114,6 +117,9 @@ class ScreeningDecisionService:
             raise ValueError(
                 f"Publication '{publication_id}' not found in project '{stripped_project_id}'."
             )
+        if canonical_publication is not None and canonical_publication.record_id != publication_id:
+            raise ValueError("canonical_publication record_id must match publication_id")
+        publication_for_evaluation = canonical_publication or publication
 
         # 2. Fetch project criteria
         project_criteria = self.criterion_repo.list_by_project(
@@ -189,7 +195,7 @@ class ScreeningDecisionService:
                 or not self._applies_to_stage(criterion.screening_stage, stage)
             ):
                 continue
-            evaluation = self._rule_evaluator.evaluate(criterion, publication)
+            evaluation = self._rule_evaluator.evaluate(criterion, publication_for_evaluation)
             assessments.append(
                 CriterionAssessment(
                     criterion_id=criterion.criterion_id,
@@ -205,6 +211,10 @@ class ScreeningDecisionService:
             )
 
         # 5. Validate required criteria completeness for stage
+        # Persisted assessment snapshots are ordered by criterion_id.  Apply the
+        # same deterministic order before saving so an in-memory decision and a
+        # reopened decision have identical immutable representation.
+        assessments.sort(key=lambda assessment: str(assessment.criterion_id))
         assessed_map = {a.criterion_id: a for a in assessments}
         for criterion in project_criteria:
             if not criterion.is_active or not criterion.is_required:
@@ -230,6 +240,7 @@ class ScreeningDecisionService:
             reviewer_id=stripped_reviewer_id,
             rationale=rationale,
             criterion_assessments=assessments,
+            exclusion_reason_criterion_ids=exclusion_reason_criterion_ids or [],
         )
 
         return self.decision_repo.save(decision)

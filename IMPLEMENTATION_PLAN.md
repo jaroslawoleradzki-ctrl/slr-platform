@@ -10,7 +10,7 @@ Unlike ROADMAP.md, this file is intentionally technical and may change frequentl
 
 Current release:
 
-v0.3.1 — Project Management and Title & Abstract Screening
+v0.3.3 — Project Management, Screening, and Dashboard/Search Polish
 
 Status:
 
@@ -27,10 +27,12 @@ Release scope:
 - executable Title & Abstract Screening GUI;
 - manual and metadata-rule screening criteria with server-authoritative
   automatic assessments and auditable rule/value/result snapshots.
+- Dashboard/Search polish: corrected search import contract, provider Load More,
+  append-only result pagination, local pagination, and cross-page selection.
 
 Next milestone:
 
-Phase 7.6 — Full-Text Screening
+Phase 7.7 — Screening Audit Trail and Progress
 
 ---
 
@@ -597,7 +599,7 @@ Zakres:
 - GUI and backend integration
 (Brak wymagania przechowywania chronionych plików PDF w aplikacji)
 
-Status: ⬜ Planned
+Status: ✅ Completed
 
 ---
 

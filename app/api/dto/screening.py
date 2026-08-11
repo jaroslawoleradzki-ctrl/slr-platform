@@ -189,6 +189,7 @@ class ScreeningDecisionResponse(BaseModel):
     reviewer_id: str = Field(description="Reviewer identifier.")
     rationale: str | None = Field(description="Decision rationale.")
     criterion_assessments: list[CriterionAssessmentResponse] = Field(description="Criterion assessments snapshot.")
+    exclusion_reason_criterion_ids: list[UUID] = Field(default_factory=list)
     decided_at: datetime = Field(description="Timezone-aware decision timestamp.")
 
     @classmethod
@@ -202,6 +203,7 @@ class ScreeningDecisionResponse(BaseModel):
             reviewer_id=decision.reviewer_id,
             rationale=decision.rationale,
             criterion_assessments=[CriterionAssessmentResponse.from_domain(a) for a in decision.criterion_assessments],
+            exclusion_reason_criterion_ids=decision.exclusion_reason_criterion_ids,
             decided_at=decision.decided_at,
         )
 

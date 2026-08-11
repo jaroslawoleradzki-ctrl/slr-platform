@@ -102,19 +102,30 @@ export function deriveNextAction(status: WorkflowNavigationStatus): NextAction |
     };
   }
 
-  // All four implemented stages completed
+  // Stage 5: Title & Abstract Screening (if stages 1–4 are complete)
   if (
     status.search.state === 'completed' &&
     (status.sources.state === 'completed' || status.sources.state === 'warning') &&
     (status.normalization.state === 'completed' || status.normalization.state === 'warning') &&
     status.deduplication.state === 'completed'
   ) {
+    if (status.screening.state !== 'completed') {
+      return {
+        title: 'Przejdź do Screeningu Title & Abstract',
+        description:
+          'Deduplikacja została ukończona. Przeprowadź wstępną kwalifikację tytułów i abstraktów (Title & Abstract Screening).',
+        targetStageId: 'screen/title-abstract',
+        actionLabel: 'Przejdź do Screeningu',
+        severity: 'normal',
+      };
+    }
+
     return {
-      title: 'Etapy 1–4 ukończone',
+      title: 'Screening Title & Abstract Ukończony',
       description:
-        'Strategia, importy, normalizacja i deduplikacja są ukończone. Etapy screeningu i oceny jakości będą dostępne w kolejnych wersjach.',
-      targetStageId: 'dedup',
-      actionLabel: 'Podsumowanie Deduplikacji',
+        'Ocena tytułów i abstraktów została ukończona. Przejdź do Full-Text Screening dla publikacji eligible.',
+      targetStageId: 'screen/full-text',
+      actionLabel: 'Przejdź do Full-Text Screening',
       severity: 'normal',
     };
   }

@@ -28,6 +28,16 @@ export const SearchResultsSection: React.FC<Props> = ({
   paginationError = null,
   onLoadMore,
 }) => {
+  const [currentPage, setCurrentPage] = React.useState(1);
+  const pageSize = 20;
+
+  const totalLoaded = result ? result.results.length : 0;
+  const totalLocalPages = Math.max(1, Math.ceil(totalLoaded / pageSize));
+
+  React.useEffect(() => {
+    setCurrentPage((prev) => Math.min(Math.max(1, prev), totalLocalPages));
+  }, [totalLoaded, totalLocalPages]);
+
   if (loading) {
     return (
       <Card title="Wyniki wyszukiwania">
@@ -42,7 +52,29 @@ export const SearchResultsSection: React.FC<Props> = ({
       </Card>
     );
   }
-  const allSelected = result.results.every((record) => selectedIds.includes(record.id));
+
+  const startIndex = (currentPage - 1) * pageSize;
+  const visibleRecords = result.results.slice(startIndex, startIndex + pageSize);
+  const allSelectedOnPage = visibleRecords.length > 0 && visibleRecords.every((record) => selectedIds.includes(record.id));
+  const allSelectedInTotal = result.results.length > 0 && result.results.every((record) => selectedIds.includes(record.id));
+
+  const togglePageSelection = (checked: boolean) => {
+    const pageIds = visibleRecords.map((r) => r.id);
+    if (checked) {
+      onSelectionChange(Array.from(new Set([...selectedIds, ...pageIds])));
+    } else {
+      onSelectionChange(selectedIds.filter((id) => !pageIds.includes(id)));
+    }
+  };
+
+  const toggleAllSelection = (checked: boolean) => {
+    if (checked) {
+      onSelectionChange(result.results.map((r) => r.id));
+    } else {
+      onSelectionChange([]);
+    }
+  };
+
   return (
     <Card
       title={
@@ -94,17 +126,39 @@ export const SearchResultsSection: React.FC<Props> = ({
           </span>
         </div>
       )}
-      <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-        <input
-          type="checkbox"
-          checked={allSelected}
-          onChange={(event) => onSelectionChange(
-            event.target.checked ? result.results.map((record) => record.id) : []
+
+      {result.results.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 16, marginBottom: 12 }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <input
+              type="checkbox"
+              checked={allSelectedOnPage}
+              onChange={(event) => togglePageSelection(event.target.checked)}
+            />
+            <CheckSquare size={15} />
+            <span>Zaznacz wszystkie widoczne rekordy{totalLocalPages > 1 ? ` (strona ${currentPage})` : ''}</span>
+          </label>
+
+          {totalLocalPages > 1 && (
+            <button
+              type="button"
+              onClick={() => toggleAllSelection(!allSelectedInTotal)}
+              style={{
+                fontSize: '0.78rem',
+                color: 'var(--accent-primary)',
+                background: 'none',
+                border: 'none',
+                padding: 0,
+                cursor: 'pointer',
+                textDecoration: 'underline',
+              }}
+            >
+              {allSelectedInTotal ? 'Odznacz wszystkie pobrane rekordy' : `Zaznacz wszystkie pobrane (${totalLoaded})`}
+            </button>
           )}
-        />
-        <CheckSquare size={15} />
-        Zaznacz wszystkie widoczne rekordy
-      </label>
+        </div>
+      )}
+
       {onImport && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
           <button
@@ -135,32 +189,113 @@ export const SearchResultsSection: React.FC<Props> = ({
           )}
         </div>
       )}
+
       {paginationError && (
         <div role="alert" style={{ color: 'var(--status-danger-text)', marginBottom: 12 }}>
           {paginationError}
         </div>
       )}
+
+      {/* Provider Load More Section (Fetching additional batches from external API) */}
       {onLoadMore && result.has_more && (
-        <button
-          type="button"
-          disabled={loadingMore}
-          onClick={onLoadMore}
+        <div
           style={{
             marginBottom: 12,
-            padding: '8px 14px',
+            padding: '10px 14px',
             borderRadius: 'var(--radius-md)',
+            border: '1px dashed var(--border-strong)',
             backgroundColor: 'var(--bg-surface-elevated)',
-            color: 'var(--text-primary)',
-            border: '1px solid var(--border-strong)',
-            fontWeight: 700,
-            opacity: loadingMore ? 0.55 : 1,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 12,
           }}
         >
-          {loadingMore ? 'Pobieranie…' : 'Pobierz kolejne wyniki'}
-        </button>
+          <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
+            Pobrano <strong>{totalLoaded}</strong> z <strong>{result.total_count}</strong> znalezionych w providerach.
+          </div>
+          <button
+            type="button"
+            disabled={loadingMore}
+            onClick={onLoadMore}
+            style={{
+              padding: '7px 14px',
+              borderRadius: 'var(--radius-md)',
+              backgroundColor: 'var(--accent-primary)',
+              color: '#fff',
+              border: 'none',
+              fontWeight: 700,
+              fontSize: '0.82rem',
+              opacity: loadingMore ? 0.55 : 1,
+              cursor: loadingMore ? 'wait' : 'pointer',
+            }}
+          >
+            {loadingMore ? 'Pobieranie…' : 'Pobierz kolejne wyniki'}
+          </button>
+        </div>
       )}
+
+      {/* Local Pagination Bar (Navigation over already loaded records) */}
+      {totalLocalPages > 1 && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '8px 12px',
+            backgroundColor: 'var(--bg-surface-elevated)',
+            borderRadius: 'var(--radius-md)',
+            border: '1px solid var(--border-subtle)',
+            marginBottom: 12,
+          }}
+        >
+          <button
+            type="button"
+            aria-label="Poprzednia strona"
+            disabled={currentPage <= 1}
+            onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+            style={{
+              padding: '5px 12px',
+              borderRadius: 'var(--radius-md)',
+              border: '1px solid var(--border-strong)',
+              backgroundColor: 'var(--bg-surface)',
+              color: 'var(--text-primary)',
+              fontWeight: 600,
+              fontSize: '0.8rem',
+              opacity: currentPage <= 1 ? 0.4 : 1,
+              cursor: currentPage <= 1 ? 'not-allowed' : 'pointer',
+            }}
+          >
+            ← Poprzednia
+          </button>
+          <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+            Strona {currentPage} z {totalLocalPages} (rekordy {startIndex + 1}–{Math.min(startIndex + pageSize, totalLoaded)} z {totalLoaded})
+          </span>
+          <button
+            type="button"
+            aria-label="Następna strona"
+            disabled={currentPage >= totalLocalPages}
+            onClick={() => setCurrentPage((p) => Math.min(totalLocalPages, p + 1))}
+            style={{
+              padding: '5px 12px',
+              borderRadius: 'var(--radius-md)',
+              border: '1px solid var(--border-strong)',
+              backgroundColor: 'var(--bg-surface)',
+              color: 'var(--text-primary)',
+              fontWeight: 600,
+              fontSize: '0.8rem',
+              opacity: currentPage >= totalLocalPages ? 0.4 : 1,
+              cursor: currentPage >= totalLocalPages ? 'not-allowed' : 'pointer',
+            }}
+          >
+            Następna →
+          </button>
+        </div>
+      )}
+
+      {/* Record list for visible local page */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {result.results.map((record) => (
+        {visibleRecords.map((record) => (
           <label
             key={record.id}
             style={{

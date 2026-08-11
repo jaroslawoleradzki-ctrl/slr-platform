@@ -159,6 +159,16 @@ groups remain separate, and pending groups or merge conflicts block readiness.
 Full durable `SearchRun` history remains a separate Phase 6.8.5 concern; it does
 not block Title & Abstract Screening.
 
+### Version 0.3.3 — Full-Text Screening and Dashboard/Search Polish ✅
+
+- **Phase 7.6 — Full-Text Screening** ✅ — Reviewer-specific eligibility,
+  derived queue, FULL_TEXT/BOTH criteria, availability metadata, structured
+  exclusion reasons, append-only history, and executable Full-Text GUI.
+- **Dashboard and Search Polish** ✅ — Corrected Search → Import contract,
+  provider pagination with append semantics, local pagination of loaded results,
+  and selection preserved across local pages.
+- **Next increment: 7.7 — Screening Audit Trail and Progress** ➡️
+
 ### Version 0.3.1 — Project Management and Title & Abstract Screening ✅
 
 - **Project Management** ✅ — Persistent project resource with list, create,
@@ -323,8 +333,8 @@ Support systematic review screening through a backend workflow and a dedicated u
 - **7.5B — Title & Abstract Screening Backend Workflow** ✅ — Deterministic project-scoped records read model, typed readiness reasons, reviewer-specific status/progress derived from batch-loaded latest decisions, active `TITLE_ABSTRACT`/`BOTH` criteria, canonical publication eligibility, stable pagination/filtering, and append-only decision writes delegated to `ScreeningDecisionService`. No GUI or queue persistence.
 - **7.5C — Title & Abstract Screening GUI** ✅ — Project-scoped executable UI with explicit reviewer identity, typed readiness blocking states, progress, filtering, deterministic record navigation, criterion-level assessment, manual decisions, Save / Save & Next, and resume from persisted decisions.
 - **7.5D — Automatic Metadata-Based Screening Criteria** ✅ — Configurable `MANUAL` and `METADATA_RULE` criteria; deterministic safe rules over publication metadata; server-authoritative automatic assessments with historical rule/value/result snapshots. The final screening outcome remains a human reviewer decision.
-- **Next increment: 7.6 — Full-Text Screening** ➡️
-- **7.6 — Full-Text Screening** ⬜ — Queue management for publications eligible after Title & Abstract Screening, evaluation against `FULL_TEXT` and `BOTH` criteria (with technical full-text availability/status presented as workflow metadata, and project-scoped criteria determining whether unretrievable full text leads to exclusion), explicit selection of exclusion reasons, decision recording (`INCLUDE` / `EXCLUDE` / `UNCERTAIN`) with rationale, history view, save & resume, progress metrics, and GUI & backend integration. No requirement for local storage of copyrighted PDF files.
+- **7.6 — Full-Text Screening** ✅ — Reviewer-specific derived eligibility from current canonical input plus latest `TITLE_ABSTRACT=INCLUDE`; `FULL_TEXT`/`BOTH` criteria, server-authoritative automatic assessments, full-text availability/reference workflow metadata, structured exclusion reasons linked to immutable criterion-assessment snapshots, append-only decisions, current progress/filtering and executable GUI. Loss of eligibility removes a record from the current queue without deleting history.
+- **Next increment: 7.7 — Screening Audit Trail and Progress** ➡️
 - **7.7 — Screening Audit Trail and Progress** ⬜ — Complete decision audit trail capturing reviewer, timestamps, exact criteria version used, decision changes, stage-specific progress metrics (included, excluded, uncertain counts), exclusion-reason aggregations, overall project screening summary, and structured data extraction necessary for subsequent PRISMA flow charts. Changes to criteria do not invalidate or obscure historical decisions.
 - **7.8 — Multi-Reviewer Screening and Conflict Detection** ⬜ — Independent multi-reviewer decision recording for the same publication and stage, conflict detection algorithm identifying reviewer disagreements, dedicated conflict resolution queue, resolution workflow with reviewer agreement metrics, resolution rationale recording, and audit trail. Single-reviewer workflow remains fully operational.
 - **7.9 — Screening Integration and Release** ⬜ — Integration into Project Dashboard, workflow stage status transitions (Deduplication → Screening and Screening → Quality Assessment), handling empty/loading/error states, backend integration test suite, frontend integration test suite, end-to-end verification, documentation reconciliation, and release verification.
