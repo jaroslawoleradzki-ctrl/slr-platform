@@ -798,11 +798,19 @@ Status:
 
 ---
 
-## 9.7 Production Template Seed & Export Dataset Preparation
+## 9.7 Production Template Seed (Lean Energy v1)
 
 Status:
 
-⬜ Next (Production Template Seed & Export Dataset Preparation)
+✅ Completed (Lean Energy Extraction v1 Template Seed)
+
+---
+
+## 9.8 Dataset Export & Final Phase 9 Verification
+
+Status:
+
+⬜ Next (Dataset Export & Final Phase 9 Verification)
 
 ---
 

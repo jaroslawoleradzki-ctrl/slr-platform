@@ -254,4 +254,13 @@ describe('Data Extraction Workspace GUI (Phase 9.5 & 9.6)', () => {
 
     expect(await screen.findByText(/Powrót do Widoku Tabelarycznego/i)).toBeInTheDocument();
   });
+
+  it('I. Lean Energy v1 schema renders publication fields and 1:N repeating group items dynamically', async () => {
+    renderComponent(`/projects/proj_test/extract/${pubId}`);
+
+    expect(await screen.findByText('7. Ekstrakcja Danych (Data Extraction Workspace)')).toBeInTheDocument();
+    expect(screen.getByText('Tytuł badania / publikacji')).toBeInTheDocument();
+    expect(screen.getByText('Typ badania (Study Design)')).toBeInTheDocument();
+    expect(screen.getByText('Ramiona Badania / Grupy Uczestników (1:N Study Arms)')).toBeInTheDocument();
+  });
 });
