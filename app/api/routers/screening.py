@@ -2,6 +2,13 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
+from app.api.dto.multi_reviewer_screening import (
+    ReviewerAssignmentResponse,
+    ReviewerRosterRequest,
+    ScreeningConflictMetricsResponse,
+    ScreeningConflictPageResponse,
+    ScreeningConflictResponse,
+)
 from app.api.dto.screening import (
     ScreeningCriterionCreateRequest,
     ScreeningCriterionListResponse,
@@ -17,6 +24,7 @@ from app.api.dto.screening import (
 )
 from app.api.dto.screening_reporting import (
     ExclusionReasonAggregationResponse,
+    MultiReviewerStageMetricsResponse,
     ScreeningAuditEventResponse,
     ScreeningAuditPageResponse,
     ScreeningReportResponse,
@@ -32,6 +40,10 @@ from app.repositories.screening_criterion_repository import (
 )
 from app.repositories.screening_decision_repository import (
     DecisionNotFoundError,
+)
+from app.services.multi_reviewer_screening_service import (
+    MultiReviewerScreeningService,
+    ScreeningConflictStatus,
 )
 from app.services.screening_decision_service import (
     CriterionAssessmentInput,
@@ -64,14 +76,93 @@ def get_screening_reporting_service() -> ScreeningReportingService:
     return ScreeningReportingService()
 
 
+def get_multi_reviewer_screening_service() -> MultiReviewerScreeningService:
+    return MultiReviewerScreeningService()
+
+
+@router.get("/{project_id}/screening/reviewers", response_model=list[ReviewerAssignmentResponse])
+def list_screening_reviewers(
+    project_id: str,
+    stage: ScreeningStage = Query(...),
+    service: MultiReviewerScreeningService = Depends(get_multi_reviewer_screening_service),
+):
+    return [ReviewerAssignmentResponse.from_domain(item) for item in service.roster(project_id, stage)]
+
+
+@router.put("/{project_id}/screening/reviewers", response_model=list[ReviewerAssignmentResponse])
+def replace_screening_reviewers(
+    project_id: str,
+    payload: ReviewerRosterRequest,
+    stage: ScreeningStage = Query(...),
+    service: MultiReviewerScreeningService = Depends(get_multi_reviewer_screening_service),
+):
+    try:
+        return [
+            ReviewerAssignmentResponse.from_domain(item)
+            for item in service.roster(project_id, stage, payload.reviewer_ids)
+        ]
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+
+
+@router.get("/{project_id}/screening/conflicts", response_model=ScreeningConflictPageResponse)
+def list_screening_conflicts(
+    project_id: str,
+    stage: ScreeningStage = Query(...),
+    conflict_status: ScreeningConflictStatus | None = Query(None, alias="status"),
+    viewer_reviewer_id: str | None = Query(None),
+    offset: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=100),
+    service: MultiReviewerScreeningService = Depends(get_multi_reviewer_screening_service),
+):
+    try:
+        items, total = service.conflicts(
+            project_id,
+            stage,
+            status=conflict_status,
+            viewer_reviewer_id=viewer_reviewer_id.strip() if viewer_reviewer_id else None,
+            offset=offset,
+            limit=limit,
+        )
+        return ScreeningConflictPageResponse(
+            total=total,
+            offset=offset,
+            limit=limit,
+            items=[ScreeningConflictResponse.from_domain(item) for item in items],
+        )
+    except Exception as exc:
+        raise _workflow_error(exc) from exc
+
+
+@router.get("/{project_id}/screening/conflict-metrics", response_model=ScreeningConflictMetricsResponse)
+def get_screening_conflict_metrics(
+    project_id: str,
+    stage: ScreeningStage = Query(...),
+    service: MultiReviewerScreeningService = Depends(get_multi_reviewer_screening_service),
+):
+    try:
+        metrics = service.metrics(project_id, stage)
+        return ScreeningConflictMetricsResponse(
+            incomplete=metrics.incomplete,
+            agreement=metrics.agreement,
+            conflict=metrics.conflict,
+            agreement_rate=metrics.agreement_rate,
+        )
+    except Exception as exc:
+        raise _workflow_error(exc) from exc
+
+
 @router.get("/{project_id}/screening/report", response_model=ScreeningReportResponse)
 def get_screening_report(
     project_id: str,
     reviewer_id: str = Query(..., min_length=1),
     service: ScreeningReportingService = Depends(get_screening_reporting_service),
+    multi_reviewer_service: MultiReviewerScreeningService = Depends(get_multi_reviewer_screening_service),
 ) -> ScreeningReportResponse:
     try:
         input_set, title_abstract, full_text, transitions, reasons = service.report(project_id, reviewer_id)
+        title_metrics = multi_reviewer_service.metrics(project_id, ScreeningStage.TITLE_ABSTRACT)
+        full_text_metrics = multi_reviewer_service.metrics(project_id, ScreeningStage.FULL_TEXT)
         return ScreeningReportResponse(
             project_id=project_id,
             reviewer_id=reviewer_id.strip(),
@@ -83,6 +174,22 @@ def get_screening_report(
             full_text=StageProgressResponse.from_domain(full_text) if full_text else None,
             transitions=ScreeningTransitionResponse.from_domain(transitions) if transitions else None,
             full_text_exclusion_reasons=[ExclusionReasonAggregationResponse.from_domain(item) for item in reasons],
+            title_abstract_multi_reviewer=MultiReviewerStageMetricsResponse(
+                incomplete=title_metrics.incomplete,
+                agreement=title_metrics.agreement,
+                conflict=title_metrics.conflict,
+                agreement_rate=title_metrics.agreement_rate,
+            )
+            if input_set.ready
+            else None,
+            full_text_multi_reviewer=MultiReviewerStageMetricsResponse(
+                incomplete=full_text_metrics.incomplete,
+                agreement=full_text_metrics.agreement,
+                conflict=full_text_metrics.conflict,
+                agreement_rate=full_text_metrics.agreement_rate,
+            )
+            if input_set.ready
+            else None,
         )
     except Exception as exc:
         raise _workflow_error(exc) from exc

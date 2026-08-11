@@ -137,9 +137,12 @@ export interface TitleAbstractDecisionRequest {
 export interface ScreeningStageProgress { total_eligible: number; screened: number; remaining: number; included: number; excluded: number; uncertain: number; }
 export interface ScreeningTransitions { canonical_input: number; title_abstract_screened: number; title_abstract_included: number; full_text_eligible: number; full_text_screened: number; full_text_included: number; }
 export interface ScreeningReasonAggregation { criterion_id: string; criterion_snapshot_key: string; snapshot_schema_version: number; snapshot_complete: boolean; count: number; criterion_assessment: CriterionAssessment; }
-export interface ScreeningReport { project_id: string; reviewer_id: string; ready: boolean; readiness_status: string; working_collection_count: number; canonical_records_count: number; title_abstract: ScreeningStageProgress | null; full_text: ScreeningStageProgress | null; transitions: ScreeningTransitions | null; full_text_exclusion_reasons: ScreeningReasonAggregation[]; }
+export interface MultiReviewerMetrics { incomplete: number; agreement: number; conflict: number; agreement_rate: number | null; }
+export interface ScreeningReport { project_id: string; reviewer_id: string; ready: boolean; readiness_status: string; working_collection_count: number; canonical_records_count: number; title_abstract: ScreeningStageProgress | null; full_text: ScreeningStageProgress | null; transitions: ScreeningTransitions | null; full_text_exclusion_reasons: ScreeningReasonAggregation[]; title_abstract_multi_reviewer?: MultiReviewerMetrics | null; full_text_multi_reviewer?: MultiReviewerMetrics | null; }
 export interface ScreeningAuditEvent { decision: ScreeningDecision; publication_title: string | null; revision_index: number; previous_outcome: ScreeningOutcome | null; is_latest_for_reviewer: boolean; }
 export interface ScreeningAuditPage { total: number; offset: number; limit: number; items: ScreeningAuditEvent[]; }
+export interface ReviewerAssignment { project_id: string; stage: 'title_abstract' | 'full_text'; reviewer_id: string; is_active: boolean; }
+export interface ScreeningConflict { publication_id: string; publication_title: string | null; stage: 'title_abstract' | 'full_text'; status: 'incomplete' | 'agreement' | 'conflict'; expected_reviewers: string[]; pending_reviewers: string[]; latest_decisions: Array<{ reviewer_id: string; outcome: ScreeningOutcome; decision_id: string; decided_at: string }>; }
 
 export class ApiError extends Error {
   constructor(
@@ -240,4 +243,8 @@ export const screeningApi = {
   getAudit(projectId: string, reviewerId: string | null, offset: number, limit: number, stage?: string | null, outcome?: string | null) {
     return request<ScreeningAuditPage>(`/projects/${projectId}/screening/audit?${query({ reviewer_id: reviewerId, offset, limit, stage, outcome })}`);
   },
+  getReviewerRoster(projectId: string, stage: 'title_abstract' | 'full_text') { return request<ReviewerAssignment[]>(`/projects/${projectId}/screening/reviewers?${query({ stage })}`); },
+  saveReviewerRoster(projectId: string, stage: 'title_abstract' | 'full_text', reviewerIds: string[]) { return request<ReviewerAssignment[]>(`/projects/${projectId}/screening/reviewers?${query({ stage })}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reviewer_ids: reviewerIds }) }); },
+  getConflicts(projectId: string, stage: 'title_abstract' | 'full_text', status?: string | null, offset = 0, limit = 50, viewerReviewerId?: string | null) { return request<{ total: number; offset: number; limit: number; items: ScreeningConflict[] }>(`/projects/${projectId}/screening/conflicts?${query({ stage, status, offset, limit, viewer_reviewer_id: viewerReviewerId })}`); },
+  getConflictMetrics(projectId: string, stage: 'title_abstract' | 'full_text') { return request<{ incomplete: number; agreement: number; conflict: number; agreement_rate: number | null }>(`/projects/${projectId}/screening/conflict-metrics?${query({ stage })}`); },
 };

@@ -34,6 +34,9 @@ from app.repositories.project_publication_repository import SqliteProjectPublica
 from app.repositories.project_repository import SqliteProjectRepository
 from app.repositories.screening_criterion_repository import SqliteScreeningCriterionRepository
 from app.repositories.screening_decision_repository import SqliteScreeningDecisionRepository
+from app.repositories.screening_reviewer_assignment_repository import (
+    SqliteScreeningReviewerAssignmentRepository,
+)
 from app.repositories.search_result_snapshot_repository import (
     SearchResultSnapshot,
     SearchResultSnapshotNotFoundError,
@@ -84,6 +87,7 @@ def _make_service(db_path: Path) -> SqliteProjectDeletionService:
         search_strategy_repo=SqliteSearchStrategyRepository(db_path),
         search_result_snapshot_repo=SqliteSearchResultSnapshotRepository(db_path),
         full_text_availability_repo=SqliteFullTextAvailabilityRepository(db_path),
+        screening_reviewer_assignment_repo=SqliteScreeningReviewerAssignmentRepository(db_path),
         tx_manager=SqliteTransactionManager(db_path),
     )
 
@@ -213,6 +217,7 @@ def test_delete_rolls_back_all_cleanup_on_failure(
         screening_criterion_repo=SqliteScreeningCriterionRepository(db_path),
         search_strategy_repo=FailingSearchStrategyRepository(db_path),
         search_result_snapshot_repo=snapshots,
+        screening_reviewer_assignment_repo=SqliteScreeningReviewerAssignmentRepository(db_path),
         tx_manager=SqliteTransactionManager(db_path),
     )
 
@@ -246,12 +251,17 @@ def test_delete_is_project_scoped_and_accepts_archived_project(
     )
     snapshots = SqliteSearchResultSnapshotRepository(db_path)
     availability = SqliteFullTextAvailabilityRepository(db_path)
+    reviewer_assignments = SqliteScreeningReviewerAssignmentRepository(db_path)
     project_a_snapshot = snapshots.save(_snapshot(created_project_id, "project-a-source"))
     project_b_snapshot = snapshots.save(_snapshot(other_id, "project-b-source"))
     _seed_project_owned_rows(db_path, created_project_id, "a")
     _seed_project_owned_rows(db_path, other_id, "b")
     availability.save(FullTextAvailability(project_id=created_project_id, publication_id=uuid4()))
     availability.save(FullTextAvailability(project_id=other_id, publication_id=uuid4()))
+    from app.domain.screening import ScreeningStage
+
+    reviewer_assignments.replace_active(created_project_id, ScreeningStage.TITLE_ABSTRACT, ["alice"])
+    reviewer_assignments.replace_active(other_id, ScreeningStage.TITLE_ABSTRACT, ["bob"])
     repo.archive(created_project_id)
 
     response = client.delete(f"/projects/{created_project_id}")
@@ -269,6 +279,7 @@ def test_delete_is_project_scoped_and_accepts_archived_project(
             "screening_criteria",
             "screening_decisions",
             "full_text_availability",
+            "screening_reviewer_assignments",
         ):
             assert connection.execute(
                 f"SELECT COUNT(*) FROM {table} WHERE project_id = ?",  # noqa: S608 - fixed table allowlist

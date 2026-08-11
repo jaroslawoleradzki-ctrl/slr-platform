@@ -28,6 +28,10 @@ from app.repositories.screening_decision_repository import (
     ScreeningDecisionRepository,
     default_screening_decision_repository,
 )
+from app.repositories.screening_reviewer_assignment_repository import (
+    SqliteScreeningReviewerAssignmentRepository,
+    default_screening_reviewer_assignment_repository,
+)
 from app.repositories.search_result_snapshot_repository import (
     SearchResultSnapshotRepository,
     default_search_result_snapshot_repository,
@@ -56,6 +60,7 @@ class SqliteProjectDeletionService:
         search_strategy_repo: SearchStrategyRepository | None = None,
         search_result_snapshot_repo: SearchResultSnapshotRepository | None = None,
         full_text_availability_repo: FullTextAvailabilityRepository | None = None,
+        screening_reviewer_assignment_repo: SqliteScreeningReviewerAssignmentRepository | None = None,
         tx_manager: SqliteTransactionManager | None = None,
     ) -> None:
         self._project_repo = project_repo or default_project_repository()
@@ -66,11 +71,10 @@ class SqliteProjectDeletionService:
         self._screening_decision_repo = screening_decision_repo or default_screening_decision_repository()
         self._screening_criterion_repo = screening_criterion_repo or default_screening_criterion_repository()
         self._search_strategy_repo = search_strategy_repo or default_search_strategy_repository()
-        self._search_result_snapshot_repo = (
-            search_result_snapshot_repo or default_search_result_snapshot_repository()
-        )
-        self._full_text_availability_repo = (
-            full_text_availability_repo or default_full_text_availability_repository()
+        self._search_result_snapshot_repo = search_result_snapshot_repo or default_search_result_snapshot_repository()
+        self._full_text_availability_repo = full_text_availability_repo or default_full_text_availability_repository()
+        self._screening_reviewer_assignment_repo = (
+            screening_reviewer_assignment_repo or default_screening_reviewer_assignment_repository()
         )
         self._tx_manager = tx_manager or default_transaction_manager()
 
@@ -82,6 +86,7 @@ class SqliteProjectDeletionService:
             self._publication_repo.delete_for_project(project_id, connection=conn)
             self._duplicate_review_repo.delete_for_project(project_id, connection=conn)
             self._screening_decision_repo.delete_for_project(project_id, connection=conn)
+            self._screening_reviewer_assignment_repo.delete_for_project(project_id, connection=conn)
             self._full_text_availability_repo.delete_for_project(project_id, connection=conn)
             self._screening_criterion_repo.delete_for_project(project_id, connection=conn)
             self._search_result_snapshot_repo.delete_for_project(project_id, connection=conn)

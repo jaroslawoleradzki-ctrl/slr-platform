@@ -49,6 +49,24 @@ class ScreeningReportingRepository:
             rows = conn.execute(query, (project_id, reviewer_id)).fetchall()
             return self._hydrate(conn, rows)
 
+    def latest_decisions_for_stage_all_reviewers(
+        self, project_id: str, stage: ScreeningStage
+    ) -> list[ScreeningDecision]:
+        """Return one latest decision per publication/reviewer in a single batch read."""
+        query = """
+        WITH ranked AS (
+          SELECT *, ROW_NUMBER() OVER (
+            PARTITION BY publication_id, reviewer_id ORDER BY decided_at DESC, decision_id DESC
+          ) AS rn
+          FROM screening_decisions WHERE project_id = ? AND stage = ?
+        ) SELECT decision_id, project_id, publication_id, stage, outcome, reviewer_id, rationale,
+                 decided_at, criterion_snapshot_schema_version
+          FROM ranked WHERE rn = 1
+        """
+        with self._connect() as conn:
+            rows = conn.execute(query, (project_id, stage.value)).fetchall()
+            return self._hydrate(conn, rows)
+
     def decisions_for_stage_outcome(
         self,
         project_id: str,
