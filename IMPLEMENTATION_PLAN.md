@@ -752,36 +752,33 @@ Status:
 
 ## 9.1 Data Extraction Domain
 
-Zakres:
-
-- extraction forms
-- extraction fields
-- structured extracted values
-- reviewer attribution
-- extracted-value provenance
-- validation
-- extraction history
-
 Status:
 
 ✅ Completed (Domain Model & Value System)
 
 ---
 
-## 9.2 Data Extraction Application Services and API
-
-Zakres:
-
-- extraction form retrieval
-- extraction assignment
-- draft and final extraction handling
-- validation
-- history retrieval
-- dataset generation
+## 9.2 Persistence & Template Catalog
 
 Status:
 
-⬜ Planned
+✅ Completed (Persistence & Template Catalog)
+
+---
+
+## 9.3 Project Configuration & Eligibility
+
+Status:
+
+✅ Completed (Project Configuration & Eligibility)
+
+---
+
+## 9.4 Execution Backend & Validation Service
+
+Status:
+
+⬜ Next (Execution Backend & Validation Service)
 
 ---
 

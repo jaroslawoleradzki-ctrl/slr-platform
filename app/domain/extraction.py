@@ -40,6 +40,18 @@ class InvalidRevisionError(ExtractionDomainError):
     """Raised when an extraction revision is structurally invalid."""
 
 
+class ExtractionConfigurationError(ExtractionDomainError):
+    """Base class for extraction configuration domain errors."""
+
+
+class ExtractionConfigurationNotFoundError(ExtractionConfigurationError):
+    """Raised when a project extraction configuration is not found."""
+
+
+class ExtractionConfigurationLockedError(ExtractionConfigurationError):
+    """Raised when attempting to modify extraction configuration after extraction has started."""
+
+
 class FieldDataType(StrEnum):
     """Supported field data types for extraction template definitions."""
 
@@ -670,3 +682,60 @@ class ExtractionRecord(BaseModel):
         if not v or not v.strip():
             raise InvalidRevisionError("project_id must be a non-empty string")
         return v.strip()
+
+
+class ProjectExtractionConfiguration(BaseModel):
+    """Project-level binding to a specific immutable extraction template version."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    project_id: str
+    template_id: str
+    template_version: str
+    configured_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+    @field_validator("project_id")
+    @classmethod
+    def validate_project_id(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise InvalidValueError("project_id must not be empty")
+        return v.strip()
+
+    @field_validator("template_id")
+    @classmethod
+    def validate_template_id(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise InvalidValueError("template_id must not be empty")
+        return v.strip()
+
+    @field_validator("template_version")
+    @classmethod
+    def validate_template_version(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise InvalidValueError("template_version must not be empty")
+        return v.strip()
+
+
+class ExtractionEligibilityStatus(StrEnum):
+    """Reason / outcome status for data extraction eligibility evaluation."""
+
+    ELIGIBLE = "eligible"
+    NO_EXTRACTION_CONFIGURATION = "no_extraction_configuration"
+    BLOCKED_SCREENING_INCOMPLETE = "blocked_screening_incomplete"
+    BLOCKED_SCREENING_EXCLUDED = "blocked_screening_excluded"
+    BLOCKED_SCREENING_UNCERTAIN = "blocked_screening_uncertain"
+    BLOCKED_SCREENING_CONFLICT = "blocked_screening_conflict"
+    BLOCKED_SCREENING_STALE_RESOLUTION = "blocked_screening_stale_resolution"
+    BLOCKED_QA_INCOMPLETE = "blocked_qa_incomplete"
+
+
+class ExtractionEligibilityResult(BaseModel):
+    """Typed result of evaluating publication eligibility for data extraction."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    publication_id: UUID
+    status: ExtractionEligibilityStatus
+    is_eligible: bool
+    reason_details: str | None = None
