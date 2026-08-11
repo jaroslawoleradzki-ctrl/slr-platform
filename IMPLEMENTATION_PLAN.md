@@ -794,7 +794,15 @@ Status:
 
 Status:
 
-⬜ Next (Publication Summary Table & Cross-Study Views)
+✅ Completed (Tabular View & Progress Reporting)
+
+---
+
+## 9.7 Production Template Seed & Export Dataset Preparation
+
+Status:
+
+⬜ Next (Production Template Seed & Export Dataset Preparation)
 
 ---
 

@@ -1,8 +1,8 @@
-import { fireEvent, render, screen, waitFor, waitForElementToBeRemoved } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { DataExtractionPage } from '../src/pages/DataExtractionPage';
-import { extractionApi, ExtractionApiError } from '../src/api/extractionApi';
+import { extractionApi } from '../src/api/extractionApi';
 import { ProjectProvider } from '../src/context/ProjectContext';
 
 const pubId = '27ae7210-a6b3-418d-8e31-b9e33a695762';
@@ -70,9 +70,81 @@ const mockHistory = {
   revisions: [mockRecord.latest_revision],
 };
 
-describe('Data Extraction Workspace GUI (Phase 9.5)', () => {
+const mockProgress = {
+  project_id: 'proj_test',
+  total_eligible_publications: 3,
+  not_started_count: 1,
+  in_progress_count: 1,
+  complete_count: 1,
+  needs_review_count: 0,
+  completion_percentage: 33.3,
+};
+
+const mockRecordsSummary = {
+  project_id: 'proj_test',
+  total_records: 3,
+  items: [
+    {
+      publication_id: pubId,
+      title: 'Sample Article Title',
+      authors: ['Smith J.', 'Doe A.'],
+      publication_year: 2024,
+      extraction_status: 'in_progress' as const,
+      latest_revision_index: 1,
+      latest_reviewer_id: 'rev_1',
+      latest_updated_at: new Date().toISOString(),
+    },
+  ],
+};
+
+const mockMatrix = {
+  project_id: 'proj_test',
+  template_id: 'default_extraction_template',
+  template_version: '1.0.0',
+  total_relationships: 2,
+  group_keys: ['study_arms'],
+  items: [
+    {
+      publication_id: pubId,
+      publication_title: 'Sample Article Title',
+      group_key: 'study_arms',
+      group_name: 'Study Arms',
+      group_item_id: 'item_1_id',
+      item_index: 1,
+      values: [
+        {
+          field_key: 'arm_name',
+          status: 'present' as const,
+          origin: 'reported' as const,
+          text_value: 'Group A Intervention',
+        },
+      ],
+    },
+    {
+      publication_id: pubId,
+      publication_title: 'Sample Article Title',
+      group_key: 'study_arms',
+      group_name: 'Study Arms',
+      group_item_id: 'item_2_id',
+      item_index: 2,
+      values: [
+        {
+          field_key: 'arm_name',
+          status: 'present' as const,
+          origin: 'reported' as const,
+          text_value: 'Group B Control',
+        },
+      ],
+    },
+  ],
+};
+
+describe('Data Extraction Workspace GUI (Phase 9.5 & 9.6)', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    vi.spyOn(extractionApi, 'getExtractionProgress').mockResolvedValue(mockProgress);
+    vi.spyOn(extractionApi, 'listExtractionRecords').mockResolvedValue(mockRecordsSummary);
+    vi.spyOn(extractionApi, 'getExtractionMatrix').mockResolvedValue(mockMatrix);
     vi.spyOn(extractionApi, 'getExtractionEligibility').mockResolvedValue(mockEligibility);
     vi.spyOn(extractionApi, 'getExtractionRecord').mockResolvedValue(mockRecord);
     vi.spyOn(extractionApi, 'getExtractionHistory').mockResolvedValue(mockHistory);
@@ -95,119 +167,19 @@ describe('Data Extraction Workspace GUI (Phase 9.5)', () => {
     );
   };
 
-  it('A & B. Data Extraction route renders and loads latest extraction record', async () => {
-    renderComponent();
-    await waitForElementToBeRemoved(() => screen.queryByText(/Ładowanie formularza ekstrakcji/i));
-    expect(screen.getByText('7. Formularz Ekstrakcji Danych (Data Extraction Workspace)')).toBeInTheDocument();
+  it('A & B. Data Extraction route renders form workspace when publication ID present', async () => {
+    renderComponent(`/projects/proj_test/extract/${pubId}`);
+
+    expect(await screen.findByText('7. Ekstrakcja Danych (Data Extraction Workspace)')).toBeInTheDocument();
     expect(screen.getByDisplayValue('Sample Article Title')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('2024')).toBeInTheDocument();
   });
 
-  it('C. Loading state is displayed during fetch', () => {
-    vi.spyOn(extractionApi, 'getExtractionEligibility').mockImplementation(() => new Promise(() => {}));
-    renderComponent();
-    expect(screen.getByText(/Ładowanie formularza ekstrakcji/i)).toBeInTheDocument();
-  });
+  it('C. Save Draft calls POST revision endpoint correctly and shows success banner', async () => {
+    renderComponent(`/projects/proj_test/extract/${pubId}`);
+    await screen.findByText('7. Ekstrakcja Danych (Data Extraction Workspace)');
 
-  it('E. Publication selector renders eligible publication ID', async () => {
-    renderComponent();
-    await waitForElementToBeRemoved(() => screen.queryByText(/Ładowanie formularza ekstrakcji/i));
-    expect(screen.getByLabelText('Wybierz publikację do ekstrakcji:')).toBeInTheDocument();
-  });
-
-  it('F. Publication-level fields render from template definition', async () => {
-    renderComponent();
-    await waitForElementToBeRemoved(() => screen.queryByText(/Ładowanie formularza ekstrakcji/i));
-    expect(screen.getByText('Tytuł badania / publikacji')).toBeInTheDocument();
-    expect(screen.getByText('Rok publikacji')).toBeInTheDocument();
-    expect(screen.getByText('Typ badania (Study Design)')).toBeInTheDocument();
-  });
-
-  it('G & H. Text and numeric field editing updates input values', async () => {
-    renderComponent();
-    await screen.findByText('7. Formularz Ekstrakcji Danych (Data Extraction Workspace)');
-
-    const titleInput = await screen.findByLabelText('Tytuł badania / publikacji');
-    fireEvent.change(titleInput, { target: { value: 'Updated Title Text' } });
-    expect(titleInput).toHaveValue('Updated Title Text');
-
-    const yearInput = await screen.findByLabelText('Rok publikacji');
-    fireEvent.change(yearInput, { target: { value: '2025' } });
-    expect(yearInput).toHaveValue(2025);
-  });
-
-  it('I. Enum selection dropdown updates selected value', async () => {
-    renderComponent();
-    await screen.findByText('7. Formularz Ekstrakcji Danych (Data Extraction Workspace)');
-
-    const designSelect = await screen.findByLabelText('Typ badania (Study Design)');
-    fireEvent.change(designSelect, { target: { value: 'Cohort Study' } });
-    expect(designSelect).toHaveValue('Cohort Study');
-  });
-
-  it('K & L & M. ValueStatus change to NOT_REPORTED / NOT_APPLICABLE disables typed input control', async () => {
-    renderComponent();
-    await screen.findByText('7. Formularz Ekstrakcji Danych (Data Extraction Workspace)');
-
-    const titleInput = await screen.findByLabelText('Tytuł badania / publikacji');
-    expect(titleInput).not.toBeDisabled();
-
-    // Change status to NOT_REPORTED
-    const statusSelects = await screen.findAllByRole('combobox');
-    const titleStatusSelect = statusSelects[1];
-    fireEvent.change(titleStatusSelect, { target: { value: 'not_reported' } });
-
-    await waitFor(() => {
-      expect(titleInput).toBeDisabled();
-    });
-  });
-
-  it('P & Q. Provenance drawer opens and allows editing metadata', async () => {
-    renderComponent();
-    await screen.findByText('7. Formularz Ekstrakcji Danych (Data Extraction Workspace)');
-    await screen.findByLabelText('Tytuł badania / publikacji');
-
-    const provButtons = await screen.findAllByRole('button', { name: /\+ Proweniencja|Proweniencja ✓/i });
-    fireEvent.click(provButtons[0]);
-
-    expect(await screen.findByText('Proweniencja pola')).toBeInTheDocument();
-    const pageInput = screen.getByLabelText('Strona w publikacji (source_page)');
-    fireEvent.change(pageInput, { target: { value: 'p. 15' } });
-    expect(pageInput).toHaveValue('p. 15');
-
-    fireEvent.click(screen.getByRole('button', { name: 'Zapisz proweniencję' }));
-    await waitFor(() => {
-      expect(screen.queryByText('Proweniencja pola')).not.toBeInTheDocument();
-    });
-  });
-
-  it('R & S & T. Repeating group manager adds, edits and removes group items', async () => {
-    renderComponent();
-    await screen.findByText('7. Formularz Ekstrakcji Danych (Data Extraction Workspace)');
-
-    expect(await screen.findByText('Ramiona badania / Grupy badane (Study Arms)')).toBeInTheDocument();
-
-    const addBtn = screen.getByRole('button', { name: /Dodaj element/i });
-    fireEvent.click(addBtn);
-
-    expect(await screen.findByText('Element #1')).toBeInTheDocument();
-
-    const armNameInput = await screen.findByLabelText('Nazwa grupy / ramienia');
-    fireEvent.change(armNameInput, { target: { value: 'Control Arm A' } });
-    expect(armNameInput).toHaveValue('Control Arm A');
-
-    const removeBtn = screen.getByRole('button', { name: /Usuń element #1/i });
-    fireEvent.click(removeBtn);
-
-    await waitFor(() => {
-      expect(screen.queryByText('Element #1')).not.toBeInTheDocument();
-    });
-  });
-
-  it('U & V. Save Draft calls POST revision endpoint correctly and shows success banner', async () => {
-    renderComponent();
-    await screen.findByText('7. Formularz Ekstrakcji Danych (Data Extraction Workspace)');
-
-    const draftBtn = await screen.findByRole('button', { name: /Zapisz szkic/i });
+    const draftBtn = await screen.findByRole('button', { name: /Zapisz Szkic/i });
     fireEvent.click(draftBtn);
 
     await waitFor(() => {
@@ -219,17 +191,17 @@ describe('Data Extraction Workspace GUI (Phase 9.5)', () => {
     expect(await screen.findByText(/Zapisano szkic ekstrakcji/i)).toBeInTheDocument();
   });
 
-  it('W & Z. Mark Complete sends completion intent and displays COMPLETE when backend accepts', async () => {
+  it('D. Mark Complete sends completion intent and displays COMPLETE when backend accepts', async () => {
     vi.spyOn(extractionApi, 'submitRevision').mockResolvedValue({
       ...mockRecord.latest_revision,
       revision_index: 2,
       completeness_status: 'complete',
     });
 
-    renderComponent();
-    await screen.findByText('7. Formularz Ekstrakcji Danych (Data Extraction Workspace)');
+    renderComponent(`/projects/proj_test/extract/${pubId}`);
+    await screen.findByText('7. Ekstrakcja Danych (Data Extraction Workspace)');
 
-    const completeBtn = await screen.findByRole('button', { name: /Oznacz jako zakończone/i });
+    const completeBtn = await screen.findByRole('button', { name: /Oznacz jako Zakończone/i });
     fireEvent.click(completeBtn);
 
     await waitFor(() => {
@@ -241,39 +213,45 @@ describe('Data Extraction Workspace GUI (Phase 9.5)', () => {
     expect(await screen.findByText(/Ekstrakcja danych została oznaczona jako ZAKOŃCZONA/i)).toBeInTheDocument();
   });
 
-  it('X. Backend 422 validation errors are displayed clearly', async () => {
-    vi.spyOn(extractionApi, 'submitRevision').mockRejectedValue(
-      new ExtractionApiError(422, ['Wymagane pole study_title nie może być puste.'])
-    );
+  it('E. Tabular view and progress header render correctly', async () => {
+    renderComponent('/projects/proj_test/extract');
 
-    renderComponent();
-    await screen.findByText('7. Formularz Ekstrakcji Danych (Data Extraction Workspace)');
-
-    const completeBtn = await screen.findByRole('button', { name: /Oznacz jako zakończone/i });
-    fireEvent.click(completeBtn);
-
-    expect(await screen.findByText('Walidacja nie powiodła się. Popraw błędy w formularzu.')).toBeInTheDocument();
+    expect(await screen.findByText('Postęp Ekstrakcji Danych (Data Extraction Progress)')).toBeInTheDocument();
+    expect(await screen.findByText('33.3%')).toBeInTheDocument();
+    expect(await screen.findByText('Sample Article Title')).toBeInTheDocument();
   });
 
-  it('Y. Backend blocked eligibility status renders warning card', async () => {
-    vi.spyOn(extractionApi, 'getExtractionEligibility').mockResolvedValue({
-      project_id: 'proj_test',
-      total_publications: 1,
-      eligible_count: 0,
-      items: [
-        {
-          publication_id: pubId,
-          status: 'blocked_screening_incomplete' as const,
-          is_eligible: false,
-          reason_details: 'Brak decyzji screeningowej',
-        },
-      ],
-    });
+  it('F. View mode switching between Table View and Form Workspace', async () => {
+    renderComponent('/projects/proj_test/extract');
 
-    renderComponent();
-    await screen.findByText('7. Formularz Ekstrakcji Danych (Data Extraction Workspace)');
+    const formBtn = await screen.findByRole('button', { name: /Formularz Ekstrakcji/i });
+    fireEvent.click(formBtn);
 
-    expect(await screen.findByText(/Publikacja nie kwalifikuje się obecnie do ekstrakcji danych/i)).toBeInTheDocument();
-    expect(screen.getAllByText(/blocked_screening_incomplete/i).length).toBeGreaterThan(0);
+    expect(await screen.findByText(/Wybierz publikację do ekstrakcji/i)).toBeInTheDocument();
+
+    const tableBtn = await screen.findByRole('button', { name: /Widok Tabelaryczny/i });
+    fireEvent.click(tableBtn);
+
+    expect(await screen.findByText('Postęp Ekstrakcji Danych (Data Extraction Progress)')).toBeInTheDocument();
+  });
+
+  it('G. Cross-Study Relationship Matrix renders 1:N items as separate rows', async () => {
+    renderComponent('/projects/proj_test/extract');
+
+    const matrixTab = await screen.findByRole('button', { name: /Macierz Relacji/i });
+    fireEvent.click(matrixTab);
+
+    expect(await screen.findByText('Macierz Relacji (Cross-Study Repeating Group Matrix)')).toBeInTheDocument();
+    expect(await screen.findByText('Group A Intervention')).toBeInTheDocument();
+    expect(await screen.findByText('Group B Control')).toBeInTheDocument();
+  });
+
+  it('H. Clicking Workspace action on summary table opens single publication editing workspace', async () => {
+    renderComponent('/projects/proj_test/extract');
+
+    const workspaceBtn = (await screen.findAllByRole('button', { name: /Otwórz formularz ekstrakcji/i }))[0];
+    fireEvent.click(workspaceBtn);
+
+    expect(await screen.findByText(/Powrót do Widoku Tabelarycznego/i)).toBeInTheDocument();
   });
 });

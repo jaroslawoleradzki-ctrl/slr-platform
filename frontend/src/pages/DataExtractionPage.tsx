@@ -8,7 +8,9 @@ import {
   AlertCircle,
   BookOpen,
   Check,
-  RefreshCw,
+  Table,
+  Layers,
+  ArrowLeft,
 } from 'lucide-react';
 import { useProject } from '../context/ProjectContext';
 import {
@@ -19,6 +21,9 @@ import {
   ExtractedValueStateDTO,
   ExtractedGroupItemStateDTO,
   ExtractionEligibilityResult,
+  ExtractionProgressResponseDTO,
+  ExtractionRecordSummaryDTO,
+  ExtractionMatrixResponseDTO,
   ExtractionApiError,
   ValueStatus,
   ValueOrigin,
@@ -26,6 +31,9 @@ import {
 import { ExtractionFormView } from '../components/extraction/ExtractionFormView';
 import { ProvenanceDrawer } from '../components/extraction/ProvenanceDrawer';
 import { RevisionHistoryDrawer } from '../components/extraction/RevisionHistoryDrawer';
+import { ExtractionProgressHeader } from '../components/extraction/ExtractionProgressHeader';
+import { ExtractionTableView } from '../components/extraction/ExtractionTableView';
+import { ExtractionMatrixView } from '../components/extraction/ExtractionMatrixView';
 
 // Standard fallback extraction template definition (domain-agnostic)
 const DEFAULT_TEMPLATE: ExtractionTemplateVersion = {
@@ -58,38 +66,30 @@ const DEFAULT_TEMPLATE: ExtractionTemplateVersion = {
       name: 'Typ badania (Study Design)',
       data_type: 'enum',
       description: 'Metodologia przeprowadzonego badania',
-      is_required: false,
-      allowed_values: [
-        'Randomized Controlled Trial (RCT)',
-        'Non-Randomized Controlled Trial',
-        'Cohort Study',
-        'Case-Control Study',
-        'Cross-Sectional Study',
-        'Systematic Review / Meta-Analysis',
-        'Other / Case Study',
-      ],
+      allowed_values: ['RCT', 'Cohort', 'Case-Control', 'Cross-Sectional', 'Systematic Review', 'Other'],
+      is_required: true,
     },
     {
-      field_key: 'total_sample_size',
-      name: 'Całkowita wielkość próby (N)',
+      field_key: 'sample_size',
+      name: 'Wielkość próby (N total)',
       data_type: 'integer',
-      description: 'Łączna liczba uczestników / obiektów w badaniu',
+      description: 'Całkowita liczba uczestników włączonych do analizy',
       is_required: false,
       min_value: 1,
     },
     {
-      field_key: 'primary_outcome',
-      name: 'Główny punkt końcowy (Primary Outcome)',
+      field_key: 'key_finding',
+      name: 'Główny wniosek / Wynik (Key Finding)',
       data_type: 'long_text',
-      description: 'Opis głównego analizowanego wyniku / wskaźnika',
+      description: 'Podsumowanie najważniejszych wyników wyciągniętych z tekstu',
       is_required: false,
     },
   ],
   repeating_groups: [
     {
       group_key: 'study_arms',
-      name: 'Ramiona badania / Grupy badane (Study Arms)',
-      description: 'Wykaz poszczególnych grup uczestników (1:N)',
+      name: 'Ramiona Badania / Grupy Uczestników (1:N Study Arms)',
+      description: 'Charakterystyka poszczególnych podgrup (np. Grupa Eksperymentalna vs Kontrolna)',
       min_items: 1,
       max_items: 10,
       field_definitions: [
@@ -97,24 +97,31 @@ const DEFAULT_TEMPLATE: ExtractionTemplateVersion = {
           field_key: 'arm_name',
           name: 'Nazwa grupy / ramienia',
           data_type: 'text',
-          description: 'np. Grupa interwencyjna A, Grupa kontrolna',
+          description: 'np. Grupa A (Interwencja Lean) lub Grupa B (Kontrola)',
           is_required: true,
         },
         {
-          field_key: 'arm_sample_size',
-          name: 'Liczebność ramienia (n)',
+          field_key: 'group_size',
+          name: 'Liczebność n w grupie',
           data_type: 'integer',
-          description: 'Liczba badanych w tym ramieniu',
+          description: 'Liczba badanych w tym konkretnym ramieniu',
           is_required: false,
           min_value: 1,
         },
         {
           field_key: 'age_mean',
-          name: 'Średni wiek badanych',
-          data_type: 'number_with_unit',
-          description: 'Wartość średnia i jednostka czasu',
+          name: 'Średni wiek badanych (Mean Age)',
+          data_type: 'decimal',
+          description: 'Średnia arytmetyczna wieku w grupie',
           is_required: false,
-          allowed_units: ['lata', 'miesiące', 'dni'],
+          min_value: 0,
+        },
+        {
+          field_key: 'primary_outcome_metric',
+          name: 'Główny wskaźnik wyniku (Primary Metric)',
+          data_type: 'number_with_unit',
+          description: 'Wartość i jednostka dla głównego punktu końcowego',
+          is_required: false,
         },
       ],
     },
@@ -130,10 +137,18 @@ export const DataExtractionPage: React.FC = () => {
   const { activeProject } = useProject();
   const projectId = routeProjectId || activeProject?.id || 'lean_energy';
 
+  // View Mode: 'table' vs 'form'
+  const [viewMode, setViewMode] = useState<'table' | 'form'>(routePubId ? 'form' : 'table');
+  const [tableTab, setTableTab] = useState<'summary' | 'matrix'>('summary');
+
   // State
+  const [progress, setProgress] = useState<ExtractionProgressResponseDTO | null>(null);
+  const [recordsSummary, setRecordsSummary] = useState<ExtractionRecordSummaryDTO[]>([]);
+  const [matrix, setMatrix] = useState<ExtractionMatrixResponseDTO | null>(null);
+
   const [eligibilityList, setEligibilityList] = useState<ExtractionEligibilityResult[]>([]);
   const [selectedPubId, setSelectedPubId] = useState<string>(routePubId || '');
-  const [record, setRecord] = useState<ExtractionRecordResponseDTO | null>(null);
+  const [, setRecord] = useState<ExtractionRecordResponseDTO | null>(null);
   const [history, setHistory] = useState<ExtractionRevisionHistoryResponseDTO | null>(null);
   const [templateVersion] = useState<ExtractionTemplateVersion>(DEFAULT_TEMPLATE);
 
@@ -159,7 +174,7 @@ export const DataExtractionPage: React.FC = () => {
 
   const reviewerId = 'rev_1';
 
-  // Fetch eligibility list, record, and history for publication
+  // Fetch eligibility list, progress, summaries, matrix, and selected record
   useEffect(() => {
     let isMounted = true;
     async function loadData() {
@@ -170,8 +185,18 @@ export const DataExtractionPage: React.FC = () => {
       setBlockedEligibility(null);
 
       try {
-        const eligRes = await extractionApi.getExtractionEligibility(projectId, reviewerId);
+        // Fetch 9.6 progress, summaries, and matrix
+        const [progRes, recsRes, matrixRes, eligRes] = await Promise.all([
+          extractionApi.getExtractionProgress(projectId, reviewerId).catch(() => null),
+          extractionApi.listExtractionRecords(projectId, reviewerId).catch(() => ({ total_records: 0, items: [] })),
+          extractionApi.getExtractionMatrix(projectId, reviewerId).catch(() => null),
+          extractionApi.getExtractionEligibility(projectId, reviewerId),
+        ]);
+
         if (!isMounted) return;
+        if (progRes) setProgress(progRes);
+        setRecordsSummary(recsRes.items || []);
+        if (matrixRes) setMatrix(matrixRes);
         setEligibilityList(eligRes.items);
 
         let pubIdToLoad = selectedPubId || routePubId;
@@ -235,9 +260,10 @@ export const DataExtractionPage: React.FC = () => {
     };
   }, [projectId, routePubId, selectedPubId]);
 
-  // Handle publication switch
+  // Handle publication selection from table or dropdown
   const handleSelectPublication = (pubId: string) => {
     setSelectedPubId(pubId);
+    setViewMode('form');
     navigate(`/projects/${projectId}/extract/${pubId}`);
   };
 
@@ -261,12 +287,20 @@ export const DataExtractionPage: React.FC = () => {
       setPublicationValues(resultRev.publication_values);
       setGroupItems(resultRev.group_items);
 
-      // Refresh record state
-      const updatedRec = await extractionApi.getExtractionRecord(projectId, selectedPubId);
-      setRecord(updatedRec);
+      // Refresh record state and 9.6 progress/summaries
+      const [updatedRec, updatedHist, updatedProg, updatedRecs, updatedMat] = await Promise.all([
+        extractionApi.getExtractionRecord(projectId, selectedPubId),
+        extractionApi.getExtractionHistory(projectId, selectedPubId),
+        extractionApi.getExtractionProgress(projectId, reviewerId).catch(() => null),
+        extractionApi.listExtractionRecords(projectId, reviewerId).catch(() => ({ total_records: 0, items: [] })),
+        extractionApi.getExtractionMatrix(projectId, reviewerId).catch(() => null),
+      ]);
 
-      const updatedHist = await extractionApi.getExtractionHistory(projectId, selectedPubId);
+      setRecord(updatedRec);
       setHistory(updatedHist);
+      if (updatedProg) setProgress(updatedProg);
+      setRecordsSummary(updatedRecs.items || []);
+      if (updatedMat) setMatrix(updatedMat);
 
       if (markComplete && resultRev.completeness_status === 'complete') {
         setSuccessBanner(`Ekstrakcja danych została oznaczona jako ZAKOŃCZONA (Rewizja #${resultRev.revision_index}).`);
@@ -309,8 +343,6 @@ export const DataExtractionPage: React.FC = () => {
     setIsProvenanceOpen(true);
   };
 
-  const currentStatus = record?.current_status || 'not_started';
-
   return (
     <div style={{ padding: '24px', maxWidth: '1200px', margin: '0 auto' }}>
       {/* Top Header Bar */}
@@ -332,262 +364,357 @@ export const DataExtractionPage: React.FC = () => {
           </div>
           <div>
             <h2 style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
-              7. Formularz Ekstrakcji Danych (Data Extraction Workspace)
+              7. Ekstrakcja Danych (Data Extraction Workspace)
             </h2>
             <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-              Strukturyzowane wyciąganie wyników, metodologii i cech populacji z publikacji.
+              Przegląd tabelaryczny, macierz relacji 1:N oraz formularz wprowadzania danych.
             </span>
           </div>
         </div>
 
-        {/* Action Buttons */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+        {/* View Switcher Controls */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <button
             type="button"
-            onClick={() => setIsHistoryOpen(true)}
+            onClick={() => setViewMode('table')}
             style={{
-              display: 'flex',
+              display: 'inline-flex',
               alignItems: 'center',
               gap: '6px',
               padding: '8px 14px',
-              backgroundColor: 'var(--bg-surface)',
-              border: '1px solid var(--border-strong)',
               borderRadius: 'var(--radius-md)',
-              color: 'var(--text-secondary)',
+              border: viewMode === 'table' ? '1px solid var(--accent-primary)' : '1px solid var(--border-subtle)',
+              backgroundColor: viewMode === 'table' ? 'var(--bg-primary)' : 'transparent',
+              color: viewMode === 'table' ? 'var(--accent-primary)' : 'var(--text-secondary)',
               fontSize: '0.85rem',
-              fontWeight: 500,
+              fontWeight: 600,
               cursor: 'pointer',
             }}
           >
-            <History size={16} /> Historia ({history?.total_revisions || 0})
+            <Table size={16} /> Widok Tabelaryczny
           </button>
-
           <button
             type="button"
-            onClick={() => handleSubmitRevision(false)}
-            disabled={isSaving || Boolean(blockedEligibility)}
+            onClick={() => setViewMode('form')}
             style={{
-              display: 'flex',
+              display: 'inline-flex',
               alignItems: 'center',
               gap: '6px',
-              padding: '8px 16px',
-              backgroundColor: 'var(--bg-surface-elevated)',
-              border: '1px solid var(--border-strong)',
+              padding: '8px 14px',
               borderRadius: 'var(--radius-md)',
-              color: 'var(--text-primary)',
+              border: viewMode === 'form' ? '1px solid var(--accent-primary)' : '1px solid var(--border-subtle)',
+              backgroundColor: viewMode === 'form' ? 'var(--bg-primary)' : 'transparent',
+              color: viewMode === 'form' ? 'var(--accent-primary)' : 'var(--text-secondary)',
               fontSize: '0.85rem',
               fontWeight: 600,
-              cursor: isSaving || Boolean(blockedEligibility) ? 'not-allowed' : 'pointer',
-              opacity: isSaving || Boolean(blockedEligibility) ? 0.6 : 1,
+              cursor: 'pointer',
             }}
           >
-            <Save size={16} /> Zapisz szkic (Draft)
-          </button>
-
-          <button
-            type="button"
-            onClick={() => handleSubmitRevision(true)}
-            disabled={isSaving || Boolean(blockedEligibility)}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '8px 18px',
-              backgroundColor: 'var(--accent-primary)',
-              color: '#fff',
-              border: 'none',
-              borderRadius: 'var(--radius-md)',
-              fontSize: '0.85rem',
-              fontWeight: 600,
-              cursor: isSaving || Boolean(blockedEligibility) ? 'not-allowed' : 'pointer',
-              opacity: isSaving || Boolean(blockedEligibility) ? 0.6 : 1,
-            }}
-          >
-            <CheckCircle size={16} /> Oznacz jako zakończone
+            <BookOpen size={16} /> Formularz Ekstrakcji
           </button>
         </div>
       </div>
 
-      {/* Banners */}
-      {errorBanner && (
-        <div
-          style={{
-            padding: '12px 16px',
-            backgroundColor: 'var(--status-error-bg)',
-            color: 'var(--status-error-text)',
-            borderRadius: 'var(--radius-md)',
-            marginBottom: '16px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '10px',
-            fontSize: '0.85rem',
-          }}
-        >
-          <AlertCircle size={18} />
-          <div style={{ flex: 1 }}>{errorBanner}</div>
-        </div>
-      )}
+      {/* VIEW MODE 1: TABULAR VIEW (Progress + Summary Table + Matrix) */}
+      {viewMode === 'table' && (
+        <div>
+          {/* Progress Header Cards */}
+          <ExtractionProgressHeader progress={progress} />
 
-      {successBanner && (
-        <div
-          style={{
-            padding: '12px 16px',
-            backgroundColor: 'var(--status-success-bg)',
-            color: 'var(--status-success-text)',
-            borderRadius: 'var(--radius-md)',
-            marginBottom: '16px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '10px',
-            fontSize: '0.85rem',
-          }}
-        >
-          <Check size={18} />
-          <div style={{ flex: 1 }}>{successBanner}</div>
-        </div>
-      )}
-
-      {/* Publication Navigation & Status Selector Bar */}
-      <div
-        style={{
-          padding: '16px 20px',
-          backgroundColor: 'var(--bg-surface)',
-          border: '1px solid var(--border-subtle)',
-          borderRadius: 'var(--radius-lg)',
-          marginBottom: '24px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          flexWrap: 'wrap',
-          gap: '16px',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1, minWidth: '300px' }}>
-          <BookOpen size={18} style={{ color: 'var(--accent-primary)' }} />
-          <div style={{ flex: 1 }}>
-            <label htmlFor="publication-selector" style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '2px' }}>
-              Wybierz publikację do ekstrakcji:
-            </label>
-            <select
-              id="publication-selector"
-              value={selectedPubId}
-              onChange={(e) => handleSelectPublication(e.target.value)}
+          {/* Sub-tabs: Table vs Matrix */}
+          <div
+            style={{
+              display: 'flex',
+              gap: '8px',
+              marginBottom: '16px',
+              borderBottom: '1px solid var(--border-subtle)',
+              paddingBottom: '8px',
+            }}
+          >
+            <button
+              onClick={() => setTableTab('summary')}
               style={{
-                width: '100%',
-                padding: '6px 12px',
-                fontSize: '0.85rem',
-                fontWeight: 600,
-                backgroundColor: 'var(--bg-primary)',
-                color: 'var(--text-primary)',
-                border: '1px solid var(--border-strong)',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '8px 16px',
                 borderRadius: 'var(--radius-md)',
+                border: 'none',
+                backgroundColor: tableTab === 'summary' ? 'var(--accent-subtle)' : 'transparent',
+                color: tableTab === 'summary' ? 'var(--accent-primary)' : 'var(--text-secondary)',
+                fontSize: '0.9rem',
+                fontWeight: 600,
+                cursor: 'pointer',
               }}
             >
-              {eligibilityList.map((pub) => (
-                <option key={pub.publication_id} value={pub.publication_id}>
-                  {pub.publication_id} ({pub.is_eligible ? 'Kwalifikowalna' : `Zablokowana: ${pub.status}`})
-                </option>
-              ))}
-            </select>
+              <Table size={16} /> Zestawienie Publikacji ({recordsSummary.length})
+            </button>
+            <button
+              onClick={() => setTableTab('matrix')}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '8px 16px',
+                borderRadius: 'var(--radius-md)',
+                border: 'none',
+                backgroundColor: tableTab === 'matrix' ? 'var(--accent-subtle)' : 'transparent',
+                color: tableTab === 'matrix' ? 'var(--accent-primary)' : 'var(--text-secondary)',
+                fontSize: '0.9rem',
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >
+              <Layers size={16} /> Macierz Relacji (Cross-Study Matrix)
+            </button>
           </div>
-        </div>
 
-        {/* Current Extraction Status Badge */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 500 }}>
-            Status ekstrakcji wpisu:
-          </span>
-          <span
-            style={{
-              fontSize: '0.8rem',
-              fontWeight: 700,
-              padding: '4px 12px',
-              borderRadius: 'var(--radius-full)',
-              backgroundColor:
-                currentStatus === 'complete'
-                  ? 'var(--status-success-bg)'
-                  : currentStatus === 'in_progress'
-                  ? 'var(--accent-subtle)'
-                  : 'var(--bg-surface-elevated)',
-              color:
-                currentStatus === 'complete'
-                  ? 'var(--status-success-text)'
-                  : currentStatus === 'in_progress'
-                  ? 'var(--accent-primary)'
-                  : 'var(--text-muted)',
-              border: '1px solid var(--border-subtle)',
-            }}
-          >
-            {currentStatus.toUpperCase()}
-          </span>
-        </div>
-      </div>
-
-      {/* Blocked Eligibility Banner */}
-      {blockedEligibility && (
-        <div
-          style={{
-            padding: '20px',
-            backgroundColor: 'var(--status-warning-bg)',
-            color: 'var(--status-warning-text)',
-            border: '1px solid var(--status-warning-text)',
-            borderRadius: 'var(--radius-lg)',
-            marginBottom: '24px',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '8px',
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontWeight: 700, fontSize: '0.95rem' }}>
-            <AlertCircle size={20} /> Publikacja nie kwalifikuje się obecnie do ekstrakcji danych
-          </div>
-          <p style={{ fontSize: '0.85rem', margin: 0 }}>
-            Powód zablokowania: <strong>{blockedEligibility.status}</strong>.
-            {blockedEligibility.reason_details && ` Wyszczególnienie: ${blockedEligibility.reason_details}`}
-          </p>
-          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-            Ukończ screening pełnotekstowy i ocenę jakości (QA), aby odblokować etap ekstrakcji.
-          </span>
+          {/* Tab Content */}
+          {tableTab === 'summary' ? (
+            <ExtractionTableView
+              records={recordsSummary}
+              isLoading={isLoading}
+              onSelectPublication={handleSelectPublication}
+            />
+          ) : (
+            <ExtractionMatrixView matrix={matrix} isLoading={isLoading} />
+          )}
         </div>
       )}
 
-      {/* Loading Spinner */}
-      {isLoading ? (
-        <div style={{ textAlign: 'center', padding: '60px', color: 'var(--text-muted)' }}>
-          <RefreshCw size={32} className="spin" style={{ marginBottom: '12px' }} />
-          <div>Ładowanie formularza ekstrakcji i szablonu danych...</div>
+      {/* VIEW MODE 2: SINGLE PUBLICATION FORM WORKSPACE */}
+      {viewMode === 'form' && (
+        <div>
+          {/* Return to Table Button & Form Header Actions */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+            <button
+              type="button"
+              onClick={() => setViewMode('table')}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '6px 12px',
+                borderRadius: 'var(--radius-md)',
+                border: '1px solid var(--border-subtle)',
+                backgroundColor: 'var(--bg-surface)',
+                color: 'var(--text-secondary)',
+                fontSize: '0.85rem',
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >
+              <ArrowLeft size={16} /> Powrót do Widoku Tabelarycznego
+            </button>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <button
+                type="button"
+                onClick={() => setIsHistoryOpen(true)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '8px 14px',
+                  backgroundColor: 'var(--bg-surface)',
+                  border: '1px solid var(--border-strong)',
+                  borderRadius: 'var(--radius-md)',
+                  color: 'var(--text-secondary)',
+                  fontSize: '0.85rem',
+                  fontWeight: 500,
+                  cursor: 'pointer',
+                }}
+              >
+                <History size={16} /> Historia Rewizji ({history?.total_revisions || 0})
+              </button>
+
+              <button
+                type="button"
+                disabled={isSaving || !!blockedEligibility}
+                onClick={() => handleSubmitRevision(false)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '8px 16px',
+                  backgroundColor: 'var(--bg-surface-elevated)',
+                  border: '1px solid var(--border-strong)',
+                  borderRadius: 'var(--radius-md)',
+                  color: 'var(--text-primary)',
+                  fontSize: '0.85rem',
+                  fontWeight: 600,
+                  cursor: isSaving || !!blockedEligibility ? 'not-allowed' : 'pointer',
+                }}
+              >
+                <Save size={16} /> Zapisz Szkic
+              </button>
+
+              <button
+                type="button"
+                disabled={isSaving || !!blockedEligibility}
+                onClick={() => handleSubmitRevision(true)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '8px 16px',
+                  backgroundColor: 'var(--accent-primary)',
+                  border: 'none',
+                  borderRadius: 'var(--radius-md)',
+                  color: '#ffffff',
+                  fontSize: '0.85rem',
+                  fontWeight: 600,
+                  cursor: isSaving || !!blockedEligibility ? 'not-allowed' : 'pointer',
+                }}
+              >
+                <CheckCircle size={16} /> Oznacz jako Zakończone
+              </button>
+            </div>
+          </div>
+
+          {/* Publication Selector Bar */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '16px',
+              padding: '16px 20px',
+              backgroundColor: 'var(--bg-surface)',
+              border: '1px solid var(--border-subtle)',
+              borderRadius: 'var(--radius-lg)',
+              marginBottom: '20px',
+            }}
+          >
+            <BookOpen size={20} style={{ color: 'var(--accent-primary)' }} />
+            <div style={{ flex: 1 }}>
+              <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>
+                Wybierz publikację do ekstrakcji (Kwalifikowalne):
+              </label>
+              <select
+                value={selectedPubId}
+                onChange={(e) => handleSelectPublication(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '8px 12px',
+                  borderRadius: 'var(--radius-md)',
+                  border: '1px solid var(--border-subtle)',
+                  backgroundColor: 'var(--bg-primary)',
+                  color: 'var(--text-primary)',
+                  fontSize: '0.9rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                {eligibilityList.map((item) => (
+                  <option key={item.publication_id} value={item.publication_id}>
+                    {item.is_eligible ? '✓ ' : '🔒 '} Publikacja ID: {item.publication_id.slice(0, 8)}... {item.is_eligible ? '(Kwalifikowalna)' : `(Zablokowana: ${item.status})`}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Status Banners */}
+          {errorBanner && (
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px',
+                padding: '12px 16px',
+                backgroundColor: 'var(--status-error-bg)',
+                border: '1px solid var(--status-error-text)',
+                borderRadius: 'var(--radius-md)',
+                color: 'var(--status-error-text)',
+                marginBottom: '20px',
+                fontSize: '0.85rem',
+              }}
+            >
+              <AlertCircle size={18} />
+              <div style={{ flex: 1 }}>{errorBanner}</div>
+            </div>
+          )}
+
+          {successBanner && (
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px',
+                padding: '12px 16px',
+                backgroundColor: 'var(--status-success-bg)',
+                border: '1px solid var(--status-success-text)',
+                borderRadius: 'var(--radius-md)',
+                color: 'var(--status-success-text)',
+                marginBottom: '20px',
+                fontSize: '0.85rem',
+              }}
+            >
+              <Check size={18} />
+              <div style={{ flex: 1 }}>{successBanner}</div>
+            </div>
+          )}
+
+          {blockedEligibility && (
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px',
+                padding: '16px',
+                backgroundColor: 'var(--status-warning-bg)',
+                border: '1px solid var(--status-warning-text)',
+                borderRadius: 'var(--radius-lg)',
+                color: 'var(--status-warning-text)',
+                marginBottom: '20px',
+                fontSize: '0.85rem',
+              }}
+            >
+              <AlertCircle size={20} />
+              <div>
+                <strong>Publikacja niekwalifikowalna do ekstrakcji!</strong> Status eligibility:{' '}
+                <code>{blockedEligibility.status}</code>. {blockedEligibility.reason_details}
+              </div>
+            </div>
+          )}
+
+          {/* Single Publication Form Workspace */}
+          <ExtractionFormView
+            templateVersion={templateVersion}
+            publicationValues={publicationValues}
+            groupItems={groupItems}
+            onChangePublicationValues={(updatedValues: ExtractedValueStateDTO[]) => {
+              setPublicationValues(updatedValues);
+            }}
+            onChangeGroupItems={(updatedGroups: ExtractedGroupItemStateDTO[]) => {
+              setGroupItems(updatedGroups);
+            }}
+            onOpenProvenance={openProvenanceDrawer}
+            validationErrors={validationErrors}
+          />
         </div>
-      ) : (
-        /* Main Extraction Form View */
-        <ExtractionFormView
-          templateVersion={templateVersion}
-          publicationValues={publicationValues}
-          groupItems={groupItems}
-          onChangePublicationValues={setPublicationValues}
-          onChangeGroupItems={setGroupItems}
-          onOpenProvenance={openProvenanceDrawer}
-          validationErrors={validationErrors}
-        />
       )}
 
       {/* Provenance Drawer */}
-      {activeProvenanceField && (
+      {isProvenanceOpen && activeProvenanceField && (
         <ProvenanceDrawer
           isOpen={isProvenanceOpen}
+          onClose={() => setIsProvenanceOpen(false)}
           fieldKey={activeProvenanceField.fieldKey}
           fieldName={activeProvenanceField.fieldName}
           valueState={activeProvenanceField.valueState}
           onSave={activeProvenanceField.onSave}
-          onClose={() => setIsProvenanceOpen(false)}
         />
       )}
 
-      {/* History Drawer */}
-      <RevisionHistoryDrawer
-        isOpen={isHistoryOpen}
-        history={history}
-        onClose={() => setIsHistoryOpen(false)}
-      />
+      {/* Revision History Drawer */}
+      {isHistoryOpen && (
+        <RevisionHistoryDrawer
+          isOpen={isHistoryOpen}
+          onClose={() => setIsHistoryOpen(false)}
+          history={history}
+        />
+      )}
     </div>
   );
 };

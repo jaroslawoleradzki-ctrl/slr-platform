@@ -203,3 +203,26 @@ class TestExtractionExecutionAPI:
             json=payload,
         )
         assert resp.status_code == 422
+
+    def test_progress_records_and_matrix_endpoints(self, api_client):
+        client = api_client["client"]
+        project_id = api_client["project_id"]
+
+        # GET progress
+        prog_resp = client.get(f"/api/v1/projects/{project_id}/extraction/progress")
+        assert prog_resp.status_code == 200
+        prog_data = prog_resp.json()
+        assert prog_data["project_id"] == project_id
+        assert prog_data["total_eligible_publications"] >= 1
+
+        # GET records
+        rec_resp = client.get(f"/api/v1/projects/{project_id}/extraction/records")
+        assert rec_resp.status_code == 200
+        rec_data = rec_resp.json()
+        assert rec_data["total_records"] >= 1
+
+        # GET matrix
+        mat_resp = client.get(f"/api/v1/projects/{project_id}/extraction/matrix")
+        assert mat_resp.status_code == 200
+        mat_data = mat_resp.json()
+        assert "items" in mat_data

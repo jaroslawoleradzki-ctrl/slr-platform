@@ -9,7 +9,12 @@ from app.api.dto.extraction import (
     ExtractedValueStateDTO,
     ExtractionEligibilityListResponseDTO,
     ExtractionEligibilityResultDTO,
+    ExtractionMatrixResponseDTO,
+    ExtractionMatrixRowDTO,
+    ExtractionProgressResponseDTO,
+    ExtractionRecordListResponseDTO,
     ExtractionRecordResponseDTO,
+    ExtractionRecordSummaryDTO,
     ExtractionRevisionHistoryResponseDTO,
     ExtractionRevisionResponseDTO,
     ExtractionRevisionSubmitRequestDTO,
@@ -337,4 +342,84 @@ def _revision_to_dto(rev: ExtractionRevision) -> ExtractionRevisionResponseDTO:
         publication_values=pub_vals,
         group_items=grp_items,
         created_at=rev.created_at.isoformat(),
+    )
+
+
+@router.get(
+    "/{project_id}/extraction/progress",
+    response_model=ExtractionProgressResponseDTO,
+    status_code=status.HTTP_200_OK,
+    summary="Get project data extraction progress metrics (Phase 9.6)",
+)
+def get_extraction_progress(
+    project_id: str,
+    reviewer_id: str = Query(default="", description="Optional reviewer ID filter"),
+) -> ExtractionProgressResponseDTO:
+    """Returns authoritative project extraction progress metrics and status counts."""
+    service = _get_execution_service()
+    data = service.get_progress(project_id, reviewer_id=reviewer_id)
+    return ExtractionProgressResponseDTO(**data)
+
+
+@router.get(
+    "/{project_id}/extraction/records",
+    response_model=ExtractionRecordListResponseDTO,
+    status_code=status.HTTP_200_OK,
+    summary="Get eligible publication extraction record summaries (Phase 9.6)",
+)
+def list_extraction_records(
+    project_id: str,
+    reviewer_id: str = Query(default="", description="Optional reviewer ID filter"),
+) -> ExtractionRecordListResponseDTO:
+    """Returns batch-hydrated list of publication extraction record summaries."""
+    service = _get_execution_service()
+    summaries = service.list_record_summaries(project_id, reviewer_id=reviewer_id)
+    items = [ExtractionRecordSummaryDTO(**s) for s in summaries]
+    return ExtractionRecordListResponseDTO(
+        project_id=project_id,
+        total_records=len(items),
+        items=items,
+    )
+
+
+@router.get(
+    "/{project_id}/extraction/matrix",
+    response_model=ExtractionMatrixResponseDTO,
+    status_code=status.HTTP_200_OK,
+    summary="Get cross-study repeating group extraction matrix (Phase 9.6)",
+)
+def get_extraction_matrix(
+    project_id: str,
+    reviewer_id: str = Query(default="", description="Optional reviewer ID filter"),
+) -> ExtractionMatrixResponseDTO:
+    """Returns template-driven cross-study matrix for repeating group items across publications."""
+    service = _get_execution_service()
+    try:
+        data = service.get_matrix(project_id, reviewer_id=reviewer_id)
+    except ExtractionConfigurationNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+
+    items = [
+        ExtractionMatrixRowDTO(
+            publication_id=row["publication_id"],
+            publication_title=row["publication_title"],
+            group_key=row["group_key"],
+            group_name=row["group_name"],
+            group_item_id=row["group_item_id"],
+            item_index=row["item_index"],
+            values=[_value_state_to_dto(v) for v in row["values"]],
+        )
+        for row in data["items"]
+    ]
+
+    return ExtractionMatrixResponseDTO(
+        project_id=data["project_id"],
+        template_id=data["template_id"],
+        template_version=data["template_version"],
+        total_relationships=data["total_relationships"],
+        group_keys=data["group_keys"],
+        items=items,
     )
