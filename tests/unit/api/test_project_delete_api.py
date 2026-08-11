@@ -23,9 +23,11 @@ from fastapi.testclient import TestClient
 from app.api.main import app
 from app.api.routers.projects import get_project_deletion_service, get_project_repository
 from app.domain.duplicate_review import DuplicateDecision, DuplicateGroupReviewDecision
+from app.domain.full_text_screening import FullTextAvailability
 from app.domain.provenance import ProvenanceEntry
 from app.domain.publication import Publication
 from app.repositories.duplicate_review_decision_repository import SqliteDuplicateReviewDecisionRepository
+from app.repositories.full_text_availability_repository import SqliteFullTextAvailabilityRepository
 from app.repositories.import_history_repository import SqliteImportHistoryRepository
 from app.repositories.normalization_execution_repository import SqliteNormalizationExecutionRepository
 from app.repositories.project_publication_repository import SqliteProjectPublicationRepository
@@ -81,6 +83,7 @@ def _make_service(db_path: Path) -> SqliteProjectDeletionService:
         screening_criterion_repo=SqliteScreeningCriterionRepository(db_path),
         search_strategy_repo=SqliteSearchStrategyRepository(db_path),
         search_result_snapshot_repo=SqliteSearchResultSnapshotRepository(db_path),
+        full_text_availability_repo=SqliteFullTextAvailabilityRepository(db_path),
         tx_manager=SqliteTransactionManager(db_path),
     )
 
@@ -242,10 +245,13 @@ def test_delete_is_project_scoped_and_accepts_archived_project(
         DuplicateGroupReviewDecision(decision=DuplicateDecision.REJECT),
     )
     snapshots = SqliteSearchResultSnapshotRepository(db_path)
+    availability = SqliteFullTextAvailabilityRepository(db_path)
     project_a_snapshot = snapshots.save(_snapshot(created_project_id, "project-a-source"))
     project_b_snapshot = snapshots.save(_snapshot(other_id, "project-b-source"))
     _seed_project_owned_rows(db_path, created_project_id, "a")
     _seed_project_owned_rows(db_path, other_id, "b")
+    availability.save(FullTextAvailability(project_id=created_project_id, publication_id=uuid4()))
+    availability.save(FullTextAvailability(project_id=other_id, publication_id=uuid4()))
     repo.archive(created_project_id)
 
     response = client.delete(f"/projects/{created_project_id}")
@@ -262,6 +268,7 @@ def test_delete_is_project_scoped_and_accepts_archived_project(
             "project_publications",
             "screening_criteria",
             "screening_decisions",
+            "full_text_availability",
         ):
             assert connection.execute(
                 f"SELECT COUNT(*) FROM {table} WHERE project_id = ?",  # noqa: S608 - fixed table allowlist

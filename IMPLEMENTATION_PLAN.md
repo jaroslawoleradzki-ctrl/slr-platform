@@ -10,7 +10,7 @@ Unlike ROADMAP.md, this file is intentionally technical and may change frequentl
 
 Current release:
 
-v0.3.1 — Project Management and Title & Abstract Screening
+v0.3.2 — Project Management, Title & Abstract and Full-Text Screening
 
 Status:
 
@@ -30,7 +30,7 @@ Release scope:
 
 Next milestone:
 
-Phase 7.6 — Full-Text Screening
+Phase 7.7 — Screening Audit Trail and Progress
 
 ---
 
@@ -597,7 +597,7 @@ Zakres:
 - GUI and backend integration
 (Brak wymagania przechowywania chronionych plików PDF w aplikacji)
 
-Status: ⬜ Planned
+Status: ✅ Completed
 
 ---
 

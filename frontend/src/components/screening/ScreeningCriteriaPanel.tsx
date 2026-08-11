@@ -1,6 +1,6 @@
 import React from 'react';
 import { Card } from '../common/Card';
-import { AssessmentValue, ScreeningCriterion, TitleAbstractRecord } from '../../services/api/screeningApi';
+import { AssessmentValue, FullTextRecord, ScreeningCriterion, TitleAbstractRecord } from '../../services/api/screeningApi';
 import { screeningControlStyle } from './screeningFormStyles';
 
 export interface AssessmentDraft { value: AssessmentValue | ''; notes: string; }
@@ -16,7 +16,7 @@ export const ScreeningCriteriaPanel: React.FC<{
   assessments: Record<string, AssessmentDraft>;
   onChange: (criterionId: string, draft: AssessmentDraft) => void;
   disabled: boolean;
-  automaticAssessments: NonNullable<TitleAbstractRecord['automatic_assessments']>;
+  automaticAssessments: NonNullable<TitleAbstractRecord['automatic_assessments'] | FullTextRecord['automatic_assessments']>;
 }> = ({ criteria, assessments, onChange, disabled, automaticAssessments }) => (
   <Card title="Ocena kryteriów" subtitle="Oceń wszystkie wymagane kryteria przed zapisaniem decyzji.">
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>

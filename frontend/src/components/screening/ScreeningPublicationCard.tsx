@@ -1,8 +1,8 @@
 import React from 'react';
 import { Card } from '../common/Card';
-import { TitleAbstractRecord } from '../../services/api/screeningApi';
+import { FullTextRecord, TitleAbstractRecord } from '../../services/api/screeningApi';
 
-export const ScreeningPublicationCard: React.FC<{ record: TitleAbstractRecord }> = ({ record }) => (
+export const ScreeningPublicationCard: React.FC<{ record: TitleAbstractRecord | FullTextRecord }> = ({ record }) => (
   <Card title={record.title} subtitle={record.authors.length ? record.authors.join(', ') : 'Brak informacji o autorach'}>
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
       {record.publication_year && <span>{record.publication_year}</span>}

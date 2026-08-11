@@ -1,6 +1,6 @@
 # SLR Platform — Project Status
 
-_Last updated: 2026-08-10_
+_Last updated: 2026-08-11_
 
 ## Current status
 
@@ -14,7 +14,7 @@ development
 
 Current version:
 
-v0.3.1
+v0.3.2
 
 Current release status:
 
@@ -22,9 +22,9 @@ Completed
 
 Current development phase:
 
-Phase 7 — Screening remains in progress. Title & Abstract Screening (7.5A–7.5D)
-and Project Management are completed; the next planned increment is 7.6 —
-Full-Text Screening.
+Phase 7 — Screening remains in progress. Title & Abstract and Full-Text
+Screening (7.5A–7.6) and Project Management are completed; the next planned
+increment is 7.7 — Screening Audit Trail and Progress.
 
 Phase 6.7 & Phase 6.8 Workflow State:
 - **Phase 6.7 (Modules 1–4 Functional Workflow)**: ✅ Completed (6.7.1, 6.7.2a, 6.7.2b).
@@ -39,15 +39,15 @@ Phase 6.7 & Phase 6.8 Workflow State:
   - 6.8.8 GUI Import Integration — ✅ Completed (`POST /imports` RIS/BibTeX upload & history)
   - 6.8.9 Publication Intake Summary — ✅ Completed (`SourcesSummaryService` read model & GET endpoint)
 
-Screening prerequisites resolved in v0.3.1:
+Screening prerequisites resolved in v0.3.2:
 - Authoritative `SearchResultSnapshot` records retain canonical provider metadata
   and provenance for new live-search imports.
 - `ScreeningInputService` derives a stable, non-destructive canonical input set;
   pending duplicate groups and merge conflicts explicitly block readiness.
 
 State of Phase 7 — Screening:
-- v0.3.1 is completed.
-- Phase 7 — Screening is in progress; 7.1–7.5D are completed and 7.6 is next.
+- v0.3.2 is completed.
+- Phase 7 — Screening is in progress; 7.1–7.6 are completed and 7.7 is next.
 - Phase 7.1 — Screening Criteria Domain Model is ✅ Completed (`ScreeningCriterion`, `ScreeningCriterionType`, `ScreeningCriterionStage`, validation, unit tests).
 - Phase 7.2 — Screening Criteria Persistence and API is ✅ Completed (SQLite schema `0007_screening_criteria.sql`, repository, project isolation, REST API, DTOs, tests).
 - Phase 7.3 — Screening Configuration GUI is ✅ Completed (ScreeningCriteriaList, ScreeningCriterionCard, ScreeningCriterionModal, projectApiService adapter, validation, 22 frontend tests).
@@ -56,7 +56,8 @@ State of Phase 7 — Screening:
 - Phase 7.5B — Title & Abstract Screening Backend Workflow is ✅ Completed.
 - Phase 7.5C — Title & Abstract Screening GUI is ✅ Completed.
 - Phase 7.5D — Automatic Metadata-Based Screening Criteria is ✅ Completed.
-- Next: Phase 7.6 — Full-Text Screening.
+- Phase 7.6 — Full-Text Screening is ✅ Completed (reviewer-specific eligibility, derived queue, FULL_TEXT/BOTH criteria, availability metadata, structured exclusion reasons, append-only history, executable GUI, and project deletion integration).
+- Next: Phase 7.7 — Screening Audit Trail and Progress.
 
 Completed in this release:
 - Project Management: persistent project resource, list/create/open/edit,

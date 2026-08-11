@@ -284,6 +284,11 @@ class ScreeningDecision(BaseModel):
     reviewer_id: str = Field(min_length=1)
     rationale: str | None = None
     criterion_assessments: list[CriterionAssessment] = Field(default_factory=list)
+    # For Full Text exclusions this stores criterion IDs whose immutable
+    # assessment snapshots explain the exclusion.  Stage-specific validation
+    # lives in FullTextScreeningService; the generic decision model remains
+    # reusable for other workflows.
+    exclusion_reason_criterion_ids: list[UUID] = Field(default_factory=list)
     decided_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     @field_validator("project_id", "reviewer_id")
@@ -318,4 +323,8 @@ class ScreeningDecision(BaseModel):
                     f"Duplicate criterion assessment for criterion_id '{assessment.criterion_id}'"
                 )
             seen_criterion_ids.add(assessment.criterion_id)
+        if len(set(self.exclusion_reason_criterion_ids)) != len(
+            self.exclusion_reason_criterion_ids
+        ):
+            raise ValueError("Duplicate exclusion reason criterion_id")
         return self

@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routers import (
     deduplication,
+    full_text_screening,
     normalization,
     projects,
     screening,
@@ -40,6 +41,7 @@ app.include_router(deduplication.router)
 app.include_router(search_strategy.router)
 app.include_router(normalization.router)
 app.include_router(screening.router)
+app.include_router(full_text_screening.router)
 
 
 @app.get("/")

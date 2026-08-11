@@ -171,6 +171,15 @@ class SqliteScreeningDecisionRepository:
         # Delete criterion assessments first (foreign-key dependency on decision_id)
         connection.execute(
             """
+            DELETE FROM screening_decision_exclusion_reasons
+            WHERE decision_id IN (
+                SELECT decision_id FROM screening_decisions WHERE project_id = ?
+            )
+            """,
+            (project_id,),
+        )
+        connection.execute(
+            """
             DELETE FROM screening_criterion_assessments
             WHERE decision_id IN (
                 SELECT decision_id FROM screening_decisions WHERE project_id = ?
@@ -238,6 +247,13 @@ class SqliteScreeningDecisionRepository:
                         else None
                     ),
                 ),
+            )
+
+        for criterion_id in decision.exclusion_reason_criterion_ids:
+            connection.execute(
+                """INSERT INTO screening_decision_exclusion_reasons (decision_id, criterion_id)
+                   VALUES (?, ?)""",
+                (str(decision.decision_id), str(criterion_id)),
             )
 
     def _get_with_conn(
@@ -378,6 +394,12 @@ class SqliteScreeningDecisionRepository:
             for a_row in assessment_rows
         ]
 
+        reason_rows = connection.execute(
+            """SELECT criterion_id FROM screening_decision_exclusion_reasons
+               WHERE decision_id = ? ORDER BY criterion_id ASC""",
+            (decision_id_str,),
+        ).fetchall()
+
         decided_at = datetime.fromisoformat(decided_at_str)
         if decided_at.tzinfo is None:
             decided_at = decided_at.replace(tzinfo=timezone.utc)
@@ -391,6 +413,7 @@ class SqliteScreeningDecisionRepository:
             reviewer_id=reviewer_id,
             rationale=rationale,
             criterion_assessments=assessments,
+            exclusion_reason_criterion_ids=[UUID(reason_row[0]) for reason_row in reason_rows],
             decided_at=decided_at,
         )
 
