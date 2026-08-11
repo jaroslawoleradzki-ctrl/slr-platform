@@ -123,9 +123,9 @@ export function deriveNextAction(status: WorkflowNavigationStatus): NextAction |
     return {
       title: 'Screening Title & Abstract Ukończony',
       description:
-        'Ocena tytułów i abstraktów została ukończona. Kolejne etapy (Full-Text Screening, Quality Assessment) będą dostępne w kolejnych wersjach.',
-      targetStageId: 'screen/title-abstract',
-      actionLabel: 'Podsumowanie Screeningu',
+        'Ocena tytułów i abstraktów została ukończona. Przejdź do Full-Text Screening dla publikacji eligible.',
+      targetStageId: 'screen/full-text',
+      actionLabel: 'Przejdź do Full-Text Screening',
       severity: 'normal',
     };
   }

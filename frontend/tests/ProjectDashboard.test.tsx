@@ -154,11 +154,11 @@ describe('deriveNextAction — shared selector, single source of truth', () => {
     expect(a?.severity).toBe('urgent');
   });
 
-  it('all stages 1–4 complete → next action points to Title & Abstract Screening', () => {
+  it('completed Title & Abstract screening → next action points to Full-Text Screening', () => {
     const a = deriveNextAction(allComplete);
-    expect(a?.targetStageId).toBe('screen/title-abstract');
+    expect(a?.targetStageId).toBe('screen/full-text');
     expect(a?.severity).toBe('normal');
-    expect(a?.title).toContain('Screeningu');
+    expect(a?.title).toContain('Title & Abstract Ukończony');
   });
 
   it('normalization warning does not block dedup as next action', () => {
@@ -251,8 +251,8 @@ describe('ProjectDashboardPage — real data, no mock values', () => {
     expect(screen.getByText(/2 APPROVE · 1 REJECT/i)).toBeInTheDocument();
   });
 
-  // ── Title & Abstract Screening is available, future stages remain unavailable ─────
-  it('stage 5 (Title & Abstract Screening) is available and navigable while Full-Text remains future', async () => {
+  // ── Title & Abstract and Full-Text Screening are available; later stages remain unavailable ─────
+  it('stage 5 (Title & Abstract Screening) and Full-Text Screening are available', async () => {
     vi.spyOn(projectApiService, 'getSearchStrategy').mockResolvedValue(null);
     vi.spyOn(projectApiService, 'getBibliographicImports').mockResolvedValue([]);
     vi.spyOn(projectApiService, 'getNormalization').mockResolvedValue(null);
@@ -260,7 +260,7 @@ describe('ProjectDashboardPage — real data, no mock values', () => {
     renderDashboard();
     await waitFor(() => expect(screen.queryByText(/Ładowanie statusu projektu/i)).not.toBeInTheDocument());
     expect(screen.getByText('5. Title & Abstract Screening')).toBeInTheDocument();
-    expect(screen.getByText('5b. Full-Text Screening (Phase 7.6)')).toBeInTheDocument();
+    expect(screen.getByText('5b. Full-Text Screening')).toBeInTheDocument();
     expect(screen.getByText('8. Exports & PRISMA')).toBeInTheDocument();
 
     // Stage 5 card must be present and clickable
