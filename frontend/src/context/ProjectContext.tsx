@@ -109,7 +109,7 @@ const computeWorkflowStatus = (
     }
   }
 
-  // Stage 5: Title & Abstract Screening
+// Stage 5: Title & Abstract Screening
   let screeningState: WorkflowStageState = 'not_started';
   let screeningCount: number | null = null;
   let screeningTotal: number | null = null;
@@ -139,6 +139,16 @@ const computeWorkflowStatus = (
     }
   }
 
+  // Stage 5b: Full-Text Screening
+  let ftState: WorkflowStageState = 'not_started';
+  let ftCount: number | null = null;
+  let ftTotal: number | null = null;
+  let ftLabel: string | null = 'Oczekuje';
+
+  // Stage 6: Quality Assessment
+  let qaState: WorkflowStageState = 'not_available';
+  let qaLabel = 'Niedostępne';
+
   return {
     search: { state: searchState, count: searchCount, label: searchLabel },
     sources: { state: sourcesState, count: sourcesCount, label: sourcesLabel },
@@ -157,7 +167,13 @@ const computeWorkflowStatus = (
       total: screeningTotal,
       label: screeningLabel,
     },
-    qualityAssessment: { state: 'not_available', label: 'Niedostępne' },
+    fullTextScreening: {
+      state: ftState,
+      count: ftCount,
+      total: ftTotal,
+      label: ftLabel,
+    },
+    qualityAssessment: { state: qaState, label: qaLabel },
     dataExtraction: { state: 'not_available', label: 'Niedostępne' },
     exports: { state: 'not_available', label: 'Niedostępne' },
   };

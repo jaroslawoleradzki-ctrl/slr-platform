@@ -206,15 +206,14 @@ not block Title & Abstract Screening.
 - **Phase 7.5A — Screening Input Prerequisites** ✅ — Authoritative snapshots,
   metadata/provenance preservation, canonical deduplicated input and typed
   readiness.
-- **Phase 7.5B — Title & Abstract Screening Backend Workflow** ✅ —
-  reviewer-specific records, statuses and progress derived from latest append-only
-  decisions; eligibility, filtering, pagination and decision API.
-- **Phase 7.5C — Title & Abstract Screening GUI** ✅ — Reviewer identity,
-  readiness states, progress, filtering, record navigation, criterion assessment,
-  Save and Save & Next.
-- **Phase 7.5D — Automatic Metadata-Based Screening Criteria** ✅ — Manual or
-  deterministic metadata-rule evaluation, authoritative server-side assessments,
-  and auditable rule/value/result snapshots.
+- **Phase 7.5B — Title & Abstract Screening Backend Workflow** ✅ — reviewer-specific records, statuses and progress derived from latest append-only decisions; eligibility, filtering, pagination and decision API.
+- **Phase 7.5C — Title & Abstract Screening GUI** ✅ — Reviewer identity, readiness states, progress, filtering, record navigation, criterion assessment, Save and Save & Next.
+- **Phase 7.5D — Automatic Metadata-Based Screening Criteria** ✅ — Manual or deterministic metadata-rule evaluation, authoritative server-side assessments, and auditable rule/value/result snapshots.
+- **Phase 7.6 — Full-Text Screening** ✅ — Reviewer-specific eligibility, derived queue, FULL_TEXT/BOTH criteria, availability metadata, structured exclusion reasons, append-only history, executable GUI.
+- **Phase 7.7 — Screening Audit Trail and Progress** ✅ — Reviewer-scoped audit pages, decision timeline, previous decision comparison, and reporting repositories.
+- **Phase 7.8A — Multi-Reviewer Screening + Conflict Detection** ✅ — Active reviewer rosters, agreement/disagreement outcome calculation, and conflict state tracking.
+- **Phase 7.8B — Conflict Resolution / Adjudication** ✅ — Adjudicator override resolutions, decision set key validation, and resolution persistence (`0017_screening_conflict_resolutions.sql`).
+- **Phase 7.9 — Screening Integration and Release** ✅ — Stage eligibility adapter (`ScreeningEligibilityAdapter`), multi-reviewer queue hydration, staleness revocation on vote change, unified GET /projects/{id}/workflow-status REST endpoint, Dashboard cards & Stepper integration, and integration test suites.
 
 ### Version 0.3.0 — Screening Decision Domain and Persistence ✅
 

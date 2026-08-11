@@ -2,7 +2,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
+from typing import TYPE_CHECKING
 from uuid import UUID
+
+if TYPE_CHECKING:
+    from app.services.screening_eligibility_adapter import ScreeningEligibilityAdapter
 
 from app.domain.full_text_screening import FullTextAvailability, FullTextAvailabilityStatus
 from app.domain.publication import Publication
@@ -43,6 +47,8 @@ class FullTextReadinessStatus(StrEnum):
     MERGE_CONFLICT = "merge_conflict"
     WAITING_FOR_TITLE_ABSTRACT = "waiting_for_title_abstract"
     NO_ELIGIBLE_PUBLICATIONS = "no_eligible_publications"
+    UNRESOLVED_CONFLICT = "unresolved_conflict"
+    STALE_RESOLUTION = "stale_resolution"
 
 
 class FullTextScreeningStatus(StrEnum):
@@ -140,6 +146,7 @@ class FullTextScreeningService:
         decision_service: ScreeningDecisionService | None = None,
         availability_repository: FullTextAvailabilityRepository | None = None,
         rule_evaluator: ScreeningCriterionRuleEvaluator | None = None,
+        eligibility_adapter: ScreeningEligibilityAdapter | None = None,
     ) -> None:
         self._input = input_service or ScreeningInputService()
         self._criteria = criterion_repository or default_screening_criterion_repository()
@@ -147,6 +154,11 @@ class FullTextScreeningService:
         self._decision_service = decision_service or ScreeningDecisionService()
         self._availability = availability_repository or default_full_text_availability_repository()
         self._rule_evaluator = rule_evaluator or ScreeningCriterionRuleEvaluator()
+        from app.services.screening_eligibility_adapter import ScreeningEligibilityAdapter
+        self._eligibility_adapter = eligibility_adapter or ScreeningEligibilityAdapter(
+            input_service=self._input,
+            decisions_repo=self._decisions,
+        )
 
     @staticmethod
     def _reviewer_id(reviewer_id: str) -> str:
@@ -185,27 +197,51 @@ class FullTextScreeningService:
 
     def _eligible_publications(
         self,
+        project_id: str,
+        reviewer_id: str,
         screening_input: ScreeningInput,
-        title_abstract_latest: dict[UUID, ScreeningDecision],
     ) -> tuple[Publication, ...]:
+        eligible_ids = set(self._eligibility_adapter.eligible_publications(
+            project_id=project_id,
+            source_stage=ScreeningStage.TITLE_ABSTRACT,
+            target_stage=ScreeningStage.FULL_TEXT,
+            reviewer_id=reviewer_id,
+        ))
         return tuple(
             publication
             for publication in screening_input.publications
-            if title_abstract_latest.get(publication.record_id) is not None
-            and title_abstract_latest[publication.record_id].outcome is ScreeningOutcome.INCLUDE
+            if publication.record_id in eligible_ids
         )
 
     def _readiness(
         self,
+        project_id: str,
+        reviewer_id: str,
         screening_input: ScreeningInput,
         eligible_publications: tuple[Publication, ...],
-        title_abstract_latest: dict[UUID, ScreeningDecision],
     ) -> FullTextReadiness:
         blocking = self._input_blocking_status(screening_input)
         if blocking is not None:
             return FullTextReadiness(blocking, 0)
+
+        adapter_readiness = self._eligibility_adapter.stage_readiness(
+            project_id=project_id,
+            stage=ScreeningStage.FULL_TEXT,
+            reviewer_id=reviewer_id,
+        )
+
+        from app.services.screening_eligibility_adapter import StageReadinessStatus
+        if adapter_readiness.status is StageReadinessStatus.UNRESOLVED_CONFLICT:
+            return FullTextReadiness(FullTextReadinessStatus.UNRESOLVED_CONFLICT, 0)
+        if adapter_readiness.status is StageReadinessStatus.STALE_RESOLUTION:
+            return FullTextReadiness(FullTextReadinessStatus.STALE_RESOLUTION, 0)
+
         if eligible_publications:
             return FullTextReadiness(FullTextReadinessStatus.READY, len(eligible_publications))
+
+        title_abstract_latest = self._latest_by_publication(
+            project_id, reviewer_id, ScreeningStage.TITLE_ABSTRACT
+        )
         has_nonfinal_or_uncertain = any(
             title_abstract_latest.get(publication.record_id) is None
             or title_abstract_latest[publication.record_id].outcome is ScreeningOutcome.UNCERTAIN
@@ -213,7 +249,7 @@ class FullTextScreeningService:
         )
         return FullTextReadiness(
             FullTextReadinessStatus.WAITING_FOR_TITLE_ABSTRACT
-            if has_nonfinal_or_uncertain
+            if has_nonfinal_or_uncertain or adapter_readiness.status is StageReadinessStatus.WAITING_FOR_PREVIOUS_STAGE
             else FullTextReadinessStatus.NO_ELIGIBLE_PUBLICATIONS,
             0,
         )
@@ -261,10 +297,9 @@ class FullTextScreeningService:
         title_abstract_latest = self._latest_by_publication(
             project_id, reviewer_id, ScreeningStage.TITLE_ABSTRACT
         )
-        eligible = self._eligible_publications(screening_input, title_abstract_latest)
-        return screening_input, eligible, title_abstract_latest, self._readiness(
-            screening_input, eligible, title_abstract_latest
-        )
+        eligible = self._eligible_publications(project_id, reviewer_id, screening_input)
+        readiness = self._readiness(project_id, reviewer_id, screening_input, eligible)
+        return screening_input, eligible, title_abstract_latest, readiness
 
     @staticmethod
     def _require_ready(readiness: FullTextReadiness) -> None:

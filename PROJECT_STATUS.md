@@ -22,9 +22,9 @@ Completed
 
 Current development phase:
 
-Phase 7 — Screening remains in progress. Title & Abstract and Full-Text
-Screening (7.5A–7.8B), Project Management, and Dashboard/Search polish are
-completed; the next planned increment is 7.9 — Screening Integration and Release.
+Phase 7 — Screening implementation is complete through 7.9 and integrated;
+automated verification is complete. Manual Acceptance is PENDING AFTER PHASE 8
+INTEGRATION ON DEVELOPMENT. Phase 7 is not yet finally released or accepted.
 
 Phase 6.7 & Phase 6.8 Workflow State:
 - **Phase 6.7 (Modules 1–4 Functional Workflow)**: ✅ Completed (6.7.1, 6.7.2a, 6.7.2b).
@@ -47,7 +47,9 @@ Screening prerequisites resolved in v0.3.3:
 
 State of Phase 7 — Screening:
 - v0.3.6 is completed.
-- Phase 7 — Screening is in progress; 7.1–7.8B are completed and 7.9 is next.
+- Phase 7 — Screening implementation is complete and integrated through 7.9;
+  automated verification is complete, with Manual Acceptance pending after
+  Phase 8 integration on development.
 - Phase 7.1 — Screening Criteria Domain Model is ✅ Completed (`ScreeningCriterion`, `ScreeningCriterionType`, `ScreeningCriterionStage`, validation, unit tests).
 - Phase 7.2 — Screening Criteria Persistence and API is ✅ Completed (SQLite schema `0007_screening_criteria.sql`, repository, project isolation, REST API, DTOs, tests).
 - Phase 7.3 — Screening Configuration GUI is ✅ Completed (ScreeningCriteriaList, ScreeningCriterionCard, ScreeningCriterionModal, projectApiService adapter, validation, 22 frontend tests).
@@ -67,7 +69,11 @@ State of Phase 7 — Screening:
   resolver workflow, append-only resolution history, stale/current semantics,
   unified audit events, project-level outcome read model, and optimistic
   concurrency).
-- Next: Phase 7.9 — Screening Integration and Release.
+- Phase 7.9 — Screening Integration and Release is ✅ Implemented and
+  integrated (ScreeningEligibilityAdapter, queue hydration, staleness
+  revocation, unified `GET /projects/{id}/workflow-status` endpoint, Dashboard
+  and Stepper integration, and integration test suites). Automated verification
+  is complete; Manual Acceptance remains pending after Phase 8 integration.
 
 Completed in v0.3.6:
 - Conflict resolution and adjudication with explicit resolver identity and
