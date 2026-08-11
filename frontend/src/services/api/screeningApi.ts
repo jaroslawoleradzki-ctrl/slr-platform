@@ -26,6 +26,7 @@ export interface ScreeningCriterion {
 export interface CriterionAssessment {
   criterion_id: string;
   criterion_name: string;
+  criterion_description?: string | null;
   criterion_type: 'inclusion' | 'exclusion';
   criterion_stage: 'title_abstract' | 'full_text' | 'both';
   criterion_is_required: boolean;
@@ -44,6 +45,7 @@ export interface ScreeningDecision {
   outcome: ScreeningOutcome;
   reviewer_id: string;
   rationale: string | null;
+  criterion_snapshot_schema_version?: number;
   criterion_assessments: CriterionAssessment[];
   exclusion_reason_criterion_ids?: string[];
   decided_at: string;
@@ -132,6 +134,12 @@ export interface TitleAbstractDecisionRequest {
     notes?: string | null;
   }>;
 }
+export interface ScreeningStageProgress { total_eligible: number; screened: number; remaining: number; included: number; excluded: number; uncertain: number; }
+export interface ScreeningTransitions { canonical_input: number; title_abstract_screened: number; title_abstract_included: number; full_text_eligible: number; full_text_screened: number; full_text_included: number; }
+export interface ScreeningReasonAggregation { criterion_id: string; criterion_snapshot_key: string; snapshot_schema_version: number; snapshot_complete: boolean; count: number; criterion_assessment: CriterionAssessment; }
+export interface ScreeningReport { project_id: string; reviewer_id: string; ready: boolean; readiness_status: string; working_collection_count: number; canonical_records_count: number; title_abstract: ScreeningStageProgress | null; full_text: ScreeningStageProgress | null; transitions: ScreeningTransitions | null; full_text_exclusion_reasons: ScreeningReasonAggregation[]; }
+export interface ScreeningAuditEvent { decision: ScreeningDecision; publication_title: string | null; revision_index: number; previous_outcome: ScreeningOutcome | null; is_latest_for_reviewer: boolean; }
+export interface ScreeningAuditPage { total: number; offset: number; limit: number; items: ScreeningAuditEvent[]; }
 
 export class ApiError extends Error {
   constructor(
@@ -227,5 +235,9 @@ export const screeningApi = {
   },
   listDecisionHistory(projectId: string, publicationId: string, reviewerId: string) {
     return request<{ items: ScreeningDecision[]; total: number }>(`/projects/${projectId}/screening/decisions/history?${query({ publication_id: publicationId, stage: 'full_text', reviewer_id: reviewerId })}`);
+  },
+  getReport(projectId: string, reviewerId: string) { return request<ScreeningReport>(`/projects/${projectId}/screening/report?${query({ reviewer_id: reviewerId })}`); },
+  getAudit(projectId: string, reviewerId: string | null, offset: number, limit: number, stage?: string | null, outcome?: string | null) {
+    return request<ScreeningAuditPage>(`/projects/${projectId}/screening/audit?${query({ reviewer_id: reviewerId, offset, limit, stage, outcome })}`);
   },
 };

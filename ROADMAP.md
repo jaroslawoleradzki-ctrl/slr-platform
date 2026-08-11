@@ -167,7 +167,7 @@ not block Title & Abstract Screening.
 - **Dashboard and Search Polish** ✅ — Corrected Search → Import contract,
   provider pagination with append semantics, local pagination of loaded results,
   and selection preserved across local pages.
-- **Next increment: 7.7 — Screening Audit Trail and Progress** ➡️
+- **Next increment: 7.8 — Multi-Reviewer Screening and Conflict Detection** ➡️
 
 ### Version 0.3.1 — Project Management and Title & Abstract Screening ✅
 
@@ -334,8 +334,8 @@ Support systematic review screening through a backend workflow and a dedicated u
 - **7.5C — Title & Abstract Screening GUI** ✅ — Project-scoped executable UI with explicit reviewer identity, typed readiness blocking states, progress, filtering, deterministic record navigation, criterion-level assessment, manual decisions, Save / Save & Next, and resume from persisted decisions.
 - **7.5D — Automatic Metadata-Based Screening Criteria** ✅ — Configurable `MANUAL` and `METADATA_RULE` criteria; deterministic safe rules over publication metadata; server-authoritative automatic assessments with historical rule/value/result snapshots. The final screening outcome remains a human reviewer decision.
 - **7.6 — Full-Text Screening** ✅ — Reviewer-specific derived eligibility from current canonical input plus latest `TITLE_ABSTRACT=INCLUDE`; `FULL_TEXT`/`BOTH` criteria, server-authoritative automatic assessments, full-text availability/reference workflow metadata, structured exclusion reasons linked to immutable criterion-assessment snapshots, append-only decisions, current progress/filtering and executable GUI. Loss of eligibility removes a record from the current queue without deleting history.
-- **Next increment: 7.7 — Screening Audit Trail and Progress** ➡️
-- **7.7 — Screening Audit Trail and Progress** ⬜ — Complete decision audit trail capturing reviewer, timestamps, exact criteria version used, decision changes, stage-specific progress metrics (included, excluded, uncertain counts), exclusion-reason aggregations, overall project screening summary, and structured data extraction necessary for subsequent PRISMA flow charts. Changes to criteria do not invalidate or obscure historical decisions.
+- **7.7 — Screening Audit Trail and Progress** ✅ — Unified, project-scoped read models for immutable Title & Abstract and Full-Text decision history; reviewer-specific stage progress and pipeline transitions; Full-Text exclusion-reason aggregation from criterion snapshots; legacy v1 and description-complete v2 criterion snapshots; paginated audit/report API and screening summary/history UI. No project-wide reviewer reconciliation.
+- **Next increment: 7.8 — Multi-Reviewer Screening and Conflict Detection** ➡️
 - **7.8 — Multi-Reviewer Screening and Conflict Detection** ⬜ — Independent multi-reviewer decision recording for the same publication and stage, conflict detection algorithm identifying reviewer disagreements, dedicated conflict resolution queue, resolution workflow with reviewer agreement metrics, resolution rationale recording, and audit trail. Single-reviewer workflow remains fully operational.
 - **7.9 — Screening Integration and Release** ⬜ — Integration into Project Dashboard, workflow stage status transitions (Deduplication → Screening and Screening → Quality Assessment), handling empty/loading/error states, backend integration test suite, frontend integration test suite, end-to-end verification, documentation reconciliation, and release verification.
 

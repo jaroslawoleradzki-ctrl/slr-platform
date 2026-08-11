@@ -148,7 +148,10 @@ class MetadataRule(BaseModel):
             if self.field is MetadataRuleField.OPEN_ACCESS
             else str
         )
-        if any(not isinstance(value, expected_type) or (expected_type is int and isinstance(value, bool)) for value in values):
+        if any(
+            not isinstance(value, expected_type) or (expected_type is int and isinstance(value, bool))
+            for value in values
+        ):
             raise ValueError(f"{self.field.value} requires {expected_type.__name__} rule values")
         return self
 
@@ -233,6 +236,9 @@ class CriterionAssessment(BaseModel):
 
     criterion_id: UUID
     criterion_name: str = Field(min_length=1)
+    # v1 snapshots did not retain this value.  Its meaning is interpreted from
+    # ScreeningDecision.criterion_snapshot_schema_version, not from null alone.
+    criterion_description: str | None = None
     criterion_type: ScreeningCriterionType
     criterion_stage: ScreeningCriterionStage
     criterion_is_required: bool
@@ -283,6 +289,7 @@ class ScreeningDecision(BaseModel):
     outcome: ScreeningOutcome
     reviewer_id: str = Field(min_length=1)
     rationale: str | None = None
+    criterion_snapshot_schema_version: int = Field(default=2, ge=1)
     criterion_assessments: list[CriterionAssessment] = Field(default_factory=list)
     # For Full Text exclusions this stores criterion IDs whose immutable
     # assessment snapshots explain the exclusion.  Stage-specific validation
@@ -319,12 +326,8 @@ class ScreeningDecision(BaseModel):
         seen_criterion_ids: set[UUID] = set()
         for assessment in self.criterion_assessments:
             if assessment.criterion_id in seen_criterion_ids:
-                raise ValueError(
-                    f"Duplicate criterion assessment for criterion_id '{assessment.criterion_id}'"
-                )
+                raise ValueError(f"Duplicate criterion assessment for criterion_id '{assessment.criterion_id}'")
             seen_criterion_ids.add(assessment.criterion_id)
-        if len(set(self.exclusion_reason_criterion_ids)) != len(
-            self.exclusion_reason_criterion_ids
-        ):
+        if len(set(self.exclusion_reason_criterion_ids)) != len(self.exclusion_reason_criterion_ids):
             raise ValueError("Duplicate exclusion reason criterion_id")
         return self

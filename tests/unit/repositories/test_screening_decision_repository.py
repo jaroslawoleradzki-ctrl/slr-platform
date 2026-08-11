@@ -1,4 +1,6 @@
+import sqlite3
 from datetime import datetime, timezone
+from pathlib import Path
 from uuid import uuid4
 
 import pytest
@@ -60,6 +62,92 @@ def test_save_and_get_decision(repository: SqliteScreeningDecisionRepository) ->
     assert len(fetched.criterion_assessments) == 1
     assert fetched.criterion_assessments[0].criterion_id == cid
     assert fetched.criterion_assessments[0].criterion_is_required is True
+
+
+def test_new_decision_persists_v2_description_snapshot(
+    repository: SqliteScreeningDecisionRepository,
+) -> None:
+    assessment = CriterionAssessment(
+        criterion_id=uuid4(),
+        criterion_name="Criterion with description",
+        criterion_description="A historical explanation.",
+        criterion_type=ScreeningCriterionType.INCLUSION,
+        criterion_stage=ScreeningCriterionStage.TITLE_ABSTRACT,
+        criterion_is_required=True,
+        assessment_value=CriterionAssessmentValue.MET,
+    )
+    decision = ScreeningDecision(
+        project_id="project-v2",
+        publication_id=uuid4(),
+        stage=ScreeningStage.TITLE_ABSTRACT,
+        outcome=ScreeningOutcome.INCLUDE,
+        reviewer_id="reviewer",
+        criterion_assessments=[assessment],
+    )
+
+    repository.save(decision)
+
+    restored = repository.get("project-v2", decision.decision_id)
+    assert restored.criterion_snapshot_schema_version == 2
+    assert restored.criterion_assessments[0].criterion_description == ("A historical explanation.")
+
+
+def test_legacy_v1_decision_migrates_without_backfilling_description(tmp_path) -> None:
+    database_path = tmp_path / "legacy-screening.db"
+    decision_id = uuid4()
+    criterion_id = uuid4()
+    publication_id = uuid4()
+    migrations = Path(__file__).parents[3] / "migrations"
+    with sqlite3.connect(database_path) as connection:
+        connection.execute("CREATE TABLE schema_migrations (version TEXT PRIMARY KEY, applied_at TEXT)")
+        for migration in sorted(migrations.glob("*.sql")):
+            if migration.name == "0015_screening_audit_reporting.sql":
+                continue
+            connection.executescript(migration.read_text(encoding="utf-8"))
+            connection.execute(
+                "INSERT INTO schema_migrations (version, applied_at) VALUES (?, CURRENT_TIMESTAMP)",
+                (migration.name,),
+            )
+        connection.execute(
+            """INSERT INTO screening_decisions (
+                decision_id, project_id, publication_id, stage, outcome, reviewer_id,
+                rationale, decided_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                str(decision_id),
+                "legacy-project",
+                str(publication_id),
+                "title_abstract",
+                "exclude",
+                "reviewer",
+                None,
+                "2026-01-01T00:00:00+00:00",
+            ),
+        )
+        connection.execute(
+            """INSERT INTO screening_criterion_assessments (
+                decision_id, criterion_id, criterion_name, criterion_type,
+                criterion_stage, criterion_is_required, assessment_value, notes,
+                evaluation_mode, metadata_rule, evaluated_metadata_value
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                str(decision_id),
+                str(criterion_id),
+                "Old criterion",
+                "inclusion",
+                "title_abstract",
+                1,
+                "not_met",
+                None,
+                "manual",
+                None,
+                None,
+            ),
+        )
+
+    restored = SqliteScreeningDecisionRepository(database_path).get("legacy-project", decision_id)
+    assert restored.criterion_snapshot_schema_version == 1
+    assert restored.criterion_assessments[0].criterion_description is None
 
 
 def test_survive_db_reopen(tmp_path) -> None:
@@ -173,12 +261,8 @@ def test_stage_separated_histories(
     )
     repository.save(d_fulltext)
 
-    title_latest = repository.get_latest_decision(
-        project_id, pub_id, ScreeningStage.TITLE_ABSTRACT, reviewer_id
-    )
-    full_latest = repository.get_latest_decision(
-        project_id, pub_id, ScreeningStage.FULL_TEXT, reviewer_id
-    )
+    title_latest = repository.get_latest_decision(project_id, pub_id, ScreeningStage.TITLE_ABSTRACT, reviewer_id)
+    full_latest = repository.get_latest_decision(project_id, pub_id, ScreeningStage.FULL_TEXT, reviewer_id)
 
     assert title_latest is not None and title_latest.decision_id == d_title.decision_id
     assert full_latest is not None and full_latest.decision_id == d_fulltext.decision_id
