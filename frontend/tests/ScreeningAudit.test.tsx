@@ -28,6 +28,15 @@ describe('Screening audit page', () => {
     expect(screen.getByText('Brak historii')).toBeInTheDocument();
   });
 
+  it('uses the shared dark control styling for the reviewer identifier', () => {
+    localStorage.removeItem('slr_screening_reviewer_id');
+    render(<MemoryRouter initialEntries={['/projects/project-a/screen/audit']}><Routes><Route path="/projects/:projectId/screen/audit" element={<ScreeningAuditPage />} /></Routes></MemoryRouter>);
+
+    const input = screen.getByLabelText('Identyfikator reviewera');
+    expect(input).toHaveStyle({ backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)' });
+    expect(input).toHaveAttribute('placeholder', 'np. anna.kowalska');
+  });
+
   it('renders decision and resolution event variants in one timeline', async () => {
     vi.mocked(screeningApi.getAudit).mockResolvedValueOnce({
       total: 2, offset: 0, limit: 25,

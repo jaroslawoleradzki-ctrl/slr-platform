@@ -12,6 +12,7 @@ import {
   screeningApi,
 } from '../services/api/screeningApi';
 import { useReviewerIdentity } from '../hooks/useReviewerIdentity';
+import { screeningControlStyle, screeningLabelStyle } from '../components/screening/screeningFormStyles';
 
 const PAGE_SIZE = 25;
 
@@ -84,12 +85,15 @@ export const ScreeningAuditPage: React.FC = () => {
     return (
       <Card title="Podsumowanie i historia">
         <p>Podaj identyfikator reviewera, aby zobaczyć jego postęp i historię.</p>
-        <label htmlFor="audit-reviewer">Identyfikator reviewera</label>
-        <input
-          id="audit-reviewer"
-          value={reviewerDraft}
-          onChange={(event) => setReviewerDraft(event.target.value)}
-        />
+        <label htmlFor="audit-reviewer" style={screeningLabelStyle}>Identyfikator reviewera
+          <input
+            id="audit-reviewer"
+            value={reviewerDraft}
+            placeholder="np. anna.kowalska"
+            onChange={(event) => setReviewerDraft(event.target.value)}
+            style={screeningControlStyle}
+          />
+        </label>
         <Button onClick={saveReviewer} disabled={!reviewerDraft.trim()}>Zapisz</Button>
       </Card>
     );

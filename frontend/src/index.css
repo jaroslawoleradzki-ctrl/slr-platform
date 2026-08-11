@@ -93,6 +93,22 @@ input, select, textarea {
   caret-color: var(--text-primary);
 }
 
+input:not([type="checkbox"]):not([type="radio"]), textarea {
+  min-height: 40px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  transition: background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+input:not([type="checkbox"]):not([type="radio"]):hover:not(:disabled),
+textarea:hover:not(:disabled) {
+  background-color: var(--bg-surface-hover);
+  border-color: var(--text-muted);
+}
+
 /* Native select controls otherwise fall back to a bright platform surface. */
 select {
   min-height: 40px;
