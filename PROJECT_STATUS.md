@@ -14,7 +14,7 @@ development
 
 Current version:
 
-v0.3.2
+v0.3.3
 
 Current release status:
 
@@ -23,7 +23,8 @@ Completed
 Current development phase:
 
 Phase 7 — Screening remains in progress. Title & Abstract and Full-Text
-Screening (7.5A–7.6) and Project Management are completed; the next planned
+Screening (7.5A–7.6), Project Management, and Dashboard/Search polish are
+completed; the next planned
 increment is 7.7 — Screening Audit Trail and Progress.
 
 Phase 6.7 & Phase 6.8 Workflow State:
@@ -39,14 +40,14 @@ Phase 6.7 & Phase 6.8 Workflow State:
   - 6.8.8 GUI Import Integration — ✅ Completed (`POST /imports` RIS/BibTeX upload & history)
   - 6.8.9 Publication Intake Summary — ✅ Completed (`SourcesSummaryService` read model & GET endpoint)
 
-Screening prerequisites resolved in v0.3.2:
+Screening prerequisites resolved in v0.3.3:
 - Authoritative `SearchResultSnapshot` records retain canonical provider metadata
   and provenance for new live-search imports.
 - `ScreeningInputService` derives a stable, non-destructive canonical input set;
   pending duplicate groups and merge conflicts explicitly block readiness.
 
 State of Phase 7 — Screening:
-- v0.3.2 is completed.
+- v0.3.3 is completed.
 - Phase 7 — Screening is in progress; 7.1–7.6 are completed and 7.7 is next.
 - Phase 7.1 — Screening Criteria Domain Model is ✅ Completed (`ScreeningCriterion`, `ScreeningCriterionType`, `ScreeningCriterionStage`, validation, unit tests).
 - Phase 7.2 — Screening Criteria Persistence and API is ✅ Completed (SQLite schema `0007_screening_criteria.sql`, repository, project isolation, REST API, DTOs, tests).

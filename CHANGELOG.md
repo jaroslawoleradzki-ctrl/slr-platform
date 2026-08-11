@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.3.3] — 2026-08-11
+
+### Added
+
+- **Dashboard and Search polish**: the project dashboard exposes the available
+  Title & Abstract and Full-Text workflows while later quality stages remain
+  clearly unavailable.
+- Search results now support provider-backed Load More, append additional
+  results without replacing existing selections, and local pagination across
+  all loaded records.
+
+### Fixed
+
+- Aligned the Search Strategy → Import request contract across the browser and
+  backend, preserving the existing 7.6 Full-Text Screening workflow.
+
+### Notes
+
+- Phase 7.7 Screening Audit Trail and Progress remains planned.
+
 ## [0.3.2] — 2026-08-11
 
 ### Added

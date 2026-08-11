@@ -159,6 +159,16 @@ groups remain separate, and pending groups or merge conflicts block readiness.
 Full durable `SearchRun` history remains a separate Phase 6.8.5 concern; it does
 not block Title & Abstract Screening.
 
+### Version 0.3.3 — Full-Text Screening and Dashboard/Search Polish ✅
+
+- **Phase 7.6 — Full-Text Screening** ✅ — Reviewer-specific eligibility,
+  derived queue, FULL_TEXT/BOTH criteria, availability metadata, structured
+  exclusion reasons, append-only history, and executable Full-Text GUI.
+- **Dashboard and Search Polish** ✅ — Corrected Search → Import contract,
+  provider pagination with append semantics, local pagination of loaded results,
+  and selection preserved across local pages.
+- **Next increment: 7.7 — Screening Audit Trail and Progress** ➡️
+
 ### Version 0.3.1 — Project Management and Title & Abstract Screening ✅
 
 - **Project Management** ✅ — Persistent project resource with list, create,
