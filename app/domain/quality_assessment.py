@@ -30,6 +30,7 @@ class QualityAssessmentTool(BaseModel):
     tool_id: StrictStr = Field(min_length=1)
     name: StrictStr = Field(min_length=1)
     description: StrictStr | None = None
+    is_active: StrictBool = True
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     @field_validator("tool_id", "name")
@@ -234,3 +235,30 @@ class QualityAssessment(BaseModel):
                 raise ValueError(f"Duplicate response for criterion_id '{resp.criterion_id}'")
             seen_criterion_ids.add(resp.criterion_id)
         return self
+
+
+class ProjectQualityAssessmentConfiguration(BaseModel):
+    """Domain model for a project's active Quality Assessment configuration."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    project_id: StrictStr = Field(min_length=1)
+    tool_id: StrictStr = Field(min_length=1)
+    template_id: UUID
+    configured_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+    @field_validator("project_id", "tool_id")
+    @classmethod
+    def validate_non_blank_text(cls, value: str) -> str:
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("text fields must not be blank")
+        return stripped
+
+    @field_validator("configured_at", "updated_at")
+    @classmethod
+    def require_timezone(cls, value: datetime) -> datetime:
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("timestamps must be timezone-aware")
+        return value

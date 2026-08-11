@@ -346,12 +346,16 @@ Phase 7 is complete when a user can:
 
 ---
 
-## Phase 8 — Quality Assessment
+## Phase 8 — Quality Assessment 🟨
 
 Support methodological quality assessment of included studies.
 
-Features:
+Increments:
+- **8.1 — Quality Assessment Domain Models & Persistence** ✅ — Infrastructure-independent Pydantic v2 models (`QualityAssessmentTool`, `QualityAssessmentTemplate`, `QualityAssessmentTemplateCriterion`, `QualityAssessment`, `QualityAssessmentResponse`), SQLite migration (`0013_quality_assessment.sql`), repository protocols (`QualityAssessmentCatalogRepository`, `QualityAssessmentRepository`), template content immutability contract, authoritative response criterion ownership validation, append-only history trail, and unit test suite.
+- **8.2 — Quality Assessment Tool Catalog & Project Configuration** ✅ — Deterministic code-defined tool/template catalog seeding (`casp_inspired`), active/inactive tool & template version lifecycle metadata semantics, project-scoped active configuration persistence (`ProjectQualityAssessmentConfiguration`, migration `0014_quality_assessment_configuration.sql`), application service (`QualityAssessmentConfigurationService`), REST API (`GET/PUT /quality-assessment/tools`, `GET/PUT /projects/{id}/quality-assessment/configuration`), typed DTOs, project hard delete integration, cross-tool mismatch validation, and test suite. No execution workflow, GUI, or unverified template criteria.
+- **Next increment: 8.3 — Execution Backend** ➡️
 
+Features:
 - configurable quality criteria
 - assessment forms
 - scoring or rating schemes

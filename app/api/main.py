@@ -7,6 +7,7 @@ from app.api.routers import (
     deduplication,
     normalization,
     projects,
+    quality_assessment,
     screening,
     search_strategy,
 )
@@ -40,6 +41,7 @@ app.include_router(deduplication.router)
 app.include_router(search_strategy.router)
 app.include_router(normalization.router)
 app.include_router(screening.router)
+app.include_router(quality_assessment.router)
 
 
 @app.get("/")

@@ -4,6 +4,7 @@ from typing import Any, Protocol, runtime_checkable
 from uuid import UUID
 
 from app.domain.quality_assessment import (
+    ProjectQualityAssessmentConfiguration,
     QualityAssessment,
     QualityAssessmentTemplate,
     QualityAssessmentTool,
@@ -58,5 +59,20 @@ class QualityAssessmentRepository(Protocol):
     def list_assessments_for_publication(
         self, project_id: str, publication_id: UUID, reviewer_id: str, connection: Any = None
     ) -> list[QualityAssessment]: ...
+
+    def delete_for_project(self, project_id: str, connection: Any = None) -> None: ...
+
+
+@runtime_checkable
+class ProjectQualityAssessmentConfigurationRepository(Protocol):
+    """Abstract protocol for project-scoped Quality Assessment active configuration storage."""
+
+    def save_configuration(
+        self, config: ProjectQualityAssessmentConfiguration, connection: Any = None
+    ) -> ProjectQualityAssessmentConfiguration: ...
+
+    def get_configuration(
+        self, project_id: str, connection: Any = None
+    ) -> ProjectQualityAssessmentConfiguration | None: ...
 
     def delete_for_project(self, project_id: str, connection: Any = None) -> None: ...

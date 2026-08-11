@@ -8,6 +8,7 @@ from typing import Any
 from uuid import UUID
 
 from app.domain.quality_assessment import (
+    ProjectQualityAssessmentConfiguration,
     QualityAssessment,
     QualityAssessmentResponse,
     QualityAssessmentResponseValue,
@@ -16,6 +17,7 @@ from app.domain.quality_assessment import (
     QualityAssessmentTool,
 )
 from app.repositories.quality_assessment_repository import (
+    ProjectQualityAssessmentConfigurationRepository,
     QualityAssessmentCatalogRepository,
     QualityAssessmentRepository,
 )
@@ -85,10 +87,10 @@ class SqliteQualityAssessmentCatalogRepository(QualityAssessmentCatalogRepositor
         try:
             conn.execute(
                 """
-                INSERT INTO quality_assessment_tools (tool_id, name, description, created_at)
-                VALUES (?, ?, ?, ?)
+                INSERT INTO quality_assessment_tools (tool_id, name, description, is_active, created_at)
+                VALUES (?, ?, ?, ?, ?)
                 """,
-                (tool.tool_id, tool.name, tool.description, tool.created_at.isoformat()),
+                (tool.tool_id, tool.name, tool.description, 1 if tool.is_active else 0, tool.created_at.isoformat()),
             )
             if close_conn:
                 conn.commit()
@@ -102,7 +104,7 @@ class SqliteQualityAssessmentCatalogRepository(QualityAssessmentCatalogRepositor
         close_conn = connection is None
         try:
             row = conn.execute(
-                "SELECT tool_id, name, description, created_at FROM quality_assessment_tools WHERE tool_id = ?",
+                "SELECT tool_id, name, description, is_active, created_at FROM quality_assessment_tools WHERE tool_id = ?",
                 (tool_id,),
             ).fetchone()
             if not row:
@@ -111,6 +113,7 @@ class SqliteQualityAssessmentCatalogRepository(QualityAssessmentCatalogRepositor
                 tool_id=row["tool_id"],
                 name=row["name"],
                 description=row["description"],
+                is_active=bool(row["is_active"]),
                 created_at=datetime.fromisoformat(row["created_at"]),
             )
         finally:
@@ -122,13 +125,14 @@ class SqliteQualityAssessmentCatalogRepository(QualityAssessmentCatalogRepositor
         close_conn = connection is None
         try:
             rows = conn.execute(
-                "SELECT tool_id, name, description, created_at FROM quality_assessment_tools ORDER BY name ASC"
+                "SELECT tool_id, name, description, is_active, created_at FROM quality_assessment_tools ORDER BY name ASC"
             ).fetchall()
             return [
                 QualityAssessmentTool(
                     tool_id=row["tool_id"],
                     name=row["name"],
                     description=row["description"],
+                    is_active=bool(row["is_active"]),
                     created_at=datetime.fromisoformat(row["created_at"]),
                 )
                 for row in rows
@@ -575,3 +579,126 @@ def default_quality_assessment_catalog_repository() -> SqliteQualityAssessmentCa
 
 def default_quality_assessment_repository() -> SqliteQualityAssessmentRepository:
     return SqliteQualityAssessmentRepository()
+
+
+class SqliteProjectQualityAssessmentConfigurationRepository(ProjectQualityAssessmentConfigurationRepository):
+    """SQLite implementation for project-scoped Quality Assessment configuration storage."""
+
+    def __init__(self, db_path: Path | str = DEFAULT_DB_PATH) -> None:
+        self._db_path = Path(db_path)
+        self._apply_migrations()
+
+    def _get_connection(self, explicit_conn: sqlite3.Connection | None = None) -> sqlite3.Connection:
+        if explicit_conn is not None:
+            return explicit_conn
+        conn = sqlite3.connect(str(self._db_path))
+        conn.execute("PRAGMA foreign_keys = ON;")
+        conn.row_factory = sqlite3.Row
+        return conn
+
+    def _apply_migrations(self) -> None:
+        migration_directory = Path(__file__).parents[2] / "migrations"
+        if not migration_directory.exists():
+            return
+
+        with self._get_connection() as connection:
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS schema_migrations (
+                    version TEXT PRIMARY KEY,
+                    applied_at TEXT NOT NULL
+                )
+                """
+            )
+
+            applied_versions = {
+                row[0] for row in connection.execute("SELECT version FROM schema_migrations")
+            }
+
+            for sql_file in sorted(migration_directory.glob("*.sql")):
+                if sql_file.name in applied_versions:
+                    continue
+
+                connection.executescript(sql_file.read_text(encoding="utf-8"))
+                connection.execute(
+                    "INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)",
+                    (sql_file.name, datetime.now(timezone.utc).isoformat()),
+                )
+
+    def save_configuration(
+        self, config: ProjectQualityAssessmentConfiguration, connection: Any = None
+    ) -> ProjectQualityAssessmentConfiguration:
+        conn = self._get_connection(connection)
+        close_conn = connection is None
+        try:
+            conn.execute(
+                """
+                INSERT INTO project_quality_assessment_configurations
+                (project_id, tool_id, template_id, configured_at, updated_at)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(project_id) DO UPDATE SET
+                    tool_id = excluded.tool_id,
+                    template_id = excluded.template_id,
+                    updated_at = excluded.updated_at
+                """,
+                (
+                    config.project_id,
+                    config.tool_id,
+                    str(config.template_id),
+                    config.configured_at.isoformat(),
+                    config.updated_at.isoformat(),
+                ),
+            )
+            if close_conn:
+                conn.commit()
+            return config
+        finally:
+            if close_conn:
+                conn.close()
+
+    def get_configuration(
+        self, project_id: str, connection: Any = None
+    ) -> ProjectQualityAssessmentConfiguration | None:
+        conn = self._get_connection(connection)
+        close_conn = connection is None
+        try:
+            row = conn.execute(
+                """
+                SELECT project_id, tool_id, template_id, configured_at, updated_at
+                FROM project_quality_assessment_configurations
+                WHERE project_id = ?
+                """,
+                (project_id,),
+            ).fetchone()
+            if not row:
+                return None
+            return ProjectQualityAssessmentConfiguration(
+                project_id=row["project_id"],
+                tool_id=row["tool_id"],
+                template_id=UUID(row["template_id"]),
+                configured_at=datetime.fromisoformat(row["configured_at"]),
+                updated_at=datetime.fromisoformat(row["updated_at"]),
+            )
+        finally:
+            if close_conn:
+                conn.close()
+
+    def delete_for_project(self, project_id: str, connection: Any = None) -> None:
+        conn = self._get_connection(connection)
+        close_conn = connection is None
+        try:
+            conn.execute(
+                "DELETE FROM project_quality_assessment_configurations WHERE project_id = ?",
+                (project_id,),
+            )
+            if close_conn:
+                conn.commit()
+        finally:
+            if close_conn:
+                conn.close()
+
+
+def default_project_quality_assessment_configuration_repository() -> (
+    SqliteProjectQualityAssessmentConfigurationRepository
+):
+    return SqliteProjectQualityAssessmentConfigurationRepository()
