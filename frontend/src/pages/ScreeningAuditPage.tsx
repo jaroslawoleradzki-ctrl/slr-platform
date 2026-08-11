@@ -123,6 +123,11 @@ export const ScreeningAuditPage: React.FC = () => {
         </p>
       </Card>
 
+      <Card title="Zgodność multi-reviewer">
+        <p>Title &amp; Abstract: {formatMultiReviewer(report.title_abstract_multi_reviewer)}</p>
+        <p>Full Text: {formatMultiReviewer(report.full_text_multi_reviewer)}</p>
+      </Card>
+
       <Card title="Powody wykluczenia Full Text">
         {report.full_text_exclusion_reasons.length ? (
           <ul>
@@ -171,3 +176,9 @@ export const ScreeningAuditPage: React.FC = () => {
     </div>
   );
 };
+
+function formatMultiReviewer(metrics: ScreeningReport['title_abstract_multi_reviewer']): string {
+  if (!metrics) return 'Brak aktywnego rosteru.';
+  const rate = metrics.agreement_rate === null ? 'brak danych' : `${Math.round(metrics.agreement_rate * 100)}%`;
+  return `zgodne: ${metrics.agreement}, konflikty: ${metrics.conflict}, niepełne: ${metrics.incomplete}, agreement rate: ${rate}`;
+}

@@ -36,7 +36,7 @@ Release scope:
 
 Next milestone:
 
-Phase 7.8 — Multi-Reviewer Screening and Conflict Detection
+Phase 7.8B — Conflict Resolution / Adjudication
 
 ---
 
@@ -622,15 +622,27 @@ Status: ✅ Completed
 
 ---
 
-## 7.8 Multi-Reviewer Screening and Conflict Detection
+## 7.8A Multi-Reviewer Screening and Conflict Detection
 
 Zakres:
-- independent reviewer decisions for multiple reviewers
-- disagreement detection algorithm and conflict queue
-- conflict resolution workflow and resolution rationale
-- reviewer agreement metrics
-- audit history tracking
-(Single-reviewer workflow zachowuje pełną funkcjonalność)
+- project-and-stage reviewer roster with active/inactive lifecycle history;
+- derived `INCOMPLETE`, `AGREEMENT`, and `CONFLICT` status from latest reviewer-specific decisions;
+- conflict queue with pending reviewers, pagination/filtering, blind-aware outcome presentation, and agreement metrics;
+- reporting extension and project/stage isolation without N+1 reads.
+
+Poza zakresem: adjudication, resolution history, majority vote, resolved
+project outcome, oraz zmiany reviewer-specific eligibility Full Text/QA.
+
+Status: ✅ Completed
+
+---
+
+## 7.8B Conflict Resolution / Adjudication
+
+Zakres:
+- explicit resolver workflow and rationale;
+- immutable resolution history and stale-resolution detection;
+- future project-level resolved outcome, without automatic majority vote.
 
 Status: ⬜ Planned
 

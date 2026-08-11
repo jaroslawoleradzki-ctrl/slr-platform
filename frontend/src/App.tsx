@@ -12,6 +12,7 @@ import { DeduplicationPage } from './pages/DeduplicationPage';
 import { ScreeningPage } from './pages/ScreeningPage';
 import { TitleAbstractScreeningPage } from './pages/TitleAbstractScreeningPage';
 import { ScreeningAuditPage } from './pages/ScreeningAuditPage';
+import { ScreeningConflictsPage } from './pages/ScreeningConflictsPage';
 import { FullTextScreeningPage } from './pages/FullTextScreeningPage';
 import { ScreeningSectionLayout } from './components/screening/ScreeningSectionLayout';
 import { QualityAssessmentPage } from './pages/QualityAssessmentPage';
@@ -42,6 +43,7 @@ export const App: React.FC = () => {
               <Route path="full-text" element={<FullTextScreeningPage />} />
               <Route path="full-text/:publicationId" element={<FullTextScreeningPage />} />
               <Route path="audit" element={<ScreeningAuditPage />} />
+              <Route path="conflicts" element={<ScreeningConflictsPage />} />
             </Route>
             <Route path="qa" element={<QualityAssessmentPage />} />
             <Route path="extract" element={<DataExtractionPlaceholderPage />} />

@@ -83,6 +83,15 @@ class ScreeningTransitionResponse(BaseModel):
         )
 
 
+class MultiReviewerStageMetricsResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    incomplete: int
+    agreement: int
+    conflict: int
+    agreement_rate: float | None
+
+
 class ScreeningReportResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -96,6 +105,8 @@ class ScreeningReportResponse(BaseModel):
     full_text: StageProgressResponse | None
     transitions: ScreeningTransitionResponse | None
     full_text_exclusion_reasons: list[ExclusionReasonAggregationResponse]
+    title_abstract_multi_reviewer: MultiReviewerStageMetricsResponse | None = None
+    full_text_multi_reviewer: MultiReviewerStageMetricsResponse | None = None
 
 
 class ScreeningAuditEventResponse(BaseModel):
