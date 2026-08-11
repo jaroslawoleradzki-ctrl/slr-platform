@@ -764,7 +764,7 @@ Zakres:
 
 Status:
 
-⬜ Planned
+✅ Completed (Domain Model & Value System)
 
 ---
 
