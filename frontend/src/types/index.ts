@@ -509,8 +509,10 @@ export interface WorkflowNavigationStatus {
     label: string | null;
   };
   screening: {
-    state: 'not_available';
-    label: string;
+    state: WorkflowStageState;
+    count: number | null;
+    total: number | null;
+    label: string | null;
   };
   qualityAssessment: {
     state: 'not_available';

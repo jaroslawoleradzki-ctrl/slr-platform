@@ -579,3 +579,128 @@ def test_invalid_payload_does_not_partially_write() -> None:
 
     assert response.status_code == 422
     assert len(repository.get_publications("lean_energy")) == 5
+
+
+def test_real_browser_flow_lean_energy_strategy_execution_and_import(tmp_path: Path) -> None:
+    """Regression test recreating the exact browser flow for project lean_energy.
+
+    Flow:
+    1. PUT /projects/lean_energy/search-strategy -> 200
+    2. POST /projects/lean_energy/search-strategy/executions -> 200
+    3. Rejection of uncorrected payload with extra 'providers' field -> 422
+    4. POST /projects/lean_energy/search-results/imports with corrected frontend payload -> 200
+    5. Verification of SearchResultSnapshot.abstract -> Publication.abstract preservation.
+    """
+    database = tmp_path / "browser_flow_lean_energy.db"
+    project_repository = SqliteProjectRepository(database)
+    publication_repository = SqliteProjectPublicationRepository(database)
+    strategy_repository = SqliteSearchStrategyRepository(database)
+    snapshot_repository = SqliteSearchResultSnapshotRepository(database)
+    import_service = ProjectImportService(
+        publication_repository,
+        SqliteImportHistoryRepository(database),
+        SqliteNormalizationExecutionRepository(database),
+        SqliteTransactionManager(database),
+        snapshot_repository,
+    )
+    publication_with_abstract = Publication(
+        title="Energy Efficient Machine Learning in Edge Computing",
+        abstract="This paper presents a comprehensive study on lean energy optimization.",
+        authors=[Author(display_name="Jan Kowalski")],
+        publication_year=2024,
+        identifiers=[Identifier(type=IdentifierType.DOI, value="10.1000/lean.energy.123")],
+        venue=Venue(name="IEEE Transactions on Sustainable Computing", type=VenueType.JOURNAL),
+        publisher="IEEE",
+        language="en",
+        keywords=["lean energy", "optimization"],
+        urls=["https://example.test/lean_energy_paper"],
+        open_access=True,
+        provenance=[ProvenanceEntry(source="openalex", source_record_id="W-lean-energy-1")],
+    )
+
+    app.dependency_overrides[get_project_repository] = lambda: project_repository
+    app.dependency_overrides[get_project_publication_repository] = lambda: publication_repository
+    app.dependency_overrides[get_search_strategy_repository] = lambda: strategy_repository
+    app.dependency_overrides[get_search_result_snapshot_repository] = lambda: snapshot_repository
+    app.dependency_overrides[get_project_import_service] = lambda: import_service
+    app.dependency_overrides[get_live_search_executor] = lambda: _Executor(
+        [_Provider("openalex", [publication_with_abstract])]
+    )
+    client = TestClient(app)
+
+    # Ensure lean_energy project exists
+    created = client.post(
+        "/projects",
+        json={"title": "lean_energy", "description": "Lean Energy Project", "protocol_version": "1.0"},
+    )
+    assert created.status_code == 201
+
+    # 1. PUT strategy = 200
+    strategy_payload = {
+        "name": "Lean Energy Strategy",
+        "description": "Strategy for lean energy research",
+        "research_questions": ["What is the energy efficiency?"],
+        "concept_groups": [
+            {"group_id": "grp-1", "name": "Lean Energy", "terms": ["lean energy"], "operator": "or"}
+        ],
+        "group_operator": "and",
+        "constraints": {
+            "publication_year_from": 2020,
+            "publication_year_to": 2026,
+            "languages": ["en"],
+            "publication_types": ["article"],
+            "additional_limits": {"open_access": True},
+        },
+        "providers": ["openalex"],
+        "queries": [{"name": "Lean Energy", "expression": {"node_type": "term", "value": "lean energy"}}],
+        "version": 1,
+    }
+    put_res = client.put("/projects/lean_energy/search-strategy", json=strategy_payload)
+    assert put_res.status_code == 200
+
+    # 2. POST execution = 200
+    exec_payload = {
+        "publication_year_from": 2020,
+        "publication_year_to": 2026,
+        "languages": ["en"],
+        "publication_types": [],
+        "open_access": True,
+        "providers": ["openalex"],
+        "concept_groups": [{"id": "grp-1", "name": "Lean Energy", "terms": ["lean energy"]}],
+    }
+    exec_res = client.post("/projects/lean_energy/search-strategy/executions", json=exec_payload)
+    assert exec_res.status_code == 200
+    results = exec_res.json()["results"]
+    assert len(results) == 1
+    record = results[0]
+
+    # 3. Verify bad payload with extra 'providers' field is rejected with 422
+    bad_import_payload = {
+        "records": [record],
+        "query": "(lean energy)",
+        "providers": ["openalex"],  # Extra forbidden input
+    }
+    bad_import_res = client.post("/projects/lean_energy/search-results/imports", json=bad_import_payload)
+    assert bad_import_res.status_code == 422
+    assert "Extra inputs are not permitted" in bad_import_res.text
+
+    # 4. POST search-results/imports with corrected frontend payload = 200
+    correct_import_payload = {
+        "records": [record],
+        "query": "(lean energy)",
+        "provider": "openalex",
+        "total_available": 1,
+    }
+    import_res = client.post("/projects/lean_energy/search-results/imports", json=correct_import_payload)
+    assert import_res.status_code == 200
+    import_data = import_res.json()
+    assert import_data["project_id"] == "lean_energy"
+    assert import_data["imported_count"] == 1
+
+    # 5. Verify SearchResultSnapshot.abstract -> Publication.abstract preservation
+    stored_pubs = publication_repository.get_publications("lean_energy")
+    assert len(stored_pubs) == 1
+    imported_pub = stored_pubs[0]
+    assert imported_pub.abstract == "This paper presents a comprehensive study on lean energy optimization."
+    assert imported_pub.abstract is not None
+    assert len(imported_pub.abstract) > 0

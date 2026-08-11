@@ -101,7 +101,7 @@ describe('deriveNextAction — shared selector, single source of truth', () => {
     sources:           { state: 'completed',    count: 2,    label: '2 importów' },
     normalization:     { state: 'completed',    count: 0,    label: 'OK' },
     deduplication:     { state: 'completed',    totalGroups: 3, pendingGroups: 0, approvedGroups: 2, rejectedGroups: 1, label: 'Oceniono' },
-    screening:         { state: 'not_available', label: 'Niedostępne' },
+    screening:         { state: 'completed', count: 10, total: 10, label: 'Skończono' },
     qualityAssessment: { state: 'not_available', label: 'Niedostępne' },
     dataExtraction:    { state: 'not_available', label: 'Niedostępne' },
     exports:           { state: 'not_available', label: 'Niedostępne' },
@@ -154,11 +154,11 @@ describe('deriveNextAction — shared selector, single source of truth', () => {
     expect(a?.severity).toBe('urgent');
   });
 
-  it('all stages complete → summary action pointing to dedup', () => {
+  it('all stages 1–4 complete → next action points to Title & Abstract Screening', () => {
     const a = deriveNextAction(allComplete);
-    expect(a?.targetStageId).toBe('dedup');
+    expect(a?.targetStageId).toBe('screen/title-abstract');
     expect(a?.severity).toBe('normal');
-    expect(a?.title).toContain('ukończone');
+    expect(a?.title).toContain('Screeningu');
   });
 
   it('normalization warning does not block dedup as next action', () => {
@@ -251,21 +251,40 @@ describe('ProjectDashboardPage — real data, no mock values', () => {
     expect(screen.getByText(/2 APPROVE · 1 REJECT/i)).toBeInTheDocument();
   });
 
-  // ── Stages 5–8 always Niedostępne, no navigation ────────────────────────────
-  it('stages 5–8 are always Niedostępne and have aria-disabled, not clickable', async () => {
+  // ── Title & Abstract Screening is available, future stages remain unavailable ─────
+  it('stage 5 (Title & Abstract Screening) is available and navigable while Full-Text remains future', async () => {
     vi.spyOn(projectApiService, 'getSearchStrategy').mockResolvedValue(null);
     vi.spyOn(projectApiService, 'getBibliographicImports').mockResolvedValue([]);
     vi.spyOn(projectApiService, 'getNormalization').mockResolvedValue(null);
     vi.spyOn(projectApiService, 'getDuplicateGroups').mockResolvedValue(EMPTY_DEDUP);
     renderDashboard();
     await waitFor(() => expect(screen.queryByText(/Ładowanie statusu projektu/i)).not.toBeInTheDocument());
-    expect(screen.getAllByText('Niedostępne').length).toBeGreaterThanOrEqual(4);
-    expect(screen.getByText('5. Screening')).toBeInTheDocument();
+    expect(screen.getByText('5. Title & Abstract Screening')).toBeInTheDocument();
+    expect(screen.getByText('5b. Full-Text Screening (Phase 7.6)')).toBeInTheDocument();
     expect(screen.getByText('8. Exports & PRISMA')).toBeInTheDocument();
-    // All Niedostępne rows must have aria-disabled
-    document.querySelectorAll('[aria-disabled="true"]').forEach((el) => {
-      expect(el).toBeInTheDocument();
-    });
+
+    // Stage 5 card must be present and clickable
+    expect(document.getElementById('stage-card-screening')).toBeInTheDocument();
+  });
+
+  it('clicking screening stage card navigates to /screen/title-abstract', async () => {
+    vi.spyOn(projectApiService, 'getSearchStrategy').mockResolvedValue(STRATEGY_2_GROUPS);
+    vi.spyOn(projectApiService, 'getBibliographicImports').mockResolvedValue(TWO_IMPORTS);
+    vi.spyOn(projectApiService, 'getNormalization').mockResolvedValue(OK_NORM);
+    vi.spyOn(projectApiService, 'getDuplicateGroups').mockResolvedValue(EMPTY_DEDUP);
+    render(
+      <ProjectProvider>
+        <MemoryRouter initialEntries={['/projects/lean_energy/dashboard']}>
+          <Routes>
+            <Route path="/projects/:projectId/dashboard" element={<ProjectDashboardPage />} />
+            <Route path="/projects/:projectId/screen/title-abstract" element={<div>Screening page</div>} />
+          </Routes>
+        </MemoryRouter>
+      </ProjectProvider>
+    );
+    await waitFor(() => expect(screen.getByText('5. Title & Abstract Screening')).toBeInTheDocument());
+    fireEvent.click(document.getElementById('stage-card-screening')!);
+    await waitFor(() => expect(screen.getByText('Screening page')).toBeInTheDocument());
   });
 
   // ── Partial failure: dedup error does not blank other stages ─────────────────

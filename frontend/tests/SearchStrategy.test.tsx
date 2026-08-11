@@ -338,4 +338,47 @@ describe('persistent Search Strategy GUI & Execution', () => {
     expect(await screen.findByText(/Strategia została zapisana/i)).toBeInTheDocument();
     expect(screen.queryByText(/nie ma jeszcze zapisanej strategii/i)).not.toBeInTheDocument();
   });
+
+  it('14. Błąd importu wyników wyświetla dedykowany komunikat błędów importu', async () => {
+    mockSearchExecutionResult = {
+      project_id: 'lean_energy',
+      status: 'validated',
+      rendered_query: '"lean"',
+      providers: ['openalex'],
+      publication_year_from: 2015,
+      publication_year_to: 2026,
+      executed_at: '2026-07-30T10:00:00Z',
+      total_count: 1,
+      returned_count: 1,
+      next_cursor: null,
+      has_more: false,
+      results: [
+        {
+          id: 'rec-100',
+          title: 'Wynik do importu',
+          authors: ['A. Kowalski'],
+          year: 2025,
+          provider: 'openalex',
+          source_id: 'W999999',
+          doi: '10.1000/999',
+        },
+      ],
+      provider_errors: [],
+    };
+    mockSelectedSearchResultIds = ['rec-100'];
+    mockImportSelectedSearchResults.mockRejectedValue(
+      new Error('Niepoprawne dane strategii: providers: Extra inputs are not permitted (HTTP 422).')
+    );
+
+    renderPage();
+    await screen.findByDisplayValue('Lean');
+
+    const importButton = screen.getByRole('button', { name: /Importuj zaznaczone/i });
+    fireEvent.click(importButton);
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('Wyszukiwanie zakończone, ale nie udało się zaimportować wyników');
+    expect(alert).toHaveTextContent('providers: Extra inputs are not permitted');
+    expect(screen.queryByText('Nie udało się wykonać wyszukiwania')).not.toBeInTheDocument();
+  });
 });

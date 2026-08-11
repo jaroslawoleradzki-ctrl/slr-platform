@@ -13,16 +13,19 @@ import {
   BibliographicImportHistoryRecord,
   SearchStrategy,
   ProjectUpdatePayload,
+  SearchResultsImportMetadata,
 } from '../types';
 import { MOCK_PROJECTS } from '../mocks/projectData';
 import { projectApiService } from '../services/api/projectApi';
+import { screeningApi, TitleAbstractOverview } from '../services/api/screeningApi';
 
 const computeWorkflowStatus = (
   searchStrategy: SearchStrategy | null,
   imports: BibliographicImportHistoryRecord[] | null,
   normalization: NormalizationResponse | null,
   deduplication: ApiDuplicateGroupListResponse | null,
-  errors: { search?: boolean; sources?: boolean; normalization?: boolean; deduplication?: boolean } = {}
+  screeningOverview: TitleAbstractOverview | null,
+  errors: { search?: boolean; sources?: boolean; normalization?: boolean; deduplication?: boolean; screening?: boolean } = {}
 ): WorkflowNavigationStatus => {
   // Stage 1: Search Strategy
   let searchState: WorkflowStageState = 'not_started';
@@ -106,6 +109,36 @@ const computeWorkflowStatus = (
     }
   }
 
+  // Stage 5: Title & Abstract Screening
+  let screeningState: WorkflowStageState = 'not_started';
+  let screeningCount: number | null = null;
+  let screeningTotal: number | null = null;
+  let screeningLabel: string | null = 'Dostępne';
+
+  if (errors.screening) {
+    screeningState = 'error';
+    screeningLabel = 'Błąd';
+  } else if (screeningOverview && screeningOverview.progress) {
+    const p = screeningOverview.progress;
+    screeningCount = p.completed;
+    screeningTotal = p.total;
+    if (p.total > 0) {
+      if (p.completed === p.total) {
+        screeningState = 'completed';
+        screeningLabel = 'Skończono';
+      } else if (p.completed > 0) {
+        screeningState = 'in_progress';
+        screeningLabel = `${p.completed}/${p.total} oceniono`;
+      } else {
+        screeningState = 'pending_action';
+        screeningLabel = `${p.unscreened} do oceny`;
+      }
+    } else {
+      screeningState = 'not_started';
+      screeningLabel = 'Dostępne';
+    }
+  }
+
   return {
     search: { state: searchState, count: searchCount, label: searchLabel },
     sources: { state: sourcesState, count: sourcesCount, label: sourcesLabel },
@@ -118,7 +151,12 @@ const computeWorkflowStatus = (
       rejectedGroups,
       label: dedupLabel,
     },
-    screening: { state: 'not_available', label: 'Niedostępne' },
+    screening: {
+      state: screeningState,
+      count: screeningCount,
+      total: screeningTotal,
+      label: screeningLabel,
+    },
     qualityAssessment: { state: 'not_available', label: 'Niedostępne' },
     dataExtraction: { state: 'not_available', label: 'Niedostępne' },
     exports: { state: 'not_available', label: 'Niedostępne' },
@@ -200,11 +238,12 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setWorkflowStatusError(null);
     setDuplicateGroupError(null);
 
-    const [searchRes, importsRes, normRes, dedupRes] = await Promise.allSettled([
+    const [searchRes, importsRes, normRes, dedupRes, screeningRes] = await Promise.allSettled([
       projectApiService.getSearchStrategy(targetProjectId),
       projectApiService.getBibliographicImports(targetProjectId),
       projectApiService.getNormalization(targetProjectId),
       projectApiService.getDuplicateGroups(targetProjectId),
+      screeningApi.getOverview(targetProjectId, 'default_reviewer'),
     ]);
 
     if (activeProjectIdRef.current !== targetProjectId) return;
@@ -213,6 +252,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const imports = importsRes.status === 'fulfilled' ? importsRes.value : null;
     const normalization = normRes.status === 'fulfilled' ? normRes.value : null;
     const deduplication = dedupRes.status === 'fulfilled' ? dedupRes.value : null;
+    const screeningOverview = screeningRes.status === 'fulfilled' ? screeningRes.value : null;
 
     if (searchRes.status === 'fulfilled' && searchStrategy) {
       const conceptGroups = searchStrategy.concept_groups.map((cg) => ({
@@ -280,6 +320,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
       sources: importsRes.status === 'rejected',
       normalization: normRes.status === 'rejected',
       deduplication: dedupRes.status === 'rejected',
+      screening: screeningRes.status === 'rejected',
     };
 
     const status = computeWorkflowStatus(
@@ -287,6 +328,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
       imports,
       normalization,
       deduplication,
+      screeningOverview,
       errors
     );
 
@@ -426,8 +468,12 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
         return null;
       }
 
-      const existingSourceIds = new Set(searchExecutionResult.results.map((r) => r.source_id));
-      const newResults = pageResult.results.filter((r) => !existingSourceIds.has(r.source_id));
+      const existingKeys = new Set(
+        searchExecutionResult.results.map((r) => `${r.provider}:${r.source_id}`)
+      );
+      const newResults = pageResult.results.filter(
+        (r) => !existingKeys.has(`${r.provider}:${r.source_id}`)
+      );
       const mergedResults = [...searchExecutionResult.results, ...newResults];
 
       const mergedResult: SearchExecutionResult = {
@@ -461,13 +507,20 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
     );
     if (selectedRecords.length === 0) return null;
 
-    const metadata = {
+    const singleProvider =
+      selectedRecords.length > 0 &&
+      selectedRecords.every((rec) => rec.provider === selectedRecords[0].provider)
+        ? selectedRecords[0].provider
+        : undefined;
+
+    const metadata: SearchResultsImportMetadata = {
       query: lastExecutedSearchStrategy
         ? lastExecutedSearchStrategy.conceptGroups
             .map((g) => `(${g.terms.join(' OR ')})`)
             .join(' AND ')
         : undefined,
-      providers: lastExecutedSearchStrategy ? lastExecutedSearchStrategy.providers : undefined,
+      provider: singleProvider,
+      total_available: searchExecutionResult ? searchExecutionResult.total_count : undefined,
     };
 
     const importResult = await projectApiService.importSearchResults(targetProjectId, selectedRecords, metadata);
