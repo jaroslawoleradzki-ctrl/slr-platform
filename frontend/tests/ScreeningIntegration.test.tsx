@@ -10,7 +10,7 @@ describe('Screening Integration Frontend Test Suite', () => {
     vi.restoreAllMocks();
   });
 
-  it('renders ScreeningSectionLayout with all 6 required sub-navigation links', () => {
+  it('renders one combined conflicts and resolutions navigation link', () => {
     render(
       <MemoryRouter initialEntries={['/projects/test-proj/screen/title-abstract']}>
         <Routes>
@@ -23,8 +23,9 @@ describe('Screening Integration Frontend Test Suite', () => {
     expect(screen.getByRole('link', { name: 'Full-Text Screening' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Criteria Configuration' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Podsumowanie i historia' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Konflikty reviewerów' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Resolution' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Konflikty i rozstrzygnięcia' })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Resolution' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Konflikty reviewerów' })).not.toBeInTheDocument();
   });
 
   it('calls backend getWorkflowStatus for project workflow status', async () => {

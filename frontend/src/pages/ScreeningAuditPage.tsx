@@ -157,10 +157,10 @@ export const ScreeningAuditPage: React.FC = () => {
         {audit.items.length ? <ul>{audit.items.map((item) => item.event_type === 'RESOLUTION' ? (
           <li key={item.resolution_id} style={{ marginBottom: 12 }}>
             <strong>{item.publication_title || item.publication_id}</strong>
-            {' · '}{stageLabel[item.stage]} · Resolution: {outcomeLabel[item.resolved_outcome]}
+            {' · '}{stageLabel[item.stage]} · Rozstrzygnięcie: {outcomeLabel[item.resolved_outcome]}
             {' · '}{new Date(item.resolved_at).toLocaleString()}
             <div>Resolver: {item.resolver_id} · {item.status === 'CURRENT' ? 'current' : 'stale'}</div>
-            <div>Uzasadnienie resolution: {item.rationale}</div>
+            <div>Uzasadnienie rozstrzygnięcia: {item.rationale}</div>
             <div>Reviewer outcomes: {item.reviewer_outcomes.map((value) => `${value.reviewer_id}: ${value.outcome}`).join(', ')}</div>
           </li>
         ) : (
@@ -186,7 +186,7 @@ export const ScreeningAuditPage: React.FC = () => {
 };
 
 function formatMultiReviewer(metrics: ScreeningReport['title_abstract_multi_reviewer']): string {
-  if (!metrics) return 'Brak aktywnego rosteru.';
+  if (!metrics) return 'Brak aktywnego zespołu reviewerów.';
   const rate = metrics.agreement_rate === null ? 'brak danych' : `${Math.round(metrics.agreement_rate * 100)}%`;
   return `zgodne: ${metrics.agreement}, konflikty: ${metrics.conflict}, niepełne: ${metrics.incomplete}, agreement rate: ${rate}`;
 }

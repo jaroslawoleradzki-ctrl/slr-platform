@@ -58,9 +58,9 @@ describe('Screening audit page', () => {
     render(<MemoryRouter initialEntries={['/projects/project-a/screen/audit']}><Routes>
       <Route path="/projects/:projectId/screen/audit" element={<ScreeningAuditPage />} />
     </Routes></MemoryRouter>);
-    expect(await screen.findByText(/Resolution: Włącz/)).toBeInTheDocument();
+    expect(await screen.findByText(/Rozstrzygnięcie: Włącz/)).toBeInTheDocument();
     expect(screen.getByText('Resolver: adjudicator · stale')).toBeInTheDocument();
-    expect(screen.getByText('Uzasadnienie resolution: Resolution rationale')).toBeInTheDocument();
+    expect(screen.getByText('Uzasadnienie rozstrzygnięcia: Resolution rationale')).toBeInTheDocument();
     expect(screen.getByText('Reviewer outcomes: alice: include, bob: exclude')).toBeInTheDocument();
     expect(screen.getByText('Uzasadnienie: Decision rationale')).toBeInTheDocument();
   });

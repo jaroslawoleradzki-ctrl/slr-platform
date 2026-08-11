@@ -159,6 +159,16 @@ groups remain separate, and pending groups or merge conflicts block readiness.
 Full durable `SearchRun` history remains a separate Phase 6.8.5 concern; it does
 not block Title & Abstract Screening.
 
+### Version 0.3.8 — Screening Manual Acceptance UX Fixes 🟨
+
+- Dark-theme select/dropdown controls across Screening with readable text,
+  borders, focus/hover/disabled states, and consistent sizing.
+- User-facing reviewer-team terminology replacing technical “roster” wording.
+- Unified “Konflikty i rozstrzygnięcia” workflow for conflict analysis and
+  adjudication, with backward-compatible routing from the former resolution
+  path.
+- **Manual Acceptance: PENDING AFTER PHASE 8 INTEGRATION ON DEVELOPMENT.**
+
 ### Version 0.3.7 — Screening Integration ✅
 
 - **Phase 7.9 — Screening Integration and Release** ✅ — Stage eligibility

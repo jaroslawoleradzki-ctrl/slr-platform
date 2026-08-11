@@ -10,7 +10,7 @@ Unlike ROADMAP.md, this file is intentionally technical and may change frequentl
 
 Current release:
 
-v0.3.7 — Screening Integration
+v0.3.8 — Screening Manual Acceptance UX Fixes
 
 Status:
 
@@ -37,6 +37,8 @@ Release scope:
 - Screening integration with stage eligibility adapter, queue hydration,
   staleness revocation, workflow-status API, Dashboard/Stepper integration,
   and backend/frontend integration tests;
+- Screening manual-acceptance UX fixes: dark-theme controls, reviewer-team
+  terminology, and unified conflicts/resolutions navigation;
 - Dashboard/Search polish: corrected search import contract, provider Load More,
   append-only result pagination, local pagination, and cross-page selection.
 

@@ -70,6 +70,11 @@ describe('Conflict Resolution workspace', () => {
     vi.restoreAllMocks();
     localStorage.setItem('slr_screening_reviewer_id', 'current-reviewer');
     vi.spyOn(screeningApi, 'getConflicts').mockResolvedValue({ total: 1, offset: 0, limit: 100, items: [conflict] });
+    vi.spyOn(screeningApi, 'getConflictMetrics').mockResolvedValue({ incomplete: 0, agreement: 0, conflict: 1, agreement_rate: null });
+    vi.spyOn(screeningApi, 'getReviewerRoster').mockResolvedValue([
+      { project_id: 'project-a', stage: 'full_text', reviewer_id: 'alice', is_active: true },
+      { project_id: 'project-a', stage: 'full_text', reviewer_id: 'bob', is_active: true },
+    ]);
     vi.spyOn(screeningApi, 'getConflictResolutionHistory').mockResolvedValue({
       publication_id: 'paper-a', stage: 'full_text', current_decision_set_key: 'decision-set-key',
       total: 1, offset: 0, limit: 100,
@@ -85,26 +90,28 @@ describe('Conflict Resolution workspace', () => {
   it('renders conflict detail, reviewer context, editable prefill, history, and saves', async () => {
     renderPage();
     expect(await screen.findAllByText('Conflicted publication')).toHaveLength(2);
+    expect(screen.getByLabelText('Etap')).toHaveStyle({ backgroundColor: 'var(--bg-primary)' });
+    expect(screen.getByLabelText('Filtr statusu')).toHaveStyle({ backgroundColor: 'var(--bg-primary)' });
     expect(screen.getByText('alice: include')).toBeInTheDocument();
-    expect(screen.getByText('Rationale: alice detailed rationale')).toBeInTheDocument();
-    expect(screen.getByText('Assessments: Relevant design: met')).toBeInTheDocument();
-    expect(screen.getByText('Exclusion reasons: Wrong population')).toBeInTheDocument();
-    expect(screen.getByText(/exclude by previous-resolver — stale/)).toBeInTheDocument();
+    expect(screen.getByText('Uzasadnienie: alice detailed rationale')).toBeInTheDocument();
+    expect(screen.getByText('Kryteria: Relevant design: met')).toBeInTheDocument();
+    expect(screen.getByText('Powody wykluczenia: Wrong population')).toBeInTheDocument();
+    expect(screen.getByText(/exclude · previous-resolver — nieaktualne/)).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText('Etap'), { target: { value: 'full_text' } });
     await waitFor(() => expect(screeningApi.getConflicts).toHaveBeenLastCalledWith(
       'project-a', 'full_text', null, 0, 100, 'current-reviewer', true,
     ));
-    const resolver = screen.getByLabelText('Resolver');
+    const resolver = screen.getByLabelText('Osoba rozstrzygająca');
     expect(resolver).toHaveValue('current-reviewer');
     fireEvent.change(resolver, { target: { value: 'edited-resolver' } });
-    fireEvent.change(screen.getByLabelText('Resolution rationale'), { target: { value: 'Resolution rationale' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Save Resolution' }));
+    fireEvent.change(screen.getByLabelText('Uzasadnienie rozstrzygnięcia'), { target: { value: 'Resolution rationale' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Zapisz rozstrzygnięcie' }));
     await waitFor(() => expect(screeningApi.saveConflictResolution).toHaveBeenCalledWith('project-a', {
       publication_id: 'paper-a', stage: 'full_text', resolved_outcome: 'include',
       resolver_id: 'edited-resolver', rationale: 'Resolution rationale',
       expected_decision_set_key: 'decision-set-key',
     }));
-    expect(await screen.findByRole('status')).toHaveTextContent('Resolution saved.');
+    expect(await screen.findByRole('status')).toHaveTextContent('Rozstrzygnięcie zapisane.');
   });
 
   it('renders conflict, resolved, and stale entries in the queue', async () => {
@@ -118,9 +125,9 @@ describe('Conflict Resolution workspace', () => {
     });
     renderPage();
     expect(await screen.findByText('Resolved paper')).toBeInTheDocument();
-    expect(screen.getAllByText('CONFLICT')).not.toHaveLength(0);
-    expect(screen.getByText('RESOLVED')).toBeInTheDocument();
-    expect(screen.getAllByText('STALE')).not.toHaveLength(0);
+    expect(screen.getAllByText('Konflikt')).not.toHaveLength(0);
+    expect(screen.getAllByText('Rozstrzygnięte')).not.toHaveLength(0);
+    expect(screen.getAllByText('Nieaktualne rozstrzygnięcie')).not.toHaveLength(0);
   });
 
   it('shows stale state and preserves the draft on 409 until explicit reload', async () => {
@@ -131,11 +138,11 @@ describe('Conflict Resolution workspace', () => {
       new ApiError('Reviewer decisions changed', 409, 'decision_set_changed'),
     );
     renderPage();
-    expect(await screen.findAllByText('STALE')).not.toHaveLength(0);
-    const rationale = screen.getByLabelText('Resolution rationale');
+    expect(await screen.findAllByText('Nieaktualne rozstrzygnięcie')).not.toHaveLength(0);
+    const rationale = screen.getByLabelText('Uzasadnienie rozstrzygnięcia');
     fireEvent.change(rationale, { target: { value: 'Keep this draft' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Save Resolution' }));
-    expect(await screen.findByText(/Reload the conflict before saving/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Zapisz rozstrzygnięcie' }));
+    expect(await screen.findByText(/Wczytaj konflikt ponownie przed zapisem/)).toBeInTheDocument();
     expect(rationale).toHaveValue('Keep this draft');
     fireEvent.click(screen.getByRole('button', { name: 'Spróbuj ponownie' }));
     await waitFor(() => expect(screeningApi.getConflicts).toHaveBeenCalledTimes(2));
@@ -145,9 +152,9 @@ describe('Conflict Resolution workspace', () => {
     let release: ((value: { total: number; offset: number; limit: number; items: ScreeningConflict[] }) => void) | undefined;
     vi.mocked(screeningApi.getConflicts).mockReturnValueOnce(new Promise((resolve) => { release = resolve; }));
     const view = renderPage();
-    expect(screen.getByText('Ładowanie workspace adjudication...')).toBeInTheDocument();
+    expect(screen.getByText('Ładowanie konfliktów i rozstrzygnięć...')).toBeInTheDocument();
     release?.({ total: 0, offset: 0, limit: 100, items: [] });
-    expect(await screen.findByText('Brak konfliktów')).toBeInTheDocument();
+    expect(await screen.findByText('Brak konfliktów wymagających rozstrzygnięcia')).toBeInTheDocument();
     view.unmount();
 
     vi.mocked(screeningApi.getConflicts).mockRejectedValueOnce(new Error('Workspace unavailable'));

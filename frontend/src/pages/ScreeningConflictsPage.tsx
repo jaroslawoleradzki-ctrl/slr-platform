@@ -69,7 +69,7 @@ export const ScreeningConflictsPage: React.FC = () => {
       );
       await load(0);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Nie udało się zapisać rosteru reviewerów.');
+      setError(caught instanceof Error ? caught.message : 'Nie udało się zapisać zespołu reviewerów.');
     } finally {
       setSaving(false);
     }
@@ -87,7 +87,7 @@ export const ScreeningConflictsPage: React.FC = () => {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <Card title="Multi-reviewer screening" subtitle="Roster jest wspólny dla projektu i etapu; usunięci reviewerzy pozostają w historii decyzji.">
+      <Card title="Multi-reviewer screening" subtitle="Zespół reviewerów jest wspólny dla projektu i etapu; usunięci reviewerzy pozostają w historii decyzji.">
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
           <label>Etap <select value={stage} onChange={(event) => updateStage(event.target.value as Stage)}>
             <option value="title_abstract">Title &amp; Abstract</option>
@@ -96,7 +96,7 @@ export const ScreeningConflictsPage: React.FC = () => {
           <label style={{ flex: '1 1 280px' }}>Reviewerzy (oddzieleni przecinkiem)
             <input value={reviewers} onChange={(event) => setReviewers(event.target.value)} />
           </label>
-          <Button onClick={() => void saveRoster()} isLoading={saving}>Zapisz roster</Button>
+          <Button onClick={() => void saveRoster()} isLoading={saving}>Zapisz zespół reviewerów</Button>
         </div>
       </Card>
 
@@ -116,7 +116,7 @@ export const ScreeningConflictsPage: React.FC = () => {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 12 }}>
             {items.map((item) => <ConflictCard key={item.publication_id} item={item} />)}
           </div>
-        ) : <EmptyState title="Brak rekordów" description="Skonfiguruj aktywny roster lub zmień filtr." />}
+        ) : <EmptyState title="Brak rekordów" description="Skonfiguruj aktywny zespół reviewerów lub zmień filtr." />}
         {total > PAGE_SIZE && <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
           <Button variant="outline" disabled={offset === 0 || loading} onClick={() => void load(Math.max(0, offset - PAGE_SIZE))}>Poprzednia</Button>
           <Button variant="outline" disabled={offset + PAGE_SIZE >= total || loading} onClick={() => void load(offset + PAGE_SIZE)}>Następna</Button>

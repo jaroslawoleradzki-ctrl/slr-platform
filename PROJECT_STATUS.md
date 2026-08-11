@@ -14,11 +14,11 @@ development
 
 Current version:
 
-v0.3.7
+v0.3.8
 
 Current release status:
 
-Automated verification complete; Manual Acceptance pending after Phase 8 integration on development.
+Automated verification complete; Manual Acceptance remains in progress after UX fixes and is pending after Phase 8 integration on development.
 
 Current development phase:
 
@@ -46,7 +46,7 @@ Screening prerequisites resolved in v0.3.3:
   pending duplicate groups and merge conflicts explicitly block readiness.
 
 State of Phase 7 — Screening:
-- v0.3.7 is integrated and automated verification is complete.
+- v0.3.8 is integrated and automated verification is complete; Manual Acceptance remains pending after Phase 8 integration.
 - Phase 7 — Screening implementation is complete and integrated through 7.9;
   automated verification is complete, with Manual Acceptance pending after
   Phase 8 integration on development.
@@ -74,6 +74,11 @@ State of Phase 7 — Screening:
   revocation, unified `GET /projects/{id}/workflow-status` endpoint, Dashboard
   and Stepper integration, and integration test suites). Automated verification
   is complete; Manual Acceptance remains pending after Phase 8 integration.
+
+Completed in v0.3.8:
+- Screening manual-acceptance UX fixes: dark-theme select controls,
+  reviewer-team terminology, and unified conflicts/resolutions workflow with
+  backward-compatible routing.
 
 Completed in v0.3.7:
 - Screening integration: stage eligibility adapter, queue hydration,
