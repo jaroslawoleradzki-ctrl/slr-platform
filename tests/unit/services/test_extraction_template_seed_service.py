@@ -80,8 +80,9 @@ class TestLeanEnergyTemplateStructure:
 
         # Publication-level fields (E1-E3, E12-E14)
         pub_keys = {f.field_key for f in version.publication_fields}
-        assert "study_title" in pub_keys  # E1
-        assert "publication_year" in pub_keys  # E1
+        # E1 is canonical publication metadata, not reviewer-entered extraction data.
+        assert "study_title" not in pub_keys
+        assert "publication_year" not in pub_keys
         assert "study_country_industry" in pub_keys  # E2
         assert "study_design" in pub_keys  # E3
         assert "main_conclusions" in pub_keys  # E12
@@ -164,18 +165,6 @@ class TestLeanEnergyDomainBehavior:
 
         pub_vals = [
             ExtractedValueState(
-                field_key="study_title",
-                status=ValueStatus.PRESENT,
-                origin=ValueOrigin.REPORTED,
-                text_value="SMED Impact on Injection Molding Energy",
-            ),
-            ExtractedValueState(
-                field_key="publication_year",
-                status=ValueStatus.PRESENT,
-                origin=ValueOrigin.REPORTED,
-                int_value=2023,
-            ),
-            ExtractedValueState(
                 field_key="study_design",
                 status=ValueStatus.PRESENT,
                 origin=ValueOrigin.REPORTED,
@@ -224,18 +213,6 @@ class TestLeanEnergyDomainBehavior:
         svc = env["execution_service"]
 
         pub_vals = [
-            ExtractedValueState(
-                field_key="study_title",
-                status=ValueStatus.PRESENT,
-                origin=ValueOrigin.REPORTED,
-                text_value="Multi-Tool Lean Energy Investigation",
-            ),
-            ExtractedValueState(
-                field_key="publication_year",
-                status=ValueStatus.PRESENT,
-                origin=ValueOrigin.REPORTED,
-                int_value=2024,
-            ),
             ExtractedValueState(
                 field_key="study_design",
                 status=ValueStatus.PRESENT,

@@ -142,6 +142,10 @@ const mockMatrix = {
 describe('Data Extraction Workspace GUI (Phase 9.5 & 9.6)', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    Object.assign(URL, {
+      createObjectURL: vi.fn().mockReturnValue('blob:test'),
+      revokeObjectURL: vi.fn(),
+    });
     vi.spyOn(extractionApi, 'getExtractionProgress').mockResolvedValue(mockProgress);
     vi.spyOn(extractionApi, 'listExtractionRecords').mockResolvedValue(mockRecordsSummary);
     vi.spyOn(extractionApi, 'getExtractionMatrix').mockResolvedValue(mockMatrix);
@@ -171,8 +175,8 @@ describe('Data Extraction Workspace GUI (Phase 9.5 & 9.6)', () => {
     renderComponent(`/projects/proj_test/extract/${pubId}`);
 
     expect(await screen.findByText('7. Ekstrakcja Danych (Data Extraction Workspace)')).toBeInTheDocument();
-    expect(screen.getByDisplayValue('Sample Article Title')).toBeInTheDocument();
-    expect(screen.getByDisplayValue('2024')).toBeInTheDocument();
+    expect(screen.getByText('Sample Article Title')).toBeInTheDocument();
+    expect(screen.getByText(/E1: canonical publication metadata/i)).toBeInTheDocument();
   });
 
   it('C. Save Draft calls POST revision endpoint correctly and shows success banner', async () => {
@@ -259,8 +263,30 @@ describe('Data Extraction Workspace GUI (Phase 9.5 & 9.6)', () => {
     renderComponent(`/projects/proj_test/extract/${pubId}`);
 
     expect(await screen.findByText('7. Ekstrakcja Danych (Data Extraction Workspace)')).toBeInTheDocument();
-    expect(screen.getByText('Tytuł badania / publikacji')).toBeInTheDocument();
+    expect(screen.getByText(/E1: canonical publication metadata/i)).toBeInTheDocument();
     expect(screen.getByText('Typ badania (Study Design)')).toBeInTheDocument();
     expect(screen.getByText('Ramiona Badania / Grupy Uczestników (1:N Study Arms)')).toBeInTheDocument();
+  });
+
+  it('J. Export controls request JSON, publication CSV, and relationship CSV', async () => {
+    const exportDataset = vi.spyOn(extractionApi, 'exportDataset').mockResolvedValue(new Blob(['{}']));
+    renderComponent('/projects/proj_test/extract');
+
+    fireEvent.click(await screen.findByRole('button', { name: /Eksport JSON/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /CSV publikacji/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /CSV relacji/i }));
+
+    await waitFor(() => expect(exportDataset).toHaveBeenCalledTimes(3));
+    expect(exportDataset).toHaveBeenNthCalledWith(1, 'proj_test', 'json', 'publications');
+    expect(exportDataset).toHaveBeenNthCalledWith(2, 'proj_test', 'csv', 'publications');
+    expect(exportDataset).toHaveBeenNthCalledWith(3, 'proj_test', 'csv', 'relationships');
+  });
+
+  it('K. Export failure is visible to the user', async () => {
+    vi.spyOn(extractionApi, 'exportDataset').mockRejectedValue(new Error('export unavailable'));
+    renderComponent('/projects/proj_test/extract');
+
+    fireEvent.click(await screen.findByRole('button', { name: /Eksport JSON/i }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(/Nie udało się pobrać eksportu/i);
   });
 });

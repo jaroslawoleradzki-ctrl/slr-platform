@@ -11,6 +11,7 @@ import {
   Table,
   Layers,
   ArrowLeft,
+  Download,
 } from 'lucide-react';
 import { useProject } from '../context/ProjectContext';
 import {
@@ -45,22 +46,6 @@ const DEFAULT_TEMPLATE: ExtractionTemplateVersion = {
   is_active: true,
   created_at: new Date().toISOString(),
   publication_fields: [
-    {
-      field_key: 'study_title',
-      name: 'Tytuł badania / publikacji',
-      data_type: 'text',
-      description: 'Oficjalny tytuł publikacji lub skrócona nazwa badania',
-      is_required: true,
-    },
-    {
-      field_key: 'publication_year',
-      name: 'Rok publikacji',
-      data_type: 'integer',
-      description: 'Rok wydania artykułu (np. 2024)',
-      is_required: true,
-      min_value: 1800,
-      max_value: 2100,
-    },
     {
       field_key: 'study_design',
       name: 'Typ badania (Study Design)',
@@ -158,6 +143,8 @@ export const DataExtractionPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [errorBanner, setErrorBanner] = useState<string | null>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
+  const [isExporting, setIsExporting] = useState<boolean>(false);
   const [successBanner, setSuccessBanner] = useState<string | null>(null);
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
   const [blockedEligibility, setBlockedEligibility] = useState<ExtractionEligibilityResult | null>(null);
@@ -173,6 +160,7 @@ export const DataExtractionPage: React.FC = () => {
   const [isHistoryOpen, setIsHistoryOpen] = useState<boolean>(false);
 
   const reviewerId = 'rev_1';
+  const selectedPublication = recordsSummary.find((record) => record.publication_id === selectedPubId);
 
   // Fetch eligibility list, progress, summaries, matrix, and selected record
   useEffect(() => {
@@ -343,6 +331,26 @@ export const DataExtractionPage: React.FC = () => {
     setIsProvenanceOpen(true);
   };
 
+  const handleExport = async (format: 'json' | 'csv', dataset: 'publications' | 'relationships') => {
+    setIsExporting(true);
+    setExportError(null);
+    try {
+      const blob = await extractionApi.exportDataset(projectId, format, dataset);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${projectId}_${dataset}.${format}`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setExportError(err instanceof ExtractionApiError ? err.message : 'Nie udało się pobrać eksportu danych.');
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   return (
     <div style={{ padding: '24px', maxWidth: '1200px', margin: '0 auto' }}>
       {/* Top Header Bar */}
@@ -362,6 +370,7 @@ export const DataExtractionPage: React.FC = () => {
           >
             <FileSpreadsheet size={22} />
           </div>
+
           <div>
             <h2 style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
               7. Ekstrakcja Danych (Data Extraction Workspace)
@@ -370,6 +379,7 @@ export const DataExtractionPage: React.FC = () => {
               Przegląd tabelaryczny, macierz relacji 1:N oraz formularz wprowadzania danych.
             </span>
           </div>
+
         </div>
 
         {/* View Switcher Controls */}
@@ -479,6 +489,19 @@ export const DataExtractionPage: React.FC = () => {
           ) : (
             <ExtractionMatrixView matrix={matrix} isLoading={isLoading} />
           )}
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginTop: '16px', flexWrap: 'wrap' }}>
+            <Download size={16} style={{ color: 'var(--text-muted)' }} />
+            <button type="button" disabled={isExporting} onClick={() => handleExport('json', 'publications')}>
+              Eksport JSON
+            </button>
+            <button type="button" disabled={isExporting} onClick={() => handleExport('csv', 'publications')}>
+              CSV publikacji
+            </button>
+            <button type="button" disabled={isExporting} onClick={() => handleExport('csv', 'relationships')}>
+              CSV relacji
+            </button>
+            {exportError && <span role="alert">{exportError}</span>}
+          </div>
         </div>
       )}
 
@@ -613,6 +636,24 @@ export const DataExtractionPage: React.FC = () => {
               </select>
             </div>
           </div>
+
+          {selectedPublication && (
+            <div
+              style={{
+                padding: '14px 20px',
+                backgroundColor: 'var(--bg-surface)',
+                border: '1px solid var(--border-subtle)',
+                borderRadius: 'var(--radius-lg)',
+                marginBottom: '20px',
+              }}
+            >
+              <strong>{selectedPublication.title}</strong>
+              <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginTop: '4px' }}>
+                {selectedPublication.authors.join('; ')}{selectedPublication.publication_year ? ` · ${selectedPublication.publication_year}` : ''}
+                {' · E1: canonical publication metadata'}
+              </div>
+            </div>
+          )}
 
           {/* Status Banners */}
           {errorBanner && (
