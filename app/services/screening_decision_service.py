@@ -69,19 +69,13 @@ class ScreeningDecisionService:
         rule_evaluator: ScreeningCriterionRuleEvaluator | None = None,
     ) -> None:
         self.decision_repo = (
-            decision_repository
-            if decision_repository is not None
-            else default_screening_decision_repository()
+            decision_repository if decision_repository is not None else default_screening_decision_repository()
         )
         self.criterion_repo = (
-            criterion_repository
-            if criterion_repository is not None
-            else default_screening_criterion_repository()
+            criterion_repository if criterion_repository is not None else default_screening_criterion_repository()
         )
         self.publication_repo = (
-            publication_repository
-            if publication_repository is not None
-            else default_project_publication_repository()
+            publication_repository if publication_repository is not None else default_project_publication_repository()
         )
         self._rule_evaluator = rule_evaluator or ScreeningCriterionRuleEvaluator()
 
@@ -114,17 +108,13 @@ class ScreeningDecisionService:
 
         publication = next((item for item in publications if item.record_id == publication_id), None)
         if publication is None:
-            raise ValueError(
-                f"Publication '{publication_id}' not found in project '{stripped_project_id}'."
-            )
+            raise ValueError(f"Publication '{publication_id}' not found in project '{stripped_project_id}'.")
         if canonical_publication is not None and canonical_publication.record_id != publication_id:
             raise ValueError("canonical_publication record_id must match publication_id")
         publication_for_evaluation = canonical_publication or publication
 
         # 2. Fetch project criteria
-        project_criteria = self.criterion_repo.list_by_project(
-            stripped_project_id, active_only=False
-        )
+        project_criteria = self.criterion_repo.list_by_project(stripped_project_id, active_only=False)
         criteria_by_id = {c.criterion_id: c for c in project_criteria}
 
         inputs = assessment_inputs or []
@@ -135,9 +125,7 @@ class ScreeningDecisionService:
         for inp in inputs:
             criterion = criteria_by_id.get(inp.criterion_id)
             if criterion is None:
-                raise ValueError(
-                    f"Criterion '{inp.criterion_id}' not found in project '{stripped_project_id}'."
-                )
+                raise ValueError(f"Criterion '{inp.criterion_id}' not found in project '{stripped_project_id}'.")
 
             if not criterion.is_active:
                 raise ValueError(
@@ -168,15 +156,14 @@ class ScreeningDecisionService:
                     )
 
             if inp.criterion_id in assessed_criterion_ids:
-                raise ValueError(
-                    f"Duplicate assessment input for criterion '{criterion.name}' ({inp.criterion_id})."
-                )
+                raise ValueError(f"Duplicate assessment input for criterion '{criterion.name}' ({inp.criterion_id}).")
             assessed_criterion_ids.add(inp.criterion_id)
 
             assessments.append(
                 CriterionAssessment(
                     criterion_id=criterion.criterion_id,
                     criterion_name=criterion.name,
+                    criterion_description=criterion.description,
                     criterion_type=criterion.criterion_type,
                     criterion_stage=criterion.screening_stage,
                     criterion_is_required=criterion.is_required,
@@ -200,6 +187,7 @@ class ScreeningDecisionService:
                 CriterionAssessment(
                     criterion_id=criterion.criterion_id,
                     criterion_name=criterion.name,
+                    criterion_description=criterion.description,
                     criterion_type=criterion.criterion_type,
                     criterion_stage=criterion.screening_stage,
                     criterion_is_required=criterion.is_required,
@@ -246,17 +234,13 @@ class ScreeningDecisionService:
         return self.decision_repo.save(decision)
 
     @staticmethod
-    def _applies_to_stage(
-        criterion_stage: ScreeningCriterionStage, stage: ScreeningStage
-    ) -> bool:
+    def _applies_to_stage(criterion_stage: ScreeningCriterionStage, stage: ScreeningStage) -> bool:
         return (
             stage is ScreeningStage.TITLE_ABSTRACT
-            and criterion_stage
-            in (ScreeningCriterionStage.TITLE_ABSTRACT, ScreeningCriterionStage.BOTH)
+            and criterion_stage in (ScreeningCriterionStage.TITLE_ABSTRACT, ScreeningCriterionStage.BOTH)
         ) or (
             stage is ScreeningStage.FULL_TEXT
-            and criterion_stage
-            in (ScreeningCriterionStage.FULL_TEXT, ScreeningCriterionStage.BOTH)
+            and criterion_stage in (ScreeningCriterionStage.FULL_TEXT, ScreeningCriterionStage.BOTH)
         )
 
     def get_decision(self, project_id: str, decision_id: UUID) -> ScreeningDecision:
@@ -267,20 +251,14 @@ class ScreeningDecisionService:
         self, project_id: str, publication_id: UUID, stage: ScreeningStage, reviewer_id: str
     ) -> ScreeningDecision | None:
         """Retrieve the latest decision for a publication, stage, and reviewer."""
-        return self.decision_repo.get_latest_decision(
-            project_id, publication_id, stage, reviewer_id
-        )
+        return self.decision_repo.get_latest_decision(project_id, publication_id, stage, reviewer_id)
 
     def list_history(
         self, project_id: str, publication_id: UUID, stage: ScreeningStage, reviewer_id: str | None = None
     ) -> list[ScreeningDecision]:
         """List decision history for a publication and stage."""
-        return self.decision_repo.list_history(
-            project_id, publication_id, stage, reviewer_id
-        )
+        return self.decision_repo.list_history(project_id, publication_id, stage, reviewer_id)
 
-    def list_by_project(
-        self, project_id: str, stage: ScreeningStage | None = None
-    ) -> list[ScreeningDecision]:
+    def list_by_project(self, project_id: str, stage: ScreeningStage | None = None) -> list[ScreeningDecision]:
         """List all screening decisions for a project."""
         return self.decision_repo.list_by_project(project_id, stage)

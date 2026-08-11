@@ -27,12 +27,16 @@ Release scope:
 - executable Title & Abstract Screening GUI;
 - manual and metadata-rule screening criteria with server-authoritative
   automatic assessments and auditable rule/value/result snapshots.
+- Full-Text Screening with reviewer-specific eligibility, availability metadata,
+  structured exclusion reasons, and append-only decisions;
+- Screening audit/report read models with criterion snapshot schema v2,
+  reviewer-specific progress, transitions, and exclusion-reason aggregation;
 - Dashboard/Search polish: corrected search import contract, provider Load More,
   append-only result pagination, local pagination, and cross-page selection.
 
 Next milestone:
 
-Phase 7.7 — Screening Audit Trail and Progress
+Phase 7.8 — Multi-Reviewer Screening and Conflict Detection
 
 ---
 
@@ -614,7 +618,7 @@ Zakres:
 - data extraction required for PRISMA flow chart
 (Modyfikacja kryteriów nie powoduje utraty interpretacji decyzji historycznych)
 
-Status: ⬜ Planned
+Status: ✅ Completed
 
 ---
 
