@@ -110,7 +110,6 @@ export const Sidebar: React.FC = () => {
       label: '7. Data Extraction',
       icon: FileSpreadsheet,
       stage: 'dataExtraction' as const,
-      disabled: true,
     },
     {
       to: `/projects/${currentId}/exports`,
@@ -142,33 +141,6 @@ export const Sidebar: React.FC = () => {
       {navItems.map((item) => {
         const Icon = item.icon;
         const badgeContent = renderBadge(item.stage);
-
-        if (item.disabled) {
-          return (
-            <div
-              key={item.to}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                padding: '8px 12px',
-                borderRadius: 'var(--radius-md)',
-                color: 'var(--text-muted)',
-                fontSize: '0.85rem',
-                opacity: 0.6,
-                cursor: 'not-allowed',
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <Icon size={16} />
-                <span>{item.label}</span>
-              </div>
-              <span style={{ fontSize: '0.7rem', padding: '1px 6px', borderRadius: '4px', backgroundColor: 'var(--bg-surface-elevated)' }}>
-                {badgeContent || 'Niedostępne'}
-              </span>
-            </div>
-          );
-        }
 
         return (
           <NavLink

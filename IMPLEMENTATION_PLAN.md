@@ -786,25 +786,15 @@ Status:
 
 Status:
 
-⬜ Next (Data Extraction UI)
+✅ Completed (Form-Based Extraction Workspace GUI)
 
 ---
 
-## 9.3 Data Extraction UI
-
-Zakres:
-
-- extraction workspace
-- configurable forms
-- structured field controls
-- publication context
-- validation feedback
-- draft and completion states
-- progress tracking
+## 9.6 Publication Summary Table & Cross-Study Views
 
 Status:
 
-⬜ Planned
+⬜ Next (Publication Summary Table & Cross-Study Views)
 
 ---
 
