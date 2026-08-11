@@ -52,6 +52,14 @@ class ExtractionConfigurationLockedError(ExtractionConfigurationError):
     """Raised when attempting to modify extraction configuration after extraction has started."""
 
 
+class ExtractionValidationError(ExtractionDomainError):
+    """Raised when an extraction revision submission fails template/domain validation rules."""
+
+    def __init__(self, errors: list[str]) -> None:
+        self.errors = errors
+        super().__init__(f"Extraction revision validation failed: {'; '.join(errors)}")
+
+
 class FieldDataType(StrEnum):
     """Supported field data types for extraction template definitions."""
 
@@ -728,6 +736,26 @@ class ExtractionEligibilityStatus(StrEnum):
     BLOCKED_SCREENING_CONFLICT = "blocked_screening_conflict"
     BLOCKED_SCREENING_STALE_RESOLUTION = "blocked_screening_stale_resolution"
     BLOCKED_QA_INCOMPLETE = "blocked_qa_incomplete"
+
+
+class ExtractionIneligibleError(ExtractionDomainError):
+    """Raised when an extraction revision submission is rejected due to publication ineligibility."""
+
+    def __init__(
+        self,
+        project_id: str,
+        publication_id: UUID,
+        status: ExtractionEligibilityStatus,
+        reason_details: str | None = None,
+    ) -> None:
+        self.project_id = project_id
+        self.publication_id = publication_id
+        self.status = status
+        self.reason_details = reason_details
+        msg = f"Publication '{publication_id}' in project '{project_id}' is not eligible for extraction: {status.value}."
+        if reason_details:
+            msg += f" Details: {reason_details}"
+        super().__init__(msg)
 
 
 class ExtractionEligibilityResult(BaseModel):

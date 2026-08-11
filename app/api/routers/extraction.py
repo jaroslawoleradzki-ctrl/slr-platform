@@ -1,15 +1,34 @@
-"""API Router for Data Extraction Project Configuration & Eligibility (Phase 9.3)."""
+"""API Router for Data Extraction Project Configuration, Eligibility & Execution (Phase 9.3 & 9.4)."""
+
+from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query, status
 
 from app.api.dto.extraction import (
+    ExtractedGroupItemStateDTO,
+    ExtractedValueStateDTO,
     ExtractionEligibilityListResponseDTO,
     ExtractionEligibilityResultDTO,
+    ExtractionRecordResponseDTO,
+    ExtractionRevisionHistoryResponseDTO,
+    ExtractionRevisionResponseDTO,
+    ExtractionRevisionSubmitRequestDTO,
     ProjectExtractionConfigurationRequestDTO,
     ProjectExtractionConfigurationResponseDTO,
 )
 from app.domain.extraction import (
+    ExtractedGroupItemState,
+    ExtractedValueState,
+    ExtractionConfigurationError,
     ExtractionConfigurationLockedError,
+    ExtractionConfigurationNotFoundError,
+    ExtractionIneligibleError,
+    ExtractionRevision,
+    ExtractionValidationError,
+    InvalidRevisionError,
+    InvalidValueError,
+    ValueOrigin,
+    ValueStatus,
 )
 from app.repositories.extraction_template_repository import (
     ExtractionTemplateNotFoundError,
@@ -25,6 +44,10 @@ from app.services.extraction_eligibility_service import (
     ExtractionEligibilityService,
     default_extraction_eligibility_service,
 )
+from app.services.extraction_execution_service import (
+    ExtractionExecutionService,
+    default_extraction_execution_service,
+)
 
 router = APIRouter(prefix="/api/v1/projects", tags=["extraction"])
 
@@ -35,6 +58,10 @@ def _get_config_service() -> ExtractionConfigurationService:
 
 def _get_eligibility_service() -> ExtractionEligibilityService:
     return default_extraction_eligibility_service()
+
+
+def _get_execution_service() -> ExtractionExecutionService:
+    return default_extraction_execution_service()
 
 
 @router.get(
@@ -118,4 +145,196 @@ def get_project_extraction_eligibility(
         total_publications=len(results),
         eligible_count=eligible_count,
         items=dtos,
+    )
+
+
+@router.get(
+    "/{project_id}/extraction/records/{publication_id}",
+    response_model=ExtractionRecordResponseDTO,
+    status_code=status.HTTP_200_OK,
+    summary="Get latest extraction record and revision state for a publication",
+)
+def get_extraction_record(project_id: str, publication_id: UUID) -> ExtractionRecordResponseDTO:
+    service = _get_execution_service()
+    record = service.get_record(project_id, publication_id)
+    if record is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Extraction record for project '{project_id}' and publication '{publication_id}' was not found.",
+        )
+    latest_rev = service.get_latest_revision(project_id, publication_id)
+    latest_dto = _revision_to_dto(latest_rev) if latest_rev else None
+
+    return ExtractionRecordResponseDTO(
+        record_id=record.record_id,
+        project_id=record.project_id,
+        publication_id=record.publication_id,
+        template_id=record.template_id,
+        template_version=record.template_version,
+        current_status=record.current_status.value,
+        created_at=record.created_at.isoformat(),
+        updated_at=record.updated_at.isoformat(),
+        latest_revision=latest_dto,
+    )
+
+
+@router.post(
+    "/{project_id}/extraction/records/{publication_id}/revisions",
+    response_model=ExtractionRevisionResponseDTO,
+    status_code=status.HTTP_201_CREATED,
+    summary="Submit a new append-only extraction revision for a publication",
+)
+def submit_extraction_revision(
+    project_id: str, publication_id: UUID, request: ExtractionRevisionSubmitRequestDTO
+) -> ExtractionRevisionResponseDTO:
+    service = _get_execution_service()
+
+    try:
+        pub_values = [_dto_to_value_state(v) for v in request.publication_values]
+        group_items = [_dto_to_group_item_state(g) for g in request.group_items]
+
+        revision = service.submit_revision(
+            project_id=project_id,
+            publication_id=publication_id,
+            reviewer_id=request.reviewer_id,
+            publication_values=pub_values,
+            group_items=group_items,
+            mark_complete=request.mark_complete,
+        )
+    except ExtractionConfigurationNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except ExtractionIneligibleError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except (
+        ExtractionValidationError,
+        ExtractionConfigurationError,
+        InvalidValueError,
+        InvalidRevisionError,
+        ValueError,
+    ) as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+
+    return _revision_to_dto(revision)
+
+
+@router.get(
+    "/{project_id}/extraction/records/{publication_id}/history",
+    response_model=ExtractionRevisionHistoryResponseDTO,
+    status_code=status.HTTP_200_OK,
+    summary="Get append-only revision history for a publication",
+)
+def get_extraction_revision_history(project_id: str, publication_id: UUID) -> ExtractionRevisionHistoryResponseDTO:
+    service = _get_execution_service()
+    record = service.get_record(project_id, publication_id)
+    if record is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Extraction record for project '{project_id}' and publication '{publication_id}' was not found.",
+        )
+    history = service.get_revision_history(project_id, publication_id)
+    dtos = [_revision_to_dto(rev) for rev in history]
+
+    return ExtractionRevisionHistoryResponseDTO(
+        project_id=project_id,
+        publication_id=publication_id,
+        total_revisions=len(dtos),
+        revisions=dtos,
+    )
+
+
+def _dto_to_value_state(dto: ExtractedValueStateDTO) -> ExtractedValueState:
+    if dto.value_id is not None:
+        return ExtractedValueState(
+            value_id=dto.value_id,
+            field_key=dto.field_key,
+            status=ValueStatus(dto.status),
+            origin=ValueOrigin(dto.origin),
+            text_value=dto.text_value,
+            int_value=dto.int_value,
+            float_value=dto.float_value,
+            bool_value=dto.bool_value,
+            unit_value=dto.unit_value,
+            json_value=dto.json_value,
+            source_page=dto.source_page,
+            source_section=dto.source_section,
+            source_locator=dto.source_locator,
+            source_quote=dto.source_quote,
+            reviewer_note=dto.reviewer_note,
+        )
+    return ExtractedValueState(
+        field_key=dto.field_key,
+        status=ValueStatus(dto.status),
+        origin=ValueOrigin(dto.origin),
+        text_value=dto.text_value,
+        int_value=dto.int_value,
+        float_value=dto.float_value,
+        bool_value=dto.bool_value,
+        unit_value=dto.unit_value,
+        json_value=dto.json_value,
+        source_page=dto.source_page,
+        source_section=dto.source_section,
+        source_locator=dto.source_locator,
+        source_quote=dto.source_quote,
+        reviewer_note=dto.reviewer_note,
+    )
+
+
+def _dto_to_group_item_state(dto: ExtractedGroupItemStateDTO) -> ExtractedGroupItemState:
+    values = [_dto_to_value_state(v) for v in dto.values]
+    if dto.group_item_id is not None:
+        return ExtractedGroupItemState(
+            group_item_id=dto.group_item_id,
+            group_key=dto.group_key,
+            item_index=dto.item_index,
+            values=values,
+        )
+    return ExtractedGroupItemState(
+        group_key=dto.group_key,
+        item_index=dto.item_index,
+        values=values,
+    )
+
+
+def _value_state_to_dto(v: ExtractedValueState) -> ExtractedValueStateDTO:
+    return ExtractedValueStateDTO(
+        value_id=v.value_id,
+        field_key=v.field_key,
+        status=v.status.value,
+        origin=v.origin.value,
+        text_value=v.text_value,
+        int_value=v.int_value,
+        float_value=v.float_value,
+        bool_value=v.bool_value,
+        unit_value=v.unit_value,
+        json_value=v.json_value,
+        source_page=v.source_page,
+        source_section=v.source_section,
+        source_locator=v.source_locator,
+        source_quote=v.source_quote,
+        reviewer_note=v.reviewer_note,
+    )
+
+
+def _revision_to_dto(rev: ExtractionRevision) -> ExtractionRevisionResponseDTO:
+    pub_vals = [_value_state_to_dto(v) for v in rev.publication_values]
+    grp_items = [
+        ExtractedGroupItemStateDTO(
+            group_item_id=gi.group_item_id,
+            group_key=gi.group_key,
+            item_index=gi.item_index,
+            values=[_value_state_to_dto(v) for v in gi.values],
+        )
+        for gi in rev.group_items
+    ]
+    return ExtractionRevisionResponseDTO(
+        revision_id=rev.revision_id,
+        record_id=rev.record_id,
+        project_id=rev.project_id,
+        publication_id=rev.publication_id,
+        revision_index=rev.revision_index,
+        reviewer_id=rev.reviewer_id,
+        completeness_status=rev.completeness_status.value,
+        publication_values=pub_vals,
+        group_items=grp_items,
+        created_at=rev.created_at.isoformat(),
     )
