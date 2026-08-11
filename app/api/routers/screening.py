@@ -344,12 +344,13 @@ def record_screening_decision(
     payload: ScreeningDecisionCreateRequest,
     service: ScreeningDecisionService = Depends(get_screening_decision_service),
 ) -> ScreeningDecisionResponse:
-    if payload.stage is ScreeningStage.TITLE_ABSTRACT:
+    if payload.stage in (ScreeningStage.TITLE_ABSTRACT, ScreeningStage.FULL_TEXT):
+        workflow = "title-abstract" if payload.stage is ScreeningStage.TITLE_ABSTRACT else "full-text"
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail={
-                "code": "title_abstract_workflow_required",
-                "dedicated_endpoint": f"/projects/{project_id}/screening/title-abstract/decisions",
+                "code": f"{workflow.replace('-', '_')}_workflow_required",
+                "dedicated_endpoint": f"/projects/{project_id}/screening/{workflow}/decisions",
             },
         )
     try:

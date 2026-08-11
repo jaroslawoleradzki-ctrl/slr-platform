@@ -1,5 +1,31 @@
 # Changelog
 
+## [0.3.2] — 2026-08-11
+
+### Added
+
+- **Full-Text Screening**: Reviewer-specific eligibility derived from the
+  current canonical input and latest Title & Abstract `INCLUDE` decision.
+- Added a derived Full-Text queue with deterministic status, progress,
+  filtering, pagination and Save / Save & Next workflow.
+- Added active `FULL_TEXT` / `BOTH` criteria, including server-authoritative
+  automatic metadata assessments.
+- Added project-scoped full-text availability and external reference metadata;
+  no copyrighted PDF storage is required.
+- Added structured exclusion reasons linked to immutable criterion assessment
+  snapshots while preserving append-only decision history.
+- Added executable Full-Text GUI with reviewer identity, metadata, criteria,
+  availability, history, navigation and `INCLUDE` / `EXCLUDE` / `UNCERTAIN`.
+
+### Fixed
+
+- Integrated Full-Text availability cleanup into atomic project hard delete.
+- Preserved Full-Text history when a publication temporarily loses eligibility.
+
+### Notes
+
+- Phase 7.7 audit-trail aggregation remains planned.
+
 ## [0.3.1] — 2026-08-10
 
 ### Added

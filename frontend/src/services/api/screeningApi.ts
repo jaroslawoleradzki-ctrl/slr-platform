@@ -45,8 +45,26 @@ export interface ScreeningDecision {
   reviewer_id: string;
   rationale: string | null;
   criterion_assessments: CriterionAssessment[];
+  exclusion_reason_criterion_ids?: string[];
   decided_at: string;
 }
+
+export type FullTextStatus = TitleAbstractStatus;
+export type FullTextReadinessStatus = ReadinessStatus | 'waiting_for_title_abstract' | 'no_eligible_publications';
+export type FullTextAvailabilityStatus = 'unknown' | 'to_retrieve' | 'available' | 'unavailable';
+export interface FullTextAvailability { status: FullTextAvailabilityStatus; external_url: string | null; notes: string | null; }
+export interface FullTextRecord extends Omit<TitleAbstractRecord, 'status'> {
+  status: FullTextStatus;
+  availability: FullTextAvailability;
+}
+export interface FullTextOverview {
+  project_id: string; reviewer_id: string; ready: boolean; readiness_status: FullTextReadinessStatus;
+  eligible_records_count: number; working_collection_count: number; canonical_records_count: number;
+  unresolved_duplicate_groups: number; criteria: ScreeningCriterion[];
+  progress: TitleAbstractOverview['progress'];
+}
+export interface FullTextRecordList { project_id: string; reviewer_id: string; ready: boolean; status_filter: FullTextStatus | null; total: number; offset: number; limit: number; items: FullTextRecord[]; }
+export interface FullTextDecisionRequest extends TitleAbstractDecisionRequest { exclusion_reason_criterion_ids: string[]; }
 
 export interface TitleAbstractRecord {
   publication_id: string;
@@ -187,5 +205,27 @@ export const screeningApi = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });
+  },
+  getFullTextOverview(projectId: string, reviewerId: string) {
+    return request<FullTextOverview>(`/projects/${projectId}/screening/full-text?${query({ reviewer_id: reviewerId })}`);
+  },
+  listFullTextRecords(projectId: string, reviewerId: string, status: FullTextStatus | null, offset: number, limit: number) {
+    return request<FullTextRecordList>(`/projects/${projectId}/screening/full-text/records?${query({ reviewer_id: reviewerId, status, offset, limit })}`);
+  },
+  getFullTextRecord(projectId: string, publicationId: string, reviewerId: string) {
+    return request<FullTextRecord>(`/projects/${projectId}/screening/full-text/records/${publicationId}?${query({ reviewer_id: reviewerId })}`);
+  },
+  saveFullTextAvailability(projectId: string, publicationId: string, payload: FullTextAvailability & { reviewer_id: string }) {
+    return request<FullTextAvailability>(`/projects/${projectId}/screening/full-text/records/${publicationId}/availability`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+    });
+  },
+  saveFullTextDecision(projectId: string, payload: FullTextDecisionRequest) {
+    return request<ScreeningDecision>(`/projects/${projectId}/screening/full-text/decisions`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+    });
+  },
+  listDecisionHistory(projectId: string, publicationId: string, reviewerId: string) {
+    return request<{ items: ScreeningDecision[]; total: number }>(`/projects/${projectId}/screening/decisions/history?${query({ publication_id: publicationId, stage: 'full_text', reviewer_id: reviewerId })}`);
   },
 };
