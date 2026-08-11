@@ -10,7 +10,7 @@ Unlike ROADMAP.md, this file is intentionally technical and may change frequentl
 
 Current release:
 
-v0.3.6 — Conflict Resolution and Adjudication
+v0.3.7 — Screening Integration
 
 Status:
 
@@ -34,12 +34,15 @@ Release scope:
 - Multi-reviewer conflict resolution with append-only resolution history,
   stale/current semantics, unified audit events, project-level outcome read
   model, and optimistic concurrency;
+- Screening integration with stage eligibility adapter, queue hydration,
+  staleness revocation, workflow-status API, Dashboard/Stepper integration,
+  and backend/frontend integration tests;
 - Dashboard/Search polish: corrected search import contract, provider Load More,
   append-only result pagination, local pagination, and cross-page selection.
 
 Next milestone:
 
-Phase 7.9 — Screening Integration and Release (Not Started)
+Phase 7.9 — Screening Integration and Release (Implemented; manual acceptance pending after Phase 8 integration)
 
 ---
 

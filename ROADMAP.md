@@ -159,6 +159,14 @@ groups remain separate, and pending groups or merge conflicts block readiness.
 Full durable `SearchRun` history remains a separate Phase 6.8.5 concern; it does
 not block Title & Abstract Screening.
 
+### Version 0.3.7 — Screening Integration ✅
+
+- **Phase 7.9 — Screening Integration and Release** ✅ — Stage eligibility
+  adapter, multi-reviewer queue hydration, staleness revocation, unified
+  workflow-status API, Dashboard and WorkflowStepper integration, and backend
+  and frontend integration test suites.
+- **Manual Acceptance: PENDING AFTER PHASE 8 INTEGRATION ON DEVELOPMENT.**
+
 ### Version 0.3.6 — Conflict Resolution and Adjudication ✅
 
 - **Phase 7.8B — Conflict Resolution / Adjudication** ✅ — Explicit resolver
@@ -166,7 +174,7 @@ not block Title & Abstract Screening.
   history, deterministic decision-set concurrency, stale/current semantics,
   unified decision/resolution audit events, project-level outcome read model,
   reporting extensions, and conflict-resolution workspace.
-- **Next increment: 7.9 — Screening Integration and Release** ➡️
+- **Phase 7.9 was delivered in v0.3.7; manual acceptance remains pending after Phase 8 integration.**
 
 ### Version 0.3.5 — Multi-Reviewer Screening and Conflict Detection ✅
 
@@ -196,7 +204,7 @@ not block Title & Abstract Screening.
   and selection preserved across local pages.
 - **Phase 7.7 was delivered in v0.3.4.**
 - **Phase 7.8B was delivered in v0.3.6.**
-- **Next increment: 7.9 — Screening Integration and Release** ➡️
+- **Phase 7.9 was delivered in v0.3.7; manual acceptance remains pending after Phase 8 integration.**
 
 ### Version 0.3.1 — Project Management and Title & Abstract Screening ✅
 
@@ -365,8 +373,9 @@ Support systematic review screening through a backend workflow and a dedicated u
 - **7.7 — Screening Audit Trail and Progress** ✅ — Unified, project-scoped read models for immutable Title & Abstract and Full-Text decision history; reviewer-specific stage progress and pipeline transitions; Full-Text exclusion-reason aggregation from criterion snapshots; legacy v1 and description-complete v2 criterion snapshots; paginated audit/report API and screening summary/history UI. No project-wide reviewer reconciliation.
 - **7.8A — Multi-Reviewer Screening and Conflict Detection** ✅ — Project-and-stage reviewer roster with active/inactive lifecycle, derived `INCOMPLETE` / `AGREEMENT` / `CONFLICT` state from latest reviewer-specific decisions, conflict queue, pending-reviewer visibility, agreement metrics, and blind-aware display. Single-reviewer workflows remain compatible; no adjudication or resolved project outcome.
 - **7.8B — Conflict Resolution / Adjudication** ✅ — Explicit resolver workflow, resolution rationale/history, stale-resolution detection, unified decision/resolution audit trail, and a project-level outcome read model. No automatic majority vote; no stage-transition integration.
-- **Next increment: 7.9 — Screening Integration and Release** ➡️
-- **7.9 — Screening Integration and Release** ⬜ — Not started. Integration into Project Dashboard, workflow stage status transitions (Deduplication → Screening and Screening → Quality Assessment), handling empty/loading/error states, backend integration test suite, frontend integration test suite, end-to-end verification, documentation reconciliation, and release verification.
+- **7.9 — Screening Integration and Release** ✅ — Implemented and integrated;
+  automated verification is complete. Manual Acceptance remains pending after
+  Phase 8 integration on development.
 
 ### Definition of Done for Phase 7
 
