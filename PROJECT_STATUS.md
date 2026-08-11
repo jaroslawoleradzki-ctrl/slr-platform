@@ -14,7 +14,7 @@ development
 
 Current version:
 
-v0.3.8
+v0.3.9
 
 Current release status:
 
@@ -79,6 +79,12 @@ Completed in v0.3.8:
 - Screening manual-acceptance UX fixes: dark-theme select controls,
   reviewer-team terminology, and unified conflicts/resolutions workflow with
   backward-compatible routing.
+
+Completed in v0.3.9:
+- Quality Assessment integration: domain and persistence, project
+  configuration, execution workflow, API, workspace, integration tests, and
+  project-deletion lifecycle support. Phase 9 Data Extraction remains under
+  active development and is not included in this release.
 
 Completed in v0.3.7:
 - Screening integration: stage eligibility adapter, queue hydration,

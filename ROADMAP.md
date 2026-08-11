@@ -169,6 +169,13 @@ not block Title & Abstract Screening.
   path.
 - **Manual Acceptance: PENDING AFTER PHASE 8 INTEGRATION ON DEVELOPMENT.**
 
+### Version 0.3.9 — Quality Assessment Integration ✅
+
+- **Quality Assessment subsystem integrated into development** — domain and
+  persistence, project configuration, execution workflow, API, workspace,
+  integration tests, and project-deletion lifecycle support.
+- **Phase 9 Data Extraction is not part of this release and remains under active development.**
+
 ### Version 0.3.7 — Screening Integration ✅
 
 - **Phase 7.9 — Screening Integration and Release** ✅ — Stage eligibility

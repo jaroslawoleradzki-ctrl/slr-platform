@@ -10,7 +10,7 @@ Unlike ROADMAP.md, this file is intentionally technical and may change frequentl
 
 Current release:
 
-v0.3.8 — Screening Manual Acceptance UX Fixes
+v0.3.9 — Quality Assessment Integration
 
 Status:
 
