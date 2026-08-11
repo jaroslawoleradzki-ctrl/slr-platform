@@ -26,6 +26,11 @@ export const ScreeningSectionLayout: React.FC = () => {
           background: isActive ? 'var(--accent-primary)' : 'var(--bg-surface-elevated)',
           color: isActive ? '#fff' : 'var(--text-primary)', border: '1px solid var(--border-strong)', fontWeight: 600,
         })}>Criteria Configuration</NavLink>
+        <NavLink to={`${base}/audit`} style={({ isActive }) => ({
+          padding: '8px 12px', borderRadius: 'var(--radius-md)', textDecoration: 'none',
+          background: isActive ? 'var(--accent-primary)' : 'var(--bg-surface-elevated)',
+          color: isActive ? '#fff' : 'var(--text-primary)', border: '1px solid var(--border-strong)', fontWeight: 600,
+        })}>Podsumowanie i historia</NavLink>
       </nav>
       <Outlet />
     </div>

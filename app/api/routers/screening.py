@@ -15,7 +15,15 @@ from app.api.dto.screening import (
     TitleAbstractScreeningOverviewResponse,
     TitleAbstractScreeningRecordResponse,
 )
-from app.domain.screening import ScreeningCriterion, ScreeningStage
+from app.api.dto.screening_reporting import (
+    ExclusionReasonAggregationResponse,
+    ScreeningAuditEventResponse,
+    ScreeningAuditPageResponse,
+    ScreeningReportResponse,
+    ScreeningTransitionResponse,
+    StageProgressResponse,
+)
+from app.domain.screening import ScreeningCriterion, ScreeningOutcome, ScreeningStage
 from app.repositories.project_publication_repository import ProjectNotFoundError
 from app.repositories.screening_criterion_repository import (
     CriterionNotFoundError,
@@ -29,6 +37,7 @@ from app.services.screening_decision_service import (
     CriterionAssessmentInput,
     ScreeningDecisionService,
 )
+from app.services.screening_reporting_service import ScreeningReportingService
 from app.services.title_abstract_screening_service import (
     ScreeningPublicationNotEligibleError,
     ScreeningWorkflowNotReadyError,
@@ -49,6 +58,65 @@ def get_screening_decision_service() -> ScreeningDecisionService:
 
 def get_title_abstract_screening_service() -> TitleAbstractScreeningService:
     return TitleAbstractScreeningService()
+
+
+def get_screening_reporting_service() -> ScreeningReportingService:
+    return ScreeningReportingService()
+
+
+@router.get("/{project_id}/screening/report", response_model=ScreeningReportResponse)
+def get_screening_report(
+    project_id: str,
+    reviewer_id: str = Query(..., min_length=1),
+    service: ScreeningReportingService = Depends(get_screening_reporting_service),
+) -> ScreeningReportResponse:
+    try:
+        input_set, title_abstract, full_text, transitions, reasons = service.report(project_id, reviewer_id)
+        return ScreeningReportResponse(
+            project_id=project_id,
+            reviewer_id=reviewer_id.strip(),
+            ready=input_set.ready,
+            readiness_status=input_set.readiness_status.value,
+            working_collection_count=input_set.working_collection_count,
+            canonical_records_count=input_set.canonical_records_count,
+            title_abstract=StageProgressResponse.from_domain(title_abstract) if title_abstract else None,
+            full_text=StageProgressResponse.from_domain(full_text) if full_text else None,
+            transitions=ScreeningTransitionResponse.from_domain(transitions) if transitions else None,
+            full_text_exclusion_reasons=[ExclusionReasonAggregationResponse.from_domain(item) for item in reasons],
+        )
+    except Exception as exc:
+        raise _workflow_error(exc) from exc
+
+
+@router.get("/{project_id}/screening/audit", response_model=ScreeningAuditPageResponse)
+def get_screening_audit(
+    project_id: str,
+    reviewer_id: str | None = Query(None),
+    publication_id: UUID | None = Query(None),
+    stage: ScreeningStage | None = Query(None),
+    outcome: ScreeningOutcome | None = Query(None),
+    offset: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=100),
+    service: ScreeningReportingService = Depends(get_screening_reporting_service),
+) -> ScreeningAuditPageResponse:
+    try:
+        items, total = service.audit(
+            project_id,
+            reviewer_id=reviewer_id.strip() if reviewer_id else None,
+            publication_id=publication_id,
+            stage=stage,
+            outcome=outcome,
+            offset=offset,
+            limit=limit,
+        )
+        return ScreeningAuditPageResponse(
+            total=total,
+            offset=offset,
+            limit=limit,
+            items=[ScreeningAuditEventResponse.from_domain(item) for item in items],
+        )
+    except Exception as exc:
+        raise _workflow_error(exc) from exc
 
 
 def _workflow_error(exc: Exception) -> HTTPException:
