@@ -5,9 +5,18 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.domain.quality_assessment import (
     ProjectQualityAssessmentConfiguration,
+    QualityAssessment,
+    QualityAssessmentResponse,
+    QualityAssessmentResponseValue,
     QualityAssessmentTemplate,
     QualityAssessmentTemplateCriterion,
     QualityAssessmentTool,
+)
+from app.services.quality_assessment_execution_service import (
+    EligiblePublicationRecord,
+    QualityAssessmentOverview,
+    QualityAssessmentRecordDetail,
+    QualityAssessmentRecordList,
 )
 
 
@@ -121,3 +130,172 @@ class ProjectQualityAssessmentConfigurationResponse(BaseModel):
             configured_at=config.configured_at,
             updated_at=config.updated_at,
         )
+
+
+class CriterionResponseInputDto(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    criterion_id: UUID
+    response_value: QualityAssessmentResponseValue
+    justification: str = Field(min_length=1)
+
+
+class SaveQualityAssessmentRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    reviewer_id: str = Field(min_length=1)
+    publication_id: UUID
+    responses: list[CriterionResponseInputDto] = Field(default_factory=list)
+
+
+class QualityAssessmentResponseDto(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    response_id: UUID
+    assessment_id: UUID
+    criterion_id: UUID
+    question_snapshot: str
+    guidance_snapshot: str | None = None
+    is_required_snapshot: bool
+    response_value: QualityAssessmentResponseValue
+    justification: str
+    created_at: datetime
+
+    @classmethod
+    def from_domain(cls, resp: QualityAssessmentResponse) -> "QualityAssessmentResponseDto":
+        return cls(
+            response_id=resp.response_id,
+            assessment_id=resp.assessment_id,
+            criterion_id=resp.criterion_id,
+            question_snapshot=resp.question_snapshot,
+            guidance_snapshot=resp.guidance_snapshot,
+            is_required_snapshot=resp.is_required_snapshot,
+            response_value=resp.response_value,
+            justification=resp.justification,
+            created_at=resp.created_at,
+        )
+
+
+class QualityAssessmentDto(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    assessment_id: UUID
+    project_id: str
+    publication_id: UUID
+    reviewer_id: str
+    template_id: UUID
+    responses: list[QualityAssessmentResponseDto]
+    assessed_at: datetime
+
+    @classmethod
+    def from_domain(cls, qa: QualityAssessment) -> "QualityAssessmentDto":
+        return cls(
+            assessment_id=qa.assessment_id,
+            project_id=qa.project_id,
+            publication_id=qa.publication_id,
+            reviewer_id=qa.reviewer_id,
+            template_id=qa.template_id,
+            responses=[QualityAssessmentResponseDto.from_domain(r) for r in qa.responses],
+            assessed_at=qa.assessed_at,
+        )
+
+
+class QualityAssessmentOverviewResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    readiness: str
+    tool_id: str | None = None
+    template_id: UUID | None = None
+    template_version: int | None = None
+    total_eligible: int
+    total_assessed: int
+    total_remaining: int
+
+    @classmethod
+    def from_domain(cls, overview: QualityAssessmentOverview) -> "QualityAssessmentOverviewResponse":
+        return cls(
+            readiness=overview.readiness.value,
+            tool_id=overview.tool_id,
+            template_id=overview.template_id,
+            template_version=overview.template_version,
+            total_eligible=overview.total_eligible,
+            total_assessed=overview.total_assessed,
+            total_remaining=overview.total_remaining,
+        )
+
+
+class EligiblePublicationRecordDto(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    publication: dict
+    has_assessment: bool
+    latest_assessment: QualityAssessmentDto | None = None
+
+    @classmethod
+    def from_domain(cls, record: EligiblePublicationRecord) -> "EligiblePublicationRecordDto":
+        return cls(
+            publication=record.publication.model_dump(mode="json"),
+            has_assessment=record.has_assessment,
+            latest_assessment=(
+                QualityAssessmentDto.from_domain(record.latest_assessment)
+                if record.latest_assessment
+                else None
+            ),
+        )
+
+
+class QualityAssessmentRecordListResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    items: list[EligiblePublicationRecordDto]
+    total: int
+    page: int
+    page_size: int
+    total_pages: int
+
+    @classmethod
+    def from_domain(cls, record_list: QualityAssessmentRecordList) -> "QualityAssessmentRecordListResponse":
+        return cls(
+            items=[EligiblePublicationRecordDto.from_domain(item) for item in record_list.items],
+            total=record_list.total,
+            page=record_list.page,
+            page_size=record_list.page_size,
+            total_pages=record_list.total_pages,
+        )
+
+
+class QualityAssessmentRecordDetailResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    project_id: str
+    publication: dict
+    reviewer_id: str
+    is_currently_eligible: bool
+    template: TemplateResponse
+    latest_assessment: QualityAssessmentDto | None = None
+    history: list[QualityAssessmentDto] = Field(default_factory=list)
+
+    @classmethod
+    def from_domain(cls, detail: QualityAssessmentRecordDetail) -> "QualityAssessmentRecordDetailResponse":
+        return cls(
+            project_id=detail.project_id,
+            publication=detail.publication.model_dump(mode="json"),
+            reviewer_id=detail.reviewer_id,
+            is_currently_eligible=detail.is_currently_eligible,
+            template=TemplateResponse.from_domain(detail.template),
+            latest_assessment=(
+                QualityAssessmentDto.from_domain(detail.latest_assessment)
+                if detail.latest_assessment
+                else None
+            ),
+            history=[QualityAssessmentDto.from_domain(qa) for qa in detail.history],
+        )
+
+
+SaveQualityAssessmentRequest.model_rebuild()
+QualityAssessmentResponseDto.model_rebuild()
+QualityAssessmentDto.model_rebuild()
+QualityAssessmentOverviewResponse.model_rebuild()
+EligiblePublicationRecordDto.model_rebuild()
+QualityAssessmentRecordListResponse.model_rebuild()
+QualityAssessmentRecordDetailResponse.model_rebuild()

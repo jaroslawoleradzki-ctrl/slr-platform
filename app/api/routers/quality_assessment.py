@@ -1,12 +1,16 @@
-from __future__ import annotations
-
 from typing import Annotated
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.api.dto.quality_assessment import (
     ProjectQualityAssessmentConfigurationRequest,
     ProjectQualityAssessmentConfigurationResponse,
+    QualityAssessmentDto,
+    QualityAssessmentOverviewResponse,
+    QualityAssessmentRecordDetailResponse,
+    QualityAssessmentRecordListResponse,
+    SaveQualityAssessmentRequest,
     TemplateResponse,
     ToolResponse,
 )
@@ -19,6 +23,16 @@ from app.services.quality_assessment_configuration_service import (
     TemplateVersionNotFoundError,
     ToolNotFoundError,
     default_quality_assessment_configuration_service,
+)
+from app.services.quality_assessment_execution_service import (
+    CriterionResponseInput,
+    MissingRequiredQualityCriterionResponseError,
+    NoQualityAssessmentConfigurationError,
+    PublicationNotEligibleForQualityAssessmentError,
+    PublicationNotFoundError,
+    QualityAssessmentExecutionService,
+    QualityAssessmentStatusFilter,
+    default_quality_assessment_execution_service,
 )
 
 router = APIRouter(tags=["Quality Assessment"])
@@ -133,5 +147,171 @@ def configure_project_quality_assessment(
     ) as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
+
+
+def get_execution_service() -> QualityAssessmentExecutionService:
+    return default_quality_assessment_execution_service()
+
+
+@router.get(
+    "/projects/{project_id}/quality-assessment/overview",
+    response_model=QualityAssessmentOverviewResponse,
+    status_code=status.HTTP_200_OK,
+)
+def get_quality_assessment_overview(
+    project_id: str,
+    reviewer_id: str,
+    service: Annotated[
+        QualityAssessmentExecutionService, Depends(get_execution_service)
+    ],
+) -> QualityAssessmentOverviewResponse:
+    """Retrieve Quality Assessment progress and readiness overview for a project and reviewer."""
+    try:
+        overview = service.get_overview(project_id=project_id, reviewer_id=reviewer_id)
+        return QualityAssessmentOverviewResponse.from_domain(overview)
+    except ProjectNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+
+
+@router.get(
+    "/projects/{project_id}/quality-assessment/records",
+    response_model=QualityAssessmentRecordListResponse,
+    status_code=status.HTTP_200_OK,
+)
+def list_quality_assessment_eligible_records(
+    project_id: str,
+    reviewer_id: str,
+    service: Annotated[
+        QualityAssessmentExecutionService, Depends(get_execution_service)
+    ],
+    status_filter: QualityAssessmentStatusFilter = QualityAssessmentStatusFilter.ALL,
+    page: int = 1,
+    page_size: int = 20,
+) -> QualityAssessmentRecordListResponse:
+    """List eligible publications for Quality Assessment with current assessment state."""
+    try:
+        record_list = service.list_eligible_records(
+            project_id=project_id,
+            reviewer_id=reviewer_id,
+            status_filter=status_filter,
+            page=page,
+            page_size=page_size,
+        )
+        return QualityAssessmentRecordListResponse.from_domain(record_list)
+    except ProjectNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+
+
+@router.get(
+    "/projects/{project_id}/quality-assessment/records/{publication_id}",
+    response_model=QualityAssessmentRecordDetailResponse,
+    status_code=status.HTTP_200_OK,
+)
+def get_quality_assessment_record_detail(
+    project_id: str,
+    publication_id: UUID,
+    reviewer_id: str,
+    service: Annotated[
+        QualityAssessmentExecutionService, Depends(get_execution_service)
+    ],
+) -> QualityAssessmentRecordDetailResponse:
+    """Retrieve detailed Quality Assessment view for a specific publication."""
+    try:
+        detail = service.get_record_detail(
+            project_id=project_id,
+            publication_id=publication_id,
+            reviewer_id=reviewer_id,
+        )
+        return QualityAssessmentRecordDetailResponse.from_domain(detail)
+    except (ProjectNotFoundError, PublicationNotFoundError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    except NoQualityAssessmentConfigurationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
+
+
+@router.post(
+    "/projects/{project_id}/quality-assessment/assessments",
+    response_model=QualityAssessmentDto,
+    status_code=status.HTTP_201_CREATED,
+)
+def save_quality_assessment(
+    project_id: str,
+    payload: SaveQualityAssessmentRequest,
+    service: Annotated[
+        QualityAssessmentExecutionService, Depends(get_execution_service)
+    ],
+) -> QualityAssessmentDto:
+    """Save an append-only Quality Assessment record for an eligible publication."""
+    try:
+        response_inputs = [
+            CriterionResponseInput(
+                criterion_id=r.criterion_id,
+                response_value=r.response_value,
+                justification=r.justification,
+            )
+            for r in payload.responses
+        ]
+        qa = service.save_assessment(
+            project_id=project_id,
+            publication_id=payload.publication_id,
+            reviewer_id=payload.reviewer_id,
+            response_inputs=response_inputs,
+        )
+        return QualityAssessmentDto.from_domain(qa)
+    except ProjectNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    except (
+        PublicationNotEligibleForQualityAssessmentError,
+        NoQualityAssessmentConfigurationError,
+        MissingRequiredQualityCriterionResponseError,
+        ValueError,
+    ) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
+
+
+@router.get(
+    "/projects/{project_id}/quality-assessment/records/{publication_id}/history",
+    response_model=list[QualityAssessmentDto],
+    status_code=status.HTTP_200_OK,
+)
+def get_quality_assessment_history(
+    project_id: str,
+    publication_id: UUID,
+    reviewer_id: str,
+    service: Annotated[
+        QualityAssessmentExecutionService, Depends(get_execution_service)
+    ],
+) -> list[QualityAssessmentDto]:
+    """Retrieve full append-only assessment history for a publication and reviewer."""
+    try:
+        history = service.get_assessment_history(
+            project_id=project_id,
+            publication_id=publication_id,
+            reviewer_id=reviewer_id,
+        )
+        return [QualityAssessmentDto.from_domain(qa) for qa in history]
+    except ProjectNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
             detail=str(exc),
         ) from exc
