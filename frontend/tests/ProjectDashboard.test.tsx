@@ -102,6 +102,7 @@ describe('deriveNextAction — shared selector, single source of truth', () => {
     normalization:     { state: 'completed',    count: 0,    label: 'OK' },
     deduplication:     { state: 'completed',    totalGroups: 3, pendingGroups: 0, approvedGroups: 2, rejectedGroups: 1, label: 'Oceniono' },
     screening:         { state: 'completed', count: 10, total: 10, label: 'Skończono' },
+    fullTextScreening: { state: 'not_available', count: null, total: null, label: 'Niedostępne' },
     qualityAssessment: { state: 'not_available', label: 'Niedostępne' },
     dataExtraction:    { state: 'not_available', label: 'Niedostępne' },
     exports:           { state: 'not_available', label: 'Niedostępne' },

@@ -21,6 +21,7 @@ import {
   ApiProjectResponse,
   ApiProjectListResponse,
   ProjectUpdatePayload,
+  ApiProjectWorkflowStatusResponse,
 } from '../../types';
 import { MOCK_PROJECTS } from '../../mocks/projectData';
 import { API_BASE_URL } from '../../config/api';
@@ -124,6 +125,10 @@ export interface ProjectApiService {
     projectId: string,
     criterionId: string
   ): Promise<ScreeningCriterionResponse>;
+  getWorkflowStatus(
+    projectId: string,
+    reviewerId?: string
+  ): Promise<ApiProjectWorkflowStatusResponse | null>;
 }
 
 const mapApiProjectToSLRProject = (p: ApiProjectResponse): SLRProject => ({
@@ -646,6 +651,23 @@ class MixedProjectApiService implements ProjectApiService {
 
     const data: ApiDuplicateGroupDecisionResponse = await response.json();
     return data;
+  }
+
+  async getWorkflowStatus(
+    projectId: string,
+    reviewerId = 'default_reviewer'
+  ): Promise<ApiProjectWorkflowStatusResponse | null> {
+    let response: Response;
+    try {
+      response = await fetch(
+        `${API_BASE_URL}/projects/${projectId}/workflow-status?reviewer_id=${encodeURIComponent(reviewerId)}`,
+        { headers: { Accept: 'application/json' } }
+      );
+    } catch {
+      return null;
+    }
+    if (!response.ok) return null;
+    return response.json() as Promise<ApiProjectWorkflowStatusResponse>;
   }
 }
 

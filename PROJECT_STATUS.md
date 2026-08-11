@@ -22,10 +22,7 @@ Completed
 
 Current development phase:
 
-Phase 7 — Screening remains in progress. Title & Abstract and Full-Text
-Screening (7.5A–7.6), Project Management, and Dashboard/Search polish are
-completed; the next planned
-increment is 7.7 — Screening Audit Trail and Progress.
+Phase 7 — Screening is ✅ Completed (7.1–7.9). All screening stages, multi-reviewer conflict detection, conflict resolution, T&A → Full-Text → Quality Assessment stage transitions, queue hydration, staleness revocation, unified workflow read model, and UI integration are fully implemented and verified.
 
 Phase 6.7 & Phase 6.8 Workflow State:
 - **Phase 6.7 (Modules 1–4 Functional Workflow)**: ✅ Completed (6.7.1, 6.7.2a, 6.7.2b).
@@ -48,7 +45,7 @@ Screening prerequisites resolved in v0.3.3:
 
 State of Phase 7 — Screening:
 - v0.3.3 is completed.
-- Phase 7 — Screening is in progress; 7.1–7.6 are completed and 7.7 is next.
+- Phase 7 — Screening is ✅ Completed (7.1–7.9).
 - Phase 7.1 — Screening Criteria Domain Model is ✅ Completed (`ScreeningCriterion`, `ScreeningCriterionType`, `ScreeningCriterionStage`, validation, unit tests).
 - Phase 7.2 — Screening Criteria Persistence and API is ✅ Completed (SQLite schema `0007_screening_criteria.sql`, repository, project isolation, REST API, DTOs, tests).
 - Phase 7.3 — Screening Configuration GUI is ✅ Completed (ScreeningCriteriaList, ScreeningCriterionCard, ScreeningCriterionModal, projectApiService adapter, validation, 22 frontend tests).
@@ -57,7 +54,11 @@ State of Phase 7 — Screening:
 - Phase 7.5B — Title & Abstract Screening Backend Workflow is ✅ Completed.
 - Phase 7.5C — Title & Abstract Screening GUI is ✅ Completed.
 - Phase 7.5D — Automatic Metadata-Based Screening Criteria is ✅ Completed.
-- Phase 7.6 — Full-Text Screening is ✅ Completed (reviewer-specific eligibility, derived queue, FULL_TEXT/BOTH criteria, availability metadata, structured exclusion reasons, append-only history, executable GUI, and project deletion integration).
+- Phase 7.6 — Full-Text Screening is ✅ Completed.
+- Phase 7.7 — Screening Audit Trail and Progress is ✅ Completed.
+- Phase 7.8A — Multi-Reviewer Screening + Conflict Detection is ✅ Completed.
+- Phase 7.8B — Conflict Resolution / Adjudication is ✅ Completed.
+- Phase 7.9 — Screening Integration and Release is ✅ Completed (ScreeningEligibilityAdapter, queue hydration, staleness revocation, unified GET /projects/{id}/workflow-status endpoint, Dashboard & Stepper integration, and integration test suites).
 - Next: Phase 7.7 — Screening Audit Trail and Progress.
 
 Completed in this release:

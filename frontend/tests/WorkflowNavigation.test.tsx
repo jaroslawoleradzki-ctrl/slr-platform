@@ -12,9 +12,23 @@ import {
   SearchStrategy,
 } from '../src/types';
 
+import { screeningApi } from '../src/services/api/screeningApi';
+
 describe('v0.2.2 — WorkflowNavigationStatus Unit & Integration Tests', () => {
   beforeEach(() => {
+    localStorage.clear();
     vi.restoreAllMocks();
+    vi.spyOn(screeningApi, 'getOverview').mockResolvedValue({
+      project_id: 'lean_energy',
+      reviewer_id: 'default_reviewer',
+      ready: true,
+      readiness_status: 'ready',
+      working_collection_count: 0,
+      canonical_records_count: 0,
+      unresolved_duplicate_groups: 0,
+      criteria: [],
+      progress: { total: 0, unscreened: 0, included: 0, excluded: 0, uncertain: 0, completed: 0 },
+    });
   });
 
   const renderNav = (path = '/projects/lean_energy/dedup') =>

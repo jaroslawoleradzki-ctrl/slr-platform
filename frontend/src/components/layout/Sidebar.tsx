@@ -23,9 +23,6 @@ export const Sidebar: React.FC = () => {
 
   const renderBadge = (stage: keyof WorkflowNavigationStatus | 'dashboard') => {
     if (!workflowStatus || stage === 'dashboard') return null;
-    if (stage === 'screening') {
-      return <span style={{ fontSize: '0.7rem', color: 'var(--status-success-text)' }}>Dostępne</span>;
-    }
     const item = workflowStatus[stage];
 
     if (stage === 'deduplication') {
@@ -40,7 +37,7 @@ export const Sidebar: React.FC = () => {
           </Badge>
         );
       }
-      if (dedup.state === 'completed' || dedup.pendingGroups === 0) {
+      if (dedup.state === 'completed') {
         return (
           <span style={{ fontSize: '0.7rem', color: 'var(--status-success-text)', fontWeight: 600 }}>
             Oceniono
