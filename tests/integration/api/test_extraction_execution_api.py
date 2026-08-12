@@ -13,11 +13,25 @@ from app.domain.extraction import (
     FieldDataType,
 )
 from app.domain.publication import Publication
+from app.domain.quality_assessment import (
+    ProjectQualityAssessmentConfiguration,
+    QualityAssessment,
+    QualityAssessmentResponse,
+    QualityAssessmentResponseValue,
+    QualityAssessmentTemplate,
+    QualityAssessmentTemplateCriterion,
+    QualityAssessmentTool,
+)
 from app.domain.screening import ScreeningDecision, ScreeningOutcome, ScreeningStage
 from app.repositories.extraction_template_repository import SqliteExtractionTemplateRepository
 from app.repositories.project_publication_repository import SqliteProjectPublicationRepository
 from app.repositories.project_repository import Project, SqliteProjectRepository
 from app.repositories.screening_decision_repository import SqliteScreeningDecisionRepository
+from app.repositories.sqlite_quality_assessment_repository import (
+    SqliteProjectQualityAssessmentConfigurationRepository,
+    SqliteQualityAssessmentCatalogRepository,
+    SqliteQualityAssessmentRepository,
+)
 from app.services.extraction_configuration_service import ExtractionConfigurationService
 
 
@@ -82,6 +96,7 @@ def api_client(tmp_path, monkeypatch):
     with TestClient(app) as client:
         yield {
             "client": client,
+            "db_path": test_db,
             "project_id": "proj_api_exec",
             "publication_id": pub_id,
             "ineligible_publication_id": ineligible_pub_id,
@@ -89,6 +104,88 @@ def api_client(tmp_path, monkeypatch):
 
 
 class TestExtractionExecutionAPI:
+    def test_configured_qa_is_enforced_by_execution_wiring(self, api_client):
+        db_path = api_client["db_path"]
+        client = api_client["client"]
+        project_id = api_client["project_id"]
+        publication_id = api_client["publication_id"]
+
+        tool_id = "api-exec-qa-tool"
+        template_id = uuid4()
+        criterion_id = uuid4()
+        catalog = SqliteQualityAssessmentCatalogRepository(db_path)
+        catalog.create_tool(
+            QualityAssessmentTool(tool_id=tool_id, name="API execution QA tool")
+        )
+        catalog.create_template_version(
+            QualityAssessmentTemplate(
+                template_id=template_id,
+                tool_id=tool_id,
+                template_key="api_exec_qa",
+                name="API execution QA",
+                version=1,
+                criteria=[
+                    QualityAssessmentTemplateCriterion(
+                        criterion_id=criterion_id,
+                        template_id=template_id,
+                        display_order=1,
+                        question="Is the QA record complete?",
+                    )
+                ],
+            )
+        )
+        SqliteProjectQualityAssessmentConfigurationRepository(db_path).save_configuration(
+            ProjectQualityAssessmentConfiguration(
+                project_id=project_id,
+                tool_id=tool_id,
+                template_id=template_id,
+            )
+        )
+
+        payload = {
+            "reviewer_id": "rev_1",
+            "publication_values": [
+                {
+                    "field_key": "sample_text",
+                    "status": "present",
+                    "origin": "reported",
+                    "text_value": "QA-gated text",
+                }
+            ],
+            "mark_complete": True,
+        }
+        blocked = client.post(
+            f"/api/v1/projects/{project_id}/extraction/records/{publication_id}/revisions",
+            json=payload,
+        )
+        assert blocked.status_code == 409
+
+        assessment_id = uuid4()
+        SqliteQualityAssessmentRepository(db_path).save_assessment(
+            QualityAssessment(
+                assessment_id=assessment_id,
+                project_id=project_id,
+                publication_id=publication_id,
+                reviewer_id="rev_1",
+                template_id=template_id,
+                responses=[
+                    QualityAssessmentResponse(
+                        assessment_id=assessment_id,
+                        criterion_id=criterion_id,
+                        question_snapshot="Is the QA record complete?",
+                        response_value=QualityAssessmentResponseValue.NO,
+                        justification="Recorded for execution gate coverage.",
+                    )
+                ],
+            )
+        )
+
+        permitted = client.post(
+            f"/api/v1/projects/{project_id}/extraction/records/{publication_id}/revisions",
+            json=payload,
+        )
+        assert permitted.status_code == 201
+
     def test_get_nonexistent_record_returns_404(self, api_client):
         client = api_client["client"]
         resp = client.get(f"/api/v1/projects/{api_client['project_id']}/extraction/records/{uuid4()}")

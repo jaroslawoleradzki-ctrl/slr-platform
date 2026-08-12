@@ -22,7 +22,16 @@ from app.repositories.quality_assessment_repository import (
     QualityAssessmentRepository,
 )
 
-DEFAULT_DB_PATH = Path(os.getenv("DATABASE_PATH", "slr_platform.db"))
+# All application repositories use SLR_DATABASE_PATH as their runtime database
+# selector. Keep DATABASE_PATH as a backwards-compatible fallback for direct
+# repository consumers, but do not let QA state diverge from the application DB.
+
+
+def _default_db_path() -> Path:
+    return Path(os.getenv("SLR_DATABASE_PATH", os.getenv("DATABASE_PATH", "data/slr-platform.db")))
+
+
+DEFAULT_DB_PATH = _default_db_path()
 
 
 class ToolNotFoundError(Exception):
@@ -40,8 +49,8 @@ class TemplateVersionNotFoundError(Exception):
 class SqliteQualityAssessmentCatalogRepository(QualityAssessmentCatalogRepository):
     """SQLite implementation for Quality Assessment tool and versioned template catalog."""
 
-    def __init__(self, db_path: Path | str = DEFAULT_DB_PATH) -> None:
-        self._db_path = Path(db_path)
+    def __init__(self, db_path: Path | str | None = None) -> None:
+        self._db_path = Path(db_path) if db_path is not None else _default_db_path()
         self._apply_migrations()
 
     def _get_connection(self, explicit_conn: sqlite3.Connection | None = None) -> sqlite3.Connection:
@@ -352,8 +361,8 @@ class SqliteQualityAssessmentCatalogRepository(QualityAssessmentCatalogRepositor
 class SqliteQualityAssessmentRepository(QualityAssessmentRepository):
     """SQLite implementation for append-only publication quality assessment storage."""
 
-    def __init__(self, db_path: Path | str = DEFAULT_DB_PATH) -> None:
-        self._db_path = Path(db_path)
+    def __init__(self, db_path: Path | str | None = None) -> None:
+        self._db_path = Path(db_path) if db_path is not None else _default_db_path()
         self._apply_migrations()
 
     def _get_connection(self, explicit_conn: sqlite3.Connection | None = None) -> sqlite3.Connection:
@@ -584,8 +593,8 @@ def default_quality_assessment_repository() -> SqliteQualityAssessmentRepository
 class SqliteProjectQualityAssessmentConfigurationRepository(ProjectQualityAssessmentConfigurationRepository):
     """SQLite implementation for project-scoped Quality Assessment configuration storage."""
 
-    def __init__(self, db_path: Path | str = DEFAULT_DB_PATH) -> None:
-        self._db_path = Path(db_path)
+    def __init__(self, db_path: Path | str | None = None) -> None:
+        self._db_path = Path(db_path) if db_path is not None else _default_db_path()
         self._apply_migrations()
 
     def _get_connection(self, explicit_conn: sqlite3.Connection | None = None) -> sqlite3.Connection:
