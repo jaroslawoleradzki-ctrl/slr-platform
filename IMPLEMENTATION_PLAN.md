@@ -805,7 +805,15 @@ Status:
 
 Status:
 
-⬜ Next (Execution Backend & Validation Service)
+✅ Completed (Execution Backend & Validation Service)
+
+---
+
+## 9.5 Data Extraction UI
+
+Status:
+
+⬜ Next (Data Extraction UI)
 
 ---
 

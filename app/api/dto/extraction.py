@@ -1,4 +1,4 @@
-"""Data Transfer Objects for Data Extraction Phase 9.3."""
+"""Data Transfer Objects for Data Extraction (Phase 9.3 & 9.4)."""
 
 from uuid import UUID
 
@@ -46,3 +46,93 @@ class ExtractionEligibilityListResponseDTO(BaseModel):
     total_publications: int
     eligible_count: int
     items: list[ExtractionEligibilityResultDTO]
+
+
+class ExtractedValueStateDTO(BaseModel):
+    """DTO representing an extracted field value assessment and provenance."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    value_id: UUID | None = None
+    field_key: str
+    status: str = Field(..., description="ValueStatus: present, not_reported, not_applicable, unclear")
+    origin: str = Field(..., description="ValueOrigin: reported, reviewer_coded")
+
+    text_value: str | None = None
+    int_value: int | None = None
+    float_value: float | None = None
+    bool_value: bool | None = None
+    unit_value: str | None = None
+    json_value: list[str] | None = None
+
+    source_page: str | None = None
+    source_section: str | None = None
+    source_locator: str | None = None
+    source_quote: str | None = None
+    reviewer_note: str | None = None
+
+
+class ExtractedGroupItemStateDTO(BaseModel):
+    """DTO representing a 1:N repeating group item instance."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    group_item_id: UUID | None = None
+    group_key: str
+    item_index: int
+    values: list[ExtractedValueStateDTO] = Field(default_factory=list)
+
+
+class ExtractionRevisionSubmitRequestDTO(BaseModel):
+    """Request DTO to submit a new append-only extraction revision."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    reviewer_id: str = Field(..., description="Identifier of the reviewer submitting this revision.")
+    publication_values: list[ExtractedValueStateDTO] = Field(default_factory=list)
+    group_items: list[ExtractedGroupItemStateDTO] = Field(default_factory=list)
+    mark_complete: bool = Field(default=False, description="If True, requires all fields to be complete.")
+
+
+class ExtractionRevisionResponseDTO(BaseModel):
+    """Response DTO representing an append-only extraction revision."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    revision_id: UUID
+    record_id: UUID
+    project_id: str
+    publication_id: UUID
+    revision_index: int
+    reviewer_id: str
+    completeness_status: str
+    publication_values: list[ExtractedValueStateDTO]
+    group_items: list[ExtractedGroupItemStateDTO]
+    created_at: str
+
+
+class ExtractionRecordResponseDTO(BaseModel):
+    """Response DTO representing the current extraction state for a publication."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    record_id: UUID
+    project_id: str
+    publication_id: UUID
+    template_id: str
+    template_version: str
+    current_status: str
+    created_at: str
+    updated_at: str
+    latest_revision: ExtractionRevisionResponseDTO | None = None
+
+
+class ExtractionRevisionHistoryResponseDTO(BaseModel):
+    """Response DTO for list of historical extraction revisions."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    project_id: str
+    publication_id: UUID
+    total_revisions: int
+    revisions: list[ExtractionRevisionResponseDTO]
