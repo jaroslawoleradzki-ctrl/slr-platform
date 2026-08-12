@@ -18,13 +18,13 @@ v0.4.6
 
 Current release status:
 
-Automated verification complete; Manual Acceptance remains in progress after UX fixes and is pending after Phase 8 integration on development.
+Phase 9 Data Extraction is formally completed and released in v0.4.6.
+Phase 10 remains unimplemented.
 
 Current development phase:
 
-Phase 7 — Screening implementation is complete through 7.9 and integrated;
-automated verification is complete. Manual Acceptance is PENDING AFTER PHASE 8
-INTEGRATION ON DEVELOPMENT. Phase 7 is not yet finally released or accepted.
+Phase 9 — Data Extraction is complete through 9.8 and released. Phase 10 has
+not started.
 
 Phase 6.7 & Phase 6.8 Workflow State:
 - **Phase 6.7 (Modules 1–4 Functional Workflow)**: ✅ Completed (6.7.1, 6.7.2a, 6.7.2b).
