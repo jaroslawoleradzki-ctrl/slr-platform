@@ -199,6 +199,14 @@ not block Title & Abstract Screening.
   provenance/reviewer attribution, and execution/history API. Phase 9.5 and
   later increments remain unintegrated.
 
+### Version 0.4.3 — Data Extraction Workspace GUI ✅
+
+- **Phase 9.5 — Form-Based Extraction Workspace** ✅ — Project navigation,
+  eligible publication selection, backend-driven dynamic template controls,
+  provenance and revision history drawers, save/completion feedback, and
+  backend validation/error handling. Phase 9.6 and later increments remain
+  unintegrated.
+
 ### Version 0.3.7 — Screening Integration ✅
 
 - **Phase 7.9 — Screening Integration and Release** ✅ — Stage eligibility

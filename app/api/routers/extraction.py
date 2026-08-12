@@ -24,6 +24,7 @@ from app.domain.extraction import (
     ExtractionConfigurationNotFoundError,
     ExtractionIneligibleError,
     ExtractionRevision,
+    ExtractionTemplateVersion,
     ExtractionValidationError,
     InvalidRevisionError,
     InvalidValueError,
@@ -32,6 +33,7 @@ from app.domain.extraction import (
 )
 from app.repositories.extraction_template_repository import (
     ExtractionTemplateNotFoundError,
+    default_extraction_template_repository,
 )
 from app.repositories.project_repository import (
     ProjectNotFoundError,
@@ -150,6 +152,27 @@ def get_project_extraction_eligibility(
         eligible_count=eligible_count,
         items=dtos,
     )
+
+
+@router.get(
+    "/{project_id}/extraction/template",
+    response_model=ExtractionTemplateVersion,
+    status_code=status.HTTP_200_OK,
+    summary="Get the active extraction template version for a project",
+)
+def get_project_extraction_template(project_id: str) -> ExtractionTemplateVersion:
+    config = _get_config_service().get_configuration(project_id)
+    if config is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Project '{project_id}' has no extraction configuration.",
+        )
+    try:
+        return default_extraction_template_repository().get_version(
+            config.template_id, config.template_version
+        )
+    except ExtractionTemplateNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
 
 
 @router.get(

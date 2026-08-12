@@ -14,7 +14,7 @@ development
 
 Current version:
 
-v0.4.2
+v0.4.3
 
 Current release status:
 
@@ -104,6 +104,13 @@ Completed in v0.4.2:
   template-bound append-only revision submission, server-side validation and
   completeness calculation, provenance/reviewer attribution, and revision
   history API. Phase 9.5 and later increments remain unintegrated.
+
+Completed in v0.4.3:
+- Phase 9.5 Data Extraction workspace GUI: project routing, eligible
+  publication selection, backend-driven template form controls, provenance
+  and revision history drawers, save/completion feedback, and backend
+  validation/error handling. Phase 9.6 and later increments remain
+  unintegrated.
 
 Completed in v0.3.7:
 - Screening integration: stage eligibility adapter, queue hydration,

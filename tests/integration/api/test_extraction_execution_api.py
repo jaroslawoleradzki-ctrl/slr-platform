@@ -104,6 +104,15 @@ def api_client(tmp_path, monkeypatch):
 
 
 class TestExtractionExecutionAPI:
+    def test_get_project_template_returns_configured_metadata(self, api_client):
+        response = api_client["client"].get(
+            f"/api/v1/projects/{api_client['project_id']}/extraction/template"
+        )
+        assert response.status_code == 200
+        assert response.json()["template_id"] == "api_exec_tmpl"
+        assert response.json()["version"] == "1.0.0"
+        assert response.json()["publication_fields"][0]["field_key"] == "sample_text"
+
     def test_configured_qa_is_enforced_by_execution_wiring(self, api_client):
         db_path = api_client["db_path"]
         client = api_client["client"]

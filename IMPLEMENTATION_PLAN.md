@@ -10,7 +10,7 @@ Unlike ROADMAP.md, this file is intentionally technical and may change frequentl
 
 Current release:
 
-v0.4.2 — Data Extraction Execution Backend & Validation
+v0.4.3 — Data Extraction Workspace GUI
 
 Status:
 
@@ -813,7 +813,8 @@ Status:
 
 Status:
 
-⬜ Next (Data Extraction UI)
+✅ Completed (workspace GUI, dynamic controls, provenance/history drawers,
+eligibility-aware save workflow, and backend validation feedback)
 
 ---
 
@@ -822,16 +823,14 @@ Status:
 Zakres:
 
 - extraction workspace
-- configurable forms
-- structured field controls
-- publication context
-- validation feedback
-- draft and completion states
-- progress tracking
+- configurable forms driven by active backend template metadata
+- structured field controls and provenance/history drawers
+- eligibility-aware draft/completion workflow
+- backend validation feedback
 
 Status:
 
-⬜ Planned
+✅ Completed (workspace GUI and backend template metadata integration)
 
 ---
 

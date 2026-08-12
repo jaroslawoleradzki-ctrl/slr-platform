@@ -16,7 +16,7 @@ import { ConflictResolutionPage } from './pages/ConflictResolutionPage';
 import { FullTextScreeningPage } from './pages/FullTextScreeningPage';
 import { ScreeningSectionLayout } from './components/screening/ScreeningSectionLayout';
 import { QualityAssessmentPage } from './pages/QualityAssessmentPage';
-import { DataExtractionPlaceholderPage } from './pages/DataExtractionPlaceholderPage';
+import { DataExtractionPage } from './pages/DataExtractionPage';
 import { ExportsPage } from './pages/ExportsPage';
 
 export const App: React.FC = () => {
@@ -50,7 +50,8 @@ export const App: React.FC = () => {
             <Route path="quality-assessment/configuration" element={<QualityAssessmentPage />} />
             <Route path="quality-assessment/:publicationId" element={<QualityAssessmentPage />} />
             <Route path="qa" element={<Navigate to="../quality-assessment" replace />} />
-            <Route path="extract" element={<DataExtractionPlaceholderPage />} />
+            <Route path="extract" element={<DataExtractionPage />} />
+            <Route path="extract/:publicationId" element={<DataExtractionPage />} />
             <Route path="exports" element={<ExportsPage />} />
           </Route>
 
