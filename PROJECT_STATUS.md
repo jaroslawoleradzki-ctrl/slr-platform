@@ -14,7 +14,7 @@ development
 
 Current version:
 
-v0.4.0
+v0.4.1
 
 Current release status:
 
@@ -91,6 +91,13 @@ Completed in v0.4.0:
   template catalog, project-scoped records, append-only revisions, batched
   hydration, and atomic project hard-delete integration. Phase 9.3 and later
   increments remain unintegrated.
+
+Completed in v0.4.1:
+- Phase 9.3 Data Extraction project configuration and reviewer-scoped
+  eligibility: Full-Text `INCLUDE` remains the upstream gate; configured
+  Quality Assessment requires a persisted assessment by the same reviewer,
+  without scoring, response interpretation, or automatic exclusion. Phase 9.4
+  and later increments remain unintegrated.
 
 Completed in v0.3.7:
 - Screening integration: stage eligibility adapter, queue hydration,

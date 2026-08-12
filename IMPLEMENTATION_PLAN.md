@@ -10,7 +10,7 @@ Unlike ROADMAP.md, this file is intentionally technical and may change frequentl
 
 Current release:
 
-v0.4.0 — Data Extraction Persistence
+v0.4.1 — Data Extraction Configuration & Eligibility
 
 Status:
 

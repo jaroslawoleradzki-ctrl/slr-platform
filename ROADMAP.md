@@ -183,6 +183,14 @@ not block Title & Abstract Screening.
   append-only revisions, batched hydration, and atomic project hard-delete
   integration. Phase 9.3 and later increments remain unintegrated.
 
+### Version 0.4.1 — Data Extraction Configuration & Eligibility ✅
+
+- **Phase 9.3 — Project Configuration & Eligibility** ✅ — Immutable template
+  selection per project, configuration locking after extraction begins,
+  Full-Text screening gates, and a fail-closed, reviewer-scoped read-only QA
+  completion gate. QA responses are neither scored nor converted into
+  exclusions. Phase 9.4 and later increments remain unintegrated.
+
 ### Version 0.3.7 — Screening Integration ✅
 
 - **Phase 7.9 — Screening Integration and Release** ✅ — Stage eligibility
