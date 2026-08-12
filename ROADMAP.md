@@ -176,6 +176,13 @@ not block Title & Abstract Screening.
   integration tests, and project-deletion lifecycle support.
 - **Phase 9 Data Extraction is not part of this release and remains under active development.**
 
+### Version 0.4.0 — Data Extraction Persistence ✅
+
+- **Phase 9.2 — Persistence & Template Catalog** ✅ — Migration `0018`,
+  immutable versioned template catalog, project-scoped extraction records,
+  append-only revisions, batched hydration, and atomic project hard-delete
+  integration. Phase 9.3 and later increments remain unintegrated.
+
 ### Version 0.3.7 — Screening Integration ✅
 
 - **Phase 7.9 — Screening Integration and Release** ✅ — Stage eligibility

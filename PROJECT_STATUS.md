@@ -14,7 +14,7 @@ development
 
 Current version:
 
-v0.3.9
+v0.4.0
 
 Current release status:
 
@@ -85,6 +85,12 @@ Completed in v0.3.9:
   configuration, execution workflow, API, workspace, integration tests, and
   project-deletion lifecycle support. Phase 9 Data Extraction remains under
   active development and is not included in this release.
+
+Completed in v0.4.0:
+- Phase 9.2 Data Extraction persistence: migration `0018`, immutable versioned
+  template catalog, project-scoped records, append-only revisions, batched
+  hydration, and atomic project hard-delete integration. Phase 9.3 and later
+  increments remain unintegrated.
 
 Completed in v0.3.7:
 - Screening integration: stage eligibility adapter, queue hydration,

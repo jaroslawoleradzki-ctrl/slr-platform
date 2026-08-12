@@ -10,7 +10,7 @@ Unlike ROADMAP.md, this file is intentionally technical and may change frequentl
 
 Current release:
 
-v0.3.9 — Quality Assessment Integration
+v0.4.0 — Data Extraction Persistence
 
 Status:
 
@@ -786,20 +786,20 @@ Status:
 
 ---
 
-## 9.2 Data Extraction Application Services and API
+## 9.2 Data Extraction Persistence and Template Catalog
 
 Zakres:
 
-- extraction form retrieval
-- extraction assignment
-- draft and final extraction handling
-- validation
-- history retrieval
-- dataset generation
+- SQLite migration and project-scoped extraction storage
+- immutable, versioned extraction template catalog
+- append-only extraction revision history
+- batched latest-revision hydration
+- project hard-delete integration
+- repository and persistence tests
 
 Status:
 
-⬜ Planned
+✅ Completed (Persistence & Template Catalog)
 
 ---
 
