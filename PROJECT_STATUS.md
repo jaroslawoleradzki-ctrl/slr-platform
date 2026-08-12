@@ -14,7 +14,7 @@ development
 
 Current version:
 
-v0.4.1
+v0.4.2
 
 Current release status:
 
@@ -98,6 +98,12 @@ Completed in v0.4.1:
   Quality Assessment requires a persisted assessment by the same reviewer,
   without scoring, response interpretation, or automatic exclusion. Phase 9.4
   and later increments remain unintegrated.
+
+Completed in v0.4.2:
+- Phase 9.4 Data Extraction execution backend: eligibility-enforced,
+  template-bound append-only revision submission, server-side validation and
+  completeness calculation, provenance/reviewer attribution, and revision
+  history API. Phase 9.5 and later increments remain unintegrated.
 
 Completed in v0.3.7:
 - Screening integration: stage eligibility adapter, queue hydration,

@@ -191,6 +191,14 @@ not block Title & Abstract Screening.
   completion gate. QA responses are neither scored nor converted into
   exclusions. Phase 9.4 and later increments remain unintegrated.
 
+### Version 0.4.2 — Data Extraction Execution Backend & Validation ✅
+
+- **Phase 9.4 — Execution Backend & Validation Service** ✅ — Eligibility-
+  enforced append-only revision submission, template/version binding,
+  server-side field and repeating-group validation, completeness states,
+  provenance/reviewer attribution, and execution/history API. Phase 9.5 and
+  later increments remain unintegrated.
+
 ### Version 0.3.7 — Screening Integration ✅
 
 - **Phase 7.9 — Screening Integration and Release** ✅ — Stage eligibility

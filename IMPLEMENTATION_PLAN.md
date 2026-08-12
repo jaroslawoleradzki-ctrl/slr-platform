@@ -10,7 +10,7 @@ Unlike ROADMAP.md, this file is intentionally technical and may change frequentl
 
 Current release:
 
-v0.4.1 — Data Extraction Configuration & Eligibility
+v0.4.2 — Data Extraction Execution Backend & Validation
 
 Status:
 
