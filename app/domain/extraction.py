@@ -474,6 +474,18 @@ class ExtractionRevision(BaseModel):
             raise InvalidRevisionError("revision_index must be >= 1")
         return v
 
+    @field_validator("completeness_status")
+    @classmethod
+    def validate_revision_completeness_status(
+        cls, v: ExtractionCompletenessStatus
+    ) -> ExtractionCompletenessStatus:
+        if v is ExtractionCompletenessStatus.NOT_STARTED:
+            raise InvalidRevisionError(
+                "ExtractionRevision completeness_status cannot be not_started; "
+                "not_started is reserved for records without revisions."
+            )
+        return v
+
     @model_validator(mode="after")
     def validate_publication_values_unique_keys(self) -> Self:
         seen = set()

@@ -586,6 +586,17 @@ class TestExtractionRevisionAndRecord:
                 completeness_status=ExtractionCompletenessStatus.IN_PROGRESS,
             )
 
+    def test_revision_rejects_not_started_completeness_status(self):
+        with pytest.raises(InvalidRevisionError, match="cannot be not_started"):
+            ExtractionRevision(
+                record_id=uuid4(),
+                project_id="proj_alpha",
+                publication_id=uuid4(),
+                revision_index=1,
+                reviewer_id="reviewer_42",
+                completeness_status=ExtractionCompletenessStatus.NOT_STARTED,
+            )
+
     def test_valid_extraction_record(self):
         pub_id = uuid4()
         rec = ExtractionRecord(
