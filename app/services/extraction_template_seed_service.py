@@ -32,22 +32,6 @@ def get_lean_energy_v1_template_version() -> ExtractionTemplateVersion:
 
     publication_fields = [
         ExtractionFieldDefinition(
-            field_key="study_title",
-            name="Tytuł badania / publikacji (E1)",
-            data_type=FieldDataType.TEXT,
-            description="Oficjalny tytuł publikacji lub skrócona nazwa badania (E1 Publication Identity)",
-            is_required=True,
-        ),
-        ExtractionFieldDefinition(
-            field_key="publication_year",
-            name="Rok publikacji (E1)",
-            data_type=FieldDataType.INTEGER,
-            description="Rok wydania artykułu naukowego (E1 Publication Identity)",
-            is_required=True,
-            min_value=1800,
-            max_value=2100,
-        ),
-        ExtractionFieldDefinition(
             field_key="study_country_industry",
             name="Kontekst badania: Kraj i Branża (E2)",
             data_type=FieldDataType.TEXT,

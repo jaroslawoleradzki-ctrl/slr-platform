@@ -78,10 +78,10 @@ class TestLeanEnergyTemplateStructure:
     def test_e1_to_e14_coverage_and_scope_separation(self, seed_service):
         version = seed_service.seed_lean_energy_v1()
 
-        # Publication-level fields (E1-E3, E12-E14)
+        # Publication-level fields (E2-E3, E12-E14). E1 is system-bound (canonical publication relation).
         pub_keys = {f.field_key for f in version.publication_fields}
-        assert "study_title" in pub_keys  # E1
-        assert "publication_year" in pub_keys  # E1
+        assert "study_title" not in pub_keys  # E1 is system-bound, not manual input
+        assert "publication_year" not in pub_keys  # E1 is system-bound, not manual input
         assert "study_country_industry" in pub_keys  # E2
         assert "study_design" in pub_keys  # E3
         assert "main_conclusions" in pub_keys  # E12
@@ -105,6 +105,44 @@ class TestLeanEnergyTemplateStructure:
         assert "impact_mechanism" in rel_keys  # E10
         assert "moderating_conditions" in rel_keys  # E11
 
+    def test_e1_no_manual_duplication_in_template_fields(self, seed_service):
+        """E1 invariant test: Lean Energy template does NOT contain reviewer-entered study_title / publication_year."""
+        version = seed_service.seed_lean_energy_v1()
+        field_keys = [f.field_key for f in version.publication_fields]
+        assert "study_title" not in field_keys
+        assert "publication_year" not in field_keys
+
+    def test_e1_generic_invariant_other_templates_unaffected(self, template_repo):
+        """Generic invariant test: Another template can define its own fields without knowledge of Lean Energy E1."""
+        from app.domain.extraction import (
+            ExtractionFieldDefinition,
+            ExtractionTemplate,
+            ExtractionTemplateVersion,
+            FieldDataType,
+        )
+        template_repo.register_template(
+            ExtractionTemplate(template_id="custom_template", name="Custom Template")
+        )
+        custom_ver = ExtractionTemplateVersion(
+            template_id="custom_template",
+            version="1.0.0",
+            name="Custom Template",
+            is_published=True,
+            is_active=True,
+            publication_fields=[
+                ExtractionFieldDefinition(
+                    field_key="custom_field",
+                    name="Custom Field",
+                    data_type=FieldDataType.TEXT,
+                )
+            ],
+        )
+        template_repo.register_version(custom_ver)
+        fetched = template_repo.get_version("custom_template", "1.0.0")
+        assert fetched.template_id == "custom_template"
+        assert len(fetched.publication_fields) == 1
+        assert fetched.publication_fields[0].field_key == "custom_field"
+
 
 class TestLeanEnergyDomainBehavior:
     @pytest.fixture
@@ -114,6 +152,23 @@ class TestLeanEnergyDomainBehavior:
 
         project_repo = SqliteProjectRepository(temp_db)
         project_repo.create(Project(project_id="proj_lean", title="Lean Project", description="Description"))
+
+        from app.domain.publication import Author, Publication
+        from app.repositories.project_publication_repository import SqliteProjectPublicationRepository
+
+        pub_repo = SqliteProjectPublicationRepository(temp_db)
+        pub_id = uuid4()
+        pub_repo.add_publications(
+            "proj_lean",
+            [
+                Publication(
+                    record_id=pub_id,
+                    title="Canonical Paper Title X",
+                    publication_year=2024,
+                    authors=[Author(display_name="Author A"), Author(display_name="Author B")],
+                )
+            ],
+        )
 
         extraction_repo = SqliteExtractionRepository(temp_db)
         seed_lean_energy_v1_template(template_repo=template_repo)
@@ -132,9 +187,12 @@ class TestLeanEnergyDomainBehavior:
         from unittest.mock import MagicMock
 
         from app.domain.extraction import ExtractionEligibilityResult, ExtractionEligibilityStatus
+        from app.services.screening_input_service import ScreeningInputService
+        input_service = ScreeningInputService(publication_repository=pub_repo)
 
         eligibility_service = ExtractionEligibilityService(
             config_service=config_service,
+            input_service=input_service,
         )
         eligibility_service.evaluate_publication = MagicMock(
             side_effect=lambda proj, pub, reviewer_id="": ExtractionEligibilityResult(
@@ -153,9 +211,10 @@ class TestLeanEnergyDomainBehavior:
 
         return {
             "project_id": "proj_lean",
-            "publication_id": uuid4(),
+            "publication_id": pub_id,
             "reviewer_id": "rev_lean_1",
             "execution_service": execution_service,
+            "pub_repo": pub_repo,
         }
 
     def test_single_relationship_can_become_complete(self, setup_lean_project):
@@ -163,18 +222,6 @@ class TestLeanEnergyDomainBehavior:
         svc = env["execution_service"]
 
         pub_vals = [
-            ExtractedValueState(
-                field_key="study_title",
-                status=ValueStatus.PRESENT,
-                origin=ValueOrigin.REPORTED,
-                text_value="SMED Impact on Injection Molding Energy",
-            ),
-            ExtractedValueState(
-                field_key="publication_year",
-                status=ValueStatus.PRESENT,
-                origin=ValueOrigin.REPORTED,
-                int_value=2023,
-            ),
             ExtractedValueState(
                 field_key="study_design",
                 status=ValueStatus.PRESENT,
@@ -224,18 +271,6 @@ class TestLeanEnergyDomainBehavior:
         svc = env["execution_service"]
 
         pub_vals = [
-            ExtractedValueState(
-                field_key="study_title",
-                status=ValueStatus.PRESENT,
-                origin=ValueOrigin.REPORTED,
-                text_value="Multi-Tool Lean Energy Investigation",
-            ),
-            ExtractedValueState(
-                field_key="publication_year",
-                status=ValueStatus.PRESENT,
-                origin=ValueOrigin.REPORTED,
-                int_value=2024,
-            ),
             ExtractedValueState(
                 field_key="study_design",
                 status=ValueStatus.PRESENT,
@@ -307,3 +342,67 @@ class TestLeanEnergyDomainBehavior:
         assert len(rev.group_items) == 2
         assert rev.group_items[0].item_index == 1
         assert rev.group_items[1].item_index == 2
+
+    def test_e1_canonical_publication_source_context_and_completeness(self, setup_lean_project):
+        """E1 verification tests:
+        1. Source: list_record_summaries derives title and publication_year from canonical publication record.
+        2. Completeness: Absence of manual study_title / publication_year fields does not cause incomplete extraction.
+        3. Canonical source of truth: Extraction values store zero duplicated publication title/year persistence.
+        """
+        env = setup_lean_project
+        svc = env["execution_service"]
+
+        summaries = svc.list_record_summaries(env["project_id"])
+        assert len(summaries) == 1
+        summary = summaries[0]
+        assert summary["title"] == "Canonical Paper Title X"
+        assert summary["publication_year"] == 2024
+
+        # Extraction values contain only reviewer-entered fields (e.g. study_design E3)
+        pub_vals = [
+            ExtractedValueState(
+                field_key="study_design",
+                status=ValueStatus.PRESENT,
+                origin=ValueOrigin.REPORTED,
+                text_value="Case Study",
+            ),
+        ]
+        rel1 = ExtractedGroupItemState(
+            group_key="lean_energy_relationships",
+            item_index=1,
+            values=[
+                ExtractedValueState(
+                    field_key="lean_practice",
+                    status=ValueStatus.PRESENT,
+                    origin=ValueOrigin.REPORTED,
+                    text_value="TPM",
+                ),
+                ExtractedValueState(
+                    field_key="energy_effect_indicator",
+                    status=ValueStatus.PRESENT,
+                    origin=ValueOrigin.REPORTED,
+                    text_value="Electricity Consumption",
+                ),
+                ExtractedValueState(
+                    field_key="evidence_character",
+                    status=ValueStatus.PRESENT,
+                    origin=ValueOrigin.REPORTED,
+                    text_value="Empirically Demonstrated",
+                ),
+            ],
+        )
+
+        rev = svc.submit_revision(
+            env["project_id"],
+            env["publication_id"],
+            env["reviewer_id"],
+            pub_vals,
+            [rel1],
+            mark_complete=True,
+        )
+        assert rev.completeness_status == ExtractionCompletenessStatus.COMPLETE
+
+        # Verify no manual title/year stored in revision publication_values
+        keys_in_rev = {v.field_key for v in rev.publication_values}
+        assert "study_title" not in keys_in_rev
+        assert "publication_year" not in keys_in_rev

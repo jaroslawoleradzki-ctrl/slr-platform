@@ -46,22 +46,6 @@ const DEFAULT_TEMPLATE: ExtractionTemplateVersion = {
   created_at: new Date().toISOString(),
   publication_fields: [
     {
-      field_key: 'study_title',
-      name: 'Tytuł badania / publikacji',
-      data_type: 'text',
-      description: 'Oficjalny tytuł publikacji lub skrócona nazwa badania',
-      is_required: true,
-    },
-    {
-      field_key: 'publication_year',
-      name: 'Rok publikacji',
-      data_type: 'integer',
-      description: 'Rok wydania artykułu (np. 2024)',
-      is_required: true,
-      min_value: 1800,
-      max_value: 2100,
-    },
-    {
       field_key: 'study_design',
       name: 'Typ badania (Study Design)',
       data_type: 'enum',
@@ -613,6 +597,36 @@ export const DataExtractionPage: React.FC = () => {
               </select>
             </div>
           </div>
+
+          {/* Read-Only Canonical Publication Context (E1 System-bound) */}
+          {selectedPubId && (
+            <div
+              style={{
+                padding: '16px 20px',
+                backgroundColor: 'var(--bg-surface)',
+                border: '1px solid var(--border-subtle)',
+                borderRadius: 'var(--radius-lg)',
+                marginBottom: '20px',
+              }}
+            >
+              <h4 style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-primary)', marginTop: 0, marginBottom: '8px' }}>
+                Kontekst Publikacji (E1 — System-bound)
+              </h4>
+              <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <div>
+                  <strong>Tytuł:</strong> {recordsSummary.find((r) => r.publication_id === selectedPubId)?.title || `Publikacja ${selectedPubId}`}
+                </div>
+                <div>
+                  <strong>Rok:</strong> {recordsSummary.find((r) => r.publication_id === selectedPubId)?.publication_year ?? 'Brak danych'}
+                </div>
+                {recordsSummary.find((r) => r.publication_id === selectedPubId)?.authors?.length ? (
+                  <div>
+                    <strong>Autorzy:</strong> {recordsSummary.find((r) => r.publication_id === selectedPubId)?.authors.join(', ')}
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          )}
 
           {/* Status Banners */}
           {errorBanner && (
