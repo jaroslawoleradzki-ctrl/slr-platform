@@ -35,7 +35,84 @@ import { RevisionHistoryDrawer } from '../components/extraction/RevisionHistoryD
 import { ExtractionProgressHeader } from '../components/extraction/ExtractionProgressHeader';
 import { ExtractionTableView } from '../components/extraction/ExtractionTableView';
 import { ExtractionMatrixView } from '../components/extraction/ExtractionMatrixView';
+import { useReviewerIdentity } from '../hooks/useReviewerIdentity';
 
+// Standard fallback extraction template definition (domain-agnostic)
+const DEFAULT_TEMPLATE: ExtractionTemplateVersion = {
+  template_id: 'default_extraction_template',
+  version: '1.0.0',
+  name: 'Standard Data Extraction Template',
+  description: 'Uniwersalny formularz ekstrakcji danych z publikacji i grup badanych.',
+  is_published: true,
+  is_active: true,
+  created_at: new Date().toISOString(),
+  publication_fields: [
+    {
+      field_key: 'study_design',
+      name: 'Typ badania (Study Design)',
+      data_type: 'enum',
+      description: 'Metodologia przeprowadzonego badania',
+      allowed_values: ['RCT', 'Cohort', 'Case-Control', 'Cross-Sectional', 'Systematic Review', 'Other'],
+      is_required: true,
+    },
+    {
+      field_key: 'sample_size',
+      name: 'Wielkość próby (N total)',
+      data_type: 'integer',
+      description: 'Całkowita liczba uczestników włączonych do analizy',
+      is_required: false,
+      min_value: 1,
+    },
+    {
+      field_key: 'key_finding',
+      name: 'Główny wniosek / Wynik (Key Finding)',
+      data_type: 'long_text',
+      description: 'Podsumowanie najważniejszych wyników wyciągniętych z tekstu',
+      is_required: false,
+    },
+  ],
+  repeating_groups: [
+    {
+      group_key: 'study_arms',
+      name: 'Ramiona Badania / Grupy Uczestników (1:N Study Arms)',
+      description: 'Charakterystyka poszczególnych podgrup (np. Grupa Eksperymentalna vs Kontrolna)',
+      min_items: 1,
+      max_items: 10,
+      field_definitions: [
+        {
+          field_key: 'arm_name',
+          name: 'Nazwa grupy / ramienia',
+          data_type: 'text',
+          description: 'np. Grupa A (Interwencja Lean) lub Grupa B (Kontrola)',
+          is_required: true,
+        },
+        {
+          field_key: 'group_size',
+          name: 'Liczebność n w grupie',
+          data_type: 'integer',
+          description: 'Liczba badanych w tym konkretnym ramieniu',
+          is_required: false,
+          min_value: 1,
+        },
+        {
+          field_key: 'age_mean',
+          name: 'Średni wiek badanych (Mean Age)',
+          data_type: 'decimal',
+          description: 'Średnia arytmetyczna wieku w grupie',
+          is_required: false,
+          min_value: 0,
+        },
+        {
+          field_key: 'primary_outcome_metric',
+          name: 'Główny wskaźnik wyniku (Primary Metric)',
+          data_type: 'number_with_unit',
+          description: 'Wartość i jednostka dla głównego punktu końcowego',
+          is_required: false,
+        },
+      ],
+    },
+  ],
+};
 export const DataExtractionPage: React.FC = () => {
   const { projectId: routeProjectId, publicationId: routePubId } = useParams<{
     projectId?: string;
@@ -530,6 +607,36 @@ export const DataExtractionPage: React.FC = () => {
               </select>
             </div>
           </div>
+
+          {/* Read-Only Canonical Publication Context (E1 System-bound) */}
+          {selectedPubId && (
+            <div
+              style={{
+                padding: '16px 20px',
+                backgroundColor: 'var(--bg-surface)',
+                border: '1px solid var(--border-subtle)',
+                borderRadius: 'var(--radius-lg)',
+                marginBottom: '20px',
+              }}
+            >
+              <h4 style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-primary)', marginTop: 0, marginBottom: '8px' }}>
+                Kontekst Publikacji (E1 — System-bound)
+              </h4>
+              <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <div>
+                  <strong>Tytuł:</strong> {recordsSummary.find((r) => r.publication_id === selectedPubId)?.title || `Publikacja ${selectedPubId}`}
+                </div>
+                <div>
+                  <strong>Rok:</strong> {recordsSummary.find((r) => r.publication_id === selectedPubId)?.publication_year ?? 'Brak danych'}
+                </div>
+                {recordsSummary.find((r) => r.publication_id === selectedPubId)?.authors?.length ? (
+                  <div>
+                    <strong>Autorzy:</strong> {recordsSummary.find((r) => r.publication_id === selectedPubId)?.authors.join(', ')}
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          )}
 
           {/* Status Banners */}
           {errorBanner && (

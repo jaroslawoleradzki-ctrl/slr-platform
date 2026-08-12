@@ -40,18 +40,6 @@ const mockRecord = {
     completeness_status: 'in_progress' as const,
     publication_values: [
       {
-        field_key: 'study_title',
-        status: 'present' as const,
-        origin: 'reported' as const,
-        text_value: 'Sample Article Title',
-      },
-      {
-        field_key: 'publication_year',
-        status: 'present' as const,
-        origin: 'reported' as const,
-        int_value: 2024,
-      },
-      {
         field_key: 'study_design',
         status: 'present' as const,
         origin: 'reported' as const,
@@ -176,12 +164,13 @@ describe('Data Extraction Workspace GUI (Phase 9.5 & 9.6)', () => {
     );
   };
 
-  it('A & B. Data Extraction route renders form workspace when publication ID present', async () => {
+  it('A & B. Data Extraction route renders form workspace and read-only E1 system-bound publication context', async () => {
     renderComponent(`/projects/proj_test/extract/${pubId}`);
 
     expect(await screen.findByText('7. Ekstrakcja Danych (Data Extraction Workspace)')).toBeInTheDocument();
-    expect(screen.getByDisplayValue('Sample Article Title')).toBeInTheDocument();
-    expect(screen.getByDisplayValue('2024')).toBeInTheDocument();
+    expect(await screen.findByText('Kontekst Publikacji (E1 — System-bound)')).toBeInTheDocument();
+    expect(screen.getByText('Sample Article Title')).toBeInTheDocument();
+    expect(screen.getByText('2024')).toBeInTheDocument();
   });
 
   it('C. Save Draft calls POST revision endpoint correctly and shows success banner', async () => {
@@ -262,5 +251,14 @@ describe('Data Extraction Workspace GUI (Phase 9.5 & 9.6)', () => {
     fireEvent.click(workspaceBtn);
 
     expect(await screen.findByText(/Powrót do Widoku Tabelarycznego/i)).toBeInTheDocument();
+  });
+
+  it('I. Template schema renders publication fields without manual study_title/publication_year', async () => {
+    renderComponent(`/projects/proj_test/extract/${pubId}`);
+
+    expect(await screen.findByText('7. Ekstrakcja Danych (Data Extraction Workspace)')).toBeInTheDocument();
+    expect(screen.queryByText('Tytuł badania / publikacji')).toBeNull();
+    expect(screen.getByText('Typ badania (Study Design)')).toBeInTheDocument();
+    expect(screen.getByText('Ramiona Badania / Grupy Uczestników (1:N Study Arms)')).toBeInTheDocument();
   });
 });

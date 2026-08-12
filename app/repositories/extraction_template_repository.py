@@ -131,4 +131,7 @@ def _as_datetime(value: str) -> datetime:
 
 
 def default_extraction_template_repository() -> SqliteExtractionTemplateRepository:
-    return SqliteExtractionTemplateRepository(os.environ.get("SLR_DATABASE_PATH", "data/slr-platform.db"))
+    repo = SqliteExtractionTemplateRepository(os.environ.get("SLR_DATABASE_PATH", "data/slr-platform.db"))
+    from app.services.extraction_template_seed_service import seed_lean_energy_v1_template
+    seed_lean_energy_v1_template(template_repo=repo)
+    return repo
