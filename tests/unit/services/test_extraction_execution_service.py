@@ -492,3 +492,105 @@ class TestExtractionExecutionService:
         assert v.source_locator == "Table 1"
         assert v.source_quote == "Extract from paper"
         assert v.reviewer_note == "Note by reviewer"
+
+    def test_progress_metrics_and_percentage_calculation(
+        self, execution_service, setup_environment
+    ):
+        env = setup_environment
+        # Initially 1 eligible publication, NOT_STARTED
+        prog = execution_service.get_progress(env["project_id"], env["reviewer_id"])
+        assert prog["total_eligible_publications"] == 1
+        assert prog["not_started_count"] == 1
+        assert prog["completion_percentage"] == 0.0
+
+        # Submit complete revision
+        val_title = ExtractedValueState(
+            field_key="study_title",
+            status=ValueStatus.PRESENT,
+            origin=ValueOrigin.REPORTED,
+            text_value="Valid Title",
+        )
+        arm_val = ExtractedValueState(
+            field_key="age_mean",
+            status=ValueStatus.PRESENT,
+            origin=ValueOrigin.REPORTED,
+            float_value=45.5,
+        )
+        group_item = ExtractedGroupItemState(
+            group_key="study_arms",
+            item_index=1,
+            values=[arm_val],
+        )
+        execution_service.submit_revision(
+            env["project_id"],
+            env["publication_id"],
+            env["reviewer_id"],
+            [val_title],
+            [group_item],
+            mark_complete=True,
+        )
+
+        prog2 = execution_service.get_progress(env["project_id"], env["reviewer_id"])
+        assert prog2["total_eligible_publications"] == 1
+        assert prog2["complete_count"] == 1
+        assert prog2["completion_percentage"] == 100.0
+
+    def test_record_summaries_list_metadata_and_status(
+        self, execution_service, setup_environment
+    ):
+        env = setup_environment
+        summaries = execution_service.list_record_summaries(env["project_id"], env["reviewer_id"])
+        assert len(summaries) == 1
+        assert summaries[0]["publication_id"] == env["publication_id"]
+        assert summaries[0]["extraction_status"] == ExtractionCompletenessStatus.NOT_STARTED.value
+
+    def test_matrix_preserves_1_to_n_independent_group_item_rows(
+        self, execution_service, setup_environment
+    ):
+        env = setup_environment
+        val_title = ExtractedValueState(
+            field_key="study_title",
+            status=ValueStatus.PRESENT,
+            origin=ValueOrigin.REPORTED,
+            text_value="Valid Title",
+        )
+        arm1 = ExtractedGroupItemState(
+            group_key="study_arms",
+            item_index=1,
+            values=[
+                ExtractedValueState(
+                    field_key="age_mean",
+                    status=ValueStatus.PRESENT,
+                    origin=ValueOrigin.REPORTED,
+                    float_value=25.0,
+                )
+            ],
+        )
+        arm2 = ExtractedGroupItemState(
+            group_key="study_arms",
+            item_index=2,
+            values=[
+                ExtractedValueState(
+                    field_key="age_mean",
+                    status=ValueStatus.PRESENT,
+                    origin=ValueOrigin.REPORTED,
+                    float_value=40.0,
+                )
+            ],
+        )
+
+        execution_service.submit_revision(
+            env["project_id"],
+            env["publication_id"],
+            env["reviewer_id"],
+            [val_title],
+            [arm1, arm2],
+            mark_complete=True,
+        )
+
+        matrix = execution_service.get_matrix(env["project_id"], env["reviewer_id"])
+        assert matrix["total_relationships"] == 2
+        # Section 11 invariant: 2 items in 1 publication render as 2 separate matrix rows!
+        assert len(matrix["items"]) == 2
+        assert matrix["items"][0]["item_index"] == 1
+        assert matrix["items"][1]["item_index"] == 2

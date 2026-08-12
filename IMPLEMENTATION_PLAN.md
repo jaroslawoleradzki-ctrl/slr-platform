@@ -10,7 +10,7 @@ Unlike ROADMAP.md, this file is intentionally technical and may change frequentl
 
 Current release:
 
-v0.4.3 — Data Extraction Workspace GUI
+v0.4.4 — Extraction Dataset View & Progress Reporting
 
 Status:
 
@@ -678,15 +678,15 @@ Zakres:
 
 - quality criteria
 - assessment forms
-- response-scale assessment model (tool-specific scoring remains a future extension)
+- rating or scoring schemes
 - reviewer attribution
 - rationale
 - assessment history
-- append-only assessment history (multi-reviewer agreement remains a future extension)
+- agreement and disagreement representation
 
 Status:
 
-✅ Completed
+⬜ Planned
 
 ---
 
@@ -697,13 +697,13 @@ Zakres:
 - assessment assignment
 - form retrieval
 - assessment submission
-- project configuration, readiness, execution, and history APIs
+- score or rating calculation where configured
 - history retrieval
 - progress information
 
 Status:
 
-✅ Completed
+⬜ Planned
 
 ---
 
@@ -713,7 +713,7 @@ Zakres:
 
 - assessment workspace
 - configurable criteria display
-- segmented response controls (`YES`, `NO`, `CANNOT_DETERMINE`)
+- rating and scoring controls
 - rationale input
 - publication context
 - provenance visibility
@@ -721,48 +721,30 @@ Zakres:
 
 Status:
 
-✅ Completed
+⬜ Planned
 
 ---
 
 ## 8.4 Quality Assessment Review UI
 
-Zakres obecnego release'u obejmuje single-reviewer execution history and
-progress. Multi-reviewer comparison, agreement, disagreement, and resolution
-remain future extensions.
-
 Zakres:
 
-- latest assessment history
-- reviewer-specific execution history
-- progress and resume support
+- reviewer comparison
+- disagreement visibility
+- assessment history
+- review and resolution support
 
 Status:
 
-✅ Completed for the delivered single-reviewer execution scope
+⬜ Planned
 
 ---
 
-## 8.5 Lean Energy QA v1 Production Template & E2E
-
-Zakres:
-
-- Production `lean_energy` v1 template seeded under `casp_inspired` tool
-- Exactly 7 required criteria (QA1–QA7) from SLR Protocol v0.10, Chapter IX
-- Polish-language questions with structured YES/CANNOT_DETERMINE/NO guidance
-- Stable deterministic UUIDs for template and criteria
-- Idempotent INSERT-only seed with `SeedCatalogConflictError` on content drift
-- No scoring engine, no quality class, no automatic exclusion
-- Comprehensive E2E integration test suite (23 tests)
-- Frontend `getTools` enriched with template data
+## 8.5 Quality Assessment Integration and Contract Tests
 
 Status:
 
-✅ Completed
-
-Future extensions outside the current Phase 8 delivery include tool-specific
-scoring/rating, a Template Builder, additional tools such as JBI/MMAT, and
-multi-reviewer QA agreement/reconciliation.
+⬜ Planned
 
 ---
 
@@ -776,16 +758,7 @@ Status:
 
 ---
 
-## 9.2 Data Extraction Persistence and Template Catalog
-
-Zakres:
-
-- SQLite migration and project-scoped extraction storage
-- immutable, versioned extraction template catalog
-- append-only extraction revision history
-- batched latest-revision hydration
-- project hard-delete integration
-- repository and persistence tests
+## 9.2 Persistence & Template Catalog
 
 Status:
 
@@ -813,28 +786,27 @@ Status:
 
 Status:
 
-✅ Completed (workspace GUI, dynamic controls, provenance/history drawers,
-eligibility-aware save workflow, and backend validation feedback)
+✅ Completed (Form-Based Extraction Workspace GUI)
 
 ---
 
-## 9.5 Data Extraction UI
-
-Zakres:
-
-- extraction workspace
-- configurable forms driven by active backend template metadata
-- structured field controls and provenance/history drawers
-- eligibility-aware draft/completion workflow
-- backend validation feedback
+## 9.6 Publication Summary Table & Cross-Study Views
 
 Status:
 
-✅ Completed (workspace GUI and backend template metadata integration)
+✅ Completed (Tabular View & Progress Reporting)
 
 ---
 
-## 9.6 Extraction Dataset View
+## 9.7 Production Template Seed & Export Dataset Preparation
+
+Status:
+
+⬜ Next (Production Template Seed & Export Dataset Preparation)
+
+---
+
+## 9.4 Extraction Dataset View
 
 Zakres:
 

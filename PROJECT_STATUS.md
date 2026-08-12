@@ -14,7 +14,7 @@ development
 
 Current version:
 
-v0.4.3
+v0.4.4
 
 Current release status:
 
@@ -111,6 +111,12 @@ Completed in v0.4.3:
   and revision history drawers, save/completion feedback, and backend
   validation/error handling. Phase 9.6 and later increments remain
   unintegrated.
+
+Completed in v0.4.4:
+- Phase 9.6 Extraction Dataset View: real API-backed publication table and
+  matrix views, authoritative progress/completeness reporting, filtering,
+  navigation, and loading/empty/error states. Phase 9.7 and later increments
+  remain unintegrated.
 
 Completed in v0.3.7:
 - Screening integration: stage eligibility adapter, queue hydration,

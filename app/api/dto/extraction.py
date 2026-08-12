@@ -136,3 +136,69 @@ class ExtractionRevisionHistoryResponseDTO(BaseModel):
     publication_id: UUID
     total_revisions: int
     revisions: list[ExtractionRevisionResponseDTO]
+
+
+class ExtractionProgressResponseDTO(BaseModel):
+    """Response DTO for project data extraction progress metrics."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    project_id: str
+    total_eligible_publications: int
+    not_started_count: int
+    in_progress_count: int
+    complete_count: int
+    needs_review_count: int
+    completion_percentage: float
+
+
+class ExtractionRecordSummaryDTO(BaseModel):
+    """Summary DTO for publication extraction status in summary table."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    publication_id: UUID
+    title: str
+    authors: list[str] = Field(default_factory=list)
+    publication_year: int | None = None
+    extraction_status: str
+    latest_revision_index: int | None = None
+    latest_reviewer_id: str | None = None
+    latest_updated_at: str | None = None
+
+
+class ExtractionRecordListResponseDTO(BaseModel):
+    """Response DTO for eligible publication extraction queue."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    project_id: str
+    total_records: int
+    items: list[ExtractionRecordSummaryDTO]
+
+
+class ExtractionMatrixRowDTO(BaseModel):
+    """DTO representing a single 1:N repeating group item row in the cross-study matrix."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    publication_id: UUID
+    publication_title: str
+    group_key: str
+    group_name: str
+    group_item_id: UUID
+    item_index: int
+    values: list[ExtractedValueStateDTO]
+
+
+class ExtractionMatrixResponseDTO(BaseModel):
+    """Response DTO for cross-study repeating group matrix."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    project_id: str
+    template_id: str
+    template_version: str
+    total_relationships: int
+    group_keys: list[str]
+    items: list[ExtractionMatrixRowDTO]

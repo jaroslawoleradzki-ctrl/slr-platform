@@ -207,6 +207,13 @@ not block Title & Abstract Screening.
   backend validation/error handling. Phase 9.6 and later increments remain
   unintegrated.
 
+### Version 0.4.4 — Extraction Dataset View & Progress Reporting ✅
+
+- **Phase 9.6 — Publication Summary Table & Cross-Study Views** ✅ — Real
+  API-backed table and matrix views, progress/completeness presentation,
+  filtering, and navigation back to the extraction workspace. Phase 9.7 and
+  later increments remain unintegrated.
+
 ### Version 0.3.7 — Screening Integration ✅
 
 - **Phase 7.9 — Screening Integration and Release** ✅ — Stage eligibility

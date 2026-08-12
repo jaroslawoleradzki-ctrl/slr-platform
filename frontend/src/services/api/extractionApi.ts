@@ -151,6 +151,52 @@ export interface ExtractionTemplateVersion {
   created_at: string;
 }
 
+export interface ExtractionProgressResponseDTO {
+  project_id: string;
+  total_eligible_publications: number;
+  not_started_count: number;
+  in_progress_count: number;
+  complete_count: number;
+  needs_review_count: number;
+  completion_percentage: number;
+}
+
+export interface ExtractionRecordSummaryDTO {
+  publication_id: string;
+  title: string;
+  authors: string[];
+  publication_year?: number | null;
+  extraction_status: ExtractionCompletenessStatus;
+  latest_revision_index?: number | null;
+  latest_reviewer_id?: string | null;
+  latest_updated_at?: string | null;
+}
+
+export interface ExtractionRecordListResponseDTO {
+  project_id: string;
+  total_records: number;
+  items: ExtractionRecordSummaryDTO[];
+}
+
+export interface ExtractionMatrixRowDTO {
+  publication_id: string;
+  publication_title: string;
+  group_key: string;
+  group_name: string;
+  group_item_id: string;
+  item_index: number;
+  values: ExtractedValueStateDTO[];
+}
+
+export interface ExtractionMatrixResponseDTO {
+  project_id: string;
+  template_id: string;
+  template_version: string;
+  total_relationships: number;
+  group_keys: string[];
+  items: ExtractionMatrixRowDTO[];
+}
+
 export class ExtractionApiError extends Error {
   statusCode: number;
   detail: string | string[];
@@ -239,6 +285,45 @@ export const extractionApi = {
     if (!res.ok) {
       const errData = await res.json().catch(() => ({ detail: res.statusText }));
       throw new ExtractionApiError(res.status, errData.detail || 'Failed to fetch extraction history');
+    }
+    return res.json();
+  },
+
+  async getExtractionProgress(
+    projectId: string,
+    reviewerId: string = ''
+  ): Promise<ExtractionProgressResponseDTO> {
+    const query = reviewerId ? `?reviewer_id=${encodeURIComponent(reviewerId)}` : '';
+    const res = await fetch(`${API_BASE_URL}/v1/projects/${projectId}/extraction/progress${query}`);
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({ detail: res.statusText }));
+      throw new ExtractionApiError(res.status, errData.detail || 'Failed to fetch extraction progress');
+    }
+    return res.json();
+  },
+
+  async listExtractionRecords(
+    projectId: string,
+    reviewerId: string = ''
+  ): Promise<ExtractionRecordListResponseDTO> {
+    const query = reviewerId ? `?reviewer_id=${encodeURIComponent(reviewerId)}` : '';
+    const res = await fetch(`${API_BASE_URL}/v1/projects/${projectId}/extraction/records${query}`);
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({ detail: res.statusText }));
+      throw new ExtractionApiError(res.status, errData.detail || 'Failed to fetch extraction records queue');
+    }
+    return res.json();
+  },
+
+  async getExtractionMatrix(
+    projectId: string,
+    reviewerId: string = ''
+  ): Promise<ExtractionMatrixResponseDTO> {
+    const query = reviewerId ? `?reviewer_id=${encodeURIComponent(reviewerId)}` : '';
+    const res = await fetch(`${API_BASE_URL}/v1/projects/${projectId}/extraction/matrix${query}`);
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({ detail: res.statusText }));
+      throw new ExtractionApiError(res.status, errData.detail || 'Failed to fetch extraction matrix');
     }
     return res.json();
   },
