@@ -10,7 +10,7 @@ Unlike ROADMAP.md, this file is intentionally technical and may change frequentl
 
 Current release:
 
-v0.3.1 — Project Management and Title & Abstract Screening
+v0.4.6 — Structured Data Extraction Dataset Export
 
 Status:
 
@@ -27,10 +27,24 @@ Release scope:
 - executable Title & Abstract Screening GUI;
 - manual and metadata-rule screening criteria with server-authoritative
   automatic assessments and auditable rule/value/result snapshots.
+- Full-Text Screening with reviewer-specific eligibility, availability metadata,
+  structured exclusion reasons, and append-only decisions;
+- Screening audit/report read models with criterion snapshot schema v2,
+  reviewer-specific progress, transitions, and exclusion-reason aggregation;
+- Multi-reviewer conflict resolution with append-only resolution history,
+  stale/current semantics, unified audit events, project-level outcome read
+  model, and optimistic concurrency;
+- Screening integration with stage eligibility adapter, queue hydration,
+  staleness revocation, workflow-status API, Dashboard/Stepper integration,
+  and backend/frontend integration tests;
+- Screening manual-acceptance UX fixes: dark-theme controls, reviewer-team
+  terminology, and unified conflicts/resolutions navigation;
+- Dashboard/Search polish: corrected search import contract, provider Load More,
+  append-only result pagination, local pagination, and cross-page selection.
 
 Next milestone:
 
-Phase 7.6 — Full-Text Screening
+Phase 7.9 — Screening Integration and Release (Implemented; manual acceptance pending after Phase 8 integration)
 
 ---
 
@@ -597,7 +611,7 @@ Zakres:
 - GUI and backend integration
 (Brak wymagania przechowywania chronionych plików PDF w aplikacji)
 
-Status: ⬜ Planned
+Status: ✅ Completed
 
 ---
 
@@ -612,21 +626,33 @@ Zakres:
 - data extraction required for PRISMA flow chart
 (Modyfikacja kryteriów nie powoduje utraty interpretacji decyzji historycznych)
 
-Status: ⬜ Planned
+Status: ✅ Completed
 
 ---
 
-## 7.8 Multi-Reviewer Screening and Conflict Detection
+## 7.8A Multi-Reviewer Screening and Conflict Detection
 
 Zakres:
-- independent reviewer decisions for multiple reviewers
-- disagreement detection algorithm and conflict queue
-- conflict resolution workflow and resolution rationale
-- reviewer agreement metrics
-- audit history tracking
-(Single-reviewer workflow zachowuje pełną funkcjonalność)
+- project-and-stage reviewer roster with active/inactive lifecycle history;
+- derived `INCOMPLETE`, `AGREEMENT`, and `CONFLICT` status from latest reviewer-specific decisions;
+- conflict queue with pending reviewers, pagination/filtering, blind-aware outcome presentation, and agreement metrics;
+- reporting extension and project/stage isolation without N+1 reads.
 
-Status: ⬜ Planned
+Poza zakresem: adjudication, resolution history, majority vote, resolved
+project outcome, oraz zmiany reviewer-specific eligibility Full Text/QA.
+
+Status: ✅ Completed
+
+---
+
+## 7.8B Conflict Resolution / Adjudication
+
+Zakres:
+- explicit resolver workflow and rationale;
+- immutable resolution history and stale-resolution detection;
+- future project-level resolved outcome, without automatic majority vote.
+
+Status: ✅ Completed
 
 ---
 
@@ -640,7 +666,7 @@ Zakres:
 - end-to-end verification and documentation reconciliation
 - release verification
 
-Status: ⬜ Planned
+Status: ➡️ Next / Not Started
 
 ---
 
@@ -726,54 +752,92 @@ Status:
 
 ## 9.1 Data Extraction Domain
 
-Zakres:
-
-- extraction forms
-- extraction fields
-- structured extracted values
-- reviewer attribution
-- extracted-value provenance
-- validation
-- extraction history
-
 Status:
 
-⬜ Planned
+✅ Completed (Domain Model & Value System)
 
 ---
 
-## 9.2 Data Extraction Application Services and API
-
-Zakres:
-
-- extraction form retrieval
-- extraction assignment
-- draft and final extraction handling
-- validation
-- history retrieval
-- dataset generation
+## 9.2 Persistence & Template Catalog
 
 Status:
 
-⬜ Planned
+✅ Completed (Persistence & Template Catalog)
 
 ---
 
-## 9.3 Data Extraction UI
-
-Zakres:
-
-- extraction workspace
-- configurable forms
-- structured field controls
-- publication context
-- validation feedback
-- draft and completion states
-- progress tracking
+## 9.3 Project Configuration & Eligibility
 
 Status:
 
-⬜ Planned
+✅ Completed (Project Configuration & Eligibility)
+
+---
+
+## 9.4 Execution Backend & Validation Service
+
+Status:
+
+✅ Completed (Execution Backend & Validation Service)
+
+---
+
+## 9.5 Data Extraction UI
+
+Status:
+
+✅ Completed (Form-Based Extraction Workspace GUI)
+
+---
+
+## 9.6 Publication Summary Table & Cross-Study Views
+
+Status:
+
+✅ Completed (Tabular View & Progress Reporting)
+
+---
+
+## 9.7 Production Template Seed (Lean Energy v1)
+
+Status:
+
+✅ Completed (Lean Energy Extraction v1 Template Seed)
+
+---
+
+## 9.8 Dataset Export & Final Phase 9 Verification
+
+Status:
+
+✅ Completed on `feature/data-extraction-9.8` (implementation complete; integration review pending)
+
+Scope completed:
+
+- canonical E1 publication identity is supplied from the publication read model;
+  `study_title` and `publication_year` are not reviewer-entered duplicate fields
+  in the Lean Energy v1 seed;
+- `PublicationExtractionReadModel` and `RelationshipExtractionReadModel` expose
+  template traceability, latest revision metadata, canonical publication context,
+  typed values, explicit missingness, origin, and provenance;
+- dataset reads hydrate the latest append-only revision per publication and
+  default to `COMPLETE` only; `IN_PROGRESS`, `NOT_STARTED`, and `NEEDS_REVIEW`
+  are excluded unless an explicit all-status service request is made;
+- publication exports preserve one row/object per publication and relationship
+  exports preserve one row/object per repeating-group item;
+- `GET /api/v1/projects/{project_id}/extraction/export` supports JSON,
+  publication CSV, and relationship CSV with deterministic ordering and stable
+  status/origin/provenance companion columns;
+- JSON and CSV preserve typed values, including deterministic `MULTI_ENUM` and
+  `NUMBER_WITH_UNIT` serialization, and retain source-page, section, locator,
+  optional quote, and reviewer-note provenance;
+- the existing Data Extraction workspace provides focused JSON, publication CSV,
+  and relationship CSV download actions with visible failure state;
+- backend, frontend, lint, type-check, build, and Phase 9 regression gates pass.
+
+Phase 10 read contract: downstream synthesis may consume these read models and
+exports without understanding SQLite/EAV storage. No synthesis, correlation,
+derived-value, or meta-analysis behavior is implemented in Phase 9.8.
 
 ---
 
@@ -797,7 +861,7 @@ Status:
 
 Status:
 
-⬜ Planned
+✅ Completed as part of Phase 9.8 final verification
 
 ---
 

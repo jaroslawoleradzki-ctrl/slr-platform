@@ -23,9 +23,6 @@ export const Sidebar: React.FC = () => {
 
   const renderBadge = (stage: keyof WorkflowNavigationStatus | 'dashboard') => {
     if (!workflowStatus || stage === 'dashboard') return null;
-    if (stage === 'screening') {
-      return <span style={{ fontSize: '0.7rem', color: 'var(--status-success-text)' }}>Dostępne</span>;
-    }
     const item = workflowStatus[stage];
 
     if (stage === 'deduplication') {
@@ -40,7 +37,7 @@ export const Sidebar: React.FC = () => {
           </Badge>
         );
       }
-      if (dedup.state === 'completed' || dedup.pendingGroups === 0) {
+      if (dedup.state === 'completed') {
         return (
           <span style={{ fontSize: '0.7rem', color: 'var(--status-success-text)', fontWeight: 600 }}>
             Oceniono
@@ -103,7 +100,7 @@ export const Sidebar: React.FC = () => {
       stage: 'screening' as const,
     },
     {
-      to: `/projects/${currentId}/qa`,
+      to: `/projects/${currentId}/quality-assessment`,
       label: '6. Quality Assessment',
       icon: Award,
       stage: 'qualityAssessment' as const,
@@ -113,7 +110,6 @@ export const Sidebar: React.FC = () => {
       label: '7. Data Extraction',
       icon: FileSpreadsheet,
       stage: 'dataExtraction' as const,
-      disabled: true,
     },
     {
       to: `/projects/${currentId}/exports`,
@@ -145,33 +141,6 @@ export const Sidebar: React.FC = () => {
       {navItems.map((item) => {
         const Icon = item.icon;
         const badgeContent = renderBadge(item.stage);
-
-        if (item.disabled) {
-          return (
-            <div
-              key={item.to}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                padding: '8px 12px',
-                borderRadius: 'var(--radius-md)',
-                color: 'var(--text-muted)',
-                fontSize: '0.85rem',
-                opacity: 0.6,
-                cursor: 'not-allowed',
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <Icon size={16} />
-                <span>{item.label}</span>
-              </div>
-              <span style={{ fontSize: '0.7rem', padding: '1px 6px', borderRadius: '4px', backgroundColor: 'var(--bg-surface-elevated)' }}>
-                {badgeContent || 'Niedostępne'}
-              </span>
-            </div>
-          );
-        }
 
         return (
           <NavLink

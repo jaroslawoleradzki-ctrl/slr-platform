@@ -25,9 +25,7 @@ class DecisionNotFoundError(Exception):
     def __init__(self, decision_id: UUID | str, project_id: str) -> None:
         self.decision_id = str(decision_id)
         self.project_id = project_id
-        super().__init__(
-            f"Screening decision '{self.decision_id}' not found in project '{self.project_id}'."
-        )
+        super().__init__(f"Screening decision '{self.decision_id}' not found in project '{self.project_id}'.")
 
 
 @runtime_checkable
@@ -62,15 +60,11 @@ class ScreeningDecisionRepository(Protocol):
         """List decision history for a publication and stage, ordered by decided_at DESC, decision_id DESC."""
         ...
 
-    def list_by_project(
-        self, project_id: str, stage: ScreeningStage | None = None
-    ) -> list[ScreeningDecision]:
+    def list_by_project(self, project_id: str, stage: ScreeningStage | None = None) -> list[ScreeningDecision]:
         """List all screening decisions for a project, optionally filtered by screening stage."""
         ...
 
-    def delete_for_project(
-        self, project_id: str, *, connection: sqlite3.Connection | None = None
-    ) -> None:
+    def delete_for_project(self, project_id: str, *, connection: sqlite3.Connection | None = None) -> None:
         """Delete all screening decisions (and criterion assessments) for the given project."""
         ...
 
@@ -118,13 +112,9 @@ class SqliteScreeningDecisionRepository:
         connection: sqlite3.Connection | None = None,
     ) -> ScreeningDecision | None:
         if connection is not None:
-            return self._get_latest_with_conn(
-                connection, project_id, publication_id, stage, reviewer_id
-            )
+            return self._get_latest_with_conn(connection, project_id, publication_id, stage, reviewer_id)
         with self._connect() as conn:
-            return self._get_latest_with_conn(
-                conn, project_id, publication_id, stage, reviewer_id
-            )
+            return self._get_latest_with_conn(conn, project_id, publication_id, stage, reviewer_id)
 
     def list_history(
         self,
@@ -136,13 +126,9 @@ class SqliteScreeningDecisionRepository:
         connection: sqlite3.Connection | None = None,
     ) -> list[ScreeningDecision]:
         if connection is not None:
-            return self._list_history_with_conn(
-                connection, project_id, publication_id, stage, reviewer_id
-            )
+            return self._list_history_with_conn(connection, project_id, publication_id, stage, reviewer_id)
         with self._connect() as conn:
-            return self._list_history_with_conn(
-                conn, project_id, publication_id, stage, reviewer_id
-            )
+            return self._list_history_with_conn(conn, project_id, publication_id, stage, reviewer_id)
 
     def list_by_project(
         self,
@@ -156,19 +142,24 @@ class SqliteScreeningDecisionRepository:
         with self._connect() as conn:
             return self._list_by_project_with_conn(conn, project_id, stage)
 
-    def delete_for_project(
-        self, project_id: str, *, connection: sqlite3.Connection | None = None
-    ) -> None:
+    def delete_for_project(self, project_id: str, *, connection: sqlite3.Connection | None = None) -> None:
         if connection is not None:
             self._delete_for_project_with_conn(connection, project_id)
         else:
             with self._connect() as conn:
                 self._delete_for_project_with_conn(conn, project_id)
 
-    def _delete_for_project_with_conn(
-        self, connection: sqlite3.Connection, project_id: str
-    ) -> None:
+    def _delete_for_project_with_conn(self, connection: sqlite3.Connection, project_id: str) -> None:
         # Delete criterion assessments first (foreign-key dependency on decision_id)
+        connection.execute(
+            """
+            DELETE FROM screening_decision_exclusion_reasons
+            WHERE decision_id IN (
+                SELECT decision_id FROM screening_decisions WHERE project_id = ?
+            )
+            """,
+            (project_id,),
+        )
         connection.execute(
             """
             DELETE FROM screening_criterion_assessments
@@ -185,16 +176,14 @@ class SqliteScreeningDecisionRepository:
 
     # Internal database operations
 
-    def _save_with_conn(
-        self, connection: sqlite3.Connection, decision: ScreeningDecision
-    ) -> None:
+    def _save_with_conn(self, connection: sqlite3.Connection, decision: ScreeningDecision) -> None:
         decided_at_str = decision.decided_at.isoformat()
         connection.execute(
             """
             INSERT INTO screening_decisions (
                 decision_id, project_id, publication_id, stage,
-                outcome, reviewer_id, rationale, decided_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                outcome, reviewer_id, rationale, decided_at, criterion_snapshot_schema_version
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 str(decision.decision_id),
@@ -205,6 +194,7 @@ class SqliteScreeningDecisionRepository:
                 decision.reviewer_id,
                 decision.rationale,
                 decided_at_str,
+                decision.criterion_snapshot_schema_version,
             ),
         )
 
@@ -212,32 +202,36 @@ class SqliteScreeningDecisionRepository:
             connection.execute(
                 """
                 INSERT INTO screening_criterion_assessments (
-                    decision_id, criterion_id, criterion_name, criterion_type,
-                    criterion_stage, criterion_is_required, assessment_value, notes,
+                    decision_id, criterion_id, criterion_name, criterion_description,
+                    criterion_type, criterion_stage, criterion_is_required, assessment_value, notes,
                     evaluation_mode, metadata_rule, evaluated_metadata_value
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     str(decision.decision_id),
                     str(assessment.criterion_id),
                     assessment.criterion_name,
+                    assessment.criterion_description,
                     assessment.criterion_type.value,
                     assessment.criterion_stage.value,
                     1 if assessment.criterion_is_required else 0,
                     assessment.assessment_value.value,
                     assessment.notes,
                     assessment.evaluation_mode.value,
-                    (
-                        assessment.metadata_rule.model_dump_json()
-                        if assessment.metadata_rule is not None
-                        else None
-                    ),
+                    (assessment.metadata_rule.model_dump_json() if assessment.metadata_rule is not None else None),
                     (
                         json.dumps(assessment.evaluated_metadata_value)
                         if assessment.evaluation_mode.value == "metadata_rule"
                         else None
                     ),
                 ),
+            )
+
+        for criterion_id in decision.exclusion_reason_criterion_ids:
+            connection.execute(
+                """INSERT INTO screening_decision_exclusion_reasons (decision_id, criterion_id)
+                   VALUES (?, ?)""",
+                (str(decision.decision_id), str(criterion_id)),
             )
 
     def _get_with_conn(
@@ -249,7 +243,7 @@ class SqliteScreeningDecisionRepository:
         row = connection.execute(
             """
             SELECT decision_id, project_id, publication_id, stage,
-                   outcome, reviewer_id, rationale, decided_at
+                   outcome, reviewer_id, rationale, decided_at, criterion_snapshot_schema_version
             FROM screening_decisions
             WHERE project_id = ? AND decision_id = ?
             """,
@@ -272,7 +266,7 @@ class SqliteScreeningDecisionRepository:
         row = connection.execute(
             """
             SELECT decision_id, project_id, publication_id, stage,
-                   outcome, reviewer_id, rationale, decided_at
+                   outcome, reviewer_id, rationale, decided_at, criterion_snapshot_schema_version
             FROM screening_decisions
             WHERE project_id = ? AND publication_id = ? AND stage = ? AND reviewer_id = ?
             ORDER BY decided_at DESC, decision_id DESC
@@ -296,7 +290,7 @@ class SqliteScreeningDecisionRepository:
     ) -> list[ScreeningDecision]:
         query = """
             SELECT decision_id, project_id, publication_id, stage,
-                   outcome, reviewer_id, rationale, decided_at
+                   outcome, reviewer_id, rationale, decided_at, criterion_snapshot_schema_version
             FROM screening_decisions
             WHERE project_id = ? AND publication_id = ? AND stage = ?
         """
@@ -319,7 +313,7 @@ class SqliteScreeningDecisionRepository:
     ) -> list[ScreeningDecision]:
         query = """
             SELECT decision_id, project_id, publication_id, stage,
-                   outcome, reviewer_id, rationale, decided_at
+                   outcome, reviewer_id, rationale, decided_at, criterion_snapshot_schema_version
             FROM screening_decisions
             WHERE project_id = ?
         """
@@ -334,9 +328,7 @@ class SqliteScreeningDecisionRepository:
         rows = connection.execute(query, params).fetchall()
         return [self._row_to_decision(connection, row) for row in rows]
 
-    def _row_to_decision(
-        self, connection: sqlite3.Connection, row: tuple
-    ) -> ScreeningDecision:
+    def _row_to_decision(self, connection: sqlite3.Connection, row: tuple) -> ScreeningDecision:
         (
             decision_id_str,
             project_id,
@@ -346,12 +338,13 @@ class SqliteScreeningDecisionRepository:
             reviewer_id,
             rationale,
             decided_at_str,
+            criterion_snapshot_schema_version,
         ) = row
 
         assessment_rows = connection.execute(
             """
-            SELECT criterion_id, criterion_name, criterion_type, criterion_stage,
-                   criterion_is_required, assessment_value, notes,
+            SELECT criterion_id, criterion_name, criterion_description, criterion_type,
+                   criterion_stage, criterion_is_required, assessment_value, notes,
                    evaluation_mode, metadata_rule, evaluated_metadata_value
             FROM screening_criterion_assessments
             WHERE decision_id = ?
@@ -364,19 +357,24 @@ class SqliteScreeningDecisionRepository:
             CriterionAssessment(
                 criterion_id=UUID(a_row[0]),
                 criterion_name=a_row[1],
-                criterion_type=ScreeningCriterionType(a_row[2]),
-                criterion_stage=ScreeningCriterionStage(a_row[3]),
-                criterion_is_required=bool(a_row[4]),
-                assessment_value=CriterionAssessmentValue(a_row[5]),
-                notes=a_row[6],
-                evaluation_mode=a_row[7],
-                metadata_rule=json.loads(a_row[8]) if a_row[8] is not None else None,
-                evaluated_metadata_value=(
-                    json.loads(a_row[9]) if a_row[9] is not None else None
-                ),
+                criterion_description=a_row[2],
+                criterion_type=ScreeningCriterionType(a_row[3]),
+                criterion_stage=ScreeningCriterionStage(a_row[4]),
+                criterion_is_required=bool(a_row[5]),
+                assessment_value=CriterionAssessmentValue(a_row[6]),
+                notes=a_row[7],
+                evaluation_mode=a_row[8],
+                metadata_rule=json.loads(a_row[9]) if a_row[9] is not None else None,
+                evaluated_metadata_value=(json.loads(a_row[10]) if a_row[10] is not None else None),
             )
             for a_row in assessment_rows
         ]
+
+        reason_rows = connection.execute(
+            """SELECT criterion_id FROM screening_decision_exclusion_reasons
+               WHERE decision_id = ? ORDER BY criterion_id ASC""",
+            (decision_id_str,),
+        ).fetchall()
 
         decided_at = datetime.fromisoformat(decided_at_str)
         if decided_at.tzinfo is None:
@@ -390,7 +388,9 @@ class SqliteScreeningDecisionRepository:
             outcome=ScreeningOutcome(outcome_str),
             reviewer_id=reviewer_id,
             rationale=rationale,
+            criterion_snapshot_schema_version=criterion_snapshot_schema_version,
             criterion_assessments=assessments,
+            exclusion_reason_criterion_ids=[UUID(reason_row[0]) for reason_row in reason_rows],
             decided_at=decided_at,
         )
 
@@ -408,12 +408,7 @@ class SqliteScreeningDecisionRepository:
                 )
                 """
             )
-            applied = {
-                row[0]
-                for row in connection.execute(
-                    "SELECT version FROM schema_migrations"
-                ).fetchall()
-            }
+            applied = {row[0] for row in connection.execute("SELECT version FROM schema_migrations").fetchall()}
             for migration in sorted(migration_directory.glob("*.sql")):
                 if migration.name in applied:
                     continue

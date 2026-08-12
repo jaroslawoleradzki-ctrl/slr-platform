@@ -1,5 +1,74 @@
 # Changelog
 
+## [0.4.6] — 2026-08-12
+
+### Added
+
+- Completed Phase 9 Data Extraction: configurable persistence, QA-aware
+  eligibility, validated execution, append-only revisions, provenance,
+  dynamic GUI, table/matrix/progress workflows, and Lean Energy E1–E14
+  template support.
+- Added system-bound E1 canonical publication context and preservation of
+  multiple Lean–EE relationships.
+- Added deterministic JSON and CSV exports with separate publication and
+  relationship datasets, current-state completeness semantics, provenance,
+  and template version traceability.
+- Formalized the completed Phase 7 Screening and Phase 8 Quality Assessment
+  release scope.
+
+### Validation
+
+- Backend: 1291 tests passed; frontend: 184 tests passed.
+- Ruff, MyPy, TypeScript, production build, and `git diff --check` passed.
+
+Phase 10 is not included in this release.
+
+## [0.3.3] — 2026-08-11
+
+### Added
+
+- **Dashboard and Search polish**: the project dashboard exposes the available
+  Title & Abstract and Full-Text workflows while later quality stages remain
+  clearly unavailable.
+- Search results now support provider-backed Load More, append additional
+  results without replacing existing selections, and local pagination across
+  all loaded records.
+
+### Fixed
+
+- Aligned the Search Strategy → Import request contract across the browser and
+  backend, preserving the existing 7.6 Full-Text Screening workflow.
+
+### Notes
+
+- Phase 7.7 Screening Audit Trail and Progress remains planned.
+
+## [0.3.2] — 2026-08-11
+
+### Added
+
+- **Full-Text Screening**: Reviewer-specific eligibility derived from the
+  current canonical input and latest Title & Abstract `INCLUDE` decision.
+- Added a derived Full-Text queue with deterministic status, progress,
+  filtering, pagination and Save / Save & Next workflow.
+- Added active `FULL_TEXT` / `BOTH` criteria, including server-authoritative
+  automatic metadata assessments.
+- Added project-scoped full-text availability and external reference metadata;
+  no copyrighted PDF storage is required.
+- Added structured exclusion reasons linked to immutable criterion assessment
+  snapshots while preserving append-only decision history.
+- Added executable Full-Text GUI with reviewer identity, metadata, criteria,
+  availability, history, navigation and `INCLUDE` / `EXCLUDE` / `UNCERTAIN`.
+
+### Fixed
+
+- Integrated Full-Text availability cleanup into atomic project hard delete.
+- Preserved Full-Text history when a publication temporarily loses eligibility.
+
+### Notes
+
+- Phase 7.7 audit-trail aggregation remains planned.
+
 ## [0.3.1] — 2026-08-10
 
 ### Added

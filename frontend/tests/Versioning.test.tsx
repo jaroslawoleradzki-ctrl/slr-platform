@@ -10,8 +10,7 @@ import { parseAppVersion } from '../src/utils/versionParser';
 
 describe('Application Versioning & Release Identity', () => {
   it('provides an application version constant', () => {
-    expect(APP_VERSION).toBeDefined();
-    expect(typeof APP_VERSION).toBe('string');
+    expect(APP_VERSION).toBe('0.4.6');
     expect(RELEASE_STATUS).toBe('Development Preview');
     expect(RUNTIME_MODE).toContain('Hybrid Data Mode');
   });

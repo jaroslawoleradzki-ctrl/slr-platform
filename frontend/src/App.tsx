@@ -11,9 +11,12 @@ import { NormalizationPage } from './pages/NormalizationPage';
 import { DeduplicationPage } from './pages/DeduplicationPage';
 import { ScreeningPage } from './pages/ScreeningPage';
 import { TitleAbstractScreeningPage } from './pages/TitleAbstractScreeningPage';
+import { ScreeningAuditPage } from './pages/ScreeningAuditPage';
+import { ConflictResolutionPage } from './pages/ConflictResolutionPage';
+import { FullTextScreeningPage } from './pages/FullTextScreeningPage';
 import { ScreeningSectionLayout } from './components/screening/ScreeningSectionLayout';
 import { QualityAssessmentPage } from './pages/QualityAssessmentPage';
-import { DataExtractionPlaceholderPage } from './pages/DataExtractionPlaceholderPage';
+import { DataExtractionPage } from './pages/DataExtractionPage';
 import { ExportsPage } from './pages/ExportsPage';
 
 export const App: React.FC = () => {
@@ -37,9 +40,18 @@ export const App: React.FC = () => {
               <Route path="criteria" element={<ScreeningPage />} />
               <Route path="title-abstract" element={<TitleAbstractScreeningPage />} />
               <Route path="title-abstract/:publicationId" element={<TitleAbstractScreeningPage />} />
+              <Route path="full-text" element={<FullTextScreeningPage />} />
+              <Route path="full-text/:publicationId" element={<FullTextScreeningPage />} />
+              <Route path="audit" element={<ScreeningAuditPage />} />
+              <Route path="conflicts" element={<ConflictResolutionPage />} />
+              <Route path="conflict-resolution" element={<Navigate to="../conflicts" replace />} />
             </Route>
-            <Route path="qa" element={<QualityAssessmentPage />} />
-            <Route path="extract" element={<DataExtractionPlaceholderPage />} />
+            <Route path="quality-assessment" element={<QualityAssessmentPage />} />
+            <Route path="quality-assessment/configuration" element={<QualityAssessmentPage />} />
+            <Route path="quality-assessment/:publicationId" element={<QualityAssessmentPage />} />
+            <Route path="qa" element={<Navigate to="../quality-assessment" replace />} />
+            <Route path="extract" element={<DataExtractionPage />} />
+            <Route path="extract/:publicationId" element={<DataExtractionPage />} />
             <Route path="exports" element={<ExportsPage />} />
           </Route>
 

@@ -9,6 +9,7 @@ from app.api.dto.project import (
     ProjectResponse,
     ProjectUpdateRequest,
 )
+from app.api.dto.workflow_status import ProjectWorkflowStatusResponse
 from app.domain.project import Project
 from app.repositories.project_repository import (
     ProjectAlreadyExistsError,
@@ -20,12 +21,20 @@ from app.services.project_deletion_service import (
     ProjectDeletionService,
     default_project_deletion_service,
 )
+from app.services.project_workflow_status_service import (
+    ProjectWorkflowStatusService,
+    default_project_workflow_status_service,
+)
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
 
 def get_project_repository() -> ProjectRepository:
     return default_project_repository()
+
+
+def get_project_workflow_status_service() -> ProjectWorkflowStatusService:
+    return default_project_workflow_status_service()
 
 
 def get_project_deletion_service() -> ProjectDeletionService:
@@ -217,3 +226,21 @@ def delete_project(
         service.delete_project(project_id)
     except ProjectNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+
+@router.get(
+    "/{project_id}/workflow-status",
+    response_model=ProjectWorkflowStatusResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Get unified workflow status for project stages",
+    description="Returns detailed workflow status metrics for Title & Abstract screening, Full-Text screening, and Quality Assessment.",
+)
+def get_workflow_status(
+    project_id: str,
+    reviewer_id: str = Query(default="default_reviewer"),
+    service: ProjectWorkflowStatusService = Depends(get_project_workflow_status_service),
+) -> ProjectWorkflowStatusResponse:
+    try:
+        return service.get_status(project_id, reviewer_id=reviewer_id)
+    except Exception as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc

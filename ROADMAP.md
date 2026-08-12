@@ -159,6 +159,122 @@ groups remain separate, and pending groups or merge conflicts block readiness.
 Full durable `SearchRun` history remains a separate Phase 6.8.5 concern; it does
 not block Title & Abstract Screening.
 
+### Version 0.3.8 — Screening Manual Acceptance UX Fixes 🟨
+
+- Dark-theme select/dropdown controls across Screening with readable text,
+  borders, focus/hover/disabled states, and consistent sizing.
+- User-facing reviewer-team terminology replacing technical “roster” wording.
+- Unified “Konflikty i rozstrzygnięcia” workflow for conflict analysis and
+  adjudication, with backward-compatible routing from the former resolution
+  path.
+- **Manual Acceptance: PENDING AFTER PHASE 8 INTEGRATION ON DEVELOPMENT.**
+
+### Version 0.3.9 — Quality Assessment Integration ✅
+
+- **Quality Assessment subsystem integrated into development** — domain and
+  persistence, project configuration, execution workflow, API, workspace,
+  integration tests, and project-deletion lifecycle support.
+- **Phase 9 Data Extraction is not part of this release and remains under active development.**
+
+### Version 0.4.0 — Data Extraction Persistence ✅
+
+- **Phase 9.2 — Persistence & Template Catalog** ✅ — Migration `0018`,
+  immutable versioned template catalog, project-scoped extraction records,
+  append-only revisions, batched hydration, and atomic project hard-delete
+  integration. Phase 9.3 and later increments remain unintegrated.
+
+### Version 0.4.1 — Data Extraction Configuration & Eligibility ✅
+
+- **Phase 9.3 — Project Configuration & Eligibility** ✅ — Immutable template
+  selection per project, configuration locking after extraction begins,
+  Full-Text screening gates, and a fail-closed, reviewer-scoped read-only QA
+  completion gate. QA responses are neither scored nor converted into
+  exclusions. Phase 9.4 and later increments remain unintegrated.
+
+### Version 0.4.2 — Data Extraction Execution Backend & Validation ✅
+
+- **Phase 9.4 — Execution Backend & Validation Service** ✅ — Eligibility-
+  enforced append-only revision submission, template/version binding,
+  server-side field and repeating-group validation, completeness states,
+  provenance/reviewer attribution, and execution/history API. Phase 9.5 and
+  later increments remain unintegrated.
+
+### Version 0.4.3 — Data Extraction Workspace GUI ✅
+
+- **Phase 9.5 — Form-Based Extraction Workspace** ✅ — Project navigation,
+  eligible publication selection, backend-driven dynamic template controls,
+  provenance and revision history drawers, save/completion feedback, and
+  backend validation/error handling. Phase 9.6 and later increments remain
+  unintegrated.
+
+### Version 0.4.5 — Lean Energy production Data Extraction template ✅
+
+- **Phase 9.7 — Lean Energy production Data Extraction template** ✅ — Idempotent
+  production template seeding (E1–E14) over generic engine, E1 system-bound
+  publication identity context, 1:N Lean–EE repeating groups, and full
+  quality gate verification.
+
+### Version 0.4.6 — Structured Data Extraction Dataset Export ✅
+
+- **Phase 9.8 — Structured Dataset Export** ✅ — Generic publication and
+  relationship read models, deterministic JSON/CSV exports, canonical E1
+  metadata, provenance, current-state completeness filtering, and separate
+  publication/relationship datasets.
+
+### Version 0.4.4 — Extraction Dataset View & Progress Reporting ✅
+
+- **Phase 9.6 — Publication Summary Table & Cross-Study Views** ✅ — Real
+  API-backed table and matrix views, progress/completeness presentation,
+  filtering, and navigation back to the extraction workspace. Phase 9.7 and
+  later increments remain unintegrated.
+
+### Version 0.3.7 — Screening Integration ✅
+
+- **Phase 7.9 — Screening Integration and Release** ✅ — Stage eligibility
+  adapter, multi-reviewer queue hydration, staleness revocation, unified
+  workflow-status API, Dashboard and WorkflowStepper integration, and backend
+  and frontend integration test suites.
+- **Manual Acceptance: PENDING AFTER PHASE 8 INTEGRATION ON DEVELOPMENT.**
+
+### Version 0.3.6 — Conflict Resolution and Adjudication ✅
+
+- **Phase 7.8B — Conflict Resolution / Adjudication** ✅ — Explicit resolver
+  workflow with required rationale and identity, append-only resolution
+  history, deterministic decision-set concurrency, stale/current semantics,
+  unified decision/resolution audit events, project-level outcome read model,
+  reporting extensions, and conflict-resolution workspace.
+- **Phase 7.9 was delivered in v0.3.7; manual acceptance remains pending after Phase 8 integration.**
+
+### Version 0.3.5 — Multi-Reviewer Screening and Conflict Detection ✅
+
+- **Phase 7.8A — Multi-Reviewer Screening and Conflict Detection** ✅ —
+  Project-and-stage reviewer roster with active/inactive lifecycle, derived
+  `INCOMPLETE` / `AGREEMENT` / `CONFLICT` state from latest reviewer-specific
+  decisions, conflict queue, pending-reviewer visibility, agreement metrics,
+  blind-aware display, and single-reviewer compatibility.
+- **Phase 7.8B was delivered in v0.3.6.**
+
+### Version 0.3.4 — Screening Audit Trail and Progress ✅
+
+- **Phase 7.7 — Screening Audit Trail and Progress** ✅ — Unified,
+  project-scoped decision audit history; reviewer-specific progress and
+  pipeline transitions; Full-Text exclusion-reason aggregation; criterion
+  snapshot schema v2; and paginated audit/report APIs with screening summary
+  and history UI.
+- **Phase 7.8A was delivered in v0.3.5.**
+
+### Version 0.3.3 — Full-Text Screening and Dashboard/Search Polish ✅
+
+- **Phase 7.6 — Full-Text Screening** ✅ — Reviewer-specific eligibility,
+  derived queue, FULL_TEXT/BOTH criteria, availability metadata, structured
+  exclusion reasons, append-only history, and executable Full-Text GUI.
+- **Dashboard and Search Polish** ✅ — Corrected Search → Import contract,
+  provider pagination with append semantics, local pagination of loaded results,
+  and selection preserved across local pages.
+- **Phase 7.7 was delivered in v0.3.4.**
+- **Phase 7.8B was delivered in v0.3.6.**
+- **Phase 7.9 was delivered in v0.3.7; manual acceptance remains pending after Phase 8 integration.**
+
 ### Version 0.3.1 — Project Management and Title & Abstract Screening ✅
 
 - **Project Management** ✅ — Persistent project resource with list, create,
@@ -167,15 +283,14 @@ not block Title & Abstract Screening.
 - **Phase 7.5A — Screening Input Prerequisites** ✅ — Authoritative snapshots,
   metadata/provenance preservation, canonical deduplicated input and typed
   readiness.
-- **Phase 7.5B — Title & Abstract Screening Backend Workflow** ✅ —
-  reviewer-specific records, statuses and progress derived from latest append-only
-  decisions; eligibility, filtering, pagination and decision API.
-- **Phase 7.5C — Title & Abstract Screening GUI** ✅ — Reviewer identity,
-  readiness states, progress, filtering, record navigation, criterion assessment,
-  Save and Save & Next.
-- **Phase 7.5D — Automatic Metadata-Based Screening Criteria** ✅ — Manual or
-  deterministic metadata-rule evaluation, authoritative server-side assessments,
-  and auditable rule/value/result snapshots.
+- **Phase 7.5B — Title & Abstract Screening Backend Workflow** ✅ — reviewer-specific records, statuses and progress derived from latest append-only decisions; eligibility, filtering, pagination and decision API.
+- **Phase 7.5C — Title & Abstract Screening GUI** ✅ — Reviewer identity, readiness states, progress, filtering, record navigation, criterion assessment, Save and Save & Next.
+- **Phase 7.5D — Automatic Metadata-Based Screening Criteria** ✅ — Manual or deterministic metadata-rule evaluation, authoritative server-side assessments, and auditable rule/value/result snapshots.
+- **Phase 7.6 — Full-Text Screening** ✅ — Reviewer-specific eligibility, derived queue, FULL_TEXT/BOTH criteria, availability metadata, structured exclusion reasons, append-only history, executable GUI.
+- **Phase 7.7 — Screening Audit Trail and Progress** ✅ — Reviewer-scoped audit pages, decision timeline, previous decision comparison, and reporting repositories.
+- **Phase 7.8A — Multi-Reviewer Screening + Conflict Detection** ✅ — Active reviewer rosters, agreement/disagreement outcome calculation, and conflict state tracking.
+- **Phase 7.8B — Conflict Resolution / Adjudication** ✅ — Adjudicator override resolutions, decision set key validation, and resolution persistence (`0017_screening_conflict_resolutions.sql`).
+- **Phase 7.9 — Screening Integration and Release** ✅ — Stage eligibility adapter (`ScreeningEligibilityAdapter`), multi-reviewer queue hydration, staleness revocation on vote change, unified GET /projects/{id}/workflow-status REST endpoint, Dashboard cards & Stepper integration, and integration test suites.
 
 ### Version 0.3.0 — Screening Decision Domain and Persistence ✅
 
@@ -323,11 +438,13 @@ Support systematic review screening through a backend workflow and a dedicated u
 - **7.5B — Title & Abstract Screening Backend Workflow** ✅ — Deterministic project-scoped records read model, typed readiness reasons, reviewer-specific status/progress derived from batch-loaded latest decisions, active `TITLE_ABSTRACT`/`BOTH` criteria, canonical publication eligibility, stable pagination/filtering, and append-only decision writes delegated to `ScreeningDecisionService`. No GUI or queue persistence.
 - **7.5C — Title & Abstract Screening GUI** ✅ — Project-scoped executable UI with explicit reviewer identity, typed readiness blocking states, progress, filtering, deterministic record navigation, criterion-level assessment, manual decisions, Save / Save & Next, and resume from persisted decisions.
 - **7.5D — Automatic Metadata-Based Screening Criteria** ✅ — Configurable `MANUAL` and `METADATA_RULE` criteria; deterministic safe rules over publication metadata; server-authoritative automatic assessments with historical rule/value/result snapshots. The final screening outcome remains a human reviewer decision.
-- **Next increment: 7.6 — Full-Text Screening** ➡️
-- **7.6 — Full-Text Screening** ⬜ — Queue management for publications eligible after Title & Abstract Screening, evaluation against `FULL_TEXT` and `BOTH` criteria (with technical full-text availability/status presented as workflow metadata, and project-scoped criteria determining whether unretrievable full text leads to exclusion), explicit selection of exclusion reasons, decision recording (`INCLUDE` / `EXCLUDE` / `UNCERTAIN`) with rationale, history view, save & resume, progress metrics, and GUI & backend integration. No requirement for local storage of copyrighted PDF files.
-- **7.7 — Screening Audit Trail and Progress** ⬜ — Complete decision audit trail capturing reviewer, timestamps, exact criteria version used, decision changes, stage-specific progress metrics (included, excluded, uncertain counts), exclusion-reason aggregations, overall project screening summary, and structured data extraction necessary for subsequent PRISMA flow charts. Changes to criteria do not invalidate or obscure historical decisions.
-- **7.8 — Multi-Reviewer Screening and Conflict Detection** ⬜ — Independent multi-reviewer decision recording for the same publication and stage, conflict detection algorithm identifying reviewer disagreements, dedicated conflict resolution queue, resolution workflow with reviewer agreement metrics, resolution rationale recording, and audit trail. Single-reviewer workflow remains fully operational.
-- **7.9 — Screening Integration and Release** ⬜ — Integration into Project Dashboard, workflow stage status transitions (Deduplication → Screening and Screening → Quality Assessment), handling empty/loading/error states, backend integration test suite, frontend integration test suite, end-to-end verification, documentation reconciliation, and release verification.
+- **7.6 — Full-Text Screening** ✅ — Reviewer-specific derived eligibility from current canonical input plus latest `TITLE_ABSTRACT=INCLUDE`; `FULL_TEXT`/`BOTH` criteria, server-authoritative automatic assessments, full-text availability/reference workflow metadata, structured exclusion reasons linked to immutable criterion-assessment snapshots, append-only decisions, current progress/filtering and executable GUI. Loss of eligibility removes a record from the current queue without deleting history.
+- **7.7 — Screening Audit Trail and Progress** ✅ — Unified, project-scoped read models for immutable Title & Abstract and Full-Text decision history; reviewer-specific stage progress and pipeline transitions; Full-Text exclusion-reason aggregation from criterion snapshots; legacy v1 and description-complete v2 criterion snapshots; paginated audit/report API and screening summary/history UI. No project-wide reviewer reconciliation.
+- **7.8A — Multi-Reviewer Screening and Conflict Detection** ✅ — Project-and-stage reviewer roster with active/inactive lifecycle, derived `INCOMPLETE` / `AGREEMENT` / `CONFLICT` state from latest reviewer-specific decisions, conflict queue, pending-reviewer visibility, agreement metrics, and blind-aware display. Single-reviewer workflows remain compatible; no adjudication or resolved project outcome.
+- **7.8B — Conflict Resolution / Adjudication** ✅ — Explicit resolver workflow, resolution rationale/history, stale-resolution detection, unified decision/resolution audit trail, and a project-level outcome read model. No automatic majority vote; no stage-transition integration.
+- **7.9 — Screening Integration and Release** ✅ — Implemented and integrated;
+  automated verification is complete. Manual Acceptance remains pending after
+  Phase 8 integration on development.
 
 ### Definition of Done for Phase 7
 
@@ -346,12 +463,19 @@ Phase 7 is complete when a user can:
 
 ---
 
-## Phase 8 — Quality Assessment
+## Phase 8 — Quality Assessment 🟨
 
 Support methodological quality assessment of included studies.
 
-Features:
+Increments:
+- **8.1 — Quality Assessment Domain Models & Persistence** ✅ — Infrastructure-independent Pydantic v2 models (`QualityAssessmentTool`, `QualityAssessmentTemplate`, `QualityAssessmentTemplateCriterion`, `QualityAssessment`, `QualityAssessmentResponse`), SQLite migration (`0013_quality_assessment.sql`), repository protocols (`QualityAssessmentCatalogRepository`, `QualityAssessmentRepository`), template content immutability contract, authoritative response criterion ownership validation, append-only history trail, and unit test suite.
+- **8.2 — Quality Assessment Tool Catalog & Project Configuration** ✅ — Deterministic code-defined tool/template catalog seeding (`casp_inspired`), active/inactive tool & template version lifecycle metadata semantics, project-scoped active configuration persistence (`ProjectQualityAssessmentConfiguration`, migration `0014_quality_assessment_configuration.sql`), application service (`QualityAssessmentConfigurationService`), REST API (`GET /quality-assessment/tools`, `GET/PUT /projects/{id}/quality-assessment/configuration`), typed DTOs, project hard delete integration, cross-tool mismatch validation, and test suite. No execution workflow, GUI, or unverified template criteria.
+- **8.3 — Quality Assessment Execution Backend** ✅ — Reviewer-specific Full-Text `INCLUDE` decision eligibility pipeline, loss & restoration of eligibility mechanics, project active configuration readiness gate, append-only assessment recording (`YES`, `NO`, `CANNOT_DETERMINE`), mandatory justification & required criteria completeness validation, authoritative backend question/guidance snapshot construction, application service (`QualityAssessmentExecutionService`), REST API (`GET /overview`, `GET /records`, `POST /assessments`, `GET /records/{id}`, `GET /records/{id}/history`), typed DTOs, reviewer & project isolation, and unit/integration test suite. No GUI or scoring schemes.
+- **8.4 — Quality Assessment Interface (GUI)** ✅ — Full-featured execution & configuration React interface, reviewer-specific progress overview bar (`Eligible`, `Assessed`, `Remaining`), status filters (`UNASSESSED`, `ALL`, `ASSESSED`), readiness alerts & blocking states (`NO_QUALITY_ASSESSMENT_CONFIGURATION`, `NO_ELIGIBLE_PUBLICATIONS`), tool & template version config selector with explicit template change confirmation prompt, publication context & abstract view, segmented response choice controls (`TAK`, `NIE`, `NIE MOŻNA OKREŚLIĆ`), criterion-level mandatory justification textareas, `Save` & `Save & Next` actions with `UNASSESSED` pagination invariant preservation, append-only history audit trail drawer, dirty draft warning, frontend service (`qualityAssessmentApi`), and Vitest test suite (`160/160 PASS`).
+- **8.5 — Lean Energy QA v1 Production Template & E2E** ✅ — First production quality assessment template (`lean_energy` v1) seeded under `casp_inspired` tool by `seed_built_in_catalog()`, derived exclusively from SLR Protocol v0.10 Chapter IX. Exactly 7 required criteria (QA1–QA7) with Polish-language questions and structured YES/CANNOT_DETERMINE/NO response guidance. Stable deterministic UUIDs (`LEAN_ENERGY_TEMPLATE_ID`, criterion IDs `e2e85001-...-11` through `-17`). Idempotent INSERT-only seed semantics with `SeedCatalogConflictError` on content drift. No scoring engine, no total score, no quality class, no automatic exclusion, no Full-Text decision modification. Comprehensive E2E integration test suite (23 tests): catalog seed verification, 7-criteria order/content assertion, full assessment workflow (configure → overview → record detail → 7-response submit → progress update → append-only history), Full-Text decision immutability invariant, negative validation (missing required, blank justification, duplicate criterion, non-template criterion, ineligible publication). Frontend `getTools` enriched with template data. All quality gates green (1158 backend, 163 frontend, ruff, mypy, tsc, build clean).
+- **Next increment: 8.6 — Template Builder GUI / Additional Assessment Tools** ➡️
 
+Features:
 - configurable quality criteria
 - assessment forms
 - scoring or rating schemes

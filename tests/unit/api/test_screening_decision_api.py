@@ -5,9 +5,13 @@ from app.api.main import app
 from app.api.routers.screening import get_screening_decision_service
 from app.domain.publication import Publication
 from app.domain.screening import (
+    CriterionAssessmentValue,
     ScreeningCriterion,
     ScreeningCriterionStage,
     ScreeningCriterionType,
+    ScreeningDecision,
+    ScreeningOutcome,
+    ScreeningStage,
 )
 from app.repositories.project_publication_repository import (
     SqliteProjectPublicationRepository,
@@ -18,7 +22,7 @@ from app.repositories.screening_criterion_repository import (
 from app.repositories.screening_decision_repository import (
     SqliteScreeningDecisionRepository,
 )
-from app.services.screening_decision_service import ScreeningDecisionService
+from app.services.screening_decision_service import CriterionAssessmentInput, ScreeningDecisionService
 
 client = TestClient(app)
 
@@ -69,15 +73,24 @@ def test_api_record_and_get_screening_decision(service_env: ScreeningDecisionSer
         ],
     }
 
-    # Record decision via POST
+    # Generic public writes must not bypass the dedicated Full Text workflow.
     response = client.post(f"/projects/{project_id}/screening/decisions", json=payload)
-    assert response.status_code == 201
-    data = response.json()
-    assert data["project_id"] == project_id
-    assert data["publication_id"] == str(pub.record_id)
-    assert data["outcome"] == "include"
-    assert data["reviewer_id"] == "reviewer-api"
-    decision_id = data["decision_id"]
+    assert response.status_code == 409
+    assert response.json()["detail"]["code"] == "full_text_workflow_required"
+
+    # Generic reads remain supported for immutable decision history.
+    saved = service_env.record_decision(
+        project_id, pub.record_id, ScreeningStage.FULL_TEXT, ScreeningOutcome.INCLUDE, "reviewer-api",
+        "High quality paper",
+        [
+            CriterionAssessmentInput(
+                criterion_id=criterion.criterion_id,
+                assessment_value=CriterionAssessmentValue.MET,
+                notes="Met during API call",
+            )
+        ],
+    )
+    decision_id = str(saved.decision_id)
 
     # Get latest decision via GET
     latest_resp = client.get(
@@ -106,25 +119,20 @@ def test_api_list_decision_history(service_env: ScreeningDecisionService) -> Non
     pub = Publication(title="API History Paper")
     service_env.publication_repo.add_publications(project_id, [pub])
 
-    # Post decision 1
-    payload1 = {
-        "publication_id": str(pub.record_id),
-        "stage": "full_text",
-        "outcome": "uncertain",
-        "reviewer_id": "reviewer-api",
-    }
-    r1 = client.post(f"/projects/{project_id}/screening/decisions", json=payload1)
-    assert r1.status_code == 201
-
-    # Post decision 2
-    payload2 = {
-        "publication_id": str(pub.record_id),
-        "stage": "full_text",
-        "outcome": "include",
-        "reviewer_id": "reviewer-api",
-    }
-    r2 = client.post(f"/projects/{project_id}/screening/decisions", json=payload2)
-    assert r2.status_code == 201
+    # Full Text history is append-only; writes are tested through the dedicated
+    # workflow, while this generic endpoint remains its public read surface.
+    service_env.decision_repo.save(
+        ScreeningDecision(
+            project_id=project_id, publication_id=pub.record_id, stage=ScreeningStage.FULL_TEXT,
+            outcome=ScreeningOutcome.UNCERTAIN, reviewer_id="reviewer-api"
+        )
+    )
+    service_env.decision_repo.save(
+        ScreeningDecision(
+            project_id=project_id, publication_id=pub.record_id, stage=ScreeningStage.FULL_TEXT,
+            outcome=ScreeningOutcome.INCLUDE, reviewer_id="reviewer-api"
+        )
+    )
 
     history_resp = client.get(
         f"/projects/{project_id}/screening/decisions/history",

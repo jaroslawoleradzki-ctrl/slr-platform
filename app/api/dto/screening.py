@@ -151,6 +151,9 @@ class CriterionAssessmentResponse(BaseModel):
 
     criterion_id: UUID = Field(description="Criterion identifier.")
     criterion_name: str = Field(description="Criterion name at decision time.")
+    criterion_description: str | None = Field(
+        description="Criterion description at decision time, if snapshot schema retained it."
+    )
     criterion_type: ScreeningCriterionType = Field(description="Criterion type.")
     criterion_stage: ScreeningCriterionStage = Field(description="Criterion stage scope.")
     criterion_is_required: bool = Field(description="Whether criterion was required at decision time.")
@@ -165,6 +168,7 @@ class CriterionAssessmentResponse(BaseModel):
         return cls(
             criterion_id=assessment.criterion_id,
             criterion_name=assessment.criterion_name,
+            criterion_description=assessment.criterion_description,
             criterion_type=assessment.criterion_type,
             criterion_stage=assessment.criterion_stage,
             criterion_is_required=assessment.criterion_is_required,
@@ -188,7 +192,9 @@ class ScreeningDecisionResponse(BaseModel):
     outcome: ScreeningOutcome = Field(description="Screening outcome.")
     reviewer_id: str = Field(description="Reviewer identifier.")
     rationale: str | None = Field(description="Decision rationale.")
+    criterion_snapshot_schema_version: int = Field(description="Version of the embedded criterion snapshot schema.")
     criterion_assessments: list[CriterionAssessmentResponse] = Field(description="Criterion assessments snapshot.")
+    exclusion_reason_criterion_ids: list[UUID] = Field(default_factory=list)
     decided_at: datetime = Field(description="Timezone-aware decision timestamp.")
 
     @classmethod
@@ -201,7 +207,9 @@ class ScreeningDecisionResponse(BaseModel):
             outcome=decision.outcome,
             reviewer_id=decision.reviewer_id,
             rationale=decision.rationale,
+            criterion_snapshot_schema_version=decision.criterion_snapshot_schema_version,
             criterion_assessments=[CriterionAssessmentResponse.from_domain(a) for a in decision.criterion_assessments],
+            exclusion_reason_criterion_ids=decision.exclusion_reason_criterion_ids,
             decided_at=decision.decided_at,
         )
 

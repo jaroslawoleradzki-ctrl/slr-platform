@@ -36,7 +36,7 @@ const Harness = () => {
   return (
     <>
       <button type="button" onClick={() => void project.executeSearchStrategy(strategy)}>search</button>
-      <button type="button" onClick={() => void project.loadMoreSearchResults()}>more</button>
+      <button type="button" onClick={() => void project.loadMoreSearchResults().catch(() => {})}>more</button>
       <div data-testid="loaded">{project.searchExecutionResult?.returned_count ?? 0}</div>
       <div data-testid="records">{project.searchExecutionResult?.results.map((record) => record.source_id).join(',')}</div>
       {project.searchPaginationError && <div role="alert">{project.searchPaginationError}</div>}

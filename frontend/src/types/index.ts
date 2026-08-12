@@ -509,11 +509,19 @@ export interface WorkflowNavigationStatus {
     label: string | null;
   };
   screening: {
-    state: 'not_available';
-    label: string;
+    state: WorkflowStageState;
+    count: number | null;
+    total: number | null;
+    label: string | null;
+  };
+  fullTextScreening: {
+    state: WorkflowStageState;
+    count: number | null;
+    total: number | null;
+    label: string | null;
   };
   qualityAssessment: {
-    state: 'not_available';
+    state: WorkflowStageState;
     label: string;
   };
   dataExtraction: {
@@ -523,5 +531,27 @@ export interface WorkflowNavigationStatus {
   exports: {
     state: 'not_available' | 'available';
     label: string;
+  };
+}
+
+export interface ApiProjectWorkflowStatusResponse {
+  project_id: string;
+  title_abstract_screening: {
+    status: 'not_started' | 'in_progress' | 'completed' | 'unresolved_conflict' | 'stale_resolution';
+    evaluated_count: number;
+    total_count: number;
+    conflict_count: number;
+    resolved_count: number;
+  };
+  full_text_screening: {
+    status: 'waiting_for_title_abstract' | 'ready' | 'in_progress' | 'completed' | 'unresolved_conflict' | 'stale_resolution';
+    eligible_count: number;
+    evaluated_count: number;
+    conflict_count: number;
+    resolved_count: number;
+  };
+  quality_assessment: {
+    status: 'waiting_for_full_text' | 'ready' | 'in_progress' | 'completed';
+    eligible_count: number;
   };
 }

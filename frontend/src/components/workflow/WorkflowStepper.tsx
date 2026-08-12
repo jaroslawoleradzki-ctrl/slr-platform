@@ -45,14 +45,14 @@ export const WorkflowStepper: React.FC = () => {
       id: 'screen',
       label: 'Screening',
       path: `/projects/${currentId}/screen/title-abstract`,
-      status: 'not_started' as const,
+      status: workflowStatus?.screening.state || 'not_started',
       alertCount: null,
     },
     {
       id: 'qa',
       label: 'Quality Assessment',
       path: `/projects/${currentId}/qa`,
-      status: 'not_available' as const,
+      status: workflowStatus?.qualityAssessment.state || 'not_available',
       alertCount: null,
     },
     {

@@ -1,6 +1,6 @@
 # SLR Platform — Project Status
 
-_Last updated: 2026-08-10_
+_Last updated: 2026-08-12_
 
 ## Current status
 
@@ -14,17 +14,17 @@ development
 
 Current version:
 
-v0.3.1
+v0.4.6
 
 Current release status:
 
-Completed
+Phase 9 Data Extraction is formally completed and released in v0.4.6.
+Phase 10 remains unimplemented.
 
 Current development phase:
 
-Phase 7 — Screening remains in progress. Title & Abstract Screening (7.5A–7.5D)
-and Project Management are completed; the next planned increment is 7.6 —
-Full-Text Screening.
+Phase 9 — Data Extraction is complete through 9.8 and released. Phase 10 has
+not started.
 
 Phase 6.7 & Phase 6.8 Workflow State:
 - **Phase 6.7 (Modules 1–4 Functional Workflow)**: ✅ Completed (6.7.1, 6.7.2a, 6.7.2b).
@@ -39,15 +39,17 @@ Phase 6.7 & Phase 6.8 Workflow State:
   - 6.8.8 GUI Import Integration — ✅ Completed (`POST /imports` RIS/BibTeX upload & history)
   - 6.8.9 Publication Intake Summary — ✅ Completed (`SourcesSummaryService` read model & GET endpoint)
 
-Screening prerequisites resolved in v0.3.1:
+Screening prerequisites resolved in v0.3.3:
 - Authoritative `SearchResultSnapshot` records retain canonical provider metadata
   and provenance for new live-search imports.
 - `ScreeningInputService` derives a stable, non-destructive canonical input set;
   pending duplicate groups and merge conflicts explicitly block readiness.
 
 State of Phase 7 — Screening:
-- v0.3.1 is completed.
-- Phase 7 — Screening is in progress; 7.1–7.5D are completed and 7.6 is next.
+- v0.3.8 is integrated and automated verification is complete; Manual Acceptance remains pending after Phase 8 integration.
+- Phase 7 — Screening implementation is complete and integrated through 7.9;
+  automated verification is complete, with Manual Acceptance pending after
+  Phase 8 integration on development.
 - Phase 7.1 — Screening Criteria Domain Model is ✅ Completed (`ScreeningCriterion`, `ScreeningCriterionType`, `ScreeningCriterionStage`, validation, unit tests).
 - Phase 7.2 — Screening Criteria Persistence and API is ✅ Completed (SQLite schema `0007_screening_criteria.sql`, repository, project isolation, REST API, DTOs, tests).
 - Phase 7.3 — Screening Configuration GUI is ✅ Completed (ScreeningCriteriaList, ScreeningCriterionCard, ScreeningCriterionModal, projectApiService adapter, validation, 22 frontend tests).
@@ -56,9 +58,100 @@ State of Phase 7 — Screening:
 - Phase 7.5B — Title & Abstract Screening Backend Workflow is ✅ Completed.
 - Phase 7.5C — Title & Abstract Screening GUI is ✅ Completed.
 - Phase 7.5D — Automatic Metadata-Based Screening Criteria is ✅ Completed.
-- Next: Phase 7.6 — Full-Text Screening.
+- Phase 7.6 — Full-Text Screening is ✅ Completed (reviewer-specific eligibility, derived queue, FULL_TEXT/BOTH criteria, availability metadata, structured exclusion reasons, append-only history, executable GUI, and project deletion integration).
+- Phase 7.7 — Screening Audit Trail and Progress is ✅ Completed (unified
+  decision audit history, reviewer-specific progress, reporting read models,
+  exclusion-reason aggregation, and screening summary/history UI).
+- Phase 7.8A — Multi-Reviewer Screening and Conflict Detection is ✅ Completed
+  (project/stage reviewer roster, conflict derivation, conflict queue,
+  agreement metrics, pending-reviewer visibility, and blind-aware display).
+- Phase 7.8B — Conflict Resolution / Adjudication is ✅ Completed (explicit
+  resolver workflow, append-only resolution history, stale/current semantics,
+  unified audit events, project-level outcome read model, and optimistic
+  concurrency).
+- Phase 7.9 — Screening Integration and Release is ✅ Implemented and
+  integrated (ScreeningEligibilityAdapter, queue hydration, staleness
+  revocation, unified `GET /projects/{id}/workflow-status` endpoint, Dashboard
+  and Stepper integration, and integration test suites). Automated verification
+  is complete; Manual Acceptance remains pending after Phase 8 integration.
 
-Completed in this release:
+Completed in v0.3.8:
+- Screening manual-acceptance UX fixes: dark-theme select controls,
+  reviewer-team terminology, and unified conflicts/resolutions workflow with
+  backward-compatible routing.
+
+Completed in v0.3.9:
+- Quality Assessment integration: domain and persistence, project
+  configuration, execution workflow, API, workspace, integration tests, and
+  project-deletion lifecycle support. Phase 9 Data Extraction remains under
+  active development and is not included in this release.
+
+Completed in v0.4.0:
+- Phase 9.2 Data Extraction persistence: migration `0018`, immutable versioned
+  template catalog, project-scoped records, append-only revisions, batched
+  hydration, and atomic project hard-delete integration. Phase 9.3 and later
+  increments remain unintegrated.
+
+Completed in v0.4.1:
+- Phase 9.3 Data Extraction project configuration and reviewer-scoped
+  eligibility: Full-Text `INCLUDE` remains the upstream gate; configured
+  Quality Assessment requires a persisted assessment by the same reviewer,
+  without scoring, response interpretation, or automatic exclusion. Phase 9.4
+  and later increments remain unintegrated.
+
+Completed in v0.4.2:
+- Phase 9.4 Data Extraction execution backend: eligibility-enforced,
+  template-bound append-only revision submission, server-side validation and
+  completeness calculation, provenance/reviewer attribution, and revision
+  history API. Phase 9.5 and later increments remain unintegrated.
+
+Completed in v0.4.3:
+- Phase 9.5 Data Extraction workspace GUI: project routing, eligible
+  publication selection, backend-driven template form controls, provenance
+  and revision history drawers, save/completion feedback, and backend
+  validation/error handling. Phase 9.6 and later increments remain
+  unintegrated.
+
+Completed in v0.4.4:
+- Phase 9.6 Extraction Dataset View: real API-backed publication table and
+  matrix views, authoritative progress/completeness reporting, filtering,
+  navigation, and loading/empty/error states. Phase 9.7 and later increments
+  remain unintegrated.
+
+Completed in v0.4.5:
+- Phase 9.7 Lean Energy production template: idempotent E1–E14 seed over the
+  generic extraction engine, system-bound E1 publication context, and 1:N
+  Lean–EE relationships. Phase 9.8 is now the remaining Phase 9 increment.
+
+Completed in v0.4.6:
+- Phase 9.8 structured dataset export: generic publication and relationship
+  read models with deterministic JSON/CSV exports, current COMPLETE-state
+  semantics, canonical publication metadata, provenance, and template version
+  traceability.
+
+Completed in v0.3.7:
+- Screening integration: stage eligibility adapter, queue hydration,
+  staleness revocation, workflow-status API, Dashboard/Stepper integration,
+  and backend/frontend integration test suites.
+
+Manual Acceptance remains pending after Phase 8 integration on development.
+
+Completed in v0.3.6:
+- Conflict resolution and adjudication with explicit resolver identity and
+  rationale, append-only history, stale-resolution handling, unified audit
+  events, project-level outcome reporting, and resolution workspace.
+
+Completed in v0.3.5:
+- Multi-reviewer screening and conflict detection with roster lifecycle,
+  derived agreement/conflict states, queue and reporting extensions, and
+  single-reviewer compatibility.
+
+Completed in v0.3.4:
+- Screening audit trail and reporting read models, including reviewer-specific
+  progress, pipeline transitions, criterion snapshot history, and paginated
+  audit/report APIs.
+
+Completed in v0.3.3:
 - Project Management: persistent project resource, list/create/open/edit,
   archive/restore, active-project persistence and atomic hard delete.
 - SearchResultSnapshot-based live-search import, metadata/provenance retention
