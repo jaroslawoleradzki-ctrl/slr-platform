@@ -11,6 +11,7 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { useProject } from '../context/ProjectContext';
+import { useReviewerIdentity } from '../hooks/useReviewerIdentity';
 import {
   extractionApi,
   ExtractionRecordResponseDTO,
@@ -34,6 +35,7 @@ export const DataExtractionPage: React.FC = () => {
   }>();
   const navigate = useNavigate();
   const { activeProject } = useProject();
+  const { reviewerId } = useReviewerIdentity();
   const projectId = routeProjectId || activeProject?.id || 'lean_energy';
 
   // State
@@ -63,8 +65,6 @@ export const DataExtractionPage: React.FC = () => {
   } | null>(null);
   const [isHistoryOpen, setIsHistoryOpen] = useState<boolean>(false);
 
-  const reviewerId = 'rev_1';
-
   // Fetch eligibility list, record, and history for publication
   useEffect(() => {
     let isMounted = true;
@@ -76,6 +76,10 @@ export const DataExtractionPage: React.FC = () => {
       setBlockedEligibility(null);
 
       try {
+        if (!reviewerId) {
+          setErrorBanner('Ustaw identyfikator reviewera przed rozpoczęciem ekstrakcji danych.');
+          return;
+        }
         const template = await extractionApi.getProjectTemplate(projectId);
         if (!isMounted) return;
         if (!template) {

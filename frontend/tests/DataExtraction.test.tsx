@@ -73,6 +73,7 @@ const mockHistory = {
 describe('Data Extraction Workspace GUI (Phase 9.5)', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    localStorage.setItem('slr_screening_reviewer_id', 'rev_1');
     vi.spyOn(extractionApi, 'getProjectTemplate').mockResolvedValue({
       template_id: 'default_extraction_template',
       version: '1.0.0',
