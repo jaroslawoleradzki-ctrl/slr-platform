@@ -35,7 +35,6 @@ import { RevisionHistoryDrawer } from '../components/extraction/RevisionHistoryD
 import { ExtractionProgressHeader } from '../components/extraction/ExtractionProgressHeader';
 import { ExtractionTableView } from '../components/extraction/ExtractionTableView';
 import { ExtractionMatrixView } from '../components/extraction/ExtractionMatrixView';
-import { useReviewerIdentity } from '../hooks/useReviewerIdentity';
 
 // Standard fallback extraction template definition (domain-agnostic)
 const DEFAULT_TEMPLATE: ExtractionTemplateVersion = {
@@ -136,7 +135,7 @@ export const DataExtractionPage: React.FC = () => {
   const [selectedPubId, setSelectedPubId] = useState<string>(routePubId || '');
   const [, setRecord] = useState<ExtractionRecordResponseDTO | null>(null);
   const [history, setHistory] = useState<ExtractionRevisionHistoryResponseDTO | null>(null);
-  const [templateVersion, setTemplateVersion] = useState<ExtractionTemplateVersion | null>(null);
+  const [templateVersion, setTemplateVersion] = useState<ExtractionTemplateVersion>(DEFAULT_TEMPLATE);
 
   const [publicationValues, setPublicationValues] = useState<ExtractedValueStateDTO[]>([]);
   const [groupItems, setGroupItems] = useState<ExtractedGroupItemStateDTO[]>([]);

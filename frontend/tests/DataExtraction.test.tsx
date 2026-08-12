@@ -127,18 +127,48 @@ const mockMatrix = {
   ],
 };
 
+const mockTemplate = {
+  template_id: 'default_extraction_template',
+  version: '1.0.0',
+  name: 'Standard Data Extraction Template',
+  description: 'Uniwersalny formularz ekstrakcji danych z publikacji i grup badanych.',
+  is_published: true,
+  is_active: true,
+  created_at: new Date().toISOString(),
+  publication_fields: [
+    {
+      field_key: 'study_design',
+      name: 'Typ badania (Study Design)',
+      data_type: 'enum' as const,
+      description: 'Metodologia przeprowadzonego badania',
+      allowed_values: ['RCT', 'Cohort', 'Case-Control', 'Cross-Sectional', 'Systematic Review', 'Other'],
+      is_required: true,
+    },
+  ],
+  repeating_groups: [
+    {
+      group_key: 'study_arms',
+      name: 'Ramiona Badania / Grupy Uczestników (1:N Study Arms)',
+      description: 'Charakterystyka poszczególnych podgrup',
+      min_items: 1,
+      max_items: 10,
+      field_definitions: [
+        {
+          field_key: 'arm_name',
+          name: 'Nazwa grupy / ramienia',
+          data_type: 'text' as const,
+          is_required: true,
+        },
+      ],
+    },
+  ],
+};
+
 describe('Data Extraction Workspace GUI (Phase 9.5 & 9.6)', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     localStorage.setItem('slr_screening_reviewer_id', 'rev_1');
-    vi.spyOn(extractionApi, 'getProjectTemplate').mockResolvedValue({
-      template_id: 'default_extraction_template', version: '1.0.0', name: 'Test template',
-      is_published: true, is_active: true, created_at: new Date().toISOString(),
-      publication_fields: [
-        { field_key: 'study_title', name: 'Tytuł badania / publikacji', data_type: 'text', is_required: true },
-        { field_key: 'publication_year', name: 'Rok publikacji', data_type: 'integer', is_required: true },
-      ], repeating_groups: [],
-    });
+    vi.spyOn(extractionApi, 'getProjectTemplate').mockResolvedValue(mockTemplate);
     vi.spyOn(extractionApi, 'getExtractionProgress').mockResolvedValue(mockProgress);
     vi.spyOn(extractionApi, 'listExtractionRecords').mockResolvedValue(mockRecordsSummary);
     vi.spyOn(extractionApi, 'getExtractionMatrix').mockResolvedValue(mockMatrix);

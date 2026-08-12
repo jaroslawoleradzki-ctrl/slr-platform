@@ -10,7 +10,7 @@ Unlike ROADMAP.md, this file is intentionally technical and may change frequentl
 
 Current release:
 
-v0.4.4 — Extraction Dataset View & Progress Reporting
+v0.4.5 — Lean Energy production Data Extraction template
 
 Status:
 

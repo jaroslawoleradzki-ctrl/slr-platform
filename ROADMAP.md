@@ -207,6 +207,13 @@ not block Title & Abstract Screening.
   backend validation/error handling. Phase 9.6 and later increments remain
   unintegrated.
 
+### Version 0.4.5 — Lean Energy production Data Extraction template ✅
+
+- **Phase 9.7 — Lean Energy production Data Extraction template** ✅ — Idempotent
+  production template seeding (E1–E14) over generic engine, E1 system-bound
+  publication identity context, 1:N Lean–EE repeating groups, and full
+  quality gate verification.
+
 ### Version 0.4.4 — Extraction Dataset View & Progress Reporting ✅
 
 - **Phase 9.6 — Publication Summary Table & Cross-Study Views** ✅ — Real
