@@ -14,7 +14,7 @@ development
 
 Current version:
 
-v0.4.5
+v0.4.6
 
 Current release status:
 
@@ -117,6 +117,17 @@ Completed in v0.4.4:
   matrix views, authoritative progress/completeness reporting, filtering,
   navigation, and loading/empty/error states. Phase 9.7 and later increments
   remain unintegrated.
+
+Completed in v0.4.5:
+- Phase 9.7 Lean Energy production template: idempotent E1–E14 seed over the
+  generic extraction engine, system-bound E1 publication context, and 1:N
+  Lean–EE relationships. Phase 9.8 is now the remaining Phase 9 increment.
+
+Completed in v0.4.6:
+- Phase 9.8 structured dataset export: generic publication and relationship
+  read models with deterministic JSON/CSV exports, current COMPLETE-state
+  semantics, canonical publication metadata, provenance, and template version
+  traceability.
 
 Completed in v0.3.7:
 - Screening integration: stage eligibility adapter, queue hydration,

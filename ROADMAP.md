@@ -214,6 +214,13 @@ not block Title & Abstract Screening.
   publication identity context, 1:N Lean–EE repeating groups, and full
   quality gate verification.
 
+### Version 0.4.6 — Structured Data Extraction Dataset Export ✅
+
+- **Phase 9.8 — Structured Dataset Export** ✅ — Generic publication and
+  relationship read models, deterministic JSON/CSV exports, canonical E1
+  metadata, provenance, current-state completeness filtering, and separate
+  publication/relationship datasets.
+
 ### Version 0.4.4 — Extraction Dataset View & Progress Reporting ✅
 
 - **Phase 9.6 — Publication Summary Table & Cross-Study Views** ✅ — Real

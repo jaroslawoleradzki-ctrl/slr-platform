@@ -10,7 +10,7 @@ Unlike ROADMAP.md, this file is intentionally technical and may change frequentl
 
 Current release:
 
-v0.4.5 — Lean Energy production Data Extraction template
+v0.4.6 — Structured Data Extraction Dataset Export
 
 Status:
 
@@ -810,7 +810,34 @@ Status:
 
 Status:
 
-⬜ Next (Dataset Export & Final Phase 9 Verification)
+✅ Completed on `feature/data-extraction-9.8` (implementation complete; integration review pending)
+
+Scope completed:
+
+- canonical E1 publication identity is supplied from the publication read model;
+  `study_title` and `publication_year` are not reviewer-entered duplicate fields
+  in the Lean Energy v1 seed;
+- `PublicationExtractionReadModel` and `RelationshipExtractionReadModel` expose
+  template traceability, latest revision metadata, canonical publication context,
+  typed values, explicit missingness, origin, and provenance;
+- dataset reads hydrate the latest append-only revision per publication and
+  default to `COMPLETE` only; `IN_PROGRESS`, `NOT_STARTED`, and `NEEDS_REVIEW`
+  are excluded unless an explicit all-status service request is made;
+- publication exports preserve one row/object per publication and relationship
+  exports preserve one row/object per repeating-group item;
+- `GET /api/v1/projects/{project_id}/extraction/export` supports JSON,
+  publication CSV, and relationship CSV with deterministic ordering and stable
+  status/origin/provenance companion columns;
+- JSON and CSV preserve typed values, including deterministic `MULTI_ENUM` and
+  `NUMBER_WITH_UNIT` serialization, and retain source-page, section, locator,
+  optional quote, and reviewer-note provenance;
+- the existing Data Extraction workspace provides focused JSON, publication CSV,
+  and relationship CSV download actions with visible failure state;
+- backend, frontend, lint, type-check, build, and Phase 9 regression gates pass.
+
+Phase 10 read contract: downstream synthesis may consume these read models and
+exports without understanding SQLite/EAV storage. No synthesis, correlation,
+derived-value, or meta-analysis behavior is implemented in Phase 9.8.
 
 ---
 
@@ -834,7 +861,7 @@ Status:
 
 Status:
 
-⬜ Planned
+✅ Completed as part of Phase 9.8 final verification
 
 ---
 

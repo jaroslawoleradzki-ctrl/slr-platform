@@ -2,7 +2,7 @@
 
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, HTTPException, Query, Response, status
 
 from app.api.dto.extraction import (
     ExtractedGroupItemStateDTO,
@@ -24,6 +24,7 @@ from app.api.dto.extraction import (
 from app.domain.extraction import (
     ExtractedGroupItemState,
     ExtractedValueState,
+    ExtractionCompletenessStatus,
     ExtractionConfigurationError,
     ExtractionConfigurationLockedError,
     ExtractionConfigurationNotFoundError,
@@ -46,6 +47,10 @@ from app.repositories.project_repository import (
 from app.services.extraction_configuration_service import (
     ExtractionConfigurationService,
     default_extraction_configuration_service,
+)
+from app.services.extraction_dataset_service import (
+    ExtractionDatasetService,
+    default_extraction_dataset_service,
 )
 from app.services.extraction_eligibility_service import (
     ExtractionEligibilityService,
@@ -450,3 +455,57 @@ def get_extraction_matrix(
         group_keys=data["group_keys"],
         items=items,
     )
+
+
+def _get_dataset_service() -> ExtractionDatasetService:
+    return default_extraction_dataset_service()
+
+
+@router.get(
+    "/{project_id}/extraction/export",
+    summary="Export structured extraction dataset (JSON or CSV) (Phase 9.8)",
+)
+def export_extraction_dataset(
+    project_id: str,
+    format: str = Query(default="json", description="Export format: 'json' or 'csv'"),
+    dataset: str = Query(default="publications", description="Dataset grain: 'publications' or 'relationships'"),
+    reviewer_id: str = Query(default="", description="Optional reviewer ID filter"),
+    include_all: bool = Query(default=False, description="Set True to include all records regardless of completeness"),
+):
+    """Exports structured extraction dataset as JSON or CSV based on latest revisions."""
+    if format not in ("json", "csv"):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Query parameter 'format' must be either 'json' or 'csv'.",
+        )
+
+    if dataset not in ("publications", "relationships"):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Query parameter 'dataset' must be either 'publications' or 'relationships'.",
+        )
+
+    service = _get_dataset_service()
+    status_filter = None if include_all else ExtractionCompletenessStatus.COMPLETE
+
+    try:
+        if format == "csv":
+            csv_content = service.export_csv(
+                project_id, dataset=dataset, reviewer_id=reviewer_id, status_filter=status_filter
+            )
+            filename = f"{project_id}_{dataset}_dataset.csv"
+            return Response(
+                content=csv_content,
+                media_type="text/csv",
+                headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+            )
+        else:
+            json_data = service.export_json(
+                project_id, dataset=dataset, reviewer_id=reviewer_id, status_filter=status_filter
+            )
+            return json_data
+    except (ExtractionConfigurationNotFoundError, ProjectNotFoundError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc

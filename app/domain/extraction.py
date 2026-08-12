@@ -767,3 +767,45 @@ class ExtractionEligibilityResult(BaseModel):
     status: ExtractionEligibilityStatus
     is_eligible: bool
     reason_details: str | None = None
+
+
+class PublicationExtractionReadModel(BaseModel):
+    """Immutable read model for a publication's latest extracted evidence (Phase 9.8)."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    project_id: str
+    publication_id: UUID
+    canonical_title: str
+    canonical_authors: list[str] = Field(default_factory=list)
+    canonical_publication_year: int | None = None
+    canonical_doi: str | None = None
+    canonical_journal: str | None = None
+    template_id: str
+    template_version: str
+    completeness_status: ExtractionCompletenessStatus
+    latest_revision_index: int
+    latest_revision_id: UUID
+    reviewer_id: str
+    submitted_at: datetime
+    publication_values: list[ExtractedValueState] = Field(default_factory=list)
+    group_items: list[ExtractedGroupItemState] = Field(default_factory=list)
+
+
+class RelationshipExtractionReadModel(BaseModel):
+    """Immutable read model for a 1:N extracted relationship item (Phase 9.8)."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    project_id: str
+    publication_id: UUID
+    canonical_title: str
+    canonical_publication_year: int | None = None
+    template_id: str
+    template_version: str
+    group_key: str
+    group_item_id: UUID
+    item_index: int
+    reviewer_id: str
+    submitted_at: datetime
+    relationship_values: list[ExtractedValueState] = Field(default_factory=list)

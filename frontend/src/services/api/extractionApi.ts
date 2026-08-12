@@ -211,6 +211,20 @@ export class ExtractionApiError extends Error {
 }
 
 export const extractionApi = {
+  async exportDataset(
+    projectId: string,
+    format: 'json' | 'csv',
+    dataset: 'publications' | 'relationships',
+  ): Promise<Blob> {
+    const query = `?format=${format}&dataset=${dataset}`;
+    const res = await fetch(`${API_BASE_URL}/v1/projects/${projectId}/extraction/export${query}`);
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({ detail: res.statusText }));
+      throw new ExtractionApiError(res.status, errData.detail || 'Failed to export extraction dataset');
+    }
+    return res.blob();
+  },
+
   async getProjectConfiguration(projectId: string): Promise<ProjectExtractionConfiguration | null> {
     const res = await fetch(`${API_BASE_URL}/v1/projects/${projectId}/extraction/configuration`);
     if (res.status === 404) return null;

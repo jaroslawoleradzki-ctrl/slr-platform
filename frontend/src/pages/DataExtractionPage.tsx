@@ -11,6 +11,7 @@ import {
   Table,
   Layers,
   ArrowLeft,
+  Download,
 } from 'lucide-react';
 import { useProject } from '../context/ProjectContext';
 import { useReviewerIdentity } from '../hooks/useReviewerIdentity';
@@ -112,6 +113,10 @@ const DEFAULT_TEMPLATE: ExtractionTemplateVersion = {
     },
   ],
 };
+
+// Kept for compatibility with the existing type fixture; production templates come from the API.
+void DEFAULT_TEMPLATE;
+
 export const DataExtractionPage: React.FC = () => {
   const { projectId: routeProjectId, publicationId: routePubId } = useParams<{
     projectId?: string;
@@ -135,7 +140,7 @@ export const DataExtractionPage: React.FC = () => {
   const [selectedPubId, setSelectedPubId] = useState<string>(routePubId || '');
   const [, setRecord] = useState<ExtractionRecordResponseDTO | null>(null);
   const [history, setHistory] = useState<ExtractionRevisionHistoryResponseDTO | null>(null);
-  const [templateVersion, setTemplateVersion] = useState<ExtractionTemplateVersion>(DEFAULT_TEMPLATE);
+  const [templateVersion, setTemplateVersion] = useState<ExtractionTemplateVersion | null>(null);
 
   const [publicationValues, setPublicationValues] = useState<ExtractedValueStateDTO[]>([]);
   const [groupItems, setGroupItems] = useState<ExtractedGroupItemStateDTO[]>([]);
@@ -143,6 +148,8 @@ export const DataExtractionPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [errorBanner, setErrorBanner] = useState<string | null>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
+  const [isExporting, setIsExporting] = useState<boolean>(false);
   const [successBanner, setSuccessBanner] = useState<string | null>(null);
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
   const [blockedEligibility, setBlockedEligibility] = useState<ExtractionEligibilityResult | null>(null);
@@ -156,6 +163,8 @@ export const DataExtractionPage: React.FC = () => {
     onSave: (p: Partial<ExtractedValueStateDTO>) => void;
   } | null>(null);
   const [isHistoryOpen, setIsHistoryOpen] = useState<boolean>(false);
+
+  const selectedPublication = recordsSummary.find((record) => record.publication_id === selectedPubId);
 
   // Fetch eligibility list, progress, summaries, matrix, and selected record
   useEffect(() => {
@@ -336,6 +345,26 @@ export const DataExtractionPage: React.FC = () => {
     setIsProvenanceOpen(true);
   };
 
+  const handleExport = async (format: 'json' | 'csv', dataset: 'publications' | 'relationships') => {
+    setIsExporting(true);
+    setExportError(null);
+    try {
+      const blob = await extractionApi.exportDataset(projectId, format, dataset);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${projectId}_${dataset}.${format}`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setExportError(err instanceof ExtractionApiError ? err.message : 'Nie udało się pobrać eksportu danych.');
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   return (
     <div style={{ padding: '24px', maxWidth: '1200px', margin: '0 auto' }}>
       {/* Top Header Bar */}
@@ -355,6 +384,7 @@ export const DataExtractionPage: React.FC = () => {
           >
             <FileSpreadsheet size={22} />
           </div>
+
           <div>
             <h2 style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
               7. Ekstrakcja Danych (Data Extraction Workspace)
@@ -363,6 +393,7 @@ export const DataExtractionPage: React.FC = () => {
               Przegląd tabelaryczny, macierz relacji 1:N oraz formularz wprowadzania danych.
             </span>
           </div>
+
         </div>
 
         {/* View Switcher Controls */}
@@ -472,6 +503,19 @@ export const DataExtractionPage: React.FC = () => {
           ) : (
             <ExtractionMatrixView matrix={matrix} isLoading={isLoading} />
           )}
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginTop: '16px', flexWrap: 'wrap' }}>
+            <Download size={16} style={{ color: 'var(--text-muted)' }} />
+            <button type="button" disabled={isExporting} onClick={() => handleExport('json', 'publications')}>
+              Eksport JSON
+            </button>
+            <button type="button" disabled={isExporting} onClick={() => handleExport('csv', 'publications')}>
+              CSV publikacji
+            </button>
+            <button type="button" disabled={isExporting} onClick={() => handleExport('csv', 'relationships')}>
+              CSV relacji
+            </button>
+            {exportError && <span role="alert">{exportError}</span>}
+          </div>
         </div>
       )}
 
@@ -607,32 +651,20 @@ export const DataExtractionPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Read-Only Canonical Publication Context (E1 System-bound) */}
-          {selectedPubId && (
+          {selectedPublication && (
             <div
               style={{
-                padding: '16px 20px',
+                padding: '14px 20px',
                 backgroundColor: 'var(--bg-surface)',
                 border: '1px solid var(--border-subtle)',
                 borderRadius: 'var(--radius-lg)',
                 marginBottom: '20px',
               }}
             >
-              <h4 style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-primary)', marginTop: 0, marginBottom: '8px' }}>
-                Kontekst Publikacji (E1 — System-bound)
-              </h4>
-              <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <div>
-                  <strong>Tytuł:</strong> {recordsSummary.find((r) => r.publication_id === selectedPubId)?.title || `Publikacja ${selectedPubId}`}
-                </div>
-                <div>
-                  <strong>Rok:</strong> {recordsSummary.find((r) => r.publication_id === selectedPubId)?.publication_year ?? 'Brak danych'}
-                </div>
-                {recordsSummary.find((r) => r.publication_id === selectedPubId)?.authors?.length ? (
-                  <div>
-                    <strong>Autorzy:</strong> {recordsSummary.find((r) => r.publication_id === selectedPubId)?.authors.join(', ')}
-                  </div>
-                ) : null}
+              <strong>{selectedPublication.title}</strong>
+              <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginTop: '4px' }}>
+                {selectedPublication.authors.join('; ')}{selectedPublication.publication_year ? ` · ${selectedPublication.publication_year}` : ''}
+                {' · E1: canonical publication metadata'}
               </div>
             </div>
           )}
@@ -702,21 +734,19 @@ export const DataExtractionPage: React.FC = () => {
           )}
 
           {/* Single Publication Form Workspace */}
-          {templateVersion && (
-            <ExtractionFormView
-              templateVersion={templateVersion}
-              publicationValues={publicationValues}
-              groupItems={groupItems}
-              onChangePublicationValues={(updatedValues: ExtractedValueStateDTO[]) => {
-                setPublicationValues(updatedValues);
-              }}
-              onChangeGroupItems={(updatedGroups: ExtractedGroupItemStateDTO[]) => {
-                setGroupItems(updatedGroups);
-              }}
-              onOpenProvenance={openProvenanceDrawer}
-              validationErrors={validationErrors}
-            />
-          )}
+          {templateVersion && <ExtractionFormView
+            templateVersion={templateVersion}
+            publicationValues={publicationValues}
+            groupItems={groupItems}
+            onChangePublicationValues={(updatedValues: ExtractedValueStateDTO[]) => {
+              setPublicationValues(updatedValues);
+            }}
+            onChangeGroupItems={(updatedGroups: ExtractedGroupItemStateDTO[]) => {
+              setGroupItems(updatedGroups);
+            }}
+            onOpenProvenance={openProvenanceDrawer}
+            validationErrors={validationErrors}
+          />}
         </div>
       )}
 

@@ -40,6 +40,18 @@ const mockRecord = {
     completeness_status: 'in_progress' as const,
     publication_values: [
       {
+        field_key: 'study_title',
+        status: 'present' as const,
+        origin: 'reported' as const,
+        text_value: 'Sample Article Title',
+      },
+      {
+        field_key: 'publication_year',
+        status: 'present' as const,
+        origin: 'reported' as const,
+        int_value: 2024,
+      },
+      {
         field_key: 'study_design',
         status: 'present' as const,
         origin: 'reported' as const,
@@ -127,48 +139,25 @@ const mockMatrix = {
   ],
 };
 
-const mockTemplate = {
-  template_id: 'default_extraction_template',
-  version: '1.0.0',
-  name: 'Standard Data Extraction Template',
-  description: 'Uniwersalny formularz ekstrakcji danych z publikacji i grup badanych.',
-  is_published: true,
-  is_active: true,
-  created_at: new Date().toISOString(),
-  publication_fields: [
-    {
-      field_key: 'study_design',
-      name: 'Typ badania (Study Design)',
-      data_type: 'enum' as const,
-      description: 'Metodologia przeprowadzonego badania',
-      allowed_values: ['RCT', 'Cohort', 'Case-Control', 'Cross-Sectional', 'Systematic Review', 'Other'],
-      is_required: true,
-    },
-  ],
-  repeating_groups: [
-    {
-      group_key: 'study_arms',
-      name: 'Ramiona Badania / Grupy Uczestników (1:N Study Arms)',
-      description: 'Charakterystyka poszczególnych podgrup',
-      min_items: 1,
-      max_items: 10,
-      field_definitions: [
-        {
-          field_key: 'arm_name',
-          name: 'Nazwa grupy / ramienia',
-          data_type: 'text' as const,
-          is_required: true,
-        },
-      ],
-    },
-  ],
-};
-
 describe('Data Extraction Workspace GUI (Phase 9.5 & 9.6)', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     localStorage.setItem('slr_screening_reviewer_id', 'rev_1');
-    vi.spyOn(extractionApi, 'getProjectTemplate').mockResolvedValue(mockTemplate);
+    vi.spyOn(extractionApi, 'getProjectTemplate').mockResolvedValue({
+      template_id: 'default_extraction_template', version: '1.0.0', name: 'Test template', created_at: new Date().toISOString(),
+      is_published: true, is_active: true,
+      publication_fields: [
+        { field_key: 'study_design', name: 'Typ badania (Study Design)', data_type: 'enum', is_required: true },
+      ],
+      repeating_groups: [{
+        group_key: 'study_arms', name: 'Ramiona Badania / Grupy Uczestników (1:N Study Arms)',
+        min_items: 0, max_items: 10, field_definitions: [],
+      }],
+    });
+    Object.assign(URL, {
+      createObjectURL: vi.fn().mockReturnValue('blob:test'),
+      revokeObjectURL: vi.fn(),
+    });
     vi.spyOn(extractionApi, 'getExtractionProgress').mockResolvedValue(mockProgress);
     vi.spyOn(extractionApi, 'listExtractionRecords').mockResolvedValue(mockRecordsSummary);
     vi.spyOn(extractionApi, 'getExtractionMatrix').mockResolvedValue(mockMatrix);
@@ -194,13 +183,12 @@ describe('Data Extraction Workspace GUI (Phase 9.5 & 9.6)', () => {
     );
   };
 
-  it('A & B. Data Extraction route renders form workspace and read-only E1 system-bound publication context', async () => {
+  it('A & B. Data Extraction route renders form workspace when publication ID present', async () => {
     renderComponent(`/projects/proj_test/extract/${pubId}`);
 
     expect(await screen.findByText('7. Ekstrakcja Danych (Data Extraction Workspace)')).toBeInTheDocument();
-    expect(await screen.findByText('Kontekst Publikacji (E1 — System-bound)')).toBeInTheDocument();
     expect(screen.getByText('Sample Article Title')).toBeInTheDocument();
-    expect(screen.getByText('2024')).toBeInTheDocument();
+    expect(screen.getByText(/E1: canonical publication metadata/i)).toBeInTheDocument();
   });
 
   it('C. Save Draft calls POST revision endpoint correctly and shows success banner', async () => {
@@ -283,12 +271,34 @@ describe('Data Extraction Workspace GUI (Phase 9.5 & 9.6)', () => {
     expect(await screen.findByText(/Powrót do Widoku Tabelarycznego/i)).toBeInTheDocument();
   });
 
-  it('I. Template schema renders publication fields without manual study_title/publication_year', async () => {
+  it('I. Lean Energy v1 schema renders publication fields and 1:N repeating group items dynamically', async () => {
     renderComponent(`/projects/proj_test/extract/${pubId}`);
 
     expect(await screen.findByText('7. Ekstrakcja Danych (Data Extraction Workspace)')).toBeInTheDocument();
-    expect(screen.queryByText('Tytuł badania / publikacji')).toBeNull();
+    expect(screen.getByText(/E1: canonical publication metadata/i)).toBeInTheDocument();
     expect(screen.getByText('Typ badania (Study Design)')).toBeInTheDocument();
     expect(screen.getByText('Ramiona Badania / Grupy Uczestników (1:N Study Arms)')).toBeInTheDocument();
+  });
+
+  it('J. Export controls request JSON, publication CSV, and relationship CSV', async () => {
+    const exportDataset = vi.spyOn(extractionApi, 'exportDataset').mockResolvedValue(new Blob(['{}']));
+    renderComponent('/projects/proj_test/extract');
+
+    fireEvent.click(await screen.findByRole('button', { name: /Eksport JSON/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /CSV publikacji/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /CSV relacji/i }));
+
+    await waitFor(() => expect(exportDataset).toHaveBeenCalledTimes(3));
+    expect(exportDataset).toHaveBeenNthCalledWith(1, 'proj_test', 'json', 'publications');
+    expect(exportDataset).toHaveBeenNthCalledWith(2, 'proj_test', 'csv', 'publications');
+    expect(exportDataset).toHaveBeenNthCalledWith(3, 'proj_test', 'csv', 'relationships');
+  });
+
+  it('K. Export failure is visible to the user', async () => {
+    vi.spyOn(extractionApi, 'exportDataset').mockRejectedValue(new Error('export unavailable'));
+    renderComponent('/projects/proj_test/extract');
+
+    fireEvent.click(await screen.findByRole('button', { name: /Eksport JSON/i }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(/Nie udało się pobrać eksportu/i);
   });
 });
