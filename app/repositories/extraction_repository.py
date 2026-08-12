@@ -15,6 +15,7 @@ from app.domain.extraction import (
     ExtractionCompletenessStatus,
     ExtractionRecord,
     ExtractionRevision,
+    ProjectExtractionConfiguration,
     ValueOrigin,
     ValueStatus,
 )
@@ -204,6 +205,52 @@ class SqliteExtractionRepository:
         )
         connection.execute("DELETE FROM extraction_revisions WHERE project_id = ?", (project_id,))
         connection.execute("DELETE FROM extraction_records WHERE project_id = ?", (project_id,))
+
+    def set_project_configuration(
+        self, config: ProjectExtractionConfiguration
+    ) -> ProjectExtractionConfiguration:
+        with self._connect() as connection:
+            connection.execute(
+                """INSERT INTO project_extraction_configurations
+                (project_id, template_id, template_version, configured_at, updated_at)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(project_id) DO UPDATE SET
+                    template_id = excluded.template_id,
+                    template_version = excluded.template_version,
+                    updated_at = excluded.updated_at""",
+                (
+                    config.project_id,
+                    config.template_id,
+                    config.template_version,
+                    config.configured_at.isoformat(),
+                    config.updated_at.isoformat(),
+                ),
+            )
+        return config
+
+    def get_project_configuration(self, project_id: str) -> ProjectExtractionConfiguration | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                """SELECT project_id, template_id, template_version, configured_at, updated_at
+                FROM project_extraction_configurations WHERE project_id = ?""",
+                (project_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        return ProjectExtractionConfiguration(
+            project_id=row[0],
+            template_id=row[1],
+            template_version=row[2],
+            configured_at=_as_datetime(row[3]),
+            updated_at=_as_datetime(row[4]),
+        )
+
+    def delete_project_configuration(self, project_id: str) -> bool:
+        with self._connect() as connection:
+            cursor = connection.execute(
+                "DELETE FROM project_extraction_configurations WHERE project_id = ?", (project_id,)
+            )
+            return cursor.rowcount > 0
 
     def _insert_values(
         self,

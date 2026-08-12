@@ -2,6 +2,29 @@
 
 This document records important project decisions that do not require a full ADR.
 
+## 2026-08-12
+
+### QA completion gate for Data Extraction
+
+- **Completion, not outcome**: when Quality Assessment is configured for a
+  project, Data Extraction eligibility requires a persisted Quality Assessment
+  for the publication. `YES`, `NO`, and `CANNOT_DETERMINE` responses have no
+  eligibility meaning and are never scored or converted into exclusions.
+- **Reviewer scope**: the assessment must belong to the same reviewer identity
+  used for reviewer-specific Full-Text and Extraction eligibility. Phase 8 is a
+  single-reviewer execution workflow; multi-reviewer QA reconciliation remains
+  outside the delivered architecture.
+- **Read-only dependency**: Extraction consumes only
+  `QualityAssessmentCompletionReader`, backed by QA configuration and
+  assessment repositories. It does not depend on the QA execution workflow and
+  has no QA write capability.
+- **Fail closed**: configured QA without a matching persisted assessment, or
+  without a reviewer identity, is not eligible. Unconfigured QA leaves
+  `FULL_TEXT=INCLUDE` as the sufficient upstream gate.
+- **Isolation and history**: completion reads are scoped by project,
+  publication, and reviewer. No QA assessment, response, Full-Text decision, or
+  historical record is modified.
+
 ## 2026-08-10
 
 ### v0.3.1 — Project Management and Title & Abstract Screening

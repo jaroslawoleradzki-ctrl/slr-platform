@@ -770,16 +770,6 @@ multi-reviewer QA agreement/reconciliation.
 
 ## 9.1 Data Extraction Domain
 
-Zakres:
-
-- extraction forms
-- extraction fields
-- structured extracted values
-- reviewer attribution
-- extracted-value provenance
-- validation
-- extraction history
-
 Status:
 
 ✅ Completed (Domain Model & Value System)
@@ -803,7 +793,23 @@ Status:
 
 ---
 
-## 9.3 Data Extraction UI
+## 9.3 Project Configuration & Eligibility
+
+Status:
+
+✅ Completed (Project Configuration & Eligibility)
+
+---
+
+## 9.4 Execution Backend & Validation Service
+
+Status:
+
+⬜ Next (Execution Backend & Validation Service)
+
+---
+
+## 9.5 Data Extraction UI
 
 Zakres:
 
@@ -821,7 +827,7 @@ Status:
 
 ---
 
-## 9.4 Extraction Dataset View
+## 9.6 Extraction Dataset View
 
 Zakres:
 

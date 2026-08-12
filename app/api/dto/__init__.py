@@ -9,6 +9,12 @@ from app.api.dto.deduplication import (
     ProvenanceEntryResponse,
     SharedIdentifierResponse,
 )
+from app.api.dto.extraction import (
+    ExtractionEligibilityListResponseDTO,
+    ExtractionEligibilityResultDTO,
+    ProjectExtractionConfigurationRequestDTO,
+    ProjectExtractionConfigurationResponseDTO,
+)
 from app.api.dto.screening import (
     ScreeningCriterionCreateRequest,
     ScreeningCriterionListResponse,
@@ -24,6 +30,10 @@ __all__ = [
     "DuplicateGroupListResponse",
     "DuplicateGroupResponse",
     "DuplicateRecordPreviewResponse",
+    "ExtractionEligibilityListResponseDTO",
+    "ExtractionEligibilityResultDTO",
+    "ProjectExtractionConfigurationRequestDTO",
+    "ProjectExtractionConfigurationResponseDTO",
     "ProvenanceEntryResponse",
     "SharedIdentifierResponse",
     "ScreeningCriterionCreateRequest",
