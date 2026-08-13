@@ -107,6 +107,20 @@ describe('No Mock Projects Fallback Safety Guarantee', () => {
     expect(screen.queryByText(/AI Architecture/i)).not.toBeInTheDocument();
   });
 
+  it('clears a stale saved project ID without selecting another project', async () => {
+    localStorage.setItem('slr_active_project_id', 'deleted-project');
+    vi.spyOn(projectApiService, 'getProjects').mockResolvedValue([realProject]);
+
+    renderProvider();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('project-count')).toHaveTextContent('1');
+    });
+
+    expect(screen.getByTestId('active-project')).toHaveTextContent('Brak aktywnego');
+    expect(localStorage.getItem('slr_active_project_id')).toBeNull();
+  });
+
   it('renders and activates a real project with routes containing its real ID', async () => {
     vi.spyOn(projectApiService, 'getProjects').mockResolvedValue([realProject]);
 

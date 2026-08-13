@@ -362,7 +362,9 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
       let targetId = activeProjectIdRef.current;
 
       const currentActiveObj = list.find((p) => p.id === targetId);
-      if (!currentActiveObj || currentActiveObj.status !== 'active') {
+      if (targetId && !currentActiveObj) {
+        targetId = '';
+      } else if (!targetId || currentActiveObj?.status !== 'active') {
         targetId = activeList.length > 0 ? activeList[0].id : '';
       }
 
