@@ -97,7 +97,7 @@ export const AboutModal: React.FC<AboutModalProps> = ({ isOpen, onClose }) => {
           >
             <Info size={16} style={{ color: 'var(--accent-primary)', flexShrink: 0, marginTop: '2px' }} />
             <div>
-              <strong>Tryb Hybrydowy (Phase 6.3):</strong> Moduł Duplicate Review pobiera candidate duplicate groups bezpośrednio z read-only API backendu. Pozostałe moduły GUI korzystają z danych demonstracyjnych do czasu kolejnych integracji. Backend pozostaje jedynym źródłem prawdy.
+              <strong>Backend API Connected:</strong> Wszystkie moduły interfejsu pobierają dane z backendu API i trwałej bazy SQLite. Backend pozostaje jedynym źródłem prawdy.
             </div>
           </div>
         </div>

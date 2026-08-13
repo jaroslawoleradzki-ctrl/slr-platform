@@ -19,7 +19,7 @@ import { WorkflowNavigationStatus } from '../../types';
 export const Sidebar: React.FC = () => {
   const { projectId } = useParams<{ projectId?: string }>();
   const { activeProject, workflowStatus } = useProject();
-  const currentId = projectId || activeProject?.id || 'lean_energy';
+  const currentId = projectId || activeProject?.id || '';
 
   const renderBadge = (stage: keyof WorkflowNavigationStatus | 'dashboard') => {
     if (!workflowStatus || stage === 'dashboard') return null;
@@ -62,57 +62,59 @@ export const Sidebar: React.FC = () => {
     return null;
   };
 
+  const buildPath = (suffix: string) => (currentId ? `/projects/${currentId}/${suffix}` : '/projects');
+
   const navItems = [
     {
-      to: `/projects/${currentId}/dashboard`,
+      to: buildPath('dashboard'),
       label: 'Dashboard',
       icon: LayoutDashboard,
       stage: 'dashboard' as const,
     },
     {
-      to: `/projects/${currentId}/search`,
+      to: buildPath('search'),
       label: '1. Search Strategy',
       icon: Search,
       stage: 'search' as const,
     },
     {
-      to: `/projects/${currentId}/sources`,
+      to: buildPath('sources'),
       label: '2. Sources & Imports',
       icon: Download,
       stage: 'sources' as const,
     },
     {
-      to: `/projects/${currentId}/normalize`,
+      to: buildPath('normalize'),
       label: '3. Normalization',
       icon: Sparkles,
       stage: 'normalization' as const,
     },
     {
-      to: `/projects/${currentId}/dedup`,
+      to: buildPath('dedup'),
       label: '4. Deduplication',
       icon: GitMerge,
       stage: 'deduplication' as const,
     },
     {
-      to: `/projects/${currentId}/screen/title-abstract`,
+      to: buildPath('screen/title-abstract'),
       label: '5. Screening',
       icon: Filter,
       stage: 'screening' as const,
     },
     {
-      to: `/projects/${currentId}/quality-assessment`,
+      to: buildPath('quality-assessment'),
       label: '6. Quality Assessment',
       icon: Award,
       stage: 'qualityAssessment' as const,
     },
     {
-      to: `/projects/${currentId}/extract`,
+      to: buildPath('extract'),
       label: '7. Data Extraction',
       icon: FileSpreadsheet,
       stage: 'dataExtraction' as const,
     },
     {
-      to: `/projects/${currentId}/exports`,
+      to: buildPath('exports'),
       label: '8. Exports & PRISMA',
       icon: FileCheck2,
       stage: 'exports' as const,
@@ -144,7 +146,7 @@ export const Sidebar: React.FC = () => {
 
         return (
           <NavLink
-            key={item.to}
+            key={item.stage}
             to={item.to}
             className={({ isActive }) => (isActive ? 'active-nav-link' : '')}
             style={({ isActive }) => ({

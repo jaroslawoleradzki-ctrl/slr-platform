@@ -12,7 +12,7 @@ describe('Application Versioning & Release Identity', () => {
   it('provides an application version constant', () => {
     expect(APP_VERSION).toBe('0.4.6');
     expect(RELEASE_STATUS).toBe('Development Preview');
-    expect(RUNTIME_MODE).toContain('Hybrid Data Mode');
+    expect(RUNTIME_MODE).toBe('Live API / Persistent Storage');
   });
 
   it('validates version strings against SemVer format and returns development fallback on invalid input', () => {
@@ -39,7 +39,6 @@ describe('Application Versioning & Release Identity', () => {
 
     expect(screen.getByText(new RegExp(`v${APP_VERSION}`, 'i'))).toBeInTheDocument();
     expect(screen.getByText(RUNTIME_MODE)).toBeInTheDocument();
-    expect(screen.queryByText(/Backend API Connected/i)).not.toBeInTheDocument();
   });
 
   it('renders application version in Sidebar footer', () => {

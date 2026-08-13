@@ -15,7 +15,6 @@ import {
   ProjectUpdatePayload,
   SearchResultsImportMetadata,
 } from '../types';
-import { MOCK_PROJECTS } from '../mocks/projectData';
 import { projectApiService } from '../services/api/projectApi';
 import { screeningApi, TitleAbstractOverview } from '../services/api/screeningApi';
 
@@ -218,9 +217,9 @@ interface ProjectContextType {
 const ProjectContext = createContext<ProjectContextType | undefined>(undefined);
 
 export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [projects, setProjects] = useState<SLRProject[]>(() => [...MOCK_PROJECTS]);
+  const [projects, setProjects] = useState<SLRProject[]>([]);
   const [activeProjectId, setActiveProjectIdState] = useState<string>(
-    () => localStorage.getItem('slr_active_project_id') || 'lean_energy'
+    () => localStorage.getItem('slr_active_project_id') || ''
   );
   const activeProjectIdRef = useRef(activeProjectId);
   const [loading, setLoading] = useState<boolean>(true);
@@ -363,7 +362,9 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
       let targetId = activeProjectIdRef.current;
 
       const currentActiveObj = list.find((p) => p.id === targetId);
-      if (!currentActiveObj || currentActiveObj.status !== 'active') {
+      if (targetId && !currentActiveObj) {
+        targetId = '';
+      } else if (!targetId || currentActiveObj?.status !== 'active') {
         targetId = activeList.length > 0 ? activeList[0].id : '';
       }
 
@@ -379,6 +380,10 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Błąd pobierania projektów');
+      setProjects([]);
+      setActiveProjectIdState('');
+      activeProjectIdRef.current = '';
+      localStorage.removeItem('slr_active_project_id');
     } finally {
       setLoading(false);
     }
