@@ -1,2 +1,5 @@
 export const API_BASE_URL: string =
-  (import.meta.env && import.meta.env.VITE_API_BASE_URL) || 'http://localhost:8000';
+  import.meta.env?.VITE_API_BASE_URL !== undefined
+    ? import.meta.env.VITE_API_BASE_URL
+    : 'http://localhost:8000';
+
