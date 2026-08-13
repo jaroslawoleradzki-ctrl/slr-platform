@@ -7,7 +7,9 @@ import { WorkflowStageState } from '../../types';
 export const WorkflowStepper: React.FC = () => {
   const { projectId } = useParams<{ projectId?: string }>();
   const { activeProject, workflowStatus } = useProject();
-  const currentId = projectId || activeProject?.id || '';
+  const currentId = projectId || activeProject?.id;
+
+  if (!currentId) return null;
 
   const steps = [
     {

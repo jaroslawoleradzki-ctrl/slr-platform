@@ -381,6 +381,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
       setProjects([]);
       setActiveProjectIdState('');
       activeProjectIdRef.current = '';
+      localStorage.removeItem('slr_active_project_id');
     } finally {
       setLoading(false);
     }
