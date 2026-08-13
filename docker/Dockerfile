@@ -1,6 +1,6 @@
 FROM python:3.12-slim
 WORKDIR /app
-COPY pyproject.toml README.md ./
+COPY pyproject.toml README.md VERSION ./
 COPY app ./app
 COPY projects ./projects
 RUN pip install --no-cache-dir --upgrade pip && pip install --no-cache-dir .
