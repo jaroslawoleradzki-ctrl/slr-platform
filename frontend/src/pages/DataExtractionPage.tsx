@@ -125,7 +125,7 @@ export const DataExtractionPage: React.FC = () => {
   const navigate = useNavigate();
   const { activeProject } = useProject();
   const { reviewerId } = useReviewerIdentity();
-  const projectId = routeProjectId || activeProject?.id || 'lean_energy';
+  const projectId = routeProjectId || activeProject?.id || '';
 
   // View Mode: 'table' vs 'form'
   const [viewMode, setViewMode] = useState<'table' | 'form'>(routePubId ? 'form' : 'table');

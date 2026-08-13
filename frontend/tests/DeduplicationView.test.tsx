@@ -10,6 +10,22 @@ describe('DeduplicationPage Phase 6.5 — Duplicate Comparison & Review UI', () 
   beforeEach(() => {
     localStorage.clear();
     vi.restoreAllMocks();
+    vi.spyOn(projectApiService, 'getProjects').mockResolvedValue([
+      {
+        id: 'lean_energy',
+        title: 'Lean Energy Project',
+        description: '',
+        protocolVersion: '1.0',
+        status: 'active',
+        createdAt: '', updatedAt: '',
+        nextAction: { title: '', description: '', targetStageId: 'search', actionLabel: '', severity: 'normal' },
+        conceptGroups: [], searchFilters: { publicationYearFrom: null, publicationYearTo: null, languages: [], publicationTypes: [], fullTextOnly: false },
+        providers: [], imports: [], normalization: [], deduplication: { recordsBeforeDedup: 0, identifierLinkedGroupsCount: 0, recordsAfterResultMerger: 0, candidateGroupsPendingUserReview: 0, status: 'pending' },
+        duplicateGroups: [], screening: { titleAbstract: { pending: 0, included: 0, excluded: 0, unresolved: 0, total: 0 }, fullText: { pending: 0, included: 0, excluded: 0, unresolved: 0, total: 0 }, status: 'pending' },
+        qualityAssessment: { totalToAssess: 0, completedAssessments: 0, reviewerConflictsCount: 0, status: 'pending' },
+        prismaMetrics: { recordsIdentifiedProviders: 0, recordsIdentifiedImports: 0, totalIdentified: 0, recordsAfterNormalization: 0, recordsBeforeDedup: 0, recordsAfterTechnicalMerger: 0, duplicateGroupsPendingReview: 0, recordsScreenedTitleAbstract: 0, recordsScreenedFullText: 0, studiesIncludedSynthesis: 0 },
+      },
+    ]);
   });
 
   it('renders loading state while fetching candidate duplicate groups from API', async () => {
@@ -23,7 +39,7 @@ describe('DeduplicationPage Phase 6.5 — Duplicate Comparison & Review UI', () 
       </ProjectProvider>
     );
 
-    expect(screen.getByText(/Pobieranie grup kandydatów z API backendu/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Pobieranie grup kandydatów z API backendu/i)).toBeInTheDocument();
   });
 
   it('renders duplicate candidate groups, side-by-side comparison, field states, and provenance', async () => {

@@ -140,7 +140,7 @@ function renderFieldBadge(state: ComparisonFieldState) {
 export const DuplicateGroupCardPreview: React.FC<DuplicateGroupCardPreviewProps> = ({
   group,
   index,
-  projectId = 'lean_energy',
+  projectId = '',
   onDecisionUpdated,
 }) => {
   const groupId = 'group_id' in group ? group.group_id : group.groupId;

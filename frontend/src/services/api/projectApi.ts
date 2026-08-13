@@ -23,7 +23,6 @@ import {
   ProjectUpdatePayload,
   ApiProjectWorkflowStatusResponse,
 } from '../../types';
-import { MOCK_PROJECTS } from '../../mocks/projectData';
 import { API_BASE_URL } from '../../config/api';
 
 interface FastApiValidationError {
@@ -226,9 +225,9 @@ class MixedProjectApiService implements ProjectApiService {
         headers: { Accept: 'application/json' },
       });
     } catch {
-      return [...MOCK_PROJECTS];
+      throw new Error('Nie udało się połączyć z backendem. Sprawdź połączenie.');
     }
-    if (!response.ok) return [...MOCK_PROJECTS];
+    if (!response.ok) throw new Error(await formatFastApiError(response, 'pobrać listę projektów'));
     const data = (await response.json()) as ApiProjectListResponse;
     return data.items.map(mapApiProjectToSLRProject);
   }

@@ -7,7 +7,7 @@ import { WorkflowStageState } from '../../types';
 export const WorkflowStepper: React.FC = () => {
   const { projectId } = useParams<{ projectId?: string }>();
   const { activeProject, workflowStatus } = useProject();
-  const currentId = projectId || activeProject?.id || 'lean_energy';
+  const currentId = projectId || activeProject?.id || '';
 
   const steps = [
     {

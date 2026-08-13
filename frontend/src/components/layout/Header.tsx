@@ -96,11 +96,15 @@ export const Header: React.FC = () => {
               cursor: 'pointer',
             }}
           >
-            {projects.map((proj) => (
-              <option key={proj.id} value={proj.id}>
-                {proj.title} (v{proj.protocolVersion})
-              </option>
-            ))}
+            {projects.length === 0 ? (
+              <option value="" disabled>Brak projektów</option>
+            ) : (
+              projects.map((proj) => (
+                <option key={proj.id} value={proj.id}>
+                  {proj.title} (v{proj.protocolVersion})
+                </option>
+              ))
+            )}
           </select>
           <ChevronDown
             size={14}

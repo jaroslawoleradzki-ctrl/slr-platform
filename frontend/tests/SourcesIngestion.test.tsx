@@ -1,13 +1,59 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ProjectProvider, useProject } from '../src/context/ProjectContext';
 import { SourcesIngestionPage } from '../src/pages/SourcesIngestionPage';
 import { projectApiService } from '../src/services/api/projectApi';
 
 describe('Sources ingestion upload', () => {
-  afterEach(() => {
+  beforeEach(() => {
     localStorage.clear();
     vi.restoreAllMocks();
+    vi.spyOn(projectApiService, 'getProjects').mockResolvedValue([
+      {
+        id: 'lean_energy',
+        title: 'Lean Energy Project',
+        description: '',
+        protocolVersion: '1.0',
+        status: 'active',
+        createdAt: '', updatedAt: '',
+        nextAction: { title: '', description: '', targetStageId: 'search', actionLabel: '', severity: 'normal' },
+        conceptGroups: [], searchFilters: { publicationYearFrom: null, publicationYearTo: null, languages: [], publicationTypes: [], fullTextOnly: false },
+        providers: [
+          { id: 'openalex', name: 'OpenAlex Works API', type: 'live_api', connected: true, status: 'idle', resultsCount: 0, lastRunTimestamp: null },
+          { id: 'crossref', name: 'Crossref REST API', type: 'live_api', connected: true, status: 'idle', resultsCount: 0, lastRunTimestamp: null },
+          { id: 'semantic_scholar', name: 'Semantic Scholar Graph API', type: 'live_api', connected: true, status: 'idle', resultsCount: 0, lastRunTimestamp: null },
+        ], imports: [], normalization: [], deduplication: { recordsBeforeDedup: 0, identifierLinkedGroupsCount: 0, recordsAfterResultMerger: 0, candidateGroupsPendingUserReview: 0, status: 'pending' },
+        duplicateGroups: [], screening: { titleAbstract: { pending: 0, included: 0, excluded: 0, unresolved: 0, total: 0 }, fullText: { pending: 0, included: 0, excluded: 0, unresolved: 0, total: 0 }, status: 'pending' },
+        qualityAssessment: { totalToAssess: 0, completedAssessments: 0, reviewerConflictsCount: 0, status: 'pending' },
+        prismaMetrics: { recordsIdentifiedProviders: 0, recordsIdentifiedImports: 0, totalIdentified: 0, recordsAfterNormalization: 0, recordsBeforeDedup: 0, recordsAfterTechnicalMerger: 0, duplicateGroupsPendingReview: 0, recordsScreenedTitleAbstract: 0, recordsScreenedFullText: 0, studiesIncludedSynthesis: 0 },
+      },
+      {
+        id: 'ai_architecture',
+        title: 'AI Architecture Project',
+        description: '',
+        protocolVersion: '1.0',
+        status: 'active',
+        createdAt: '', updatedAt: '',
+        nextAction: { title: '', description: '', targetStageId: 'search', actionLabel: '', severity: 'normal' },
+        conceptGroups: [], searchFilters: { publicationYearFrom: null, publicationYearTo: null, languages: [], publicationTypes: [], fullTextOnly: false },
+        providers: [
+          { id: 'openalex', name: 'OpenAlex Works API', type: 'live_api', connected: true, status: 'idle', resultsCount: 0, lastRunTimestamp: null },
+          { id: 'crossref', name: 'Crossref REST API', type: 'live_api', connected: true, status: 'idle', resultsCount: 0, lastRunTimestamp: null },
+          { id: 'semantic_scholar', name: 'Semantic Scholar Graph API', type: 'live_api', connected: true, status: 'idle', resultsCount: 0, lastRunTimestamp: null },
+        ], imports: [], normalization: [], deduplication: { recordsBeforeDedup: 0, identifierLinkedGroupsCount: 0, recordsAfterResultMerger: 0, candidateGroupsPendingUserReview: 0, status: 'pending' },
+        duplicateGroups: [], screening: { titleAbstract: { pending: 0, included: 0, excluded: 0, unresolved: 0, total: 0 }, fullText: { pending: 0, included: 0, excluded: 0, unresolved: 0, total: 0 }, status: 'pending' },
+        qualityAssessment: { totalToAssess: 0, completedAssessments: 0, reviewerConflictsCount: 0, status: 'pending' },
+        prismaMetrics: { recordsIdentifiedProviders: 0, recordsIdentifiedImports: 0, totalIdentified: 0, recordsAfterNormalization: 0, recordsBeforeDedup: 0, recordsAfterTechnicalMerger: 0, duplicateGroupsPendingReview: 0, recordsScreenedTitleAbstract: 0, recordsScreenedFullText: 0, studiesIncludedSynthesis: 0 },
+      },
+    ]);
+    vi.spyOn(projectApiService, 'getSearchStrategy').mockResolvedValue(null);
+    vi.spyOn(projectApiService, 'getBibliographicImports').mockResolvedValue([]);
+    vi.spyOn(projectApiService, 'getNormalization').mockResolvedValue(null);
+    vi.spyOn(projectApiService, 'getDuplicateGroups').mockResolvedValue({
+      project_id: 'lean_energy',
+      total_groups_count: 0,
+      groups: [],
+    });
   });
 
   const renderPage = () => render(
