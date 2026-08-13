@@ -16,6 +16,7 @@ from app.api.routers import (
     screening,
     search_strategy,
 )
+from app.core.config import load_project_config
 from app.repositories.project_repository import default_project_repository
 
 
