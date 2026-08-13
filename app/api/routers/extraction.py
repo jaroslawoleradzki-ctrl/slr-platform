@@ -61,7 +61,7 @@ from app.services.extraction_execution_service import (
     default_extraction_execution_service,
 )
 
-router = APIRouter(prefix="/api/v1/projects", tags=["extraction"])
+router = APIRouter(prefix="/projects", tags=["extraction"])
 
 
 def _get_config_service() -> ExtractionConfigurationService:

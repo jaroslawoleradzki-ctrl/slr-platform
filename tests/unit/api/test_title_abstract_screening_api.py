@@ -73,7 +73,7 @@ def test_overview_records_get_pagination_and_filter(environment) -> None:
         )
     )
 
-    overview = client.get("/projects/lean_energy/screening/title-abstract", params={"reviewer_id": "alice"})
+    overview = client.get("/api/v1/projects/lean_energy/screening/title-abstract", params={"reviewer_id": "alice"})
     assert overview.status_code == 200
     assert overview.json()["progress"] == {
         "total": 2,
@@ -85,13 +85,13 @@ def test_overview_records_get_pagination_and_filter(environment) -> None:
     }
     assert [item["criterion_id"] for item in overview.json()["criteria"]] == [str(visible.criterion_id)]
     page = client.get(
-        "/projects/lean_energy/screening/title-abstract/records",
+        "/api/v1/projects/lean_energy/screening/title-abstract/records",
         params={"reviewer_id": "alice", "status": "unscreened", "offset": 1, "limit": 1},
     )
     assert page.status_code == 200 and page.json()["total"] == 2
     assert page.json()["items"][0]["publication_id"] == str(records[0].record_id)
     detail = client.get(
-        f"/projects/lean_energy/screening/title-abstract/records/{records[1].record_id}",
+        f"/api/v1/projects/lean_energy/screening/title-abstract/records/{records[1].record_id}",
         params={"reviewer_id": "alice"},
     )
     assert detail.status_code == 200 and detail.json()["abstract"] == "Abstract 1"
@@ -105,7 +105,7 @@ def test_post_decision_forces_title_abstract_and_updates_latest(environment, out
     publication = _publication(1)
     publications.add_publications("lean_energy", [publication])
     response = client.post(
-        "/projects/lean_energy/screening/title-abstract/decisions",
+        "/api/v1/projects/lean_energy/screening/title-abstract/decisions",
         json={
             "publication_id": str(publication.record_id),
             "reviewer_id": "alice",
@@ -116,12 +116,12 @@ def test_post_decision_forces_title_abstract_and_updates_latest(environment, out
     assert response.status_code == 201
     assert response.json()["stage"] == "title_abstract"
     detail = client.get(
-        f"/projects/lean_energy/screening/title-abstract/records/{publication.record_id}",
+        f"/api/v1/projects/lean_energy/screening/title-abstract/records/{publication.record_id}",
         params={"reviewer_id": "alice"},
     )
     assert detail.json()["status"] == status_value
     invalid_stage = client.post(
-        "/projects/lean_energy/screening/title-abstract/decisions",
+        "/api/v1/projects/lean_energy/screening/title-abstract/decisions",
         json={
             "publication_id": str(publication.record_id),
             "reviewer_id": "alice",
@@ -136,14 +136,14 @@ def test_validation_not_ready_and_missing_reviewer(environment) -> None:
     client, publications, _, _, reviews = environment
     records = [_publication(1, "10.1/x"), _publication(2, "10.1/x")]
     publications.add_publications("lean_energy", records)
-    overview = client.get("/projects/lean_energy/screening/title-abstract", params={"reviewer_id": "alice"})
+    overview = client.get("/api/v1/projects/lean_energy/screening/title-abstract", params={"reviewer_id": "alice"})
     assert overview.json()["readiness_status"] == "unresolved_duplicates"
-    blocked = client.get("/projects/lean_energy/screening/title-abstract/records", params={"reviewer_id": "alice"})
+    blocked = client.get("/api/v1/projects/lean_energy/screening/title-abstract/records", params={"reviewer_id": "alice"})
     assert blocked.status_code == 409
     assert blocked.json()["detail"]["readiness_status"] == "unresolved_duplicates"
-    assert client.get("/projects/lean_energy/screening/title-abstract/records").status_code == 422
+    assert client.get("/api/v1/projects/lean_energy/screening/title-abstract/records").status_code == 422
     assert (
-        client.get("/projects/lean_energy/screening/title-abstract/records", params={"reviewer_id": "   "}).status_code
+        client.get("/api/v1/projects/lean_energy/screening/title-abstract/records", params={"reviewer_id": "   "}).status_code
         == 422
     )
 
@@ -157,12 +157,12 @@ def test_noncanonical_and_cross_project_publications_return_404(environment) -> 
         "lean_energy", str(group.group_id), DuplicateGroupReviewDecision(decision=DuplicateDecision.APPROVE)
     )
     noncanonical = client.post(
-        "/projects/lean_energy/screening/title-abstract/decisions",
+        "/api/v1/projects/lean_energy/screening/title-abstract/decisions",
         json={"publication_id": str(records[0].record_id), "reviewer_id": "alice", "outcome": "include"},
     )
     assert noncanonical.status_code == 404
     generic_bypass = client.post(
-        "/projects/lean_energy/screening/decisions",
+        "/api/v1/projects/lean_energy/screening/decisions",
         json={
             "publication_id": str(records[0].record_id),
             "stage": "title_abstract",
@@ -173,7 +173,7 @@ def test_noncanonical_and_cross_project_publications_return_404(environment) -> 
     assert generic_bypass.status_code == 409
     assert generic_bypass.json()["detail"]["code"] == "title_abstract_workflow_required"
     canonical = client.post(
-        "/projects/lean_energy/screening/title-abstract/decisions",
+        "/api/v1/projects/lean_energy/screening/title-abstract/decisions",
         json={
             "publication_id": str(records[1].record_id),
             "reviewer_id": "alice",
@@ -183,7 +183,7 @@ def test_noncanonical_and_cross_project_publications_return_404(environment) -> 
     assert canonical.status_code == 201
     decision_id = canonical.json()["decision_id"]
     latest = client.get(
-        "/projects/lean_energy/screening/decisions/latest",
+        "/api/v1/projects/lean_energy/screening/decisions/latest",
         params={
             "publication_id": str(records[1].record_id),
             "stage": "title_abstract",
@@ -191,23 +191,23 @@ def test_noncanonical_and_cross_project_publications_return_404(environment) -> 
         },
     )
     history = client.get(
-        "/projects/lean_energy/screening/decisions/history",
+        "/api/v1/projects/lean_energy/screening/decisions/history",
         params={
             "publication_id": str(records[1].record_id),
             "stage": "title_abstract",
             "reviewer_id": "alice",
         },
     )
-    by_id = client.get(f"/projects/lean_energy/screening/decisions/{decision_id}")
+    by_id = client.get(f"/api/v1/projects/lean_energy/screening/decisions/{decision_id}")
     assert latest.status_code == history.status_code == by_id.status_code == 200
     assert history.json()["total"] == 1
     foreign = client.get(
-        f"/projects/ai_architecture/screening/title-abstract/records/{records[1].record_id}",
+        f"/api/v1/projects/ai_architecture/screening/title-abstract/records/{records[1].record_id}",
         params={"reviewer_id": "alice"},
     )
     assert foreign.status_code == 404
     missing = client.get(
-        f"/projects/lean_energy/screening/title-abstract/records/{uuid4()}", params={"reviewer_id": "alice"}
+        f"/api/v1/projects/lean_energy/screening/title-abstract/records/{uuid4()}", params={"reviewer_id": "alice"}
     )
     assert missing.status_code == 404
 
@@ -226,7 +226,7 @@ def test_required_criterion_validation_is_422(environment) -> None:
         )
     )
     response = client.post(
-        "/projects/lean_energy/screening/title-abstract/decisions",
+        "/api/v1/projects/lean_energy/screening/title-abstract/decisions",
         json={"publication_id": str(publication.record_id), "reviewer_id": "alice", "outcome": "include"},
     )
     assert response.status_code == 422

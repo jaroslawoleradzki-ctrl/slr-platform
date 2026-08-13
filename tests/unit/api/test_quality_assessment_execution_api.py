@@ -115,7 +115,7 @@ def test_quality_assessment_execution_api_flow(exec_api_client):
 
     # 1. GET Overview
     overview_resp = client.get(
-        "/projects/proj_api/quality-assessment/overview",
+        "/api/v1/projects/proj_api/quality-assessment/overview",
         params={"reviewer_id": "rev_1"},
     )
     assert overview_resp.status_code == 200
@@ -126,7 +126,7 @@ def test_quality_assessment_execution_api_flow(exec_api_client):
 
     # 2. GET Records
     records_resp = client.get(
-        "/projects/proj_api/quality-assessment/records",
+        "/api/v1/projects/proj_api/quality-assessment/records",
         params={"reviewer_id": "rev_1"},
     )
     assert records_resp.status_code == 200
@@ -136,7 +136,7 @@ def test_quality_assessment_execution_api_flow(exec_api_client):
 
     # 3. GET Record Detail
     detail_resp = client.get(
-        f"/projects/proj_api/quality-assessment/records/{pub_id}",
+        f"/api/v1/projects/proj_api/quality-assessment/records/{pub_id}",
         params={"reviewer_id": "rev_1"},
     )
     assert detail_resp.status_code == 200
@@ -157,7 +157,7 @@ def test_quality_assessment_execution_api_flow(exec_api_client):
         ],
     }
     save_resp = client.post(
-        "/projects/proj_api/quality-assessment/assessments",
+        "/api/v1/projects/proj_api/quality-assessment/assessments",
         json=save_payload,
     )
     assert save_resp.status_code == 201
@@ -167,7 +167,7 @@ def test_quality_assessment_execution_api_flow(exec_api_client):
 
     # 5. GET History
     history_resp = client.get(
-        f"/projects/proj_api/quality-assessment/records/{pub_id}/history",
+        f"/api/v1/projects/proj_api/quality-assessment/records/{pub_id}/history",
         params={"reviewer_id": "rev_1"},
     )
     assert history_resp.status_code == 200
@@ -180,7 +180,7 @@ def test_quality_assessment_execution_api_errors(exec_api_client):
 
     # 1. Missing project -> 404
     resp = client.get(
-        "/projects/missing_proj/quality-assessment/overview",
+        "/api/v1/projects/missing_proj/quality-assessment/overview",
         params={"reviewer_id": "rev_1"},
     )
     assert resp.status_code == 404
@@ -198,7 +198,7 @@ def test_quality_assessment_execution_api_errors(exec_api_client):
         ],
     }
     save_resp = client.post(
-        "/projects/proj_api/quality-assessment/assessments",
+        "/api/v1/projects/proj_api/quality-assessment/assessments",
         json=save_payload,
     )
     assert save_resp.status_code == 422

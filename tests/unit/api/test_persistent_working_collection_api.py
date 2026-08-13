@@ -46,7 +46,7 @@ def test_file_import_and_normalization_use_same_durable_collection(tmp_path: Pat
     client = _client(database)
 
     imported = client.post(
-        "/projects/ai_architecture/imports",
+        "/api/v1/projects/ai_architecture/imports",
         files={
             "file": (
                 "record.ris",
@@ -57,13 +57,13 @@ def test_file_import_and_normalization_use_same_durable_collection(tmp_path: Pat
     )
     assert imported.status_code == 201
 
-    normalized = client.post("/projects/ai_architecture/normalization")
+    normalized = client.post("/api/v1/projects/ai_architecture/normalization")
     assert normalized.status_code == 200
     assert normalized.json()["processed_records"] == 1
 
     reopened = SqliteProjectPublicationRepository(database)
     assert len(reopened.get_publications("ai_architecture")) == 1
-    assert client.get("/projects/lean_energy/normalization").status_code == 404
+    assert client.get("/api/v1/projects/lean_energy/normalization").status_code == 404
 
 
 def test_selected_openalex_import_is_written_to_working_collection(tmp_path: Path) -> None:
@@ -100,10 +100,10 @@ def test_selected_openalex_import_is_written_to_working_collection(tmp_path: Pat
         ],
     }
 
-    imported = client.post("/projects/ai_architecture/search-results/imports", json=payload)
+    imported = client.post("/api/v1/projects/ai_architecture/search-results/imports", json=payload)
     assert imported.status_code == 200
     assert imported.json()["imported_count"] == 1
-    normalized = client.post("/projects/ai_architecture/normalization")
+    normalized = client.post("/api/v1/projects/ai_architecture/normalization")
     assert normalized.json()["processed_records"] == 1
 
     reopened = SqliteProjectPublicationRepository(database)
@@ -114,18 +114,18 @@ def test_new_import_invalidates_previous_normalization_result(tmp_path: Path) ->
     database = tmp_path / "project.db"
     client = _client(database)
     first = client.post(
-        "/projects/ai_architecture/imports",
+        "/api/v1/projects/ai_architecture/imports",
         files={"file": ("one.ris", "TY  - JOUR\nTI  - One\nER  - \n", "text/plain")},
     )
     assert first.status_code == 201
-    assert client.post("/projects/ai_architecture/normalization").status_code == 200
+    assert client.post("/api/v1/projects/ai_architecture/normalization").status_code == 200
 
     second = client.post(
-        "/projects/ai_architecture/imports",
+        "/api/v1/projects/ai_architecture/imports",
         files={"file": ("two.ris", "TY  - JOUR\nTI  - Two\nER  - \n", "text/plain")},
     )
     assert second.status_code == 201
-    assert client.get("/projects/ai_architecture/normalization").status_code == 404
+    assert client.get("/api/v1/projects/ai_architecture/normalization").status_code == 404
 
 
 def test_one_hundred_records_survive_normalization_and_repository_restart(tmp_path: Path) -> None:
@@ -146,9 +146,9 @@ def test_one_hundred_records_survive_normalization_and_repository_restart(tmp_pa
     assert result.working_collection_count == 100
 
     client = _client(database)
-    normalized = client.post("/projects/ai_architecture/normalization")
+    normalized = client.post("/api/v1/projects/ai_architecture/normalization")
     assert normalized.json()["processed_records"] == 100
 
     reopened = SqliteProjectPublicationRepository(database)
     assert len(reopened.get_publications("ai_architecture")) == 100
-    assert client.get("/projects/ai_architecture/normalization").json()["processed_records"] == 100
+    assert client.get("/api/v1/projects/ai_architecture/normalization").json()["processed_records"] == 100

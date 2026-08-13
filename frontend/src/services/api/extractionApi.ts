@@ -217,7 +217,7 @@ export const extractionApi = {
     dataset: 'publications' | 'relationships',
   ): Promise<Blob> {
     const query = `?format=${format}&dataset=${dataset}`;
-    const res = await fetch(`${API_BASE_URL}/v1/projects/${projectId}/extraction/export${query}`);
+    const res = await fetch(`${API_BASE_URL}/projects/${projectId}/extraction/export${query}`);
     if (!res.ok) {
       const errData = await res.json().catch(() => ({ detail: res.statusText }));
       throw new ExtractionApiError(res.status, errData.detail || 'Failed to export extraction dataset');
@@ -226,7 +226,7 @@ export const extractionApi = {
   },
 
   async getProjectConfiguration(projectId: string): Promise<ProjectExtractionConfiguration | null> {
-    const res = await fetch(`${API_BASE_URL}/v1/projects/${projectId}/extraction/configuration`);
+    const res = await fetch(`${API_BASE_URL}/projects/${projectId}/extraction/configuration`);
     if (res.status === 404) return null;
     if (!res.ok) {
       const errData = await res.json().catch(() => ({ detail: res.statusText }));
@@ -240,7 +240,7 @@ export const extractionApi = {
     reviewerId: string = ''
   ): Promise<ExtractionEligibilityListResponse> {
     const query = reviewerId ? `?reviewer_id=${encodeURIComponent(reviewerId)}` : '';
-    const res = await fetch(`${API_BASE_URL}/v1/projects/${projectId}/extraction/eligibility${query}`);
+    const res = await fetch(`${API_BASE_URL}/projects/${projectId}/extraction/eligibility${query}`);
     if (!res.ok) {
       const errData = await res.json().catch(() => ({ detail: res.statusText }));
       throw new ExtractionApiError(res.status, errData.detail || 'Failed to fetch extraction eligibility');
@@ -249,7 +249,7 @@ export const extractionApi = {
   },
 
   async getProjectTemplate(projectId: string): Promise<ExtractionTemplateVersion | null> {
-    const res = await fetch(`${API_BASE_URL}/v1/projects/${projectId}/extraction/template`);
+    const res = await fetch(`${API_BASE_URL}/projects/${projectId}/extraction/template`);
     if (res.status === 404) return null;
     if (!res.ok) {
       const errData = await res.json().catch(() => ({ detail: res.statusText }));
@@ -262,7 +262,7 @@ export const extractionApi = {
     projectId: string,
     publicationId: string
   ): Promise<ExtractionRecordResponseDTO | null> {
-    const res = await fetch(`${API_BASE_URL}/v1/projects/${projectId}/extraction/records/${publicationId}`);
+    const res = await fetch(`${API_BASE_URL}/projects/${projectId}/extraction/records/${publicationId}`);
     if (res.status === 404) return null;
     if (!res.ok) {
       const errData = await res.json().catch(() => ({ detail: res.statusText }));
@@ -276,7 +276,7 @@ export const extractionApi = {
     publicationId: string,
     payload: ExtractionRevisionSubmitRequestDTO
   ): Promise<ExtractionRevisionResponseDTO> {
-    const res = await fetch(`${API_BASE_URL}/v1/projects/${projectId}/extraction/records/${publicationId}/revisions`, {
+    const res = await fetch(`${API_BASE_URL}/projects/${projectId}/extraction/records/${publicationId}/revisions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
@@ -292,7 +292,7 @@ export const extractionApi = {
     projectId: string,
     publicationId: string
   ): Promise<ExtractionRevisionHistoryResponseDTO> {
-    const res = await fetch(`${API_BASE_URL}/v1/projects/${projectId}/extraction/records/${publicationId}/history`);
+    const res = await fetch(`${API_BASE_URL}/projects/${projectId}/extraction/records/${publicationId}/history`);
     if (res.status === 404) {
       return { project_id: projectId, publication_id: publicationId, total_revisions: 0, revisions: [] };
     }
@@ -308,7 +308,7 @@ export const extractionApi = {
     reviewerId: string = ''
   ): Promise<ExtractionProgressResponseDTO> {
     const query = reviewerId ? `?reviewer_id=${encodeURIComponent(reviewerId)}` : '';
-    const res = await fetch(`${API_BASE_URL}/v1/projects/${projectId}/extraction/progress${query}`);
+    const res = await fetch(`${API_BASE_URL}/projects/${projectId}/extraction/progress${query}`);
     if (!res.ok) {
       const errData = await res.json().catch(() => ({ detail: res.statusText }));
       throw new ExtractionApiError(res.status, errData.detail || 'Failed to fetch extraction progress');
@@ -321,7 +321,7 @@ export const extractionApi = {
     reviewerId: string = ''
   ): Promise<ExtractionRecordListResponseDTO> {
     const query = reviewerId ? `?reviewer_id=${encodeURIComponent(reviewerId)}` : '';
-    const res = await fetch(`${API_BASE_URL}/v1/projects/${projectId}/extraction/records${query}`);
+    const res = await fetch(`${API_BASE_URL}/projects/${projectId}/extraction/records${query}`);
     if (!res.ok) {
       const errData = await res.json().catch(() => ({ detail: res.statusText }));
       throw new ExtractionApiError(res.status, errData.detail || 'Failed to fetch extraction records queue');
@@ -334,7 +334,7 @@ export const extractionApi = {
     reviewerId: string = ''
   ): Promise<ExtractionMatrixResponseDTO> {
     const query = reviewerId ? `?reviewer_id=${encodeURIComponent(reviewerId)}` : '';
-    const res = await fetch(`${API_BASE_URL}/v1/projects/${projectId}/extraction/matrix${query}`);
+    const res = await fetch(`${API_BASE_URL}/projects/${projectId}/extraction/matrix${query}`);
     if (!res.ok) {
       const errData = await res.json().catch(() => ({ detail: res.statusText }));
       throw new ExtractionApiError(res.status, errData.detail || 'Failed to fetch extraction matrix');

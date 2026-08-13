@@ -214,7 +214,7 @@ def test_get_duplicate_groups_returns_venue_and_provenance() -> None:
 
 
 def test_get_duplicate_groups_lean_energy_endpoint_returns_200() -> None:
-    response = client.get("/projects/lean_energy/duplicate-groups")
+    response = client.get("/api/v1/projects/lean_energy/duplicate-groups")
     assert response.status_code == 200
 
     data = response.json()
@@ -226,7 +226,7 @@ def test_get_duplicate_groups_lean_energy_endpoint_returns_200() -> None:
 
 
 def test_get_duplicate_groups_ai_architecture_endpoint_returns_200_with_empty_groups() -> None:
-    response = client.get("/projects/ai_architecture/duplicate-groups")
+    response = client.get("/api/v1/projects/ai_architecture/duplicate-groups")
     assert response.status_code == 200
 
     data = response.json()
@@ -236,7 +236,7 @@ def test_get_duplicate_groups_ai_architecture_endpoint_returns_200_with_empty_gr
 
 
 def test_get_duplicate_groups_unknown_project_returns_404() -> None:
-    response = client.get("/projects/unknown_project_123/duplicate-groups")
+    response = client.get("/api/v1/projects/unknown_project_123/duplicate-groups")
     assert response.status_code == 404
     assert "not found" in response.json()["detail"].lower()
 
@@ -245,11 +245,11 @@ def test_get_duplicate_groups_unknown_project_returns_404() -> None:
 
 
 def test_post_decision_approve_with_rationale() -> None:
-    res = client.get("/projects/lean_energy/duplicate-groups")
+    res = client.get("/api/v1/projects/lean_energy/duplicate-groups")
     group_id = res.json()["groups"][0]["group_id"]
 
     response = client.post(
-        f"/projects/lean_energy/duplicate-groups/{group_id}/decision",
+        f"/api/v1/projects/lean_energy/duplicate-groups/{group_id}/decision",
         json={
             "decision": "APPROVE",
             "rationale": "  Verified full text agreement between sources.  ",
@@ -264,7 +264,7 @@ def test_post_decision_approve_with_rationale() -> None:
     }
 
     # Verify GET decision returns APPROVE and rationale
-    get_res = client.get(f"/projects/lean_energy/duplicate-groups/{group_id}/decision")
+    get_res = client.get(f"/api/v1/projects/lean_energy/duplicate-groups/{group_id}/decision")
     assert get_res.status_code == 200
     assert get_res.json() == {
         "project_id": "lean_energy",
@@ -275,11 +275,11 @@ def test_post_decision_approve_with_rationale() -> None:
 
 
 def test_post_decision_without_rationale() -> None:
-    res = client.get("/projects/lean_energy/duplicate-groups")
+    res = client.get("/api/v1/projects/lean_energy/duplicate-groups")
     group_id = res.json()["groups"][0]["group_id"]
 
     response = client.post(
-        f"/projects/lean_energy/duplicate-groups/{group_id}/decision",
+        f"/api/v1/projects/lean_energy/duplicate-groups/{group_id}/decision",
         json={"decision": "REJECT"},
     )
     assert response.status_code == 200
@@ -292,11 +292,11 @@ def test_post_decision_without_rationale() -> None:
 
 
 def test_empty_and_whitespace_rationale_becomes_none() -> None:
-    res = client.get("/projects/lean_energy/duplicate-groups")
+    res = client.get("/api/v1/projects/lean_energy/duplicate-groups")
     group_id = res.json()["groups"][0]["group_id"]
 
     response = client.post(
-        f"/projects/lean_energy/duplicate-groups/{group_id}/decision",
+        f"/api/v1/projects/lean_energy/duplicate-groups/{group_id}/decision",
         json={"decision": "APPROVE", "rationale": "   \n\t  "},
     )
     assert response.status_code == 200
@@ -304,13 +304,13 @@ def test_empty_and_whitespace_rationale_becomes_none() -> None:
 
 
 def test_rationale_exceeding_max_length_returns_422() -> None:
-    res = client.get("/projects/lean_energy/duplicate-groups")
+    res = client.get("/api/v1/projects/lean_energy/duplicate-groups")
     group_id = res.json()["groups"][0]["group_id"]
 
     overlong_rationale = "A" * 1001
 
     response = client.post(
-        f"/projects/lean_energy/duplicate-groups/{group_id}/decision",
+        f"/api/v1/projects/lean_energy/duplicate-groups/{group_id}/decision",
         json={"decision": "APPROVE", "rationale": overlong_rationale},
     )
     assert response.status_code == 422
@@ -318,19 +318,19 @@ def test_rationale_exceeding_max_length_returns_422() -> None:
 
 
 def test_overwrite_decision_and_rationale() -> None:
-    res = client.get("/projects/lean_energy/duplicate-groups")
+    res = client.get("/api/v1/projects/lean_energy/duplicate-groups")
     group_id = res.json()["groups"][0]["group_id"]
 
     # 1. First Approve with rationale
     client.post(
-        f"/projects/lean_energy/duplicate-groups/{group_id}/decision",
+        f"/api/v1/projects/lean_energy/duplicate-groups/{group_id}/decision",
         json={"decision": "APPROVE", "rationale": "First decision rationale"},
     )
-    assert client.get(f"/projects/lean_energy/duplicate-groups/{group_id}/decision").json()["rationale"] == "First decision rationale"
+    assert client.get(f"/api/v1/projects/lean_energy/duplicate-groups/{group_id}/decision").json()["rationale"] == "First decision rationale"
 
     # 2. Overwrite with Reject and new rationale
     response = client.post(
-        f"/projects/lean_energy/duplicate-groups/{group_id}/decision",
+        f"/api/v1/projects/lean_energy/duplicate-groups/{group_id}/decision",
         json={"decision": "REJECT", "rationale": "Updated decision rationale"},
     )
     assert response.status_code == 200
@@ -338,14 +338,14 @@ def test_overwrite_decision_and_rationale() -> None:
     assert response.json()["rationale"] == "Updated decision rationale"
 
     # 3. Read again
-    get_res = client.get(f"/projects/lean_energy/duplicate-groups/{group_id}/decision")
+    get_res = client.get(f"/api/v1/projects/lean_energy/duplicate-groups/{group_id}/decision")
     assert get_res.json()["decision"] == "REJECT"
     assert get_res.json()["rationale"] == "Updated decision rationale"
 
 
 def test_post_decision_invalid_group_returns_404() -> None:
     response = client.post(
-        "/projects/lean_energy/duplicate-groups/non_existent_group_uuid/decision",
+        "/api/v1/projects/lean_energy/duplicate-groups/non_existent_group_uuid/decision",
         json={"decision": "APPROVE"},
     )
     assert response.status_code == 404
@@ -353,27 +353,27 @@ def test_post_decision_invalid_group_returns_404() -> None:
 
 
 def test_get_decision_invalid_group_returns_404() -> None:
-    response = client.get("/projects/lean_energy/duplicate-groups/non_existent_group_uuid/decision")
+    response = client.get("/api/v1/projects/lean_energy/duplicate-groups/non_existent_group_uuid/decision")
     assert response.status_code == 404
     assert "not found" in response.json()["detail"].lower()
 
 
 def test_post_decision_invalid_enum_returns_422() -> None:
-    res = client.get("/projects/lean_energy/duplicate-groups")
+    res = client.get("/api/v1/projects/lean_energy/duplicate-groups")
     group_id = res.json()["groups"][0]["group_id"]
 
     response = client.post(
-        f"/projects/lean_energy/duplicate-groups/{group_id}/decision",
+        f"/api/v1/projects/lean_energy/duplicate-groups/{group_id}/decision",
         json={"decision": "INVALID_DECISION_TYPE"},
     )
     assert response.status_code == 422
 
 
 def test_read_decision_defaults_to_pending() -> None:
-    res = client.get("/projects/lean_energy/duplicate-groups")
+    res = client.get("/api/v1/projects/lean_energy/duplicate-groups")
     group_id = res.json()["groups"][0]["group_id"]
 
-    get_res = client.get(f"/projects/lean_energy/duplicate-groups/{group_id}/decision")
+    get_res = client.get(f"/api/v1/projects/lean_energy/duplicate-groups/{group_id}/decision")
     assert get_res.status_code == 200
     assert get_res.json() == {
         "project_id": "lean_energy",

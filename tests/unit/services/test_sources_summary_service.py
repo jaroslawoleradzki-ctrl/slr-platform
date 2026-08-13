@@ -283,7 +283,7 @@ def test_sources_summary_http_endpoint(pub_repo, history_repo):
     client = TestClient(app)
 
     try:
-        response = client.get(f"/projects/{project_id}/sources-summary")
+        response = client.get(f"/api/v1/projects/{project_id}/sources-summary")
         assert response.status_code == 200
         data = response.json()
 
@@ -310,7 +310,7 @@ def test_sources_summary_http_endpoint(pub_repo, history_repo):
         assert "2026-08-05T10:00:00" in h["created_at"]
 
         # Test empty/not found project HTTP 404
-        response_404 = client.get("/projects/non_existent/sources-summary")
+        response_404 = client.get("/api/v1/projects/non_existent/sources-summary")
         assert response_404.status_code == 404
     finally:
         app.dependency_overrides.clear()
@@ -331,7 +331,7 @@ def test_sources_summary_http_endpoint_empty_project(pub_repo, history_repo):
     client = TestClient(app)
 
     try:
-        response = client.get(f"/projects/{project_id}/sources-summary")
+        response = client.get(f"/api/v1/projects/{project_id}/sources-summary")
         assert response.status_code == 200
         data = response.json()
 

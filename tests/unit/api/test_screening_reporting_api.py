@@ -97,9 +97,9 @@ def test_report_and_audit_are_reviewer_and_project_scoped(environment) -> None:
         )
     )
 
-    report = client.get("/projects/lean_energy/screening/report", params={"reviewer_id": "alice"})
+    report = client.get("/api/v1/projects/lean_energy/screening/report", params={"reviewer_id": "alice"})
     audit = client.get(
-        "/projects/lean_energy/screening/audit",
+        "/api/v1/projects/lean_energy/screening/audit",
         params={"reviewer_id": "alice", "outcome": "include"},
     )
 
@@ -129,7 +129,7 @@ def test_reviewer_roster_and_conflict_api(environment) -> None:
     )
     publications.add_publications("lean_energy", [paper])
     roster = client.put(
-        "/projects/lean_energy/screening/reviewers",
+        "/api/v1/projects/lean_energy/screening/reviewers",
         params={"stage": "title_abstract"},
         json={"reviewer_ids": ["alice", "bob"]},
     )
@@ -150,7 +150,7 @@ def test_reviewer_roster_and_conflict_api(environment) -> None:
         )
     )
     conflicts = client.get(
-        "/projects/lean_energy/screening/conflicts",
+        "/api/v1/projects/lean_energy/screening/conflicts",
         params={"stage": "title_abstract", "status": "conflict", "viewer_reviewer_id": "alice"},
     )
     assert conflicts.status_code == 200
@@ -159,7 +159,7 @@ def test_reviewer_roster_and_conflict_api(environment) -> None:
     assert len(conflicts.json()["items"][0]["latest_decisions"]) == 2
 
     blind = client.get(
-        "/projects/lean_energy/screening/conflicts",
+        "/api/v1/projects/lean_energy/screening/conflicts",
         params={"stage": "title_abstract", "viewer_reviewer_id": "carol"},
     )
     assert blind.status_code == 200
@@ -223,7 +223,7 @@ def test_unified_audit_orders_pages_and_marks_stale_resolution(environment) -> N
     )
 
     current = client.get(
-        "/projects/lean_energy/screening/audit",
+        "/api/v1/projects/lean_energy/screening/audit",
         params={"stage": "title_abstract", "publication_id": str(paper.record_id)},
     )
     assert current.status_code == 200
@@ -243,7 +243,7 @@ def test_unified_audit_orders_pages_and_marks_stale_resolution(environment) -> N
         )
     )
     stale = client.get(
-        "/projects/lean_energy/screening/audit",
+        "/api/v1/projects/lean_energy/screening/audit",
         params={"stage": "title_abstract", "publication_id": str(paper.record_id)},
     )
     assert stale.status_code == 200
@@ -254,11 +254,11 @@ def test_unified_audit_orders_pages_and_marks_stale_resolution(environment) -> N
     assert items[0]["decision"]["rationale"] == "Changed after adjudication"
 
     first_page = client.get(
-        "/projects/lean_energy/screening/audit",
+        "/api/v1/projects/lean_energy/screening/audit",
         params={"publication_id": str(paper.record_id), "offset": 0, "limit": 1},
     ).json()
     second_page = client.get(
-        "/projects/lean_energy/screening/audit",
+        "/api/v1/projects/lean_energy/screening/audit",
         params={"publication_id": str(paper.record_id), "offset": 1, "limit": 1},
     ).json()
     assert first_page["total"] == 4
@@ -266,7 +266,7 @@ def test_unified_audit_orders_pages_and_marks_stale_resolution(environment) -> N
     assert second_page["items"][0]["event_type"] == "RESOLUTION"
 
     full_text = client.get(
-        "/projects/lean_energy/screening/audit",
+        "/api/v1/projects/lean_energy/screening/audit",
         params={"stage": "full_text", "publication_id": str(paper.record_id)},
     )
     assert full_text.status_code == 200
@@ -317,7 +317,7 @@ def test_reporting_counts_current_stale_and_project_outcomes(environment) -> Non
     decide(papers[3], "bob", ScreeningOutcome.UNCERTAIN, 100)
 
     metrics = client.get(
-        "/projects/lean_energy/screening/conflict-metrics",
+        "/api/v1/projects/lean_energy/screening/conflict-metrics",
         params={"stage": "title_abstract"},
     )
     assert metrics.status_code == 200
@@ -331,7 +331,7 @@ def test_reporting_counts_current_stale_and_project_outcomes(environment) -> Non
         "resolution_rate": pytest.approx(1 / 3),
     }
     report = client.get(
-        "/projects/lean_energy/screening/report",
+        "/api/v1/projects/lean_energy/screening/report",
         params={"reviewer_id": "alice"},
     )
     assert report.status_code == 200

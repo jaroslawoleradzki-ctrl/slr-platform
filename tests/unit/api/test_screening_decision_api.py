@@ -74,7 +74,7 @@ def test_api_record_and_get_screening_decision(service_env: ScreeningDecisionSer
     }
 
     # Generic public writes must not bypass the dedicated Full Text workflow.
-    response = client.post(f"/projects/{project_id}/screening/decisions", json=payload)
+    response = client.post(f"/api/v1/projects/{project_id}/screening/decisions", json=payload)
     assert response.status_code == 409
     assert response.json()["detail"]["code"] == "full_text_workflow_required"
 
@@ -94,7 +94,7 @@ def test_api_record_and_get_screening_decision(service_env: ScreeningDecisionSer
 
     # Get latest decision via GET
     latest_resp = client.get(
-        f"/projects/{project_id}/screening/decisions/latest",
+        f"/api/v1/projects/{project_id}/screening/decisions/latest",
         params={
             "publication_id": str(pub.record_id),
             "stage": "full_text",
@@ -106,7 +106,7 @@ def test_api_record_and_get_screening_decision(service_env: ScreeningDecisionSer
     assert latest_data["decision_id"] == decision_id
 
     # Get decision by ID via GET
-    get_resp = client.get(f"/projects/{project_id}/screening/decisions/{decision_id}")
+    get_resp = client.get(f"/api/v1/projects/{project_id}/screening/decisions/{decision_id}")
     assert get_resp.status_code == 200
     get_data = get_resp.json()
     assert get_data["decision_id"] == decision_id
@@ -135,7 +135,7 @@ def test_api_list_decision_history(service_env: ScreeningDecisionService) -> Non
     )
 
     history_resp = client.get(
-        f"/projects/{project_id}/screening/decisions/history",
+        f"/api/v1/projects/{project_id}/screening/decisions/history",
         params={
             "publication_id": str(pub.record_id),
             "stage": "full_text",

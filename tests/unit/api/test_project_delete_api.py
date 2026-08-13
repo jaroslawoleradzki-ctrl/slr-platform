@@ -2,10 +2,10 @@
 Regression tests for Project hard delete API and CORS preflight behaviour.
 
 Coverage:
-- DELETE /projects/{project_id} returns 204 and removes the project.
-- DELETE /projects/{unknown} returns 404.
+- DELETE /api/v1/projects/{project_id} returns 204 and removes the project.
+- DELETE /api/v1/projects/{unknown} returns 404.
 - After deletion the project is absent from LIST.
-- OPTIONS /projects/{project_id} with request-method DELETE from a permitted
+- OPTIONS /api/v1/projects/{project_id} with request-method DELETE from a permitted
   frontend origin returns 200 (not 400) — regression guard for the missing
   DELETE in CORS allow_methods.
 """
@@ -98,7 +98,7 @@ def _make_service(db_path: Path) -> SqliteProjectDeletionService:
 def created_project_id(repo: SqliteProjectRepository) -> str:
     """Creates a project via POST and returns its project_id."""
     resp = client.post(
-        "/projects",
+        "/api/v1/projects",
         json={"title": "Delete Test Project", "description": "For deletion", "protocol_version": "1.0"},
     )
     assert resp.status_code == 201
@@ -111,14 +111,14 @@ def created_project_id(repo: SqliteProjectRepository) -> str:
 
 def test_cors_preflight_delete_returns_200(repo: SqliteProjectRepository) -> None:
     """
-    OPTIONS /projects/{project_id} with Access-Control-Request-Method: DELETE
+    OPTIONS /api/v1/projects/{project_id} with Access-Control-Request-Method: DELETE
     from a permitted frontend origin must return 200, not 400.
 
     Regression guard: DELETE was missing from allow_methods in CORSMiddleware,
     causing the preflight to be rejected with 400 Bad Request.
     """
     resp = client.options(
-        "/projects/some-project-id",
+        "/api/v1/projects/some-project-id",
         headers={
             "Origin": FRONTEND_ORIGIN,
             "Access-Control-Request-Method": "DELETE",
@@ -142,13 +142,13 @@ def test_cors_preflight_delete_returns_200(repo: SqliteProjectRepository) -> Non
 def test_delete_project_returns_204(
     db_path: Path, repo: SqliteProjectRepository, created_project_id: str
 ) -> None:
-    """DELETE /projects/{project_id} returns 204 No Content for an existing project."""
-    response = client.delete(f"/projects/{created_project_id}")
+    """DELETE /api/v1/projects/{project_id} returns 204 No Content for an existing project."""
+    response = client.delete(f"/api/v1/projects/{created_project_id}")
     assert response.status_code == 204
     assert response.content == b""
 
     # Verify via API
-    get_resp = client.get(f"/projects/{created_project_id}")
+    get_resp = client.get(f"/api/v1/projects/{created_project_id}")
     assert get_resp.status_code == 404
 
 
@@ -157,14 +157,14 @@ def test_delete_project_removes_from_list(
 ) -> None:
     """After deletion the project must not appear in LIST (including archived)."""
     _make_service(db_path).delete_project(created_project_id)
-    list_resp = client.get("/projects", params={"include_archived": True})
+    list_resp = client.get("/api/v1/projects", params={"include_archived": True})
     assert list_resp.status_code == 200
     ids = [p["project_id"] for p in list_resp.json()["items"]]
     assert created_project_id not in ids
 
 
 def test_delete_nonexistent_project_returns_404(repo: SqliteProjectRepository, db_path: Path) -> None:
-    """DELETE /projects/{unknown} returns 404 when the project does not exist."""
+    """DELETE /api/v1/projects/{unknown} returns 404 when the project does not exist."""
     from app.repositories.project_repository import ProjectNotFoundError
     service = _make_service(db_path)
     with pytest.raises(ProjectNotFoundError):
@@ -187,8 +187,8 @@ def test_delete_is_idempotent_error_on_second_call(
 # ---------------------------------------------------------------------------
 
 def test_http_delete_nonexistent_project_returns_404(repo: SqliteProjectRepository) -> None:
-    """DELETE /projects/{unknown} via HTTP returns 404."""
-    resp = client.delete("/projects/nonexistent-xyz")
+    """DELETE /api/v1/projects/{unknown} via HTTP returns 404."""
+    resp = client.delete("/api/v1/projects/nonexistent-xyz")
     assert resp.status_code == 404
 
 
@@ -236,7 +236,7 @@ def test_delete_is_project_scoped_and_accepts_archived_project(
     db_path: Path, repo: SqliteProjectRepository, created_project_id: str
 ) -> None:
     other_response = client.post(
-        "/projects",
+        "/api/v1/projects",
         json={"title": "Project B", "description": "Must remain", "protocol_version": "1.0"},
     )
     assert other_response.status_code == 201
@@ -267,7 +267,7 @@ def test_delete_is_project_scoped_and_accepts_archived_project(
     reviewer_assignments.replace_active(other_id, ScreeningStage.TITLE_ABSTRACT, ["bob"])
     repo.archive(created_project_id)
 
-    response = client.delete(f"/projects/{created_project_id}")
+    response = client.delete(f"/api/v1/projects/{created_project_id}")
 
     assert response.status_code == 204
     assert repo.get(other_id).project_id == other_id

@@ -61,7 +61,7 @@ def api_client(tmp_path: Path):
 
 def test_list_tools_api(api_client):
     client, _, _ = api_client
-    response = client.get("/quality-assessment/tools")
+    response = client.get("/api/v1/quality-assessment/tools")
     assert response.status_code == 200
     data = response.json()
     assert len(data) >= 1
@@ -71,7 +71,7 @@ def test_list_tools_api(api_client):
 
 def test_list_templates_for_tool_api(api_client):
     client, tid, _ = api_client
-    response = client.get(f"/quality-assessment/tools/{CASP_INSPIRED_TOOL_ID}/templates")
+    response = client.get(f"/api/v1/quality-assessment/tools/{CASP_INSPIRED_TOOL_ID}/templates")
     assert response.status_code == 200
     data = response.json()
     assert len(data) >= 1
@@ -79,7 +79,7 @@ def test_list_templates_for_tool_api(api_client):
     assert str(tid) in template_ids
 
     # Missing tool -> 404
-    resp_missing = client.get("/quality-assessment/tools/missing_tool/templates")
+    resp_missing = client.get("/api/v1/quality-assessment/tools/missing_tool/templates")
     assert resp_missing.status_code == 404
 
 
@@ -87,7 +87,7 @@ def test_get_and_put_project_configuration_api(api_client):
     client, tid, _ = api_client
 
     # 1. Initially no config -> 404
-    get_resp = client.get("/projects/lean_energy/quality-assessment/configuration")
+    get_resp = client.get("/api/v1/projects/lean_energy/quality-assessment/configuration")
     assert get_resp.status_code == 404
 
     # 2. PUT valid configuration -> 200 OK
@@ -96,7 +96,7 @@ def test_get_and_put_project_configuration_api(api_client):
         "template_id": str(tid),
     }
     put_resp = client.put(
-        "/projects/lean_energy/quality-assessment/configuration", json=put_payload
+        "/api/v1/projects/lean_energy/quality-assessment/configuration", json=put_payload
     )
     assert put_resp.status_code == 200
     put_data = put_resp.json()
@@ -105,7 +105,7 @@ def test_get_and_put_project_configuration_api(api_client):
     assert put_data["template_id"] == str(tid)
 
     # 3. GET configuration -> 200 OK
-    get_resp2 = client.get("/projects/lean_energy/quality-assessment/configuration")
+    get_resp2 = client.get("/api/v1/projects/lean_energy/quality-assessment/configuration")
     assert get_resp2.status_code == 200
     assert get_resp2.json()["template_id"] == str(tid)
 
@@ -120,14 +120,14 @@ def test_put_project_configuration_validation_errors(api_client):
 
     # 1. Missing project -> 404
     put_resp_missing_proj = client.put(
-        "/projects/missing_project/quality-assessment/configuration",
+        "/api/v1/projects/missing_project/quality-assessment/configuration",
         json={"tool_id": CASP_INSPIRED_TOOL_ID, "template_id": str(tid)},
     )
     assert put_resp_missing_proj.status_code == 404
 
     # 2. Cross-tool template mismatch -> 422 Unprocessable Content
     put_resp_mismatch = client.put(
-        "/projects/lean_energy/quality-assessment/configuration",
+        "/api/v1/projects/lean_energy/quality-assessment/configuration",
         json={"tool_id": "jbi_tool", "template_id": str(tid)}, # Template tid belongs to CASP, NOT JBI
     )
     assert put_resp_mismatch.status_code == 422

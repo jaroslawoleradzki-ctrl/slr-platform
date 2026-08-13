@@ -79,26 +79,26 @@ def test_full_text_api_workflow_and_generic_bypass_block(environment) -> None:
         )
     )
     assert client.get(
-        "/projects/lean_energy/screening/full-text", params={"reviewer_id": "alice"}
+        "/api/v1/projects/lean_energy/screening/full-text", params={"reviewer_id": "alice"}
     ).json()["ready"] is True
     availability = client.put(
-        f"/projects/lean_energy/screening/full-text/records/{paper.record_id}/availability",
+        f"/api/v1/projects/lean_energy/screening/full-text/records/{paper.record_id}/availability",
         json={"reviewer_id": "alice", "status": "available", "external_url": "https://example.test/full"},
     )
     assert availability.status_code == 200
     invalid = client.post(
-        "/projects/lean_energy/screening/full-text/decisions",
+        "/api/v1/projects/lean_energy/screening/full-text/decisions",
         json={"publication_id": str(paper.record_id), "reviewer_id": "alice", "outcome": "exclude", "criterion_assessments": [{"criterion_id": str(criterion.criterion_id), "assessment_value": "not_met"}]},
     )
     assert invalid.status_code == 422
     saved = client.post(
-        "/projects/lean_energy/screening/full-text/decisions",
+        "/api/v1/projects/lean_energy/screening/full-text/decisions",
         json={"publication_id": str(paper.record_id), "reviewer_id": "alice", "outcome": "exclude", "criterion_assessments": [{"criterion_id": str(criterion.criterion_id), "assessment_value": "not_met"}], "exclusion_reason_criterion_ids": [str(criterion.criterion_id)]},
     )
     assert saved.status_code == 201
     assert saved.json()["exclusion_reason_criterion_ids"] == [str(criterion.criterion_id)]
     generic = client.post(
-        "/projects/lean_energy/screening/decisions",
+        "/api/v1/projects/lean_energy/screening/decisions",
         json={"publication_id": str(paper.record_id), "reviewer_id": "alice", "stage": "full_text", "outcome": "include"},
     )
     assert generic.status_code == 409
@@ -110,6 +110,6 @@ def test_other_reviewer_is_not_eligible(environment) -> None:
     paper = _publication()
     publications.add_publications("lean_energy", [paper])
     decisions.save(ScreeningDecision(project_id="lean_energy", publication_id=paper.record_id, stage=ScreeningStage.TITLE_ABSTRACT, outcome=ScreeningOutcome.INCLUDE, reviewer_id="bob"))
-    response = client.get("/projects/lean_energy/screening/full-text", params={"reviewer_id": "alice"})
+    response = client.get("/api/v1/projects/lean_energy/screening/full-text", params={"reviewer_id": "alice"})
     assert response.status_code == 200
     assert response.json()["readiness_status"] == "waiting_for_title_abstract"

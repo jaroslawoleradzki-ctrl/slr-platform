@@ -68,10 +68,10 @@ def test_put_then_get_returns_fully_serialized_strategy(tmp_path: Path) -> None:
     client = _client(tmp_path)
 
     put_response = client.put(
-        "/projects/lean_energy/search-strategy",
+        "/api/v1/projects/lean_energy/search-strategy",
         json=_payload(),
     )
-    get_response = client.get("/projects/lean_energy/search-strategy")
+    get_response = client.get("/api/v1/projects/lean_energy/search-strategy")
 
     assert put_response.status_code == 200
     assert get_response.status_code == 200
@@ -87,11 +87,11 @@ def test_repeated_put_preserves_server_assigned_strategy_identity(
     client = _client(tmp_path)
 
     first = client.put(
-        "/projects/lean_energy/search-strategy",
+        "/api/v1/projects/lean_energy/search-strategy",
         json=_payload(),
     )
     second = client.put(
-        "/projects/lean_energy/search-strategy",
+        "/api/v1/projects/lean_energy/search-strategy",
         json=_payload(),
     )
 
@@ -111,7 +111,7 @@ def test_put_validates_year_range_and_unknown_fields(tmp_path: Path) -> None:
     payload["unexpected"] = True
 
     response = client.put(
-        "/projects/lean_energy/search-strategy",
+        "/api/v1/projects/lean_energy/search-strategy",
         json=payload,
     )
 
@@ -122,7 +122,7 @@ def test_put_validates_year_range_and_unknown_fields(tmp_path: Path) -> None:
 def test_get_missing_strategy_returns_404(tmp_path: Path) -> None:
     client = _client(tmp_path)
 
-    response = client.get("/projects/lean_energy/search-strategy")
+    response = client.get("/api/v1/projects/lean_energy/search-strategy")
 
     assert response.status_code == 404
     app.dependency_overrides.clear()
@@ -132,7 +132,7 @@ def test_put_unknown_project_returns_404(tmp_path: Path) -> None:
     client = _client(tmp_path)
 
     response = client.put(
-        "/projects/unknown/search-strategy",
+        "/api/v1/projects/unknown/search-strategy",
         json=_payload(),
     )
 

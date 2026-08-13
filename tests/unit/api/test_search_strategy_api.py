@@ -168,7 +168,7 @@ def test_openalex_and_crossref_success_are_returned_without_deduplication() -> N
     )
 
     response = client.post(
-        "/projects/lean_energy/search-strategy/executions",
+        "/api/v1/projects/lean_energy/search-strategy/executions",
         json=_payload(),
     )
 
@@ -208,7 +208,7 @@ def test_one_provider_failure_returns_other_results_and_partial_error(
         for name in ("openalex", "crossref")
     ]
     response = _client_with_executor(_Executor(providers)).post(
-        "/projects/lean_energy/search-strategy/executions",
+        "/api/v1/projects/lean_energy/search-strategy/executions",
         json=_payload(),
     )
 
@@ -232,11 +232,11 @@ def test_execution_timestamp_is_real_and_remaining_response_is_stable() -> None:
     client = _client_with_executor(_Executor([_Provider("openalex", [publication])]))
     started_at = datetime.now(timezone.utc)
     first = client.post(
-        "/projects/lean_energy/search-strategy/executions",
+        "/api/v1/projects/lean_energy/search-strategy/executions",
         json=_payload(["openalex"]),
     ).json()
     second = client.post(
-        "/projects/lean_energy/search-strategy/executions",
+        "/api/v1/projects/lean_energy/search-strategy/executions",
         json=_payload(["openalex"]),
     ).json()
     finished_at = datetime.now(timezone.utc)
@@ -276,7 +276,7 @@ def test_openalex_metadata_is_exposed_without_confusing_total_and_returned() -> 
             ]
         )
     ).post(
-        "/projects/lean_energy/search-strategy/executions",
+        "/api/v1/projects/lean_energy/search-strategy/executions",
         json=_payload(["openalex"]),
     )
 
@@ -299,7 +299,7 @@ def test_cursor_is_optional_and_forwarded_to_provider() -> None:
     payload["cursor"] = "next-page"
 
     response = _client_with_executor(executor).post(
-        "/projects/lean_energy/search-strategy/executions",
+        "/api/v1/projects/lean_energy/search-strategy/executions",
         json=payload,
     )
 
@@ -312,13 +312,13 @@ def test_cursor_is_optional_and_forwarded_to_provider() -> None:
 def test_unknown_project_and_invalid_strategy_are_rejected() -> None:
     client = _client_with_executor(_Executor([], missing_project=True))
     missing = client.post(
-        "/projects/not-a-project/search-strategy/executions",
+        "/api/v1/projects/not-a-project/search-strategy/executions",
         json=_payload(),
     )
     invalid_payload = _payload()
     invalid_payload["providers"] = []
     invalid = client.post(
-        "/projects/lean_energy/search-strategy/executions",
+        "/api/v1/projects/lean_energy/search-strategy/executions",
         json=invalid_payload,
     )
 
@@ -374,7 +374,7 @@ def test_new_project_accepts_frontend_search_contract_and_preserves_snapshot_met
     client = TestClient(app)
 
     created = client.post(
-        "/projects",
+        "/api/v1/projects",
         json={"title": "Frontend search contract", "description": None, "protocol_version": "1.0"},
     )
     assert created.status_code == 201
@@ -382,7 +382,7 @@ def test_new_project_accepts_frontend_search_contract_and_preserves_snapshot_met
 
     # This is the canonical payload emitted by SearchStrategyPage/projectApi.
     saved = client.put(
-        f"/projects/{project_id}/search-strategy",
+        f"/api/v1/projects/{project_id}/search-strategy",
         json={
             "name": "Fresh strategy",
             "description": None,
@@ -407,7 +407,7 @@ def test_new_project_accepts_frontend_search_contract_and_preserves_snapshot_met
     assert saved.json()["providers"] == ["openalex"]
 
     executed = client.post(
-        f"/projects/{project_id}/search-strategy/executions",
+        f"/api/v1/projects/{project_id}/search-strategy/executions",
         json={
             "publication_year_from": 2024,
             "publication_year_to": 2024,
@@ -423,7 +423,7 @@ def test_new_project_accepts_frontend_search_contract_and_preserves_snapshot_met
     assert record["source_id"] == "W-fresh"
 
     imported = client.post(
-        f"/projects/{project_id}/search-results/imports",
+        f"/api/v1/projects/{project_id}/search-results/imports",
         json={"records": [record]},
     )
     assert imported.status_code == 200
@@ -469,11 +469,11 @@ def test_first_and_repeated_import_are_idempotent() -> None:
     record = _import_record(number=1, source_id="W-new")
 
     first = client.post(
-        "/projects/lean_energy/search-results/imports",
+        "/api/v1/projects/lean_energy/search-results/imports",
         json={"records": [record]},
     )
     repeated = client.post(
-        "/projects/lean_energy/search-results/imports",
+        "/api/v1/projects/lean_energy/search-results/imports",
         json={"records": [record]},
     )
 
@@ -501,11 +501,11 @@ def test_imports_multiple_new_records_and_mixed_new_existing_records() -> None:
     third = _import_record(number=3)
 
     multiple = client.post(
-        "/projects/ai_architecture/search-results/imports",
+        "/api/v1/projects/ai_architecture/search-results/imports",
         json={"records": [first, second]},
     )
     mixed = client.post(
-        "/projects/ai_architecture/search-results/imports",
+        "/api/v1/projects/ai_architecture/search-results/imports",
         json={"records": [second, third]},
     )
 
@@ -530,11 +530,11 @@ def test_source_identity_is_isolated_by_project_and_provider() -> None:
     )
 
     lean = client.post(
-        "/projects/lean_energy/search-results/imports",
+        "/api/v1/projects/lean_energy/search-results/imports",
         json={"records": [openalex, crossref]},
     )
     other_project = client.post(
-        "/projects/ai_architecture/search-results/imports",
+        "/api/v1/projects/ai_architecture/search-results/imports",
         json={"records": [openalex]},
     )
 
@@ -549,11 +549,11 @@ def test_empty_and_missing_project_imports() -> None:
     client = _client_with_repository(repository)
 
     empty = client.post(
-        "/projects/lean_energy/search-results/imports",
+        "/api/v1/projects/lean_energy/search-results/imports",
         json={"records": []},
     )
     missing = client.post(
-        "/projects/missing/search-results/imports",
+        "/api/v1/projects/missing/search-results/imports",
         json={"records": []},
     )
 
@@ -574,7 +574,7 @@ def test_invalid_payload_does_not_partially_write() -> None:
     invalid = {**_import_record(number=2), "authors": [" "]}
 
     response = client.post(
-        "/projects/lean_energy/search-results/imports",
+        "/api/v1/projects/lean_energy/search-results/imports",
         json={"records": [valid, invalid]},
     )
 
@@ -586,10 +586,10 @@ def test_real_browser_flow_lean_energy_strategy_execution_and_import(tmp_path: P
     """Regression test recreating the exact browser flow for project lean_energy.
 
     Flow:
-    1. PUT /projects/lean_energy/search-strategy -> 200
-    2. POST /projects/lean_energy/search-strategy/executions -> 200
+    1. PUT /api/v1/projects/lean_energy/search-strategy -> 200
+    2. POST /api/v1/projects/lean_energy/search-strategy/executions -> 200
     3. Rejection of uncorrected payload with extra 'providers' field -> 422
-    4. POST /projects/lean_energy/search-results/imports with corrected frontend payload -> 200
+    4. POST /api/v1/projects/lean_energy/search-results/imports with corrected frontend payload -> 200
     5. Verification of SearchResultSnapshot.abstract -> Publication.abstract preservation.
     """
     database = tmp_path / "browser_flow_lean_energy.db"
@@ -631,7 +631,7 @@ def test_real_browser_flow_lean_energy_strategy_execution_and_import(tmp_path: P
 
     # Ensure lean_energy project exists
     created = client.post(
-        "/projects",
+        "/api/v1/projects",
         json={"title": "lean_energy", "description": "Lean Energy Project", "protocol_version": "1.0"},
     )
     assert created.status_code == 201
@@ -656,7 +656,7 @@ def test_real_browser_flow_lean_energy_strategy_execution_and_import(tmp_path: P
         "queries": [{"name": "Lean Energy", "expression": {"node_type": "term", "value": "lean energy"}}],
         "version": 1,
     }
-    put_res = client.put("/projects/lean_energy/search-strategy", json=strategy_payload)
+    put_res = client.put("/api/v1/projects/lean_energy/search-strategy", json=strategy_payload)
     assert put_res.status_code == 200
 
     # 2. POST execution = 200
@@ -669,7 +669,7 @@ def test_real_browser_flow_lean_energy_strategy_execution_and_import(tmp_path: P
         "providers": ["openalex"],
         "concept_groups": [{"id": "grp-1", "name": "Lean Energy", "terms": ["lean energy"]}],
     }
-    exec_res = client.post("/projects/lean_energy/search-strategy/executions", json=exec_payload)
+    exec_res = client.post("/api/v1/projects/lean_energy/search-strategy/executions", json=exec_payload)
     assert exec_res.status_code == 200
     results = exec_res.json()["results"]
     assert len(results) == 1
@@ -681,7 +681,7 @@ def test_real_browser_flow_lean_energy_strategy_execution_and_import(tmp_path: P
         "query": "(lean energy)",
         "providers": ["openalex"],  # Extra forbidden input
     }
-    bad_import_res = client.post("/projects/lean_energy/search-results/imports", json=bad_import_payload)
+    bad_import_res = client.post("/api/v1/projects/lean_energy/search-results/imports", json=bad_import_payload)
     assert bad_import_res.status_code == 422
     assert "Extra inputs are not permitted" in bad_import_res.text
 
@@ -692,7 +692,7 @@ def test_real_browser_flow_lean_energy_strategy_execution_and_import(tmp_path: P
         "provider": "openalex",
         "total_available": 1,
     }
-    import_res = client.post("/projects/lean_energy/search-results/imports", json=correct_import_payload)
+    import_res = client.post("/api/v1/projects/lean_energy/search-results/imports", json=correct_import_payload)
     assert import_res.status_code == 200
     import_data = import_res.json()
     assert import_data["project_id"] == "lean_energy"
