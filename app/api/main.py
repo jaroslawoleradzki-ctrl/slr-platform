@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -15,14 +16,22 @@ from app.api.routers import (
     screening,
     search_strategy,
 )
-from app.core.config import load_project_config
+from app.repositories.project_repository import default_project_repository
 
 
 def _application_version() -> str:
     return (Path(__file__).parents[2] / "VERSION").read_text(encoding="utf-8").strip()
 
 
-app = FastAPI(title="SLR Platform", version=_application_version())
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    default_project_repository()
+    yield
+
+
+app = FastAPI(title="SLR Platform", version=_application_version(), lifespan=lifespan)
+
+
 
 # Configure CORS for local development
 origins = [
