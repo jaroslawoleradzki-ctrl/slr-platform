@@ -68,8 +68,12 @@ describe('Deduplication Page Full Integration Workflow & Regression Suite', () =
       ],
     };
 
-    // 1. Mock API calls
-    vi.spyOn(projectApiService, 'getDuplicateGroups').mockResolvedValue(groupListResponse);
+    // 1. Mock API calls. Keep the request pending so the loading state is observable.
+    let resolveDuplicateGroups: (response: ApiDuplicateGroupListResponse) => void = () => {};
+    const duplicateGroupsPromise = new Promise<ApiDuplicateGroupListResponse>((resolve) => {
+      resolveDuplicateGroups = resolve;
+    });
+    vi.spyOn(projectApiService, 'getDuplicateGroups').mockReturnValue(duplicateGroupsPromise);
     vi.spyOn(projectApiService, 'getDuplicateGroupDecision').mockResolvedValue({
       project_id: 'lean_energy',
       group_id: 'grp-flow-999',
@@ -101,8 +105,9 @@ describe('Deduplication Page Full Integration Workflow & Regression Suite', () =
       </ProjectProvider>
     );
 
-    // 3. Verify loading state then initial group render
+    // 3. Verify loading state, then release the request and verify final render
     expect(await screen.findByText(/Pobieranie grup kandydatów z API backendu/i)).toBeInTheDocument();
+    resolveDuplicateGroups(groupListResponse);
     expect(await screen.findByText(/Pobrano 1 grup z API backendu/i)).toBeInTheDocument();
     expect(screen.getByText(/Porównanie Publikacji Obok Siebie/i)).toBeInTheDocument();
 

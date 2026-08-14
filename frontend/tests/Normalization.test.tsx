@@ -3,12 +3,20 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ProjectProvider } from '../src/context/ProjectContext';
 import { NormalizationPage } from '../src/pages/NormalizationPage';
 import { projectApiService } from '../src/services/api/projectApi';
+import { screeningApi, TitleAbstractOverview } from '../src/services/api/screeningApi';
 import { NormalizationResponse } from '../src/types';
 
 describe('Normalization page', () => {
   beforeEach(() => {
     localStorage.clear();
     vi.restoreAllMocks();
+    vi.spyOn(projectApiService, 'getSearchStrategy').mockResolvedValue(null);
+    vi.spyOn(projectApiService, 'getDuplicateGroups').mockResolvedValue({
+      project_id: 'lean_energy',
+      total_groups_count: 0,
+      groups: [],
+    });
+    vi.spyOn(screeningApi, 'getOverview').mockResolvedValue({} as TitleAbstractOverview);
     vi.spyOn(projectApiService, 'getProjects').mockResolvedValue([
       {
         id: 'lean_energy',
@@ -128,6 +136,7 @@ describe('Normalization page', () => {
 
     renderPage();
 
+    await screen.findByText('DOI normalized: 1');
     const reRunButton = await screen.findByRole('button', { name: /Uruchom.*normalizację/i });
     expect(reRunButton).toBeInTheDocument();
     expect(reRunButton).not.toBeDisabled();
