@@ -316,3 +316,128 @@ class MatrixCellDetail(BaseModel):
     direction_distribution: dict[str, int] = Field(default_factory=dict)
     evidence_character_distribution: dict[str, int] = Field(default_factory=dict)
     relations: list[AnalyticalRelationDetail] = Field(default_factory=list)
+
+
+class MechanismOriginType(StrEnum):
+    """Origin attribution for mechanism pathways."""
+
+    SOURCE_REPORTED = "source_reported"
+    REVIEW_SYNTHESIZED = "review_synthesized"
+
+
+class AnalyticalMechanismCategory(BaseModel):
+    """Standardized analytical mechanism taxonomy category."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    category_id: str = Field(min_length=1)
+    name: str = Field(min_length=1)
+    project_id: str = Field(default="", min_length=0)
+    description: str | None = None
+    display_order: int = 0
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+    @field_validator("created_at", "updated_at")
+    @classmethod
+    def validate_tz(cls, v: datetime) -> datetime:
+        if v.tzinfo is None or v.utcoffset() is None:
+            raise ValueError("timestamps must be timezone-aware")
+        return v
+
+
+class MechanismPathway(BaseModel):
+    """Pathway linking a Lean–EE analytical relation to an analytical mechanism category."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    pathway_id: UUID = Field(default_factory=uuid4)
+    project_id: str = Field(min_length=1)
+    analytical_relation_id: UUID
+    group_item_id: UUID
+    publication_id: UUID
+    latest_revision_id: UUID
+    source_mechanism_text: str | None = None
+    analytical_mechanism_category_id: str | None = None
+    is_review_synthesized: bool = False
+    approval_state: ClassificationApprovalState = ClassificationApprovalState.PENDING
+    approved_by: str | None = None
+    approved_at: datetime | None = None
+    notes: str | None = None
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+    @field_validator("approved_at")
+    @classmethod
+    def validate_approved_at(cls, v: datetime | None) -> datetime | None:
+        if v is not None and (v.tzinfo is None or v.utcoffset() is None):
+            raise ValueError("approved_at must be timezone-aware")
+        return v
+
+    @field_validator("created_at", "updated_at")
+    @classmethod
+    def validate_tz(cls, v: datetime) -> datetime:
+        if v.tzinfo is None or v.utcoffset() is None:
+            raise ValueError("timestamps must be timezone-aware")
+        return v
+
+
+class MechanismPathwayDetail(BaseModel):
+    """Detailed view of a mechanism pathway with relation, publication, and QA provenance."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    pathway: MechanismPathway
+    publication_title: str | None = None
+    publication_year: int | None = None
+    source_practice: str = Field(min_length=1)
+    source_effect: str = Field(min_length=1)
+    analytical_lean_category_id: str | None = None
+    analytical_lean_category_name: str | None = None
+    analytical_energy_category_id: str | None = None
+    analytical_energy_category_name: str | None = None
+    analytical_mechanism_category_name: str | None = None
+    direction: RelationDirection = RelationDirection.CANNOT_DETERMINE
+    evidence_character: EvidenceCharacter = EvidenceCharacter.EMPIRICAL
+    qa_profile: QAProfileSummary | None = None
+
+
+class MechanismSynthesisPathway(BaseModel):
+    """Aggregated synthesis chain: Lean Category -> Mechanism Category -> Energy Category."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    lean_category_id: str
+    lean_category_name: str
+    mechanism_category_id: str
+    mechanism_category_name: str
+    energy_category_id: str
+    energy_category_name: str
+    pathway_count: int = Field(ge=0, default=0)
+    publication_count: int = Field(ge=0, default=0)
+    relation_count: int = Field(ge=0, default=0)
+    pathways: list[MechanismPathwayDetail] = Field(default_factory=list)
+
+
+class MechanismWorkspaceStats(BaseModel):
+    """Statistical summary of mechanism synthesis progress."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    total_pathways: int = Field(ge=0, default=0)
+    mapped_count: int = Field(ge=0, default=0)
+    unmapped_count: int = Field(ge=0, default=0)
+    approved_count: int = Field(ge=0, default=0)
+    total_publications: int = Field(ge=0, default=0)
+
+
+class MechanismWorkspaceData(BaseModel):
+    """Complete dataset for the Mechanism Synthesis Workspace."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    project_id: str = Field(min_length=1)
+    categories: list[AnalyticalMechanismCategory] = Field(default_factory=list)
+    pathways: list[MechanismPathwayDetail] = Field(default_factory=list)
+    synthesis_chains: list[MechanismSynthesisPathway] = Field(default_factory=list)
+    stats: MechanismWorkspaceStats

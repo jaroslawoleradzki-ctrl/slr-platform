@@ -173,4 +173,66 @@ export const synthesisApi = {
       }
     );
   },
+
+  // Mechanism Synthesis & Pathways (Task 10.4)
+  getMechanismWorkspace: (projectId: string): Promise<any> => {
+    return request<any>(`/projects/${projectId}/synthesis/mechanisms`);
+  },
+
+  listMechanismCategories: (projectId: string): Promise<Category[]> => {
+    return request<Category[]>(`/projects/${projectId}/synthesis/mechanisms/categories`);
+  },
+
+  createMechanismCategory: (
+    projectId: string,
+    data: { category_id: string; name: string; description?: string | null; display_order?: number }
+  ): Promise<Category> => {
+    return request<Category>(`/projects/${projectId}/synthesis/mechanisms/categories`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  updateMechanismCategory: (
+    projectId: string,
+    categoryId: string,
+    data: { name: string; description?: string | null; display_order?: number }
+  ): Promise<Category> => {
+    return request<Category>(`/projects/${projectId}/synthesis/mechanisms/categories/${categoryId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  },
+
+  deleteMechanismCategory: (projectId: string, categoryId: string): Promise<void> => {
+    return request<void>(`/projects/${projectId}/synthesis/mechanisms/categories/${categoryId}`, {
+      method: 'DELETE',
+    });
+  },
+
+  assignMechanismPathway: (
+    projectId: string,
+    pathwayId: string,
+    data: { category_id: string | null; is_review_synthesized?: boolean; notes?: string | null }
+  ): Promise<any> => {
+    return request<any>(`/projects/${projectId}/synthesis/mechanisms/pathways/${pathwayId}/assign`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  approveMechanismPathway: (
+    projectId: string,
+    pathwayId: string,
+    reviewerId: string
+  ): Promise<any> => {
+    return request<any>(`/projects/${projectId}/synthesis/mechanisms/pathways/${pathwayId}/approve`, {
+      method: 'POST',
+      body: JSON.stringify({ reviewer_id: reviewerId }),
+    });
+  },
+
+  getMechanismSynthesis: (projectId: string): Promise<any[]> => {
+    return request<any[]>(`/projects/${projectId}/synthesis/mechanisms/synthesis`);
+  },
 };
