@@ -346,3 +346,99 @@ class MechanismWorkspaceDataDTO(BaseModel):
     pathways: list[MechanismPathwayDetailDTO]
     synthesis_chains: list[MechanismSynthesisPathwayDTO]
     stats: MechanismWorkspaceStatsDTO
+
+
+# -------------------------------------------------------------------------
+# Task 10.5: Context & Moderating Factors DTOs
+# -------------------------------------------------------------------------
+
+
+class ContextCategoryDTO(BaseModel):
+    """DTO representing a researcher-created context taxonomy category."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    category_id: str
+    name: str
+    project_id: str = ""
+    description: str | None = None
+    display_order: int = 0
+
+
+class CreateContextCategoryRequestDTO(BaseModel):
+    """Request payload for creating a new context category."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    category_id: str = Field(min_length=1)
+    name: str = Field(min_length=1)
+    description: str | None = None
+    display_order: int = 0
+
+
+class UpdateContextCategoryRequestDTO(BaseModel):
+    """Request payload for updating a context category."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1)
+    description: str | None = None
+    display_order: int = 0
+
+
+class ContextAssignmentDTO(BaseModel):
+    """DTO representing an assignment of source context evidence to a category."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    assignment_id: UUID
+    project_id: str
+    analytical_relation_id: UUID
+    group_item_id: UUID
+    publication_id: UUID
+    latest_revision_id: UUID
+    source_context_text: str
+    analytical_context_category_id: str | None = None
+    context_impact: str = Field(min_length=1)  # ENABLE, STRENGTHEN, WEAKEN, CONDITION
+    approval_state: str
+    approved_by: str | None = None
+    approved_at: datetime | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class AssignContextToRelationRequestDTO(BaseModel):
+    """Request payload for assigning source context evidence to a relation."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    category_id: str = Field(min_length=1)
+    context_impact: str = Field(min_length=1, pattern="^(ENABLE|STRENGTHEN|WEAKEN|CONDITION)$")
+
+
+class UnassignContextRequestDTO(BaseModel):
+    """Request payload for unassigning context from a relation."""
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class ContextSynthesisSummaryDTO(BaseModel):
+    """Deterministic context synthesis summary statistics."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    context_evidence_count: int
+    distinct_publication_count: int
+    distinct_analytical_relation_count: int
+    distinct_mechanism_pathway_count: int
+
+
+class ContextWorkspaceDataDTO(BaseModel):
+    """Complete dataset for the Context Synthesis Workspace."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    project_id: str
+    categories: list[ContextCategoryDTO]
+    assignments: list[ContextAssignmentDTO]
+    stats: ContextSynthesisSummaryDTO

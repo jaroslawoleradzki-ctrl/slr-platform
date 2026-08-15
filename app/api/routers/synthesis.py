@@ -3,20 +3,26 @@
 from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Query, Response, status
+from fastapi import APIRouter, Form, HTTPException, Query, Response, status
 
 from app.api.dto.synthesis import (
     AnalyticalRelationDetailDTO,
     AnalyticalRelationDTO,
     ApproveMechanismPathwayRequestDTO,
     ApproveTermMappingRequestDTO,
+    AssignContextToRelationRequestDTO,
     AssignMechanismCategoryRequestDTO,
     CategoryDTO,
     ClassificationWorkspaceStatsDTO,
     ClassifiedSourceTermDTO,
+    ContextAssignmentDTO,
+    ContextCategoryDTO,
+    ContextSynthesisSummaryDTO,
+    ContextWorkspaceDataDTO,
     ConvertedValueDTO,
     ConvertUnitRequestDTO,
     CreateCategoryRequestDTO,
+    CreateContextCategoryRequestDTO,
     MatrixCellDetailDTO,
     MatrixCellDTO,
     MechanismPathwayDetailDTO,
@@ -31,9 +37,13 @@ from app.api.dto.synthesis import (
     TerminologyClassificationWorkspaceDTO,
     TermMappingDTO,
     UpdateCategoryRequestDTO,
+    UpdateContextCategoryRequestDTO,
 )
 from app.domain.synthesis import (
     AnalyticalRelation,
+    ClassificationApprovalState,
+    ContextAssignment,
+    ContextCategory,
     ConvertedValue,
     MechanismPathway,
     MechanismPathwayDetail,
@@ -740,5 +750,242 @@ def get_mechanism_synthesis(projectId: str):
             )
             for c in data.synthesis_chains
         ]
+    except ProjectNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+
+
+# -------------------------------------------------------------------------
+# Task 10.5: Context & Moderating Factors Endpoints
+# -------------------------------------------------------------------------
+
+
+def _context_assignment_to_dto(a: ContextAssignment) -> ContextAssignmentDTO:
+    return ContextAssignmentDTO(
+        assignment_id=a.assignment_id,
+        project_id=a.project_id,
+        analytical_relation_id=a.analytical_relation_id,
+        group_item_id=a.group_item_id,
+        publication_id=a.publication_id,
+        latest_revision_id=a.latest_revision_id,
+        source_context_text=a.source_context_text,
+        analytical_context_category_id=a.analytical_context_category_id,
+        context_impact=a.context_impact,
+        approval_state=a.approval_state.value,
+        approved_by=a.approved_by,
+        approved_at=a.approved_at,
+        created_at=a.created_at,
+        updated_at=a.updated_at,
+    )
+
+
+def _context_category_to_dto(c: ContextCategory) -> ContextCategoryDTO:
+    return ContextCategoryDTO(
+        category_id=c.category_id,
+        name=c.name,
+        project_id=c.project_id,
+        description=c.description,
+        display_order=c.display_order,
+    )
+
+
+@router.get("/context/categories", response_model=list[ContextCategoryDTO])
+def list_context_categories(projectId: str):
+    """Lists all researcher-created context taxonomy categories for a project."""
+    from app.services.synthesis_context_service import default_synthesis_context_service
+    service = default_synthesis_context_service()
+    try:
+        categories = service.list_context_categories(project_id=projectId)
+        return [_context_category_to_dto(c) for c in categories]
+    except ProjectNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+
+
+@router.post("/context/categories", response_model=ContextCategoryDTO, status_code=status.HTTP_201_CREATED)
+def create_context_category(projectId: str, req: CreateContextCategoryRequestDTO):
+    """Creates a new researcher-created context taxonomy category."""
+    from app.services.synthesis_context_service import default_synthesis_context_service
+    service = default_synthesis_context_service()
+    try:
+        created = service.create_context_category(
+            category_id=req.category_id,
+            name=req.name,
+            project_id=projectId,
+            description=req.description,
+            display_order=req.display_order,
+        )
+        return _context_category_to_dto(created)
+    except ProjectNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+
+
+@router.put("/context/categories/{categoryId}", response_model=ContextCategoryDTO)
+def update_context_category(projectId: str, categoryId: str, req: UpdateContextCategoryRequestDTO):
+    """Updates an existing context category."""
+    from app.services.synthesis_context_service import default_synthesis_context_service
+    service = default_synthesis_context_service()
+    try:
+        updated = service.update_context_category(
+            project_id=projectId,
+            category_id=categoryId,
+            name=req.name,
+            description=req.description,
+            display_order=req.display_order,
+        )
+        return _context_category_to_dto(updated) if updated is not None else None
+    except (ProjectNotFoundError, CategoryNotFoundError) as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+
+
+@router.delete("/context/categories/{categoryId}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_context_category(projectId: str, categoryId: str):
+    """Deletes a context category, unclassifying linked context assignments."""
+    from app.services.synthesis_context_service import default_synthesis_context_service
+    service = default_synthesis_context_service()
+    try:
+        deleted = service.delete_context_category(project_id=projectId, category_id=categoryId)
+        if not deleted:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Context category '{categoryId}' not found",
+            )
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+    except ProjectNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+
+
+@router.post("/context/assign-by-group-item", response_model=ContextAssignmentDTO, status_code=status.HTTP_201_CREATED)
+def assign_context_by_group_item(
+    projectId: str,
+    categoryId: str = Form(...),
+    contextImpact: str = Form(...),
+    groupItemId: str = Form(...),
+    publicationId: str = Form(...),
+    latestRevisionId: str = Form(...),
+    sourceContextText: str = Form(...),
+):
+    """Assigns source context evidence to a relation identified by group_item_id.
+
+    Creates a new assignment or updates an existing one for the given group_item_id.
+    Uses form parameters for simplicity.
+    """
+
+    from app.services.synthesis_context_service import default_synthesis_context_service
+    service = default_synthesis_context_service()
+    try:
+        assigned = service.assign_context_to_relation(
+            project_id=projectId,
+            group_item_id=UUID(groupItemId),
+            publication_id=UUID(publicationId),
+            latest_revision_id=UUID(latestRevisionId),
+            source_context_text=sourceContextText,
+            category_id=categoryId,
+            context_impact=contextImpact,
+        )
+        return _context_assignment_to_dto(assigned)
+    except ProjectNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+
+
+@router.post("/context/synthesize", response_model=ContextWorkspaceDataDTO)
+def get_context_workspace(projectId: str):
+    """Retrieves complete dataset for the Context Synthesis Workspace."""
+    from app.services.synthesis_context_service import default_synthesis_context_service
+    service = default_synthesis_context_service()
+    try:
+        data = service.synchronize_context_from_extraction(project_id=projectId)
+        summary = ContextSynthesisSummaryDTO(
+            context_evidence_count=len(data.assignments),
+            distinct_publication_count=len({a.publication_id for a in data.assignments}),
+            distinct_analytical_relation_count=len({a.analytical_relation_id for a in data.assignments}),
+            distinct_mechanism_pathway_count=len({a.analytical_context_category_id for a in data.assignments if a.analytical_context_category_id is not None}),
+        )
+        return ContextWorkspaceDataDTO(
+            project_id=data.project_id,
+            categories=[_context_category_to_dto(c) for c in data.categories],
+            assignments=[_context_assignment_to_dto(a) for a in data.assignments],
+            stats=summary,
+        )
+    except ProjectNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+
+
+@router.put("/context/remap", response_model=ContextAssignmentDTO)
+def remap_context_assignment(linkId: str, projectId: str, req: AssignContextToRelationRequestDTO):
+    """Remaps a context assignment to a different category."""
+    from app.services.synthesis_context_service import default_synthesis_context_service
+    service = default_synthesis_context_service()
+    try:
+        remapped = service.remap_context_assignment(
+            link_id=linkId,
+            new_category_id=req.category_id,
+            project_id=projectId,
+        )
+        if remapped is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Context assignment not found",
+            )
+        return _context_assignment_to_dto(remapped)
+    except ProjectNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+
+
+@router.put("/context/unassign/{linkId}", response_model=ContextAssignmentDTO)
+def unassign_context(projectId: str, linkId: str):
+    """Unassigns context from a relation identified by link_id."""
+    from app.services.synthesis_context_service import default_synthesis_context_service
+    service = default_synthesis_context_service()
+    try:
+        unassigned = service.unassign_context_from_relation(link_id=linkId, project_id=projectId)
+        if not unassigned:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Context assignment not found",
+            )
+        # Fetch the link state after unassignment
+        from app.repositories.synthesis_context_repository import default_synthesis_context_repository
+        repo = default_synthesis_context_repository()
+        link = repo.get_link(linkId)
+        if link is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Link not found")
+        return _context_assignment_to_dto(ContextAssignment(
+            assignment_id=UUID(link["link_id"]),
+            project_id=link["project_id"],
+            analytical_relation_id=UUID(link["analytical_relation_id"]),
+            group_item_id=UUID(link["group_item_id"]),
+            publication_id=UUID(link["publication_id"]),
+            latest_revision_id=UUID(link["latest_revision_id"]),
+            source_context_text=link["source_context_text"],
+            analytical_context_category_id=link["analytical_context_category_id"],
+            context_impact=link["context_impact"],
+            approval_state=ClassificationApprovalState(link["approval_state"]),
+            approved_by=link.get("approved_by"),
+            approved_at=link.get("approved_at"),
+            created_at=link["created_at"],
+            updated_at=link["updated_at"],
+        ))
+    except ProjectNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+
+
+@router.get("/context/summary", response_model=ContextSynthesisSummaryDTO)
+def get_context_synthesis_summary(projectId: str):
+    """Calculates deterministic context synthesis summary statistics."""
+    from app.services.synthesis_context_service import default_synthesis_context_service
+    service = default_synthesis_context_service()
+    try:
+        summary = service.calculate_context_synthesis_summary(project_id=projectId)
+        return ContextSynthesisSummaryDTO(
+            context_evidence_count=summary["context_evidence_count"],
+            distinct_publication_count=summary["distinct_publication_count"],
+            distinct_analytical_relation_count=summary["distinct_analytical_relation_count"],
+            distinct_mechanism_pathway_count=summary["distinct_mechanism_pathway_count"],
+        )
     except ProjectNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
