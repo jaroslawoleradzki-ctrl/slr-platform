@@ -230,7 +230,7 @@ class TestExtractionConfigurationAPI:
         _configure_qa(api_context["db_path"])
 
         saved = client.post(
-            "/projects/proj_api/quality-assessment/assessments",
+            "/api/v1/projects/proj_api/quality-assessment/assessments",
             json={
                 "reviewer_id": "rev_1",
                 "publication_id": str(PUBLICATION_ID),

@@ -20,7 +20,7 @@ describe('extraction API routing', () => {
     await extractionApi.getExtractionEligibility('project-1', 'reviewer-1');
 
     expect(fetchMock).toHaveBeenCalledWith(
-      'http://localhost:8000/api/v1/projects/project-1/extraction/eligibility?reviewer_id=reviewer-1',
+      '/api/v1/projects/project-1/extraction/eligibility?reviewer_id=reviewer-1',
     );
   });
 

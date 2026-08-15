@@ -210,7 +210,7 @@ export class ExtractionApiError extends Error {
   }
 }
 
-const EXTRACTION_API_BASE_URL = `${API_BASE_URL}/api/v1/projects`;
+const EXTRACTION_API_BASE_URL = `${API_BASE_URL}/projects`;
 
 export const extractionApi = {
   async exportDataset(
