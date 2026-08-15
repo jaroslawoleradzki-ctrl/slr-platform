@@ -61,7 +61,8 @@ from app.services.extraction_execution_service import (
     default_extraction_execution_service,
 )
 
-router = APIRouter(prefix="/api/v1/projects", tags=["extraction"])
+catalog_router = APIRouter(prefix="/extraction-templates", tags=["extraction"])
+router = APIRouter(prefix="/projects", tags=["extraction"])
 
 
 def _get_config_service() -> ExtractionConfigurationService:
@@ -74,6 +75,39 @@ def _get_eligibility_service() -> ExtractionEligibilityService:
 
 def _get_execution_service() -> ExtractionExecutionService:
     return default_extraction_execution_service()
+
+
+@catalog_router.get(
+    "",
+    response_model=list[ExtractionTemplateVersion],
+    status_code=status.HTTP_200_OK,
+    summary="List active published data extraction template versions",
+)
+def list_extraction_template_versions() -> list[ExtractionTemplateVersion]:
+    return default_extraction_template_repository().list_active_published_versions()
+
+
+@catalog_router.get(
+    "/{template_id}/versions/{version}",
+    response_model=ExtractionTemplateVersion,
+    status_code=status.HTTP_200_OK,
+    summary="Get a data extraction template version",
+)
+def get_extraction_template_version(
+    template_id: str, version: str
+) -> ExtractionTemplateVersion:
+    try:
+        template_version = default_extraction_template_repository().get_version(
+            template_id, version
+        )
+    except ExtractionTemplateNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    if not template_version.is_active or not template_version.is_published:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Extraction template version '{template_id}' v{version} was not found.",
+        )
+    return template_version
 
 
 @router.get(

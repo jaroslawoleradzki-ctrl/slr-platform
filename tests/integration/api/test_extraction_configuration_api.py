@@ -139,6 +139,64 @@ def _save_qa_assessment(db_path, response_value: QualityAssessmentResponseValue)
 
 
 class TestExtractionConfigurationAPI:
+    def test_catalog_lists_active_published_versions_with_human_readable_schema(
+        self, api_client
+    ):
+        response = api_client.get("/api/v1/extraction-templates")
+
+        assert response.status_code == 200
+        api_template = next(
+            item for item in response.json() if item["template_id"] == "api_tmpl"
+        )
+        assert api_template["version"] == "1.0.0"
+        assert api_template["name"] == "v1"
+        assert api_template["publication_fields"][0]["name"] == "Field 1"
+        assert api_template["is_active"] is True
+        assert api_template["is_published"] is True
+
+    def test_catalog_reads_a_specific_published_version(self, api_client):
+        response = api_client.get(
+            "/api/v1/extraction-templates/api_tmpl/versions/1.0.0"
+        )
+
+        assert response.status_code == 200
+        assert response.json()["template_id"] == "api_tmpl"
+        assert response.json()["publication_fields"][0]["field_key"] == "field1"
+
+    def test_catalog_does_not_offer_unpublished_versions(self, api_context):
+        template_repo = SqliteExtractionTemplateRepository(api_context["db_path"])
+        template_repo.register_template(
+            ExtractionTemplate(template_id="draft_only", name="Draft only")
+        )
+        template_repo.register_version(
+            ExtractionTemplateVersion(
+                template_id="draft_only",
+                version="1.0.0",
+                name="Unpublished draft",
+                is_active=True,
+                is_published=False,
+            )
+        )
+
+        listing = api_context["client"].get("/api/v1/extraction-templates")
+        detail = api_context["client"].get(
+            "/api/v1/extraction-templates/draft_only/versions/1.0.0"
+        )
+
+        assert listing.status_code == 200
+        assert all(
+            item["template_id"] != "draft_only" for item in listing.json()
+        )
+        assert detail.status_code == 404
+
+    def test_catalog_returns_json_404_for_unknown_version(self, api_client):
+        response = api_client.get(
+            "/api/v1/extraction-templates/api_tmpl/versions/9.9.9"
+        )
+
+        assert response.status_code == 404
+        assert response.headers["content-type"].startswith("application/json")
+
     def test_get_unconfigured_project_returns_404(self, api_client):
         response = api_client.get("/api/v1/projects/proj_api/extraction/configuration")
         assert response.status_code == 404
@@ -230,7 +288,7 @@ class TestExtractionConfigurationAPI:
         _configure_qa(api_context["db_path"])
 
         saved = client.post(
-            "/projects/proj_api/quality-assessment/assessments",
+            "/api/v1/projects/proj_api/quality-assessment/assessments",
             json={
                 "reviewer_id": "rev_1",
                 "publication_id": str(PUBLICATION_ID),

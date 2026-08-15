@@ -1,7 +1,10 @@
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from app.api.routers import (
     deduplication,
@@ -13,14 +16,31 @@ from app.api.routers import (
     screening,
     search_strategy,
 )
-from app.core.config import load_project_config
+from app.repositories.project_repository import default_project_repository
 
 
 def _application_version() -> str:
     return (Path(__file__).parents[2] / "VERSION").read_text(encoding="utf-8").strip()
 
 
-app = FastAPI(title="SLR Platform", version=_application_version())
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    default_project_repository()
+    yield
+
+
+API_V1_PREFIX = "/api/v1"
+
+app = FastAPI(
+    title="SLR Platform",
+    version=_application_version(),
+    lifespan=lifespan,
+    docs_url="/api/docs",
+    redoc_url="/api/redoc",
+    openapi_url="/api/openapi.json",
+)
+
+
 
 # Configure CORS for local development
 origins = [
@@ -38,26 +58,52 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(projects.router)
-app.include_router(deduplication.router)
-app.include_router(search_strategy.router)
-app.include_router(normalization.router)
-app.include_router(screening.router)
-app.include_router(full_text_screening.router)
-app.include_router(quality_assessment.router)
-app.include_router(extraction.router)
+app.include_router(projects.router, prefix=API_V1_PREFIX)
+app.include_router(deduplication.router, prefix=API_V1_PREFIX)
+app.include_router(search_strategy.router, prefix=API_V1_PREFIX)
+app.include_router(normalization.router, prefix=API_V1_PREFIX)
+app.include_router(screening.router, prefix=API_V1_PREFIX)
+app.include_router(full_text_screening.router, prefix=API_V1_PREFIX)
+app.include_router(quality_assessment.router, prefix=API_V1_PREFIX)
+app.include_router(extraction.catalog_router, prefix=API_V1_PREFIX)
+app.include_router(extraction.router, prefix=API_V1_PREFIX)
 
 
-@app.get("/")
-def root():
-    return {"name": "SLR Platform", "version": _application_version()}
-
-
-@app.get("/health")
+@app.get("/api/health")
 def health():
     return {"status": "ok"}
 
 
-@app.get("/projects/lean_energy")
-def project():
-    return load_project_config("projects/lean_energy/config.yaml").model_dump()
+@app.get("/api/version")
+def api_version():
+    return {"name": "SLR Platform", "version": _application_version()}
+
+
+_FRONTEND_DIST = Path(__file__).parents[2] / "frontend" / "dist"
+
+if (_FRONTEND_DIST / "assets").is_dir():
+    app.mount("/assets", StaticFiles(directory=_FRONTEND_DIST / "assets"), name="assets")
+
+
+@app.get("/")
+def root():
+    index_file = _FRONTEND_DIST / "index.html"
+    if index_file.is_file():
+        return FileResponse(index_file)
+    return {"name": "SLR Platform", "version": _application_version()}
+
+
+@app.get("/{full_path:path}")
+def spa_fallback(full_path: str):
+    if full_path.startswith("api/"):
+        return JSONResponse(status_code=404, content={"detail": "Not Found"})
+
+    file_path = _FRONTEND_DIST / full_path
+    if file_path.is_file():
+        return FileResponse(file_path)
+
+    index_file = _FRONTEND_DIST / "index.html"
+    if index_file.is_file():
+        return FileResponse(index_file)
+
+    return JSONResponse(status_code=404, content={"detail": "Not Found"})

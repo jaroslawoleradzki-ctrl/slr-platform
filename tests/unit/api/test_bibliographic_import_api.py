@@ -31,7 +31,7 @@ def teardown_function() -> None:
 def test_uploads_ris_and_persists_publications(tmp_path: Path) -> None:
     repository = DemoProjectPublicationRepository()
     response = _client(repository, tmp_path / "ris.db").post(
-        "/projects/ai_architecture/imports",
+        "/api/v1/projects/ai_architecture/imports",
         files={
             "file": (
                 "records.ris",
@@ -52,7 +52,7 @@ def test_uploads_ris_and_persists_publications(tmp_path: Path) -> None:
 def test_uploads_bibtex_and_persists_publications(tmp_path: Path) -> None:
     repository = DemoProjectPublicationRepository()
     response = _client(repository, tmp_path / "bib.db").post(
-        "/projects/ai_architecture/imports",
+        "/api/v1/projects/ai_architecture/imports",
         files={
             "file": (
                 "records.bib",
@@ -72,15 +72,15 @@ def test_rejects_unsupported_extension_empty_file_and_invalid_content(tmp_path: 
     client = _client(repository, tmp_path / "invalid.db")
 
     unsupported = client.post(
-        "/projects/ai_architecture/imports",
+        "/api/v1/projects/ai_architecture/imports",
         files={"file": ("records.txt", "content", "text/plain")},
     )
     empty = client.post(
-        "/projects/ai_architecture/imports",
+        "/api/v1/projects/ai_architecture/imports",
         files={"file": ("empty.ris", "   ", "text/plain")},
     )
     invalid = client.post(
-        "/projects/ai_architecture/imports",
+        "/api/v1/projects/ai_architecture/imports",
         files={"file": ("invalid.bib", "@article{x, year={2024}}", "text/plain")},
     )
 
@@ -97,9 +97,9 @@ def test_missing_file_and_project_scope_are_validated(tmp_path: Path) -> None:
     repository = DemoProjectPublicationRepository()
     client = _client(repository, tmp_path / "scope.db")
 
-    missing = client.post("/projects/ai_architecture/imports")
+    missing = client.post("/api/v1/projects/ai_architecture/imports")
     unknown_project = client.post(
-        "/projects/missing/imports",
+        "/api/v1/projects/missing/imports",
         files={"file": ("records.ris", "TY  - JOUR\nTI  - x\nER  - \n", "text/plain")},
     )
 
@@ -119,12 +119,12 @@ def test_history_is_project_scoped_sorted_and_persistent(tmp_path: Path) -> None
             else "@article{second, title={Second}}"
         )
         assert client.post(
-            "/projects/ai_architecture/imports",
+            "/api/v1/projects/ai_architecture/imports",
             files={"file": (filename, content, "text/plain")},
         ).status_code == 201
 
-    history = client.get("/projects/ai_architecture/imports")
-    other_project = client.get("/projects/lean_energy/imports")
+    history = client.get("/api/v1/projects/ai_architecture/imports")
+    other_project = client.get("/api/v1/projects/lean_energy/imports")
     persisted = SqliteImportHistoryRepository(database).list_for_project(
         "ai_architecture"
     )
@@ -175,32 +175,32 @@ def test_selected_provider_imports_create_durable_history_records(
     }
 
     # 1. Pierwszy import (1 rekord)
-    res1 = client.post("/projects/ai_architecture/search-results/imports", json=openalex_payload1)
+    res1 = client.post("/api/v1/projects/ai_architecture/search-results/imports", json=openalex_payload1)
     assert res1.status_code == 200
     assert res1.json()["imported_count"] == 1
 
-    h1 = client.get("/projects/ai_architecture/imports").json()
+    h1 = client.get("/api/v1/projects/ai_architecture/imports").json()
     assert len(h1) == 1
     assert h1[0]["records_count"] == 1
     assert h1[0]["provider"] == "openalex"
 
     # 2. Drugi import (kolejny 1 rekord)
-    res2 = client.post("/projects/ai_architecture/search-results/imports", json=openalex_payload2)
+    res2 = client.post("/api/v1/projects/ai_architecture/search-results/imports", json=openalex_payload2)
     assert res2.status_code == 200
     assert res2.json()["imported_count"] == 1
 
-    h2 = client.get("/projects/ai_architecture/imports").json()
+    h2 = client.get("/api/v1/projects/ai_architecture/imports").json()
     assert len(h2) == 2
     assert h2[0]["records_count"] == 1  # najnowszy
     assert h2[1]["records_count"] == 1  # poprzedni
 
     # 3. Trzeci import – częściowo idempotentny (rekord 1 + powtórzony rekord 2)
-    res3 = client.post("/projects/ai_architecture/search-results/imports", json=openalex_payload2)
+    res3 = client.post("/api/v1/projects/ai_architecture/search-results/imports", json=openalex_payload2)
     assert res3.status_code == 200
     assert res3.json()["imported_count"] == 0  # pominięty przez idempotencję
     assert res3.json()["skipped_count"] == 1
 
-    h3 = client.get("/projects/ai_architecture/imports").json()
+    h3 = client.get("/api/v1/projects/ai_architecture/imports").json()
     assert len(h3) == 3
     assert h3[0]["records_count"] == 0  # historia odzwierciedla nowo dodane rekordy (0)
 
@@ -258,11 +258,11 @@ def test_multi_provider_mixed_import_creates_separate_history_entries(
 
     # Wcześniej importujemy 1 z OpenAlex i 1 z Crossref (tak by 2 rekordy już istniały)
     client.post(
-        "/projects/ai_architecture/search-results/imports",
+        "/api/v1/projects/ai_architecture/search-results/imports",
         json={"records": [oa_existing], "provider": "openalex", "query": "init"},
     )
     client.post(
-        "/projects/ai_architecture/search-results/imports",
+        "/api/v1/projects/ai_architecture/search-results/imports",
         json={"records": [cr_existing], "provider": "crossref", "query": "init"},
     )
 
@@ -273,7 +273,7 @@ def test_multi_provider_mixed_import_creates_separate_history_entries(
         "total_available": 400,
     }
 
-    response = client.post("/projects/ai_architecture/search-results/imports", json=mixed_payload)
+    response = client.post("/api/v1/projects/ai_architecture/search-results/imports", json=mixed_payload)
 
     assert response.status_code == 200
     res_data = response.json()
@@ -282,8 +282,8 @@ def test_multi_provider_mixed_import_creates_separate_history_entries(
     assert res_data["total_requested"] == 4
     assert res_data["working_collection_count"] == 4
 
-    # Weryfikacja wpisów w historii przez GET /projects/{id}/imports
-    history = client.get("/projects/ai_architecture/imports").json()
+    # Weryfikacja wpisów w historii przez GET /api/v1/projects/{id}/imports
+    history = client.get("/api/v1/projects/ai_architecture/imports").json()
     # Wynik ma 4 wpisy w historii (2 z inicjalizacji + 2 z grupy mixed importu)
     latest_entries = history[:2]
     history_by_provider = {item["provider"]: item for item in latest_entries}

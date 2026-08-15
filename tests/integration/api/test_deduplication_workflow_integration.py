@@ -15,7 +15,7 @@ client = TestClient(app)
 def test_full_duplicate_review_lifecycle_workflow() -> None:
     """Verify complete API integration workflow: GET list -> GET initial PENDING -> POST APPROVE -> GET APPROVE -> POST REJECT -> GET REJECT -> no publication loss."""
     # Step 1: GET list of candidate duplicate groups
-    res_list = client.get("/projects/lean_energy/duplicate-groups")
+    res_list = client.get("/api/v1/projects/lean_energy/duplicate-groups")
     assert res_list.status_code == 200
     groups_data = res_list.json()
     assert groups_data["total_groups_count"] > 0
@@ -25,14 +25,14 @@ def test_full_duplicate_review_lifecycle_workflow() -> None:
     initial_record_ids = [r["id"] for r in group["records"]]
 
     # Step 2 & 3: GET initial decision (PENDING, rationale: null)
-    res_get_1 = client.get(f"/projects/lean_energy/duplicate-groups/{group_id}/decision")
+    res_get_1 = client.get(f"/api/v1/projects/lean_energy/duplicate-groups/{group_id}/decision")
     assert res_get_1.status_code == 200
     assert res_get_1.json()["decision"] == "PENDING"
     assert res_get_1.json()["rationale"] is None
 
     # Step 4: POST APPROVE with rationale
     res_post_1 = client.post(
-        f"/projects/lean_energy/duplicate-groups/{group_id}/decision",
+        f"/api/v1/projects/lean_energy/duplicate-groups/{group_id}/decision",
         json={"decision": "APPROVE", "rationale": "Verified abstract and author overlap"},
     )
     assert res_post_1.status_code == 200
@@ -40,14 +40,14 @@ def test_full_duplicate_review_lifecycle_workflow() -> None:
     assert res_post_1.json()["rationale"] == "Verified abstract and author overlap"
 
     # Step 5: GET decision returns APPROVE and saved rationale
-    res_get_2 = client.get(f"/projects/lean_energy/duplicate-groups/{group_id}/decision")
+    res_get_2 = client.get(f"/api/v1/projects/lean_energy/duplicate-groups/{group_id}/decision")
     assert res_get_2.status_code == 200
     assert res_get_2.json()["decision"] == "APPROVE"
     assert res_get_2.json()["rationale"] == "Verified abstract and author overlap"
 
     # Step 6: POST REJECT with new rationale
     res_post_2 = client.post(
-        f"/projects/lean_energy/duplicate-groups/{group_id}/decision",
+        f"/api/v1/projects/lean_energy/duplicate-groups/{group_id}/decision",
         json={"decision": "REJECT", "rationale": "Different publication year upon full text inspection"},
     )
     assert res_post_2.status_code == 200
@@ -55,13 +55,13 @@ def test_full_duplicate_review_lifecycle_workflow() -> None:
     assert res_post_2.json()["rationale"] == "Different publication year upon full text inspection"
 
     # Step 7 & 8: GET decision returns REJECT and updated rationale (overwritten)
-    res_get_3 = client.get(f"/projects/lean_energy/duplicate-groups/{group_id}/decision")
+    res_get_3 = client.get(f"/api/v1/projects/lean_energy/duplicate-groups/{group_id}/decision")
     assert res_get_3.status_code == 200
     assert res_get_3.json()["decision"] == "REJECT"
     assert res_get_3.json()["rationale"] == "Different publication year upon full text inspection"
 
     # Step 9 & 10: Candidate group list remains available; no record deletion or physical merge executed
-    res_list_after = client.get("/projects/lean_energy/duplicate-groups")
+    res_list_after = client.get("/api/v1/projects/lean_energy/duplicate-groups")
     assert res_list_after.status_code == 200
     after_groups = res_list_after.json()["groups"]
     matching_group = next(g for g in after_groups if g["group_id"] == group_id)
@@ -74,12 +74,12 @@ def test_full_duplicate_review_lifecycle_workflow() -> None:
 
 def test_decision_workflow_edge_cases_and_validations() -> None:
     """Verify rationale trimming, null handling, length boundary (1000 chars), enum validation, and project isolation."""
-    res_list = client.get("/projects/lean_energy/duplicate-groups")
+    res_list = client.get("/api/v1/projects/lean_energy/duplicate-groups")
     group_id = res_list.json()["groups"][0]["group_id"]
 
     # 1. Decision without rationale -> rationale is null
     r1 = client.post(
-        f"/projects/lean_energy/duplicate-groups/{group_id}/decision",
+        f"/api/v1/projects/lean_energy/duplicate-groups/{group_id}/decision",
         json={"decision": "APPROVE"},
     )
     assert r1.status_code == 200
@@ -87,7 +87,7 @@ def test_decision_workflow_edge_cases_and_validations() -> None:
 
     # 2. Whitespace rationale -> trimmed to null
     r2 = client.post(
-        f"/projects/lean_energy/duplicate-groups/{group_id}/decision",
+        f"/api/v1/projects/lean_energy/duplicate-groups/{group_id}/decision",
         json={"decision": "APPROVE", "rationale": "   \n\t  "},
     )
     assert r2.status_code == 200
@@ -96,7 +96,7 @@ def test_decision_workflow_edge_cases_and_validations() -> None:
     # 3. Rationale exactly at 1000 characters -> accepted
     exact_1000 = "B" * 1000
     r3 = client.post(
-        f"/projects/lean_energy/duplicate-groups/{group_id}/decision",
+        f"/api/v1/projects/lean_energy/duplicate-groups/{group_id}/decision",
         json={"decision": "APPROVE", "rationale": exact_1000},
     )
     assert r3.status_code == 200
@@ -105,24 +105,24 @@ def test_decision_workflow_edge_cases_and_validations() -> None:
     # 4. Rationale exceeding 1000 characters -> HTTP 422
     over_1000 = "B" * 1001
     r4 = client.post(
-        f"/projects/lean_energy/duplicate-groups/{group_id}/decision",
+        f"/api/v1/projects/lean_energy/duplicate-groups/{group_id}/decision",
         json={"decision": "APPROVE", "rationale": over_1000},
     )
     assert r4.status_code == 422
 
     # 5. Invalid decision enum -> HTTP 422
     r5 = client.post(
-        f"/projects/lean_energy/duplicate-groups/{group_id}/decision",
+        f"/api/v1/projects/lean_energy/duplicate-groups/{group_id}/decision",
         json={"decision": "INVALID_DECISION_ENUM"},
     )
     assert r5.status_code == 422
 
     # 6. Non-existent project -> HTTP 404
-    r6 = client.get("/projects/non_existent_project_xyz/duplicate-groups")
+    r6 = client.get("/api/v1/projects/non_existent_project_xyz/duplicate-groups")
     assert r6.status_code == 404
 
     # 7. Non-existent group -> HTTP 404
-    r7 = client.get("/projects/lean_energy/duplicate-groups/non_existent_group_123/decision")
+    r7 = client.get("/api/v1/projects/lean_energy/duplicate-groups/non_existent_group_123/decision")
     assert r7.status_code == 404
 
 
@@ -184,9 +184,9 @@ def test_project_decision_isolation() -> None:
 
 def test_backend_response_determinism() -> None:
     """Verify backend API produces deterministic responses with stable group and record ordering across multiple invocations."""
-    res1 = client.get("/projects/lean_energy/duplicate-groups").json()
-    res2 = client.get("/projects/lean_energy/duplicate-groups").json()
-    res3 = client.get("/projects/lean_energy/duplicate-groups").json()
+    res1 = client.get("/api/v1/projects/lean_energy/duplicate-groups").json()
+    res2 = client.get("/api/v1/projects/lean_energy/duplicate-groups").json()
+    res3 = client.get("/api/v1/projects/lean_energy/duplicate-groups").json()
 
     # 1. High level equivalence
     assert res1 == res2 == res3

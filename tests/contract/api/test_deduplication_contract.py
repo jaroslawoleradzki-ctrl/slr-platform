@@ -15,8 +15,8 @@ client = TestClient(app)
 
 
 def test_duplicate_groups_endpoint_full_contract_schema() -> None:
-    """Verify GET /projects/{project_id}/duplicate-groups matches full DTO contract."""
-    response = client.get("/projects/lean_energy/duplicate-groups")
+    """Verify GET /api/v1/projects/{project_id}/duplicate-groups matches full DTO contract."""
+    response = client.get("/api/v1/projects/lean_energy/duplicate-groups")
     assert response.status_code == 200
 
     data = response.json()
@@ -60,12 +60,12 @@ def test_duplicate_groups_endpoint_full_contract_schema() -> None:
 
 
 def test_decision_endpoints_full_contract_schema() -> None:
-    """Verify POST & GET /projects/{project_id}/duplicate-groups/{group_id}/decision contract."""
-    res_list = client.get("/projects/lean_energy/duplicate-groups")
+    """Verify POST & GET /api/v1/projects/{project_id}/duplicate-groups/{group_id}/decision contract."""
+    res_list = client.get("/api/v1/projects/lean_energy/duplicate-groups")
     group_id = res_list.json()["groups"][0]["group_id"]
 
     # 1. GET initial decision (PENDING)
-    res_get_initial = client.get(f"/projects/lean_energy/duplicate-groups/{group_id}/decision")
+    res_get_initial = client.get(f"/api/v1/projects/lean_energy/duplicate-groups/{group_id}/decision")
     assert res_get_initial.status_code == 200
     initial_dto = DuplicateGroupDecisionResponse.model_validate(res_get_initial.json())
     assert initial_dto.project_id == "lean_energy"
@@ -75,7 +75,7 @@ def test_decision_endpoints_full_contract_schema() -> None:
 
     # 2. POST APPROVE with rationale
     res_post = client.post(
-        f"/projects/lean_energy/duplicate-groups/{group_id}/decision",
+        f"/api/v1/projects/lean_energy/duplicate-groups/{group_id}/decision",
         json={"decision": "APPROVE", "rationale": "Verified matching abstracts"},
     )
     assert res_post.status_code == 200
@@ -86,7 +86,7 @@ def test_decision_endpoints_full_contract_schema() -> None:
     assert post_dto.rationale == "Verified matching abstracts"
 
     # 3. GET recorded decision
-    res_get_after = client.get(f"/projects/lean_energy/duplicate-groups/{group_id}/decision")
+    res_get_after = client.get(f"/api/v1/projects/lean_energy/duplicate-groups/{group_id}/decision")
     assert res_get_after.status_code == 200
     after_dto = DuplicateGroupDecisionResponse.model_validate(res_get_after.json())
     assert after_dto == post_dto
@@ -99,13 +99,13 @@ def test_openapi_schema_contract() -> None:
     paths = openapi["paths"]
 
     # 1. Verify endpoint registration
-    assert "/projects/{project_id}/duplicate-groups" in paths
-    assert "/projects/{project_id}/duplicate-groups/{group_id}/decision" in paths
+    assert "/api/v1/projects/{project_id}/duplicate-groups" in paths
+    assert "/api/v1/projects/{project_id}/duplicate-groups/{group_id}/decision" in paths
 
     # 2. Verify methods
-    list_op = paths["/projects/{project_id}/duplicate-groups"]["get"]
-    decision_post_op = paths["/projects/{project_id}/duplicate-groups/{group_id}/decision"]["post"]
-    decision_get_op = paths["/projects/{project_id}/duplicate-groups/{group_id}/decision"]["get"]
+    list_op = paths["/api/v1/projects/{project_id}/duplicate-groups"]["get"]
+    decision_post_op = paths["/api/v1/projects/{project_id}/duplicate-groups/{group_id}/decision"]["post"]
+    decision_get_op = paths["/api/v1/projects/{project_id}/duplicate-groups/{group_id}/decision"]["get"]
 
     assert list_op["summary"] == "Get candidate duplicate groups for human review"
     assert decision_post_op["summary"] == "Record reviewer decision for a candidate duplicate group"

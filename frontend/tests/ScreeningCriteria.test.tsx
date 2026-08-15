@@ -10,6 +10,36 @@ import { ScreeningCriterionResponse } from '../src/types';
 describe('Screening Criteria Configuration GUI (Phase 7.3)', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    vi.spyOn(projectApiService, 'getProjects').mockResolvedValue([
+      {
+        id: 'lean_energy',
+        title: 'Lean Energy Project',
+        description: '',
+        protocolVersion: '1.0',
+        status: 'active',
+        createdAt: '', updatedAt: '',
+        nextAction: { title: '', description: '', targetStageId: 'search', actionLabel: '', severity: 'normal' },
+        conceptGroups: [], searchFilters: { publicationYearFrom: null, publicationYearTo: null, languages: [], publicationTypes: [], fullTextOnly: false },
+        providers: [], imports: [], normalization: [], deduplication: { recordsBeforeDedup: 0, identifierLinkedGroupsCount: 0, recordsAfterResultMerger: 0, candidateGroupsPendingUserReview: 0, status: 'pending' },
+        duplicateGroups: [], screening: { titleAbstract: { pending: 0, included: 0, excluded: 0, unresolved: 0, total: 0 }, fullText: { pending: 0, included: 0, excluded: 0, unresolved: 0, total: 0 }, status: 'pending' },
+        qualityAssessment: { totalToAssess: 0, completedAssessments: 0, reviewerConflictsCount: 0, status: 'pending' },
+        prismaMetrics: { recordsIdentifiedProviders: 0, recordsIdentifiedImports: 0, totalIdentified: 0, recordsAfterNormalization: 0, recordsBeforeDedup: 0, recordsAfterTechnicalMerger: 0, duplicateGroupsPendingReview: 0, recordsScreenedTitleAbstract: 0, recordsScreenedFullText: 0, studiesIncludedSynthesis: 0 },
+      },
+      {
+        id: 'ai_architecture',
+        title: 'AI Architecture Project',
+        description: '',
+        protocolVersion: '1.0',
+        status: 'active',
+        createdAt: '', updatedAt: '',
+        nextAction: { title: '', description: '', targetStageId: 'search', actionLabel: '', severity: 'normal' },
+        conceptGroups: [], searchFilters: { publicationYearFrom: null, publicationYearTo: null, languages: [], publicationTypes: [], fullTextOnly: false },
+        providers: [], imports: [], normalization: [], deduplication: { recordsBeforeDedup: 0, identifierLinkedGroupsCount: 0, recordsAfterResultMerger: 0, candidateGroupsPendingUserReview: 0, status: 'pending' },
+        duplicateGroups: [], screening: { titleAbstract: { pending: 0, included: 0, excluded: 0, unresolved: 0, total: 0 }, fullText: { pending: 0, included: 0, excluded: 0, unresolved: 0, total: 0 }, status: 'pending' },
+        qualityAssessment: { totalToAssess: 0, completedAssessments: 0, reviewerConflictsCount: 0, status: 'pending' },
+        prismaMetrics: { recordsIdentifiedProviders: 0, recordsIdentifiedImports: 0, totalIdentified: 0, recordsAfterNormalization: 0, recordsBeforeDedup: 0, recordsAfterTechnicalMerger: 0, duplicateGroupsPendingReview: 0, recordsScreenedTitleAbstract: 0, recordsScreenedFullText: 0, studiesIncludedSynthesis: 0 },
+      },
+    ]);
   });
 
   const mockCriterionActive: ScreeningCriterionResponse = {
@@ -78,7 +108,7 @@ describe('Screening Criteria Configuration GUI (Phase 7.3)', () => {
   it('1. renders loading state during GET request', async () => {
     vi.spyOn(projectApiService, 'listScreeningCriteria').mockReturnValue(new Promise(() => {}));
     renderComponent();
-    expect(screen.getByText(/Ładowanie kryteriów screeningu z backendu/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Ładowanie kryteriów screeningu z backendu/i)).toBeInTheDocument();
   });
 
   // Test 2: Empty state

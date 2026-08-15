@@ -65,7 +65,7 @@ def resolution_api(tmp_path):
 
 def _conflict(client: TestClient, publication_id: UUID) -> dict:
     response = client.get(
-        "/projects/lean_energy/screening/conflicts",
+        "/api/v1/projects/lean_energy/screening/conflicts",
         params={"stage": "title_abstract", "status": "conflict", "adjudication": True},
     )
     assert response.status_code == 200
@@ -79,7 +79,7 @@ def test_conflict_detail_and_save_each_resolution_outcome(resolution_api, outcom
     assert {item["reviewer_id"] for item in detail["latest_decisions"]} == {"alice", "bob"}
     assert all(item["decision"]["rationale"] for item in detail["latest_decisions"])
     response = client.post(
-        "/projects/lean_energy/screening/conflict-resolutions",
+        "/api/v1/projects/lean_energy/screening/conflict-resolutions",
         json={
             "publication_id": str(paper.record_id), "stage": "title_abstract",
             "resolved_outcome": outcome, "resolver_id": " independent adjudicator ",
@@ -91,7 +91,7 @@ def test_conflict_detail_and_save_each_resolution_outcome(resolution_api, outcom
     assert response.json()["resolved_outcome"] == outcome
     assert response.json()["resolver_id"] == "independent adjudicator"
     resolved = client.get(
-        "/projects/lean_energy/screening/conflicts",
+        "/api/v1/projects/lean_energy/screening/conflicts",
         params={"stage": "title_abstract", "status": "resolved", "adjudication": True},
     )
     assert resolved.status_code == 200
@@ -101,13 +101,13 @@ def test_conflict_detail_and_save_each_resolution_outcome(resolution_api, outcom
 def test_incomplete_and_agreement_cannot_be_resolved_and_validation_is_authoritative(resolution_api) -> None:
     client, _, agreement, incomplete, *_ = resolution_api
     all_items = client.get(
-        "/projects/lean_energy/screening/conflicts",
+        "/api/v1/projects/lean_energy/screening/conflicts",
         params={"stage": "title_abstract", "adjudication": True},
     ).json()["items"]
     by_id = {item["publication_id"]: item for item in all_items}
     for publication in (agreement, incomplete):
         response = client.post(
-            "/projects/lean_energy/screening/conflict-resolutions",
+            "/api/v1/projects/lean_energy/screening/conflict-resolutions",
             json={
                 "publication_id": str(publication.record_id), "stage": "title_abstract",
                 "resolved_outcome": "include", "resolver_id": "resolver", "rationale": "reason",
@@ -123,7 +123,7 @@ def test_incomplete_and_agreement_cannot_be_resolved_and_validation_is_authorita
     }
     for field in ("resolver_id", "rationale"):
         response = client.post(
-            "/projects/lean_energy/screening/conflict-resolutions",
+            "/api/v1/projects/lean_energy/screening/conflict-resolutions",
             json={**base, field: "   "},
         )
         assert response.status_code == 422
@@ -133,7 +133,7 @@ def test_history_stale_key_409_and_append_only_reresolution(resolution_api) -> N
     client, paper, _, _, _, _, _, _, save = resolution_api
     detail = _conflict(client, paper.record_id)
     first = client.post(
-        "/projects/lean_energy/screening/conflict-resolutions",
+        "/api/v1/projects/lean_energy/screening/conflict-resolutions",
         json={
             "publication_id": str(paper.record_id), "stage": "title_abstract",
             "resolved_outcome": "include", "resolver_id": "one", "rationale": "first",
@@ -143,13 +143,13 @@ def test_history_stale_key_409_and_append_only_reresolution(resolution_api) -> N
     assert first.status_code == 201
     save(paper.record_id, "bob", ScreeningOutcome.UNCERTAIN, 20)
     stale = client.get(
-        "/projects/lean_energy/screening/conflicts",
+        "/api/v1/projects/lean_energy/screening/conflicts",
         params={"stage": "title_abstract", "status": "stale_resolution", "adjudication": True},
     )
     assert stale.status_code == 200 and stale.json()["total"] == 1
     current = stale.json()["items"][0]
     conflict_response = client.post(
-        "/projects/lean_energy/screening/conflict-resolutions",
+        "/api/v1/projects/lean_energy/screening/conflict-resolutions",
         json={
             "publication_id": str(paper.record_id), "stage": "title_abstract",
             "resolved_outcome": "exclude", "resolver_id": "two", "rationale": "outdated",
@@ -159,7 +159,7 @@ def test_history_stale_key_409_and_append_only_reresolution(resolution_api) -> N
     assert conflict_response.status_code == 409
     assert conflict_response.json()["detail"]["code"] == "decision_set_changed"
     second = client.post(
-        "/projects/lean_energy/screening/conflict-resolutions",
+        "/api/v1/projects/lean_energy/screening/conflict-resolutions",
         json={
             "publication_id": str(paper.record_id), "stage": "title_abstract",
             "resolved_outcome": "exclude", "resolver_id": "two", "rationale": "fresh",
@@ -168,7 +168,7 @@ def test_history_stale_key_409_and_append_only_reresolution(resolution_api) -> N
     )
     assert second.status_code == 201
     history = client.get(
-        f"/projects/lean_energy/screening/conflict-resolutions/{paper.record_id}/history",
+        f"/api/v1/projects/lean_energy/screening/conflict-resolutions/{paper.record_id}/history",
         params={"stage": "title_abstract"},
     )
     assert history.status_code == 200
@@ -182,7 +182,7 @@ def test_history_stale_key_409_and_append_only_reresolution(resolution_api) -> N
         for item in history.json()["resolutions"][0]["reviewer_outcomes"]
     } == {("alice", "include"), ("bob", "uncertain")}
     page = client.get(
-        f"/projects/lean_energy/screening/conflict-resolutions/{paper.record_id}/history",
+        f"/api/v1/projects/lean_energy/screening/conflict-resolutions/{paper.record_id}/history",
         params={"stage": "title_abstract", "offset": 1, "limit": 1},
     )
     assert page.status_code == 200
@@ -195,7 +195,7 @@ def test_resolution_api_project_stage_and_missing_resource_isolation(resolution_
     client, paper, *_ = resolution_api
     detail = _conflict(client, paper.record_id)
     saved = client.post(
-        "/projects/lean_energy/screening/conflict-resolutions",
+        "/api/v1/projects/lean_energy/screening/conflict-resolutions",
         json={
             "publication_id": str(paper.record_id), "stage": "title_abstract",
             "resolved_outcome": "include", "resolver_id": "resolver", "rationale": "scope",
@@ -204,22 +204,22 @@ def test_resolution_api_project_stage_and_missing_resource_isolation(resolution_
     )
     assert saved.status_code == 201
     wrong_project = client.get(
-        f"/projects/ai_architecture/screening/conflict-resolutions/{paper.record_id}/history",
+        f"/api/v1/projects/ai_architecture/screening/conflict-resolutions/{paper.record_id}/history",
         params={"stage": "title_abstract"},
     )
     assert wrong_project.status_code == 404
     missing = client.get(
-        f"/projects/lean_energy/screening/conflict-resolutions/{uuid4()}/history",
+        f"/api/v1/projects/lean_energy/screening/conflict-resolutions/{uuid4()}/history",
         params={"stage": "title_abstract"},
     )
     assert missing.status_code == 404
     other_stage = client.get(
-        f"/projects/lean_energy/screening/conflict-resolutions/{paper.record_id}/history",
+        f"/api/v1/projects/lean_energy/screening/conflict-resolutions/{paper.record_id}/history",
         params={"stage": "full_text"},
     )
     assert other_stage.status_code == 404
     missing_project = client.post(
-        "/projects/nonexistent-project/screening/conflict-resolutions",
+        "/api/v1/projects/nonexistent-project/screening/conflict-resolutions",
         json={
             "publication_id": str(paper.record_id), "stage": "title_abstract",
             "resolved_outcome": "include", "resolver_id": "resolver", "rationale": "missing",

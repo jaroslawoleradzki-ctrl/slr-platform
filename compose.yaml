@@ -8,4 +8,5 @@ services:
       - "8000:8000"
     volumes:
       - ./projects:/app/projects
+      - ./data:/app/data
     restart: unless-stopped

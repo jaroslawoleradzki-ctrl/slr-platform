@@ -35,7 +35,7 @@ def test_create_screening_criterion_api(client: TestClient) -> None:
         "is_active": True,
         "is_required": True,
     }
-    response = client.post("/projects/proj-100/screening/criteria", json=payload)
+    response = client.post("/api/v1/projects/proj-100/screening/criteria", json=payload)
     assert response.status_code == 201
     data = response.json()
     assert "criterion_id" in data
@@ -51,7 +51,7 @@ def test_create_screening_criterion_api(client: TestClient) -> None:
 
 def test_get_screening_criterion_api(client: TestClient) -> None:
     create_res = client.post(
-        "/projects/proj-100/screening/criteria",
+        "/api/v1/projects/proj-100/screening/criteria",
         json={
             "name": "Sample Criterion",
             "criterion_type": "exclusion",
@@ -60,7 +60,7 @@ def test_get_screening_criterion_api(client: TestClient) -> None:
     )
     criterion_id = create_res.json()["criterion_id"]
 
-    get_res = client.get(f"/projects/proj-100/screening/criteria/{criterion_id}")
+    get_res = client.get(f"/api/v1/projects/proj-100/screening/criteria/{criterion_id}")
     assert get_res.status_code == 200
     data = get_res.json()
     assert data["criterion_id"] == criterion_id
@@ -70,7 +70,7 @@ def test_get_screening_criterion_api(client: TestClient) -> None:
 
 def test_list_screening_criteria_api(client: TestClient) -> None:
     client.post(
-        "/projects/proj-list/screening/criteria",
+        "/api/v1/projects/proj-list/screening/criteria",
         json={
             "name": "Second Order",
             "criterion_type": "inclusion",
@@ -79,7 +79,7 @@ def test_list_screening_criteria_api(client: TestClient) -> None:
         },
     )
     client.post(
-        "/projects/proj-list/screening/criteria",
+        "/api/v1/projects/proj-list/screening/criteria",
         json={
             "name": "First Order",
             "criterion_type": "exclusion",
@@ -88,7 +88,7 @@ def test_list_screening_criteria_api(client: TestClient) -> None:
         },
     )
 
-    list_res = client.get("/projects/proj-list/screening/criteria")
+    list_res = client.get("/api/v1/projects/proj-list/screening/criteria")
     assert list_res.status_code == 200
     data = list_res.json()
     assert data["total"] == 2
@@ -100,7 +100,7 @@ def test_list_screening_criteria_api(client: TestClient) -> None:
 
 def test_update_screening_criterion_api(client: TestClient) -> None:
     create_res = client.post(
-        "/projects/proj-100/screening/criteria",
+        "/api/v1/projects/proj-100/screening/criteria",
         json={
             "name": "Initial Name",
             "description": "Initial Desc",
@@ -121,7 +121,7 @@ def test_update_screening_criterion_api(client: TestClient) -> None:
         "is_required": False,
     }
     update_res = client.put(
-        f"/projects/proj-100/screening/criteria/{criterion_id}",
+        f"/api/v1/projects/proj-100/screening/criteria/{criterion_id}",
         json=update_payload,
     )
     assert update_res.status_code == 200
@@ -139,7 +139,7 @@ def test_update_screening_criterion_api(client: TestClient) -> None:
 
 def test_deactivate_screening_criterion_api(client: TestClient) -> None:
     create_res = client.post(
-        "/projects/proj-100/screening/criteria",
+        "/api/v1/projects/proj-100/screening/criteria",
         json={
             "name": "To Deactivate",
             "criterion_type": "inclusion",
@@ -150,19 +150,19 @@ def test_deactivate_screening_criterion_api(client: TestClient) -> None:
     criterion_id = create_res.json()["criterion_id"]
 
     patch_res = client.patch(
-        f"/projects/proj-100/screening/criteria/{criterion_id}/deactivate"
+        f"/api/v1/projects/proj-100/screening/criteria/{criterion_id}/deactivate"
     )
     assert patch_res.status_code == 200
     assert patch_res.json()["is_active"] is False
 
     # Confirm via GET that is_active is False
-    get_res = client.get(f"/projects/proj-100/screening/criteria/{criterion_id}")
+    get_res = client.get(f"/api/v1/projects/proj-100/screening/criteria/{criterion_id}")
     assert get_res.json()["is_active"] is False
 
 
 def test_list_active_only_query_param(client: TestClient) -> None:
     c1 = client.post(
-        "/projects/proj-active/screening/criteria",
+        "/api/v1/projects/proj-active/screening/criteria",
         json={
             "name": "Active One",
             "criterion_type": "inclusion",
@@ -172,7 +172,7 @@ def test_list_active_only_query_param(client: TestClient) -> None:
     ).json()
 
     client.post(
-        "/projects/proj-active/screening/criteria",
+        "/api/v1/projects/proj-active/screening/criteria",
         json={
             "name": "Inactive One",
             "criterion_type": "exclusion",
@@ -182,11 +182,11 @@ def test_list_active_only_query_param(client: TestClient) -> None:
     )
 
     # Default list includes both
-    res_all = client.get("/projects/proj-active/screening/criteria")
+    res_all = client.get("/api/v1/projects/proj-active/screening/criteria")
     assert res_all.json()["total"] == 2
 
     # active_only=true returns only active one
-    res_active = client.get("/projects/proj-active/screening/criteria?active_only=true")
+    res_active = client.get("/api/v1/projects/proj-active/screening/criteria?active_only=true")
     assert res_active.json()["total"] == 1
     assert res_active.json()["items"][0]["criterion_id"] == c1["criterion_id"]
 
@@ -194,7 +194,7 @@ def test_list_active_only_query_param(client: TestClient) -> None:
 def test_validation_errors(client: TestClient) -> None:
     # Blank name
     res1 = client.post(
-        "/projects/proj-val/screening/criteria",
+        "/api/v1/projects/proj-val/screening/criteria",
         json={
             "name": "   ",
             "criterion_type": "inclusion",
@@ -205,7 +205,7 @@ def test_validation_errors(client: TestClient) -> None:
 
     # Negative display_order
     res2 = client.post(
-        "/projects/proj-val/screening/criteria",
+        "/api/v1/projects/proj-val/screening/criteria",
         json={
             "name": "Valid Name",
             "criterion_type": "inclusion",
@@ -217,7 +217,7 @@ def test_validation_errors(client: TestClient) -> None:
 
     # Invalid criterion_type enum
     res3 = client.post(
-        "/projects/proj-val/screening/criteria",
+        "/api/v1/projects/proj-val/screening/criteria",
         json={
             "name": "Valid Name",
             "criterion_type": "invalid_type",
@@ -228,7 +228,7 @@ def test_validation_errors(client: TestClient) -> None:
 
     # Invalid screening_stage enum
     res4 = client.post(
-        "/projects/proj-val/screening/criteria",
+        "/api/v1/projects/proj-val/screening/criteria",
         json={
             "name": "Valid Name",
             "criterion_type": "inclusion",
@@ -240,11 +240,11 @@ def test_validation_errors(client: TestClient) -> None:
 
 def test_404_nonexistent_criterion(client: TestClient) -> None:
     fake_id = uuid4()
-    get_res = client.get(f"/projects/proj-100/screening/criteria/{fake_id}")
+    get_res = client.get(f"/api/v1/projects/proj-100/screening/criteria/{fake_id}")
     assert get_res.status_code == 404
 
     put_res = client.put(
-        f"/projects/proj-100/screening/criteria/{fake_id}",
+        f"/api/v1/projects/proj-100/screening/criteria/{fake_id}",
         json={
             "name": "Name",
             "criterion_type": "inclusion",
@@ -254,7 +254,7 @@ def test_404_nonexistent_criterion(client: TestClient) -> None:
     assert put_res.status_code == 404
 
     deactivate_res = client.patch(
-        f"/projects/proj-100/screening/criteria/{fake_id}/deactivate"
+        f"/api/v1/projects/proj-100/screening/criteria/{fake_id}/deactivate"
     )
     assert deactivate_res.status_code == 404
 
@@ -262,7 +262,7 @@ def test_404_nonexistent_criterion(client: TestClient) -> None:
 def test_cross_project_isolation_api(client: TestClient) -> None:
     # Create criterion in project A
     create_res = client.post(
-        "/projects/project-A/screening/criteria",
+        "/api/v1/projects/project-A/screening/criteria",
         json={
             "name": "Project A Criterion",
             "criterion_type": "inclusion",
@@ -272,12 +272,12 @@ def test_cross_project_isolation_api(client: TestClient) -> None:
     criterion_id = create_res.json()["criterion_id"]
 
     # GET via project-B URL returns 404
-    get_res = client.get(f"/projects/project-B/screening/criteria/{criterion_id}")
+    get_res = client.get(f"/api/v1/projects/project-B/screening/criteria/{criterion_id}")
     assert get_res.status_code == 404
 
     # PUT via project-B URL returns 404
     put_res = client.put(
-        f"/projects/project-B/screening/criteria/{criterion_id}",
+        f"/api/v1/projects/project-B/screening/criteria/{criterion_id}",
         json={
             "name": "Hacked Name",
             "criterion_type": "inclusion",
@@ -288,12 +288,12 @@ def test_cross_project_isolation_api(client: TestClient) -> None:
 
     # PATCH deactivate via project-B URL returns 404
     deactivate_res = client.patch(
-        f"/projects/project-B/screening/criteria/{criterion_id}/deactivate"
+        f"/api/v1/projects/project-B/screening/criteria/{criterion_id}/deactivate"
     )
     assert deactivate_res.status_code == 404
 
     # Confirm original criterion in project-A remains unchanged
-    orig_res = client.get(f"/projects/project-A/screening/criteria/{criterion_id}")
+    orig_res = client.get(f"/api/v1/projects/project-A/screening/criteria/{criterion_id}")
     assert orig_res.status_code == 200
     assert orig_res.json()["name"] == "Project A Criterion"
     assert orig_res.json()["is_active"] is True

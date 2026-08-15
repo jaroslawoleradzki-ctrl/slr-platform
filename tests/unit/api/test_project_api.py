@@ -38,7 +38,7 @@ def test_api_create_list_get_update_archive(repo: SqliteProjectRepository) -> No
         "description": "Scope description",
         "protocol_version": "1.1",
     }
-    create_resp = client.post("/projects", json=payload)
+    create_resp = client.post("/api/v1/projects", json=payload)
     assert create_resp.status_code == 201
     created_data = create_resp.json()
     project_id = created_data["project_id"]
@@ -47,18 +47,18 @@ def test_api_create_list_get_update_archive(repo: SqliteProjectRepository) -> No
     assert created_data["status"] == "active"
 
     # 2. Create duplicate title generates DIFFERENT project_id
-    create_resp_dup = client.post("/projects", json=payload)
+    create_resp_dup = client.post("/api/v1/projects", json=payload)
     assert create_resp_dup.status_code == 201
     dup_id = create_resp_dup.json()["project_id"]
     assert dup_id != project_id
 
     # 3. Get project by ID
-    get_resp = client.get(f"/projects/{project_id}")
+    get_resp = client.get(f"/api/v1/projects/{project_id}")
     assert get_resp.status_code == 200
     assert get_resp.json()["project_id"] == project_id
 
     # 4. List projects
-    list_resp = client.get("/projects")
+    list_resp = client.get("/api/v1/projects")
     assert list_resp.status_code == 200
     assert list_resp.json()["total"] == 2
 
@@ -68,26 +68,26 @@ def test_api_create_list_get_update_archive(repo: SqliteProjectRepository) -> No
         "description": "New scope",
         "protocol_version": "1.2",
     }
-    put_resp = client.put(f"/projects/{project_id}", json=update_payload)
+    put_resp = client.put(f"/api/v1/projects/{project_id}", json=update_payload)
     assert put_resp.status_code == 200
     put_data = put_resp.json()
     assert put_data["project_id"] == project_id  # Preserved!
     assert put_data["title"] == "Updated Title of AI Review"
 
     # 6. Archive project
-    archive_resp = client.patch(f"/projects/{project_id}/archive")
+    archive_resp = client.patch(f"/api/v1/projects/{project_id}/archive")
     assert archive_resp.status_code == 200
     assert archive_resp.json()["status"] == "archived"
 
     # 7. List excluding archived returns only 1 active project
-    list_active = client.get("/projects")
+    list_active = client.get("/api/v1/projects")
     assert list_active.json()["total"] == 1
 
     # 8. List including archived returns 2 projects
-    list_all = client.get("/projects", params={"include_archived": True})
+    list_all = client.get("/api/v1/projects", params={"include_archived": True})
     assert list_all.json()["total"] == 2
 
     # 9. Restore project
-    restore_resp = client.patch(f"/projects/{project_id}/restore")
+    restore_resp = client.patch(f"/api/v1/projects/{project_id}/restore")
     assert restore_resp.status_code == 200
     assert restore_resp.json()["status"] == "active"

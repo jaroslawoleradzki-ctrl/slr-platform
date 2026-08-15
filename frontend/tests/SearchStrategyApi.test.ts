@@ -44,7 +44,7 @@ describe('Search Strategy frontend-backend contract', () => {
 
     await expect(projectApiService.getSearchStrategy('lean_energy')).resolves.toEqual(backendResponse);
     expect(fetchMock).toHaveBeenCalledWith(
-      'http://localhost:8000/projects/lean_energy/search-strategy',
+      '/api/v1/projects/lean_energy/search-strategy',
       { headers: { Accept: 'application/json' } },
     );
   });
@@ -95,7 +95,7 @@ describe('Search Strategy frontend-backend contract', () => {
 
     await expect(projectApiService.saveSearchStrategy('lean_energy', payload)).resolves.toEqual(response);
     expect(fetchMock).toHaveBeenCalledWith(
-      'http://localhost:8000/projects/lean_energy/search-strategy',
+      '/api/v1/projects/lean_energy/search-strategy',
       expect.objectContaining({ method: 'PUT', body: JSON.stringify(payload) }),
     );
   });
@@ -134,7 +134,7 @@ describe('Search Strategy frontend-backend contract', () => {
 
     expect(result).toEqual(backendResponse);
     expect(fetchMock).toHaveBeenCalledWith(
-      'http://localhost:8000/projects/lean_energy/search-strategy/executions',
+      '/api/v1/projects/lean_energy/search-strategy/executions',
       expect.objectContaining({
         method: 'POST',
         body: JSON.stringify({
@@ -158,7 +158,7 @@ describe('Search Strategy frontend-backend contract', () => {
     await projectApiService.executeSearchStrategy('lean_energy', strategy, 'next-page');
 
     expect(fetchMock).toHaveBeenCalledWith(
-      'http://localhost:8000/projects/lean_energy/search-strategy/executions',
+      '/api/v1/projects/lean_energy/search-strategy/executions',
       expect.objectContaining({
         body: expect.stringContaining('"cursor":"next-page"'),
       }),
@@ -242,7 +242,7 @@ describe('Search Strategy frontend-backend contract', () => {
 
     expect(result).toEqual(backendResponse);
     expect(fetchMock).toHaveBeenCalledWith(
-      'http://localhost:8000/projects/lean_energy/search-results/imports',
+      '/api/v1/projects/lean_energy/search-results/imports',
       expect.objectContaining({
         method: 'POST',
         body: JSON.stringify({ records: [record] }),
@@ -266,7 +266,7 @@ describe('Search Strategy frontend-backend contract', () => {
       .resolves.toEqual(backendResponse);
 
     const request = fetchMock.mock.calls[0][1] as RequestInit;
-    expect(fetchMock.mock.calls[0][0]).toBe('http://localhost:8000/projects/lean_energy/imports');
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/v1/projects/lean_energy/imports');
     expect(request.method).toBe('POST');
     expect(request.body).toBeInstanceOf(FormData);
     expect((request.body as FormData).get('file')).toBe(file);
