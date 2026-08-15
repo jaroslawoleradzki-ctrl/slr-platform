@@ -1,7 +1,8 @@
-"""Phase 10.1: Core Data Synthesis / Evidence Synthesis in-memory domain models.
+"""Phase 10: Core Data Synthesis / Evidence Synthesis domain models.
 
 Pure Python domain objects, enums, value objects, and relation models
-establishing deterministic evidence synthesis and QA profile integration.
+establishing deterministic evidence synthesis, terminology classification,
+and QA profile integration.
 """
 
 from __future__ import annotations
@@ -38,6 +39,13 @@ class ClassificationApprovalState(StrEnum):
     PENDING = "pending"
     APPROVED = "approved"
     REJECTED = "rejected"
+
+
+class TermType(StrEnum):
+    """Discriminator for terminology classification domain."""
+
+    LEAN_PRACTICE = "lean_practice"
+    ENERGY_EFFECT = "energy_effect"
 
 
 # Standard energy conversion factors to Base Unit (Joules) for pure domain validation
@@ -91,8 +99,18 @@ class LeanPracticeCategory(BaseModel):
 
     category_id: str = Field(min_length=1)
     name: str = Field(min_length=1)
+    project_id: str = Field(default="", min_length=0)
     description: str | None = None
     display_order: int = 0
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+    @field_validator("created_at", "updated_at")
+    @classmethod
+    def validate_tz(cls, v: datetime) -> datetime:
+        if v.tzinfo is None or v.utcoffset() is None:
+            raise ValueError("timestamps must be timezone-aware")
+        return v
 
 
 class EnergyEffectCategory(BaseModel):
@@ -102,8 +120,67 @@ class EnergyEffectCategory(BaseModel):
 
     category_id: str = Field(min_length=1)
     name: str = Field(min_length=1)
+    project_id: str = Field(default="", min_length=0)
     description: str | None = None
     display_order: int = 0
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+    @field_validator("created_at", "updated_at")
+    @classmethod
+    def validate_tz(cls, v: datetime) -> datetime:
+        if v.tzinfo is None or v.utcoffset() is None:
+            raise ValueError("timestamps must be timezone-aware")
+        return v
+
+
+class TermMapping(BaseModel):
+    """Researcher mapping from an empirical source term to an analytical category."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    mapping_id: UUID = Field(default_factory=uuid4)
+    project_id: str = Field(min_length=1)
+    term_type: TermType
+    source_value: str = Field(min_length=1)
+    analytical_category_id: str = Field(min_length=1)
+    approval_state: ClassificationApprovalState = ClassificationApprovalState.PENDING
+    approved_by: str | None = None
+    approved_at: datetime | None = None
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+    @field_validator("approved_at")
+    @classmethod
+    def validate_approved_at(cls, v: datetime | None) -> datetime | None:
+        if v is not None and (v.tzinfo is None or v.utcoffset() is None):
+            raise ValueError("approved_at must be timezone-aware")
+        return v
+
+    @field_validator("created_at", "updated_at")
+    @classmethod
+    def validate_tz(cls, v: datetime) -> datetime:
+        if v.tzinfo is None or v.utcoffset() is None:
+            raise ValueError("timestamps must be timezone-aware")
+        return v
+
+
+class ClassifiedSourceTerm(BaseModel):
+    """Discovered source term combined with its current analytical mapping state."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    project_id: str = Field(min_length=1)
+    term_type: TermType
+    source_value: str = Field(min_length=1)
+    occurrence_count: int = Field(ge=0, default=1)
+    publication_count: int = Field(ge=0, default=1)
+    analytical_category_id: str | None = None
+    analytical_category_name: str | None = None
+    approval_state: ClassificationApprovalState = ClassificationApprovalState.PENDING
+    approved_by: str | None = None
+    approved_at: datetime | None = None
+    mapping_id: UUID | None = None
 
 
 class QACriterionAssessmentSummary(BaseModel):

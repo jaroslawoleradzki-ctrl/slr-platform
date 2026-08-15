@@ -17,6 +17,7 @@ import { FullTextScreeningPage } from './pages/FullTextScreeningPage';
 import { ScreeningSectionLayout } from './components/screening/ScreeningSectionLayout';
 import { QualityAssessmentPage } from './pages/QualityAssessmentPage';
 import { DataExtractionPage } from './pages/DataExtractionPage';
+import { EvidenceSynthesisPage } from './pages/EvidenceSynthesisPage';
 import { ExportsPage } from './pages/ExportsPage';
 
 export const App: React.FC = () => {
@@ -52,6 +53,8 @@ export const App: React.FC = () => {
             <Route path="qa" element={<Navigate to="../quality-assessment" replace />} />
             <Route path="extract" element={<DataExtractionPage />} />
             <Route path="extract/:publicationId" element={<DataExtractionPage />} />
+            <Route path="synthesis" element={<EvidenceSynthesisPage />} />
+            <Route path="synthesis/classification" element={<EvidenceSynthesisPage />} />
             <Route path="exports" element={<ExportsPage />} />
           </Route>
 
