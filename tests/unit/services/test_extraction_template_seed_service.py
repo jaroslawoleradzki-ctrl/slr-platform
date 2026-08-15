@@ -169,6 +169,7 @@ class TestLeanEnergyDomainBehavior:
                 status=ValueStatus.PRESENT,
                 origin=ValueOrigin.REPORTED,
                 text_value="Case Study",
+                source_locator="Methods section",
             ),
         ]
 
@@ -181,18 +182,21 @@ class TestLeanEnergyDomainBehavior:
                     status=ValueStatus.PRESENT,
                     origin=ValueOrigin.REPORTED,
                     text_value="SMED (Single-Minute Exchange of Die)",
+                    source_locator="Results table",
                 ),
                 ExtractedValueState(
                     field_key="energy_effect_indicator",
                     status=ValueStatus.PRESENT,
                     origin=ValueOrigin.REPORTED,
                     text_value="Electricity Consumption",
+                    source_locator="Results table",
                 ),
                 ExtractedValueState(
                     field_key="evidence_character",
                     status=ValueStatus.PRESENT,
                     origin=ValueOrigin.REPORTED,
                     text_value="Empirically Demonstrated",
+                    source_locator="Results table",
                 ),
             ],
         )
@@ -218,6 +222,7 @@ class TestLeanEnergyDomainBehavior:
                 status=ValueStatus.PRESENT,
                 origin=ValueOrigin.REPORTED,
                 text_value="Empirical / Field Experiment",
+                source_locator="Methods section",
             ),
         ]
 
@@ -230,18 +235,21 @@ class TestLeanEnergyDomainBehavior:
                     status=ValueStatus.PRESENT,
                     origin=ValueOrigin.REPORTED,
                     text_value="SMED (Single-Minute Exchange of Die)",
+                    source_locator="Results table",
                 ),
                 ExtractedValueState(
                     field_key="energy_effect_indicator",
                     status=ValueStatus.PRESENT,
                     origin=ValueOrigin.REPORTED,
                     text_value="Electricity Consumption",
+                    source_locator="Results table",
                 ),
                 ExtractedValueState(
                     field_key="evidence_character",
                     status=ValueStatus.PRESENT,
                     origin=ValueOrigin.REPORTED,
                     text_value="Quantitatively Measured",
+                    source_locator="Results table",
                 ),
             ],
         )
@@ -255,18 +263,21 @@ class TestLeanEnergyDomainBehavior:
                     status=ValueStatus.PRESENT,
                     origin=ValueOrigin.REPORTED,
                     text_value="5S",
+                    source_locator="Results table",
                 ),
                 ExtractedValueState(
                     field_key="energy_effect_indicator",
                     status=ValueStatus.PRESENT,
                     origin=ValueOrigin.REPORTED,
                     text_value="Standby / Idle Energy",
+                    source_locator="Results table",
                 ),
                 ExtractedValueState(
                     field_key="evidence_character",
                     status=ValueStatus.PRESENT,
                     origin=ValueOrigin.REPORTED,
                     text_value="Qualitatively Described",
+                    source_locator="Results table",
                 ),
             ],
         )

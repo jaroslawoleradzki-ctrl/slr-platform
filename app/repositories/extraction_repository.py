@@ -18,6 +18,8 @@ from app.domain.extraction import (
     ProjectExtractionConfiguration,
     ValueOrigin,
     ValueStatus,
+    is_legacy_missingness_snapshot,
+    legacy_extraction_value_hydration,
 )
 
 
@@ -90,8 +92,15 @@ class SqliteExtractionRepository:
             ).fetchall()
         return [_record_from_row(row) for row in rows]
 
-    def append_revision(self, revision: ExtractionRevision) -> ExtractionRevision:
+    def append_revision(self, revision: ExtractionRevision, *, new_record: ExtractionRecord | None = None) -> ExtractionRevision:
         with self._connect() as connection:
+            if new_record is not None:
+                connection.execute(
+                    """INSERT INTO extraction_records
+                    (record_id, project_id, publication_id, template_id, template_version, current_status, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (str(new_record.record_id), new_record.project_id, str(new_record.publication_id), new_record.template_id, new_record.template_version, new_record.current_status.value, new_record.created_at.isoformat(), new_record.updated_at.isoformat()),
+                )
             record_row = connection.execute(
                 "SELECT record_id, project_id, publication_id FROM extraction_records WHERE record_id = ?",
                 (str(revision.record_id),),
@@ -283,7 +292,7 @@ class SqliteExtractionRepository:
                     str(group_item_id) if group_item_id else None,
                     value.field_key,
                     value.status.value,
-                    value.origin.value,
+                    value.origin.value if value.origin is not None else None,
                     value.text_value,
                     value.int_value,
                     value.float_value,
@@ -341,21 +350,30 @@ class SqliteExtractionRepository:
                 item_index=item_index,
                 values=group_values[(revision_id, group_item_id)],
             )
-        return [
-            ExtractionRevision(
-                revision_id=UUID(row[0]),
-                record_id=UUID(row[1]),
-                project_id=row[2],
-                publication_id=UUID(row[3]),
-                revision_index=row[4],
-                reviewer_id=row[5],
-                completeness_status=ExtractionCompletenessStatus(row[6]),
-                created_at=_as_datetime(row[7]),
-                publication_values=publication_values[row[0]],
-                group_items=sorted(group_items[row[0]].values(), key=lambda item: (item.group_key, item.item_index)),
-            )
-            for row in rows
-        ]
+        legacy_value_ids = {
+            value.value_id
+            for value in [
+                *[value for values in publication_values.values() for value in values],
+                *[value for values in group_values.values() for value in values],
+            ]
+            if is_legacy_missingness_snapshot(value)
+        }
+        with legacy_extraction_value_hydration(legacy_value_ids):
+            return [
+                ExtractionRevision(
+                    revision_id=UUID(row[0]),
+                    record_id=UUID(row[1]),
+                    project_id=row[2],
+                    publication_id=UUID(row[3]),
+                    revision_index=row[4],
+                    reviewer_id=row[5],
+                    completeness_status=ExtractionCompletenessStatus(row[6]),
+                    created_at=_as_datetime(row[7]),
+                    publication_values=publication_values[row[0]],
+                    group_items=sorted(group_items[row[0]].values(), key=lambda item: (item.group_key, item.item_index)),
+                )
+                for row in rows
+            ]
 
     def _connect(self) -> sqlite3.Connection:
         connection = sqlite3.connect(self._database_path)
@@ -379,11 +397,11 @@ def _record_from_row(row: tuple) -> ExtractionRecord:
 
 
 def _value_from_child_row(row: tuple) -> ExtractedValueState:
-    return ExtractedValueState(
+    payload = dict(
         value_id=UUID(row[1]),
         field_key=row[5],
         status=ValueStatus(row[6]),
-        origin=ValueOrigin(row[7]),
+        origin=ValueOrigin(row[7]) if row[7] is not None else None,
         text_value=row[8],
         int_value=row[9],
         float_value=row[10],
@@ -396,6 +414,29 @@ def _value_from_child_row(row: tuple) -> ExtractedValueState:
         source_quote=row[17],
         reviewer_note=row[18],
     )
+    # v0.4.8 persisted NOT_REPORTED/NOT_APPLICABLE with mandatory REPORTED
+    # origin.  Permit only that final status/origin incompatibility while
+    # retaining normal Pydantic field validation (IDs, field_key, quote length,
+    # types, etc.).  This is deliberately not a model_construct escape hatch.
+    legacy_candidate = (
+        payload["status"] in (ValueStatus.NOT_REPORTED, ValueStatus.NOT_APPLICABLE)
+        and payload["origin"] is ValueOrigin.REPORTED
+        and all(
+            payload[name] is None
+            for name in (
+                "text_value",
+                "int_value",
+                "float_value",
+                "bool_value",
+                "unit_value",
+                "json_value",
+            )
+        )
+    )
+    if legacy_candidate:
+        with legacy_extraction_value_hydration({payload["value_id"]}):
+            return ExtractedValueState(**payload)
+    return ExtractedValueState(**payload)
 
 
 def _as_datetime(value: str) -> datetime:

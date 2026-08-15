@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from app.domain.extraction import (
     ExtractedGroupItemState,
@@ -100,6 +100,7 @@ class ExtractionExecutionService:
         # 4. Get/Create ExtractionRecord header
         try:
             record = self._extraction_repo.get_record(project_id, publication_id)
+            new_record = None
         except ExtractionRecordNotFoundError:
             record = ExtractionRecord(
                 project_id=project_id,
@@ -108,7 +109,7 @@ class ExtractionExecutionService:
                 template_version=config.template_version,
                 current_status=ExtractionCompletenessStatus.NOT_STARTED,
             )
-            record = self._extraction_repo.create_record(record)
+            new_record = record
 
         # Calculate next revision index
         history = self._extraction_repo.list_revision_history(project_id, publication_id)
@@ -157,12 +158,16 @@ class ExtractionExecutionService:
                     "is missing" in err
                     or "requires at least" in err
                     or "missing in group" in err
+                    or "is unassessed" in err
                 )
             ]
             if structural_errors:
                 raise ExtractionValidationError(structural_errors)
 
         # Build final revision with calculated completeness
+        def snapshot_value(value: ExtractedValueState) -> ExtractedValueState:
+            return value.model_copy(update={"value_id": uuid4()})
+
         final_revision = ExtractionRevision(
             record_id=record.record_id,
             project_id=project_id,
@@ -170,12 +175,12 @@ class ExtractionExecutionService:
             revision_index=next_index,
             reviewer_id=reviewer_id,
             completeness_status=completeness,
-            publication_values=publication_values,
-            group_items=items,
+            publication_values=[snapshot_value(value) for value in publication_values],
+            group_items=[item.model_copy(update={"values": [snapshot_value(value) for value in item.values]}) for item in items],
         )
 
         # Persist revision atomically
-        return self._extraction_repo.append_revision(final_revision)
+        return self._extraction_repo.append_revision(final_revision, new_record=new_record)
 
     def get_latest_revision(
         self, project_id: str, publication_id: UUID

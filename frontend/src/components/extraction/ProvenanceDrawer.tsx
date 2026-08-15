@@ -7,6 +7,8 @@ interface ProvenanceDrawerProps {
   fieldKey: string;
   fieldName: string;
   valueState: ExtractedValueStateDTO;
+  allowSourceProvenance: boolean;
+  allowReviewerNote: boolean;
   onSave: (updatedProvenance: Partial<ExtractedValueStateDTO>) => void;
   onClose: () => void;
 }
@@ -16,6 +18,8 @@ export const ProvenanceDrawer: React.FC<ProvenanceDrawerProps> = ({
   fieldKey,
   fieldName,
   valueState,
+  allowSourceProvenance,
+  allowReviewerNote,
   onSave,
   onClose,
 }) => {
@@ -38,11 +42,11 @@ export const ProvenanceDrawer: React.FC<ProvenanceDrawerProps> = ({
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
     onSave({
-      source_page: sourcePage.trim() || null,
-      source_section: sourceSection.trim() || null,
-      source_locator: sourceLocator.trim() || null,
-      source_quote: sourceQuote.trim() || null,
-      reviewer_note: reviewerNote.trim() || null,
+      source_page: allowSourceProvenance ? sourcePage.trim() || null : null,
+      source_section: allowSourceProvenance ? sourceSection.trim() || null : null,
+      source_locator: allowSourceProvenance ? sourceLocator.trim() || null : null,
+      source_quote: allowSourceProvenance ? sourceQuote.trim() || null : null,
+      reviewer_note: allowReviewerNote ? reviewerNote.trim() || null : null,
     });
     onClose();
   };
@@ -114,6 +118,7 @@ export const ProvenanceDrawer: React.FC<ProvenanceDrawerProps> = ({
           <input
             id="provenance-source-page"
             type="text"
+            disabled={!allowSourceProvenance}
             value={sourcePage}
             onChange={(e) => setSourcePage(e.target.value)}
             placeholder="np. Str. 14, p. 12"
@@ -136,6 +141,7 @@ export const ProvenanceDrawer: React.FC<ProvenanceDrawerProps> = ({
           <input
             id="provenance-source-section"
             type="text"
+            disabled={!allowSourceProvenance}
             value={sourceSection}
             onChange={(e) => setSourceSection(e.target.value)}
             placeholder="np. Methods 2.1, Results"
@@ -158,6 +164,7 @@ export const ProvenanceDrawer: React.FC<ProvenanceDrawerProps> = ({
           <input
             id="provenance-source-locator"
             type="text"
+            disabled={!allowSourceProvenance}
             value={sourceLocator}
             onChange={(e) => setSourceLocator(e.target.value)}
             placeholder="np. Tabela 2 row 4, Rysunek 1"
@@ -180,6 +187,7 @@ export const ProvenanceDrawer: React.FC<ProvenanceDrawerProps> = ({
           <textarea
             id="provenance-source-quote"
             rows={4}
+            disabled={!allowSourceProvenance}
             maxLength={500}
             value={sourceQuote}
             onChange={(e) => setSourceQuote(e.target.value)}
@@ -207,6 +215,7 @@ export const ProvenanceDrawer: React.FC<ProvenanceDrawerProps> = ({
           <textarea
             id="provenance-reviewer-note"
             rows={3}
+            disabled={!allowReviewerNote}
             value={reviewerNote}
             onChange={(e) => setReviewerNote(e.target.value)}
             placeholder="Komentarz własny recenzenta dot. tego pola..."

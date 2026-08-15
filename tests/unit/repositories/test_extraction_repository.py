@@ -47,7 +47,13 @@ def _record(project_id: str, publication_id: UUID | None = None) -> ExtractionRe
 
 
 def _value(field_key: str, **kwargs) -> ExtractedValueState:
-    return ExtractedValueState(field_key=field_key, status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, **kwargs)
+    return ExtractedValueState(
+        field_key=field_key,
+        status=ValueStatus.PRESENT,
+        origin=ValueOrigin.REPORTED,
+        source_locator="fixture source",
+        **kwargs,
+    )
 
 
 @pytest.fixture
@@ -138,7 +144,60 @@ def test_append_only_history_latest_and_typed_value_hydration(repository):
     )
 
 
-def test_missingness_and_unclear_values_preserve_status_origin_and_provenance(repository):
+def test_failed_append_rolls_back_first_record_and_later_revision(repository):
+    """A persistence failure cannot leave an orphan record or partial revision."""
+    duplicate_id = uuid4()
+    record = _record("project-a")
+    failed_first = ExtractionRevision(
+        record_id=record.record_id,
+        project_id="project-a",
+        publication_id=record.publication_id,
+        revision_index=1,
+        reviewer_id="alice",
+        completeness_status=ExtractionCompletenessStatus.IN_PROGRESS,
+        publication_values=[
+            _value("one", value_id=duplicate_id, text_value="One"),
+            _value("two", value_id=duplicate_id, text_value="Two"),
+        ],
+    )
+    with pytest.raises(ExtractionRevisionConflictError):
+        repository.append_revision(failed_first, new_record=record)
+    with pytest.raises(ExtractionRecordNotFoundError):
+        repository.get_record("project-a", record.publication_id)
+
+    repository.create_record(record)
+    first = ExtractionRevision(
+        record_id=record.record_id,
+        project_id="project-a",
+        publication_id=record.publication_id,
+        revision_index=1,
+        reviewer_id="alice",
+        completeness_status=ExtractionCompletenessStatus.IN_PROGRESS,
+        publication_values=[_value("one", text_value="One")],
+    )
+    repository.append_revision(first)
+    with pytest.raises(ExtractionRevisionConflictError):
+        repository.append_revision(
+            ExtractionRevision(
+                record_id=record.record_id,
+                project_id="project-a",
+                publication_id=record.publication_id,
+                revision_index=2,
+                reviewer_id="alice",
+                completeness_status=ExtractionCompletenessStatus.COMPLETE,
+                publication_values=[
+                    _value("one", value_id=duplicate_id, text_value="Updated"),
+                    _value("two", value_id=duplicate_id, text_value="Duplicate"),
+                ],
+            )
+        )
+    history = repository.list_revision_history("project-a", record.publication_id)
+    assert len(history) == 1
+    assert history[0].publication_values[0].text_value == "One"
+    assert repository.get_record("project-a", record.publication_id).current_status is ExtractionCompletenessStatus.IN_PROGRESS
+
+
+def test_missingness_and_unclear_values_preserve_status_and_notes(repository):
     record = repository.create_record(_record("project-a"))
     revision = ExtractionRevision(
         record_id=record.record_id,
@@ -148,12 +207,11 @@ def test_missingness_and_unclear_values_preserve_status_origin_and_provenance(re
         reviewer_id="alice",
         completeness_status=ExtractionCompletenessStatus.IN_PROGRESS,
         publication_values=[
-            ExtractedValueState(field_key="missing", status=ValueStatus.NOT_REPORTED, origin=ValueOrigin.REPORTED),
+            ExtractedValueState(field_key="missing", status=ValueStatus.NOT_REPORTED),
             ExtractedValueState(
                 field_key="unclear",
                 status=ValueStatus.UNCLEAR,
-                origin=ValueOrigin.REVIEWER_CODED,
-                source_quote="unclear",
+                reviewer_note="The source is ambiguous.",
             ),
         ],
     )

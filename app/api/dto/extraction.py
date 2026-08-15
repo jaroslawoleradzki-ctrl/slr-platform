@@ -55,8 +55,8 @@ class ExtractedValueStateDTO(BaseModel):
 
     value_id: UUID | None = None
     field_key: str
-    status: str = Field(..., description="ValueStatus: present, not_reported, not_applicable, unclear")
-    origin: str = Field(..., description="ValueOrigin: reported, reviewer_coded")
+    status: str = Field(..., description="ValueStatus: unassessed, present, not_reported, not_applicable, unclear")
+    origin: str | None = None
 
     text_value: str | None = None
     int_value: int | None = None
