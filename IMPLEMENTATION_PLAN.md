@@ -10,7 +10,7 @@ Unlike ROADMAP.md, this file is intentionally technical and may change frequentl
 
 Current release:
 
-v0.4.6 — Structured Data Extraction Dataset Export
+v0.4.7 — Data Extraction Configuration Visibility
 
 Status:
 
@@ -41,6 +41,9 @@ Release scope:
   terminology, and unified conflicts/resolutions navigation;
 - Dashboard/Search polish: corrected search import contract, provider Load More,
   append-only result pagination, local pagination, and cross-page selection.
+- Data Extraction eligibility diagnostics: projects without an extraction
+  configuration retain their blocked publication list and show the required
+  configuration message in the default table view.
 
 Next milestone:
 

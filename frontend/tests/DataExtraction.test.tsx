@@ -318,6 +318,49 @@ describe('Data Extraction Workspace GUI (Phase 9.5 & 9.6)', () => {
     expect(extractionApi.getExtractionRecord).not.toHaveBeenCalled();
   });
 
+  it('shows the production missing-configuration gate instead of an empty table', async () => {
+    localStorage.setItem('slr_screening_reviewer_id', 'jarek');
+    vi.mocked(extractionApi.getProjectTemplate).mockResolvedValue(null);
+    vi.mocked(extractionApi.getExtractionEligibility).mockResolvedValue({
+      project_id: 'proj_test',
+      total_publications: 1,
+      eligible_count: 0,
+      items: [{
+        publication_id: pubId,
+        status: 'no_extraction_configuration',
+        is_eligible: false,
+        reason_details: 'Project has no active data extraction configuration.',
+      }],
+    });
+    vi.mocked(extractionApi.listExtractionRecords).mockResolvedValue({
+      project_id: 'proj_test',
+      total_records: 0,
+      items: [],
+    });
+    vi.mocked(extractionApi.getExtractionProgress).mockResolvedValue({
+      project_id: 'proj_test',
+      total_eligible_publications: 0,
+      not_started_count: 0,
+      in_progress_count: 0,
+      complete_count: 0,
+      needs_review_count: 0,
+      completion_percentage: 0,
+    });
+    vi.mocked(extractionApi.getExtractionMatrix).mockRejectedValue(
+      new ExtractionApiError(404, "Project 'proj_test' has no extraction configuration."),
+    );
+
+    renderComponent('/projects/proj_test/extract');
+
+    expect(await screen.findByText('Zestawienie Publikacji (1)')).toBeInTheDocument();
+    expect(screen.getByText(pubId)).toBeInTheDocument();
+    expect(screen.getByText('Zablokowana: no_extraction_configuration')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: new RegExp(`Publikacja ${pubId} jest zablokowana`) })).toBeDisabled();
+    expect(screen.getByRole('alert')).toHaveTextContent(/nie ma aktywnej konfiguracji ekstrakcji danych/i);
+    expect(screen.getByRole('alert')).toHaveTextContent(/pozostają zablokowane/i);
+    expect(extractionApi.getExtractionRecord).not.toHaveBeenCalled();
+  });
+
   it('renders an empty table when eligibility returns no publications', async () => {
     vi.mocked(extractionApi.getExtractionEligibility).mockResolvedValue({
       project_id: 'proj_test',

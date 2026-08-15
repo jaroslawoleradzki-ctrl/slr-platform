@@ -219,15 +219,18 @@ export const DataExtractionPage: React.FC = () => {
         ]);
 
         if (!isMounted) return;
-        if (!templateRes) {
-          setErrorBanner('Projekt nie ma skonfigurowanego szablonu ekstrakcji danych.');
-          return;
-        }
-        setTemplateVersion(templateRes);
         if (progRes) setProgress(progRes);
         setRecordsSummary(recsRes.items || []);
         if (matrixRes) setMatrix(matrixRes);
         setEligibilityList(eligRes.items);
+
+        if (!templateRes) {
+          setErrorBanner(
+            'Projekt nie ma aktywnej konfiguracji ekstrakcji danych. Publikacje pozostają zablokowane do czasu skonfigurowania szablonu ekstrakcji.',
+          );
+          return;
+        }
+        setTemplateVersion(templateRes);
 
         let pubIdToLoad = selectedPubId || routePubId;
         const eligiblePubs = eligRes.items.filter((item) => item.is_eligible);
@@ -493,6 +496,27 @@ export const DataExtractionPage: React.FC = () => {
         </div>
       </div>
 
+      {errorBanner && (
+        <div
+          role="alert"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px',
+            padding: '12px 16px',
+            backgroundColor: 'var(--status-error-bg)',
+            border: '1px solid var(--status-error-text)',
+            borderRadius: 'var(--radius-md)',
+            color: 'var(--status-error-text)',
+            marginBottom: '20px',
+            fontSize: '0.85rem',
+          }}
+        >
+          <AlertCircle size={18} />
+          <div style={{ flex: 1 }}>{errorBanner}</div>
+        </div>
+      )}
+
       {/* VIEW MODE 1: TABULAR VIEW (Progress + Summary Table + Matrix) */}
       {viewMode === 'table' && (
         <div>
@@ -726,26 +750,6 @@ export const DataExtractionPage: React.FC = () => {
           )}
 
           {/* Status Banners */}
-          {errorBanner && (
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '10px',
-                padding: '12px 16px',
-                backgroundColor: 'var(--status-error-bg)',
-                border: '1px solid var(--status-error-text)',
-                borderRadius: 'var(--radius-md)',
-                color: 'var(--status-error-text)',
-                marginBottom: '20px',
-                fontSize: '0.85rem',
-              }}
-            >
-              <AlertCircle size={18} />
-              <div style={{ flex: 1 }}>{errorBanner}</div>
-            </div>
-          )}
-
           {successBanner && (
             <div
               style={{
