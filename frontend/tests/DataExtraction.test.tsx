@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { DataExtractionPage } from '../src/pages/DataExtractionPage';
-import { extractionApi } from '../src/api/extractionApi';
+import { ExtractionApiError, extractionApi } from '../src/api/extractionApi';
 import { ProjectProvider } from '../src/context/ProjectContext';
 
 const pubId = '27ae7210-a6b3-418d-8e31-b9e33a695762';
@@ -235,6 +235,144 @@ describe('Data Extraction Workspace GUI (Phase 9.5 & 9.6)', () => {
     expect(await screen.findByText('Postęp Ekstrakcji Danych (Data Extraction Progress)')).toBeInTheDocument();
     expect(await screen.findByText('33.3%')).toBeInTheDocument();
     expect(await screen.findByText('Sample Article Title')).toBeInTheDocument();
+    expect(screen.getByText('W trakcie')).toBeInTheDocument();
+  });
+
+  it('shows and saves an eligible publication before its first extraction record exists', async () => {
+    vi.mocked(extractionApi.listExtractionRecords).mockResolvedValue({
+      project_id: 'proj_test',
+      total_records: 0,
+      items: [],
+    });
+    vi.mocked(extractionApi.getExtractionRecord).mockRejectedValue(
+      new ExtractionApiError(404, 'Extraction record was not found.'),
+    );
+    vi.mocked(extractionApi.getExtractionHistory).mockResolvedValue({
+      project_id: 'proj_test',
+      publication_id: pubId,
+      total_revisions: 0,
+      revisions: [],
+    });
+
+    renderComponent('/projects/proj_test/extract');
+
+    expect(await screen.findByText('Zestawienie Publikacji (1)')).toBeInTheDocument();
+    expect(screen.getByText(pubId)).toBeInTheDocument();
+    expect(screen.getAllByText('Nie rozpoczęto').length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByRole('button', { name: new RegExp(`Otwórz formularz ekstrakcji dla ${pubId}`) }));
+
+    expect(await screen.findByText('Typ badania (Study Design)')).toBeInTheDocument();
+    expect(screen.queryByText(/Błąd pobierania danych ekstrakcji/i)).not.toBeInTheDocument();
+
+    vi.mocked(extractionApi.getExtractionRecord).mockResolvedValue(mockRecord);
+    vi.mocked(extractionApi.listExtractionRecords).mockResolvedValue(mockRecordsSummary);
+    fireEvent.click(screen.getByRole('button', { name: /Zapisz Szkic/i }));
+
+    await waitFor(() => {
+      expect(extractionApi.submitRevision).toHaveBeenCalledWith('proj_test', pubId, expect.objectContaining({
+        mark_complete: false,
+      }));
+    });
+    expect(await screen.findByText(/Zapisano szkic ekstrakcji/i)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /Powrót do Widoku Tabelarycznego/i }));
+    expect(await screen.findByText('W trakcie')).toBeInTheDocument();
+  });
+
+  it('keeps completed extraction records visible with their completed status', async () => {
+    vi.mocked(extractionApi.listExtractionRecords).mockResolvedValue({
+      ...mockRecordsSummary,
+      items: [{ ...mockRecordsSummary.items[0], extraction_status: 'complete' }],
+    });
+
+    renderComponent('/projects/proj_test/extract');
+
+    expect(await screen.findByText('Sample Article Title')).toBeInTheDocument();
+    expect(screen.getAllByText('Zakończone').length).toBeGreaterThan(0);
+  });
+
+  it('shows blocked publications as non-editable eligibility candidates', async () => {
+    vi.mocked(extractionApi.getExtractionEligibility).mockResolvedValue({
+      project_id: 'proj_test',
+      total_publications: 1,
+      eligible_count: 0,
+      items: [{
+        publication_id: pubId,
+        status: 'blocked_qa_incomplete',
+        is_eligible: false,
+        reason_details: 'Quality Assessment is incomplete.',
+      }],
+    });
+    vi.mocked(extractionApi.listExtractionRecords).mockResolvedValue({
+      project_id: 'proj_test',
+      total_records: 0,
+      items: [],
+    });
+
+    renderComponent('/projects/proj_test/extract');
+
+    expect(await screen.findByText('Zestawienie Publikacji (1)')).toBeInTheDocument();
+    expect(screen.getByText('Zablokowana: blocked_qa_incomplete')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: new RegExp(`Publikacja ${pubId} jest zablokowana`) })).toBeDisabled();
+    expect(extractionApi.getExtractionRecord).not.toHaveBeenCalled();
+  });
+
+  it('shows the production missing-configuration gate instead of an empty table', async () => {
+    localStorage.setItem('slr_screening_reviewer_id', 'jarek');
+    vi.mocked(extractionApi.getProjectTemplate).mockResolvedValue(null);
+    vi.mocked(extractionApi.getExtractionEligibility).mockResolvedValue({
+      project_id: 'proj_test',
+      total_publications: 1,
+      eligible_count: 0,
+      items: [{
+        publication_id: pubId,
+        status: 'no_extraction_configuration',
+        is_eligible: false,
+        reason_details: 'Project has no active data extraction configuration.',
+      }],
+    });
+    vi.mocked(extractionApi.listExtractionRecords).mockResolvedValue({
+      project_id: 'proj_test',
+      total_records: 0,
+      items: [],
+    });
+    vi.mocked(extractionApi.getExtractionProgress).mockResolvedValue({
+      project_id: 'proj_test',
+      total_eligible_publications: 0,
+      not_started_count: 0,
+      in_progress_count: 0,
+      complete_count: 0,
+      needs_review_count: 0,
+      completion_percentage: 0,
+    });
+    vi.mocked(extractionApi.getExtractionMatrix).mockRejectedValue(
+      new ExtractionApiError(404, "Project 'proj_test' has no extraction configuration."),
+    );
+
+    renderComponent('/projects/proj_test/extract');
+
+    expect(await screen.findByText('Zestawienie Publikacji (1)')).toBeInTheDocument();
+    expect(screen.getByText(pubId)).toBeInTheDocument();
+    expect(screen.getByText('Zablokowana: no_extraction_configuration')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: new RegExp(`Publikacja ${pubId} jest zablokowana`) })).toBeDisabled();
+    expect(screen.getByRole('alert')).toHaveTextContent(/nie ma aktywnej konfiguracji ekstrakcji danych/i);
+    expect(screen.getByRole('alert')).toHaveTextContent(/pozostają zablokowane/i);
+    expect(extractionApi.getExtractionRecord).not.toHaveBeenCalled();
+  });
+
+  it('renders an empty table when eligibility returns no publications', async () => {
+    vi.mocked(extractionApi.getExtractionEligibility).mockResolvedValue({
+      project_id: 'proj_test',
+      total_publications: 0,
+      eligible_count: 0,
+      items: [],
+    });
+
+    renderComponent('/projects/proj_test/extract');
+
+    expect(await screen.findByText('Zestawienie Publikacji (0)')).toBeInTheDocument();
+    expect(screen.getByText('Brak zakwalifikowanych publikacji do ekstrakcji w tym projekcie.')).toBeInTheDocument();
   });
 
   it('F. View mode switching between Table View and Form Workspace', async () => {
@@ -300,5 +438,53 @@ describe('Data Extraction Workspace GUI (Phase 9.5 & 9.6)', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: /Eksport JSON/i }));
     expect(await screen.findByRole('alert')).toHaveTextContent(/Nie udało się pobrać eksportu/i);
+  });
+
+  it('L. Repeating group items preserve durable group_item_id across add, edit, delete and submission', async () => {
+    const existingGroupId = 'uuid-arm-123';
+    const mockRecordWithGroup = {
+      ...mockRecord,
+      latest_revision: {
+        ...mockRecord.latest_revision,
+        group_items: [
+          {
+            group_key: 'study_arms',
+            group_item_id: existingGroupId,
+            item_index: 1,
+            values: [],
+          },
+        ],
+      },
+    };
+    vi.spyOn(extractionApi, 'getExtractionRecord').mockResolvedValue(mockRecordWithGroup);
+
+    renderComponent(`/projects/proj_test/extract/${pubId}`);
+    await screen.findByText('7. Ekstrakcja Danych (Data Extraction Workspace)');
+
+    // Add a new element
+    const addBtn = await screen.findByRole('button', { name: /Dodaj element/i });
+    fireEvent.click(addBtn);
+
+    // Save draft
+    const draftBtn = await screen.findByRole('button', { name: /Zapisz Szkic/i });
+    fireEvent.click(draftBtn);
+
+    await waitFor(() => {
+      expect(extractionApi.submitRevision).toHaveBeenCalledWith(
+        'proj_test',
+        pubId,
+        expect.objectContaining({
+          group_items: expect.arrayContaining([
+            expect.objectContaining({
+              group_item_id: existingGroupId,
+              item_index: 1,
+            }),
+            expect.objectContaining({
+              item_index: 2,
+            }),
+          ]),
+        })
+      );
+    });
   });
 });

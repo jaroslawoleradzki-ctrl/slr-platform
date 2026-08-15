@@ -1,9 +1,26 @@
 import React, { useState } from 'react';
 import { Search, ExternalLink, Filter, CheckCircle2, Clock, FileX, AlertCircle } from 'lucide-react';
-import { ExtractionRecordSummaryDTO, ExtractionCompletenessStatus } from '../../api/extractionApi';
+import {
+  ExtractionCompletenessStatus,
+  ExtractionEligibilityStatus,
+} from '../../api/extractionApi';
+
+export interface ExtractionPublicationRow {
+  publication_id: string;
+  title?: string | null;
+  authors?: string[];
+  publication_year?: number | null;
+  extraction_status: ExtractionCompletenessStatus;
+  latest_revision_index?: number | null;
+  latest_reviewer_id?: string | null;
+  latest_updated_at?: string | null;
+  is_eligible: boolean;
+  eligibility_status: ExtractionEligibilityStatus;
+  eligibility_reason?: string | null;
+}
 
 interface ExtractionTableViewProps {
-  records: ExtractionRecordSummaryDTO[];
+  records: ExtractionPublicationRow[];
   isLoading: boolean;
   onSelectPublication: (publicationId: string) => void;
 }
@@ -24,9 +41,10 @@ export const ExtractionTableView: React.FC<ExtractionTableViewProps> = ({
     // Search query filter
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
-      const titleMatch = rec.title.toLowerCase().includes(q);
-      const authorsMatch = rec.authors.some((a) => a.toLowerCase().includes(q));
-      if (!titleMatch && !authorsMatch) return false;
+      const titleMatch = rec.title?.toLowerCase().includes(q) ?? false;
+      const authorsMatch = rec.authors?.some((a) => a.toLowerCase().includes(q)) ?? false;
+      const idMatch = rec.publication_id.toLowerCase().includes(q);
+      if (!titleMatch && !authorsMatch && !idMatch) return false;
     }
     return true;
   });
@@ -234,6 +252,7 @@ export const ExtractionTableView: React.FC<ExtractionTableViewProps> = ({
                 <th style={{ padding: '12px 16px' }}>Publikacja</th>
                 <th style={{ padding: '12px 16px', width: '80px' }}>Rok</th>
                 <th style={{ padding: '12px 16px', width: '140px' }}>Status Ekstrakcji</th>
+                <th style={{ padding: '12px 16px', width: '150px' }}>Kwalifikowalność</th>
                 <th style={{ padding: '12px 16px', width: '110px' }}>Wersja (Rev)</th>
                 <th style={{ padding: '12px 16px', width: '130px' }}>Recenzent</th>
                 <th style={{ padding: '12px 16px', width: '140px' }}>Ostatnia zmiana</th>
@@ -251,7 +270,7 @@ export const ExtractionTableView: React.FC<ExtractionTableViewProps> = ({
                 >
                   <td style={{ padding: '12px 16px' }}>
                     <div style={{ fontWeight: 600, color: 'var(--text-primary)', marginBottom: '2px' }}>
-                      {rec.title}
+                      {rec.title || rec.publication_id}
                     </div>
                     {rec.authors && rec.authors.length > 0 && (
                       <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
@@ -263,6 +282,18 @@ export const ExtractionTableView: React.FC<ExtractionTableViewProps> = ({
                     {rec.publication_year || '—'}
                   </td>
                   <td style={{ padding: '12px 16px' }}>{renderStatusBadge(rec.extraction_status)}</td>
+                  <td style={{ padding: '12px 16px' }}>
+                    <span
+                      title={rec.eligibility_reason || rec.eligibility_status}
+                      style={{
+                        color: rec.is_eligible ? 'var(--status-success-text)' : 'var(--status-warning-text)',
+                        fontWeight: 600,
+                        fontSize: '0.75rem',
+                      }}
+                    >
+                      {rec.is_eligible ? 'Kwalifikowalna' : `Zablokowana: ${rec.eligibility_status}`}
+                    </span>
+                  </td>
                   <td style={{ padding: '12px 16px', color: 'var(--text-secondary)' }}>
                     {rec.latest_revision_index !== null && rec.latest_revision_index !== undefined
                       ? `Rev #${rec.latest_revision_index}`
@@ -284,6 +315,8 @@ export const ExtractionTableView: React.FC<ExtractionTableViewProps> = ({
                   </td>
                   <td style={{ padding: '12px 16px', textAlign: 'right' }}>
                     <button
+                      type="button"
+                      disabled={!rec.is_eligible}
                       onClick={() => onSelectPublication(rec.publication_id)}
                       style={{
                         display: 'inline-flex',
@@ -293,15 +326,19 @@ export const ExtractionTableView: React.FC<ExtractionTableViewProps> = ({
                         borderRadius: 'var(--radius-md)',
                         border: '1px solid var(--border-subtle)',
                         backgroundColor: 'var(--bg-primary)',
-                        color: 'var(--accent-primary)',
+                        color: rec.is_eligible ? 'var(--accent-primary)' : 'var(--text-muted)',
                         fontSize: '0.8rem',
                         fontWeight: 600,
-                        cursor: 'pointer',
+                        cursor: rec.is_eligible ? 'pointer' : 'not-allowed',
                       }}
-                      title="Otwórz formularz ekstrakcji dla tej publikacji"
-                      aria-label={`Otwórz formularz ekstrakcji dla ${rec.title}`}
+                      title={rec.is_eligible ? 'Otwórz formularz ekstrakcji dla tej publikacji' : rec.eligibility_reason || 'Publikacja zablokowana'}
+                      aria-label={
+                        rec.is_eligible
+                          ? `Otwórz formularz ekstrakcji dla ${rec.title || rec.publication_id}`
+                          : `Publikacja ${rec.title || rec.publication_id} jest zablokowana`
+                      }
                     >
-                      Workspace <ExternalLink size={12} />
+                      {rec.is_eligible ? 'Workspace' : 'Zablokowana'} <ExternalLink size={12} />
                     </button>
                   </td>
                 </tr>

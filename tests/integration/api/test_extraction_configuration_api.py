@@ -219,6 +219,63 @@ class TestExtractionConfigurationAPI:
         assert response.json()["eligible_count"] == 1
         assert response.json()["items"][0]["status"] == "eligible"
 
+    def test_qa_completed_publication_is_queued_before_first_extraction_revision(
+        self, api_context
+    ):
+        client = api_context["client"]
+        client.put(
+            "/api/v1/projects/proj_api/extraction/configuration",
+            json={"template_id": "api_tmpl", "template_version": "1.0.0"},
+        )
+        _configure_qa(api_context["db_path"])
+
+        saved = client.post(
+            "/projects/proj_api/quality-assessment/assessments",
+            json={
+                "reviewer_id": "rev_1",
+                "publication_id": str(PUBLICATION_ID),
+                "responses": [
+                    {
+                        "criterion_id": str(QA_CRITERION_ID),
+                        "response_value": "YES",
+                        "justification": "Completed in the QA workflow.",
+                    }
+                ],
+            },
+        )
+        assert saved.status_code == 201, saved.text
+
+        no_record = client.get(
+            f"/api/v1/projects/proj_api/extraction/records/{PUBLICATION_ID}"
+        )
+        assert no_record.status_code == 404
+
+        eligibility = client.get(
+            "/api/v1/projects/proj_api/extraction/eligibility",
+            params={"reviewer_id": "rev_1"},
+        )
+        assert eligibility.status_code == 200
+        assert eligibility.json()["eligible_count"] == 1
+        assert eligibility.json()["items"] == [
+            {
+                "publication_id": str(PUBLICATION_ID),
+                "status": "eligible",
+                "is_eligible": True,
+                "reason_details": None,
+            }
+        ]
+
+        queue = client.get(
+            "/api/v1/projects/proj_api/extraction/records",
+            params={"reviewer_id": "rev_1"},
+        )
+        assert queue.status_code == 200
+        assert queue.json()["total_records"] == 1
+        assert queue.json()["items"][0]["publication_id"] == str(PUBLICATION_ID)
+        assert queue.json()["items"][0]["title"] == "API Pub"
+        assert queue.json()["items"][0]["extraction_status"] == "not_started"
+        assert queue.json()["items"][0]["latest_revision_index"] is None
+
     def test_real_api_wiring_is_reviewer_scoped(self, api_context):
         client = api_context["client"]
         client.put(

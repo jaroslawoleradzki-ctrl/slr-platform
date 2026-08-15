@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.4.7] — 2026-08-15
+
+### Fixed
+
+- Data Extraction now retains and displays the backend eligibility population
+  when a project has no extraction configuration. Blocked publications expose
+  the `no_extraction_configuration` reason in the default table view instead
+  of appearing as an unexplained empty list.
+
 ## [0.4.6] — 2026-08-12
 
 ### Added
