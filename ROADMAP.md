@@ -214,6 +214,12 @@ not block Title & Abstract Screening.
   publication identity context, 1:N Lean–EE repeating groups, and full
   quality gate verification.
 
+### Version 0.4.8 — Data Extraction Configuration Workflow ✅
+
+- Added explicit project-level selection of active, published Data Extraction
+  template versions with human-readable field previews and configuration
+  refresh after save.
+
 ### Version 0.4.7 — Data Extraction Configuration Visibility ✅
 
 - Data Extraction retains and displays backend eligibility results for projects

@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.8] — 2026-08-15
+
+### Added
+
+- Added project-level Data Extraction template configuration workflow with
+  explicit template/version selection, field preview, and eligibility refresh.
+
 ## [0.4.7] — 2026-08-15
 
 ### Fixed

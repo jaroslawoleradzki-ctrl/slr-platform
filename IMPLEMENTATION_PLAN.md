@@ -10,7 +10,7 @@ Unlike ROADMAP.md, this file is intentionally technical and may change frequentl
 
 Current release:
 
-v0.4.7 — Data Extraction Configuration Visibility
+v0.4.8 — Data Extraction Configuration Workflow
 
 Status:
 
