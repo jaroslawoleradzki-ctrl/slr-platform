@@ -191,9 +191,7 @@ def setup_environment(project_repo, template_repo, config_service, pub_repo, dec
 
 
 class TestExtractionExecutionService:
-    def test_first_revision_creates_index_1_and_subsequent_creates_index_2(
-        self, execution_service, setup_environment
-    ):
+    def test_first_revision_creates_index_1_and_subsequent_creates_index_2(self, execution_service, setup_environment):
         env = setup_environment
         val1 = ExtractedValueState(
             field_key="study_title",
@@ -201,9 +199,7 @@ class TestExtractionExecutionService:
             origin=ValueOrigin.REPORTED,
             text_value="Initial Title",
         )
-        rev1 = execution_service.submit_revision(
-            env["project_id"], env["publication_id"], env["reviewer_id"], [val1]
-        )
+        rev1 = execution_service.submit_revision(env["project_id"], env["publication_id"], env["reviewer_id"], [val1])
         assert rev1.revision_index == 1
 
         val2 = ExtractedValueState(
@@ -212,9 +208,7 @@ class TestExtractionExecutionService:
             origin=ValueOrigin.REPORTED,
             text_value="Updated Title",
         )
-        rev2 = execution_service.submit_revision(
-            env["project_id"], env["publication_id"], env["reviewer_id"], [val2]
-        )
+        rev2 = execution_service.submit_revision(env["project_id"], env["publication_id"], env["reviewer_id"], [val2])
         assert rev2.revision_index == 2
 
         history = execution_service.get_revision_history(env["project_id"], env["publication_id"])
@@ -234,9 +228,7 @@ class TestExtractionExecutionService:
         )
 
         # Eligible accepts
-        rev = execution_service.submit_revision(
-            env["project_id"], env["publication_id"], env["reviewer_id"], [val]
-        )
+        rev = execution_service.submit_revision(env["project_id"], env["publication_id"], env["reviewer_id"], [val])
         assert rev is not None
 
         # Ineligible rejects
@@ -334,9 +326,7 @@ class TestExtractionExecutionService:
         )
         assert rev2.completeness_status == ExtractionCompletenessStatus.COMPLETE
 
-    def test_save_draft_with_missing_required_results_in_in_progress(
-        self, execution_service, setup_environment
-    ):
+    def test_save_draft_with_missing_required_results_in_in_progress(self, execution_service, setup_environment):
         env = setup_environment
         # Missing required field "study_title" and repeating group "study_arms"
         val_sample = ExtractedValueState(
@@ -354,9 +344,7 @@ class TestExtractionExecutionService:
         )
         assert rev.completeness_status == ExtractionCompletenessStatus.IN_PROGRESS
 
-    def test_attempt_complete_with_missing_required_raises_validation_error(
-        self, execution_service, setup_environment
-    ):
+    def test_attempt_complete_with_missing_required_raises_validation_error(self, execution_service, setup_environment):
         env = setup_environment
         val_sample = ExtractedValueState(
             field_key="sample_size",
@@ -373,9 +361,7 @@ class TestExtractionExecutionService:
                 mark_complete=True,
             )
 
-    def test_invalid_enum_and_out_of_bounds_numeric_fail(
-        self, execution_service, setup_environment
-    ):
+    def test_invalid_enum_and_out_of_bounds_numeric_fail(self, execution_service, setup_environment):
         env = setup_environment
         val_enum = ExtractedValueState(
             field_key="study_design",
@@ -405,9 +391,7 @@ class TestExtractionExecutionService:
                 [val_bound],
             )
 
-    def test_repeating_group_cardinality_and_child_field_enforcement(
-        self, execution_service, setup_environment
-    ):
+    def test_repeating_group_cardinality_and_child_field_enforcement(self, execution_service, setup_environment):
         env = setup_environment
         val_title1 = ExtractedValueState(
             field_key="study_title",
@@ -459,9 +443,7 @@ class TestExtractionExecutionService:
                 mark_complete=False,
             )
 
-    def test_provenance_and_reviewer_attribution_survive_persistence(
-        self, execution_service, setup_environment
-    ):
+    def test_provenance_and_reviewer_attribution_survive_persistence(self, execution_service, setup_environment):
         env = setup_environment
         val = ExtractedValueState(
             field_key="study_title",
@@ -493,9 +475,7 @@ class TestExtractionExecutionService:
         assert v.source_quote == "Extract from paper"
         assert v.reviewer_note == "Note by reviewer"
 
-    def test_progress_metrics_and_percentage_calculation(
-        self, execution_service, setup_environment
-    ):
+    def test_progress_metrics_and_percentage_calculation(self, execution_service, setup_environment):
         env = setup_environment
         # Initially 1 eligible publication, NOT_STARTED
         prog = execution_service.get_progress(env["project_id"], env["reviewer_id"])
@@ -535,18 +515,14 @@ class TestExtractionExecutionService:
         assert prog2["complete_count"] == 1
         assert prog2["completion_percentage"] == 100.0
 
-    def test_record_summaries_list_metadata_and_status(
-        self, execution_service, setup_environment
-    ):
+    def test_record_summaries_list_metadata_and_status(self, execution_service, setup_environment):
         env = setup_environment
         summaries = execution_service.list_record_summaries(env["project_id"], env["reviewer_id"])
         assert len(summaries) == 1
         assert summaries[0]["publication_id"] == env["publication_id"]
         assert summaries[0]["extraction_status"] == ExtractionCompletenessStatus.NOT_STARTED.value
 
-    def test_matrix_preserves_1_to_n_independent_group_item_rows(
-        self, execution_service, setup_environment
-    ):
+    def test_matrix_preserves_1_to_n_independent_group_item_rows(self, execution_service, setup_environment):
         env = setup_environment
         val_title = ExtractedValueState(
             field_key="study_title",
@@ -594,3 +570,145 @@ class TestExtractionExecutionService:
         assert len(matrix["items"]) == 2
         assert matrix["items"][0]["item_index"] == 1
         assert matrix["items"][1]["item_index"] == 2
+
+    def test_durable_group_item_id_contract_across_service_revisions(
+        self, setup_environment, execution_service: ExtractionExecutionService
+    ):
+        """End-to-end service verification of Section 3.1 durable group_item_id contract:
+        1. New group item receives durable ID
+        2. Editing values preserves ID
+        3. Reordering preserves IDs
+        4. Inserting new item preserves existing IDs
+        5. Deleting one item preserves remaining IDs
+        6. IDs survive full persistence/readback cycle
+        7. Stable across append-only revisions and matrix/dataset views
+        """
+        env = setup_environment
+        project_id = env["project_id"]
+        pub_id = env["publication_id"]
+        rev_id = env["reviewer_id"]
+
+        def make_title():
+            return ExtractedValueState(
+                field_key="study_title",
+                status=ValueStatus.PRESENT,
+                origin=ValueOrigin.REPORTED,
+                text_value="Empirical Lean Energy Study",
+            )
+
+        # --- Revision 1: Initial creation of 2 items (A and B) ---
+        item_a = ExtractedGroupItemState(
+            group_key="study_arms",
+            item_index=1,
+            values=[
+                ExtractedValueState(
+                    field_key="age_mean", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, float_value=25.0
+                )
+            ],
+        )
+        item_b = ExtractedGroupItemState(
+            group_key="study_arms",
+            item_index=2,
+            values=[
+                ExtractedValueState(
+                    field_key="age_mean", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, float_value=30.0
+                )
+            ],
+        )
+        r1_result = execution_service.submit_revision(
+            project_id, pub_id, rev_id, [make_title()], [item_a, item_b], mark_complete=False
+        )
+        assert len(r1_result.group_items) == 2
+        uuid_a = r1_result.group_items[0].group_item_id
+        uuid_b = r1_result.group_items[1].group_item_id
+        assert uuid_a is not None and uuid_b is not None
+        assert uuid_a != uuid_b
+
+        # --- Revision 2: Insert new item X at top, edit item A values, shift B ---
+        item_x = ExtractedGroupItemState(
+            group_key="study_arms",
+            item_index=1,
+            values=[
+                ExtractedValueState(
+                    field_key="age_mean", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, float_value=20.0
+                )
+            ],
+        )
+        item_a_edited = ExtractedGroupItemState(
+            group_item_id=uuid_a,  # Keep UUID
+            group_key="study_arms",
+            item_index=2,  # Shifted index
+            values=[
+                ExtractedValueState(
+                    field_key="age_mean", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, float_value=27.5
+                )
+            ],  # Edited value
+        )
+        item_b_shifted = ExtractedGroupItemState(
+            group_item_id=uuid_b,  # Keep UUID
+            group_key="study_arms",
+            item_index=3,  # Shifted index
+            values=[
+                ExtractedValueState(
+                    field_key="age_mean", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, float_value=30.0
+                )
+            ],
+        )
+        r2_result = execution_service.submit_revision(
+            project_id, pub_id, rev_id, [make_title()], [item_x, item_a_edited, item_b_shifted], mark_complete=False
+        )
+        assert len(r2_result.group_items) == 3
+        uuid_x = r2_result.group_items[0].group_item_id
+        assert uuid_x not in (uuid_a, uuid_b)
+        assert r2_result.group_items[1].group_item_id == uuid_a
+        assert r2_result.group_items[1].item_index == 2
+        assert r2_result.group_items[1].values[0].float_value == 27.5
+        assert r2_result.group_items[2].group_item_id == uuid_b
+        assert r2_result.group_items[2].item_index == 3
+
+        # --- Revision 3: Delete item A, reorder B to index 1 and X to index 2 ---
+        item_b_reordered = ExtractedGroupItemState(
+            group_item_id=uuid_b,  # Keep UUID
+            group_key="study_arms",
+            item_index=1,  # Reordered
+            values=[
+                ExtractedValueState(
+                    field_key="age_mean", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, float_value=30.0
+                )
+            ],
+        )
+        item_x_reordered = ExtractedGroupItemState(
+            group_item_id=uuid_x,  # Keep UUID
+            group_key="study_arms",
+            item_index=2,  # Reordered
+            values=[
+                ExtractedValueState(
+                    field_key="age_mean", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, float_value=20.0
+                )
+            ],
+        )
+        r3_result = execution_service.submit_revision(
+            project_id, pub_id, rev_id, [make_title()], [item_b_reordered, item_x_reordered], mark_complete=True
+        )
+        assert len(r3_result.group_items) == 2
+        assert r3_result.group_items[0].group_item_id == uuid_b
+        assert r3_result.group_items[0].item_index == 1
+        assert r3_result.group_items[1].group_item_id == uuid_x
+        assert r3_result.group_items[1].item_index == 2
+
+        # Check Matrix view retains durable group_item_id
+        matrix = execution_service.get_matrix(project_id, rev_id)
+        assert matrix["total_relationships"] == 2
+        assert [row["group_item_id"] for row in matrix["items"]] == [uuid_b, uuid_x]
+
+        # Check History preservation across all 3 revisions
+        history = execution_service.get_revision_history(project_id, pub_id)
+        assert len(history) == 3
+        # Rev 1: [A, B]
+        assert [item.group_item_id for item in history[0].group_items] == [uuid_a, uuid_b]
+        assert history[0].group_items[0].values[0].float_value == 25.0
+        # Rev 2: [X, A, B]
+        assert [item.group_item_id for item in history[1].group_items] == [uuid_x, uuid_a, uuid_b]
+        assert history[1].group_items[1].values[0].float_value == 27.5
+        # Rev 3: [B, X]
+        assert [item.group_item_id for item in history[2].group_items] == [uuid_b, uuid_x]
