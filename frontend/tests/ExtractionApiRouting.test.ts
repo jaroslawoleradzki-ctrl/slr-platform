@@ -39,4 +39,35 @@ describe('extraction API routing', () => {
       message: 'Extraction record was not found.',
     }));
   });
+
+  it('lists template versions and saves project configuration through /api/v1', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response('[]', {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        project_id: 'project-1',
+        template_id: 'generic-clinical',
+        template_version: '2.1.0',
+        configured_at: '2026-08-15T00:00:00Z',
+        updated_at: '2026-08-15T00:00:00Z',
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }));
+
+    await extractionApi.listExtractionTemplates();
+    await extractionApi.setProjectConfiguration('project-1', 'generic-clinical', '2.1.0');
+
+    expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/v1/extraction-templates');
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      '/api/v1/projects/project-1/extraction/configuration',
+      expect.objectContaining({
+        method: 'PUT',
+        body: JSON.stringify({ template_id: 'generic-clinical', template_version: '2.1.0' }),
+      }),
+    );
+  });
 });

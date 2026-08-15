@@ -39,6 +39,7 @@ import {
   ExtractionTableView,
 } from '../components/extraction/ExtractionTableView';
 import { ExtractionMatrixView } from '../components/extraction/ExtractionMatrixView';
+import { ExtractionConfigurationPanel } from '../components/extraction/ExtractionConfigurationPanel';
 
 // Standard fallback extraction template definition (domain-agnostic)
 const DEFAULT_TEMPLATE: ExtractionTemplateVersion = {
@@ -156,6 +157,7 @@ export const DataExtractionPage: React.FC = () => {
   const [successBanner, setSuccessBanner] = useState<string | null>(null);
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
   const [blockedEligibility, setBlockedEligibility] = useState<ExtractionEligibilityResult | null>(null);
+  const [configurationRevision, setConfigurationRevision] = useState(0);
 
   // Drawers
   const [isProvenanceOpen, setIsProvenanceOpen] = useState<boolean>(false);
@@ -203,6 +205,7 @@ export const DataExtractionPage: React.FC = () => {
       setSuccessBanner(null);
       setValidationErrors({});
       setBlockedEligibility(null);
+      setTemplateVersion(null);
 
       try {
         if (!reviewerId) {
@@ -317,7 +320,7 @@ export const DataExtractionPage: React.FC = () => {
     return () => {
       isMounted = false;
     };
-  }, [projectId, routePubId, selectedPubId]);
+  }, [configurationRevision, projectId, reviewerId, routePubId, selectedPubId]);
 
   // Handle publication selection from table or dropdown
   const handleSelectPublication = (pubId: string) => {
@@ -495,6 +498,15 @@ export const DataExtractionPage: React.FC = () => {
           </button>
         </div>
       </div>
+
+      <ExtractionConfigurationPanel
+        projectId={projectId}
+        currentTemplate={templateVersion}
+        hasStartedExtraction={recordsSummary.some(
+          (summary) => summary.latest_revision_index !== null && summary.latest_revision_index !== undefined,
+        )}
+        onConfigured={() => setConfigurationRevision((revision) => revision + 1)}
+      />
 
       {errorBanner && (
         <div

@@ -237,6 +237,46 @@ export const extractionApi = {
     return res.json();
   },
 
+  async listExtractionTemplates(): Promise<ExtractionTemplateVersion[]> {
+    const res = await fetch(`${API_BASE_URL}/extraction-templates`);
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({ detail: res.statusText }));
+      throw new ExtractionApiError(res.status, errData.detail || 'Failed to fetch extraction templates');
+    }
+    return res.json();
+  },
+
+  async getExtractionTemplateVersion(
+    templateId: string,
+    version: string,
+  ): Promise<ExtractionTemplateVersion> {
+    const res = await fetch(
+      `${API_BASE_URL}/extraction-templates/${encodeURIComponent(templateId)}/versions/${encodeURIComponent(version)}`,
+    );
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({ detail: res.statusText }));
+      throw new ExtractionApiError(res.status, errData.detail || 'Failed to fetch extraction template version');
+    }
+    return res.json();
+  },
+
+  async setProjectConfiguration(
+    projectId: string,
+    templateId: string,
+    templateVersion: string,
+  ): Promise<ProjectExtractionConfiguration> {
+    const res = await fetch(`${EXTRACTION_API_BASE_URL}/${projectId}/extraction/configuration`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ template_id: templateId, template_version: templateVersion }),
+    });
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({ detail: res.statusText }));
+      throw new ExtractionApiError(res.status, errData.detail || 'Failed to update project configuration');
+    }
+    return res.json();
+  },
+
   async getExtractionEligibility(
     projectId: string,
     reviewerId: string = ''
