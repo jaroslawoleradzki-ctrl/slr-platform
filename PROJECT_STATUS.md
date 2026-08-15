@@ -14,12 +14,13 @@ development
 
 Current version:
 
-v0.4.7
+v0.4.8
 
 Current release status:
 
 Phase 9 Data Extraction is formally completed and released in v0.4.6, with
-the v0.4.7 Data Extraction configuration visibility patch on development.
+the v0.4.7 configuration visibility patch and v0.4.8 project template
+configuration workflow on development.
 Phase 10 remains unimplemented.
 
 Current development phase:

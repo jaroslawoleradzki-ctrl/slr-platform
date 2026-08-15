@@ -7,6 +7,38 @@ import { ProjectProvider } from '../src/context/ProjectContext';
 
 const pubId = '27ae7210-a6b3-418d-8e31-b9e33a695762';
 
+const mockTemplate = {
+  template_id: 'generic_outcomes',
+  version: '2.1.0',
+  name: 'Generic Outcomes Extraction',
+  description: 'Collects study design and reported outcome details.',
+  created_at: new Date().toISOString(),
+  is_published: true,
+  is_active: true,
+  publication_fields: [
+    {
+      field_key: 'study_design',
+      name: 'Typ badania (Study Design)',
+      data_type: 'enum' as const,
+      description: 'Design reported by the study authors.',
+      is_required: true,
+    },
+  ],
+  repeating_groups: [{
+    group_key: 'study_arms',
+    name: 'Ramiona Badania / Grupy Uczestników (1:N Study Arms)',
+    description: 'Reported study groups.',
+    min_items: 0,
+    max_items: 10,
+    field_definitions: [{
+      field_key: 'arm_name',
+      name: 'Nazwa grupy',
+      data_type: 'text' as const,
+      is_required: true,
+    }],
+  }],
+};
+
 const mockEligibility = {
   project_id: 'proj_test',
   total_publications: 1,
@@ -143,16 +175,14 @@ describe('Data Extraction Workspace GUI (Phase 9.5 & 9.6)', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     localStorage.setItem('slr_screening_reviewer_id', 'rev_1');
-    vi.spyOn(extractionApi, 'getProjectTemplate').mockResolvedValue({
-      template_id: 'default_extraction_template', version: '1.0.0', name: 'Test template', created_at: new Date().toISOString(),
-      is_published: true, is_active: true,
-      publication_fields: [
-        { field_key: 'study_design', name: 'Typ badania (Study Design)', data_type: 'enum', is_required: true },
-      ],
-      repeating_groups: [{
-        group_key: 'study_arms', name: 'Ramiona Badania / Grupy Uczestników (1:N Study Arms)',
-        min_items: 0, max_items: 10, field_definitions: [],
-      }],
+    vi.spyOn(extractionApi, 'getProjectTemplate').mockResolvedValue(mockTemplate);
+    vi.spyOn(extractionApi, 'listExtractionTemplates').mockResolvedValue([mockTemplate]);
+    vi.spyOn(extractionApi, 'setProjectConfiguration').mockResolvedValue({
+      project_id: 'proj_test',
+      template_id: mockTemplate.template_id,
+      template_version: mockTemplate.version,
+      configured_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
     });
     Object.assign(URL, {
       createObjectURL: vi.fn().mockReturnValue('blob:test'),
@@ -359,6 +389,117 @@ describe('Data Extraction Workspace GUI (Phase 9.5 & 9.6)', () => {
     expect(screen.getByRole('alert')).toHaveTextContent(/nie ma aktywnej konfiguracji ekstrakcji danych/i);
     expect(screen.getByRole('alert')).toHaveTextContent(/pozostają zablokowane/i);
     expect(extractionApi.getExtractionRecord).not.toHaveBeenCalled();
+  });
+
+  it('configures an unconfigured production-like project and preserves all screening and QA gates', async () => {
+    let isConfigured = false;
+    const eligibilityItems = Array.from({ length: 20 }, (_, index) => ({
+      publication_id: `00000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`,
+      status: index < 4 ? 'eligible' as const : 'blocked_qa_incomplete' as const,
+      is_eligible: index < 4,
+      reason_details: index < 4 ? null : 'Quality Assessment is incomplete.',
+    }));
+    const noConfigurationItems = eligibilityItems.map((item) => ({
+      ...item,
+      status: 'no_extraction_configuration' as const,
+      is_eligible: false,
+      reason_details: 'Project has no active data extraction configuration.',
+    }));
+
+    vi.mocked(extractionApi.getProjectTemplate).mockImplementation(async () => (
+      isConfigured ? mockTemplate : null
+    ));
+    vi.mocked(extractionApi.getExtractionEligibility).mockImplementation(async () => ({
+      project_id: 'proj_test',
+      total_publications: 20,
+      eligible_count: isConfigured ? 4 : 0,
+      items: isConfigured ? eligibilityItems : noConfigurationItems,
+    }));
+    vi.mocked(extractionApi.listExtractionRecords).mockResolvedValue({
+      project_id: 'proj_test',
+      total_records: 0,
+      items: [],
+    });
+    vi.mocked(extractionApi.getExtractionRecord).mockRejectedValue(
+      new ExtractionApiError(404, 'Extraction record was not found.'),
+    );
+    vi.mocked(extractionApi.setProjectConfiguration).mockImplementation(async () => {
+      isConfigured = true;
+      return {
+        project_id: 'proj_test',
+        template_id: mockTemplate.template_id,
+        template_version: mockTemplate.version,
+        configured_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+    });
+
+    renderComponent('/projects/proj_test/extract');
+
+    expect(await screen.findByText('Zestawienie Publikacji (20)')).toBeInTheDocument();
+    expect(extractionApi.getExtractionRecord).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: /Skonfiguruj ekstrakcję danych/i }));
+    expect(await screen.findByText('Generic Outcomes Extraction')).toBeInTheDocument();
+    expect(screen.getByText('Collects study design and reported outcome details.')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('radio', { name: /Generic Outcomes Extraction/i }));
+    expect(screen.getByText('Typ badania (Study Design) (wymagane)')).toBeInTheDocument();
+    expect(screen.getByText('Nazwa grupy (wymagane)')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /Zapisz konfigurację/i }));
+
+    await waitFor(() => {
+      expect(extractionApi.setProjectConfiguration).toHaveBeenCalledWith(
+        'proj_test',
+        'generic_outcomes',
+        '2.1.0',
+      );
+    });
+    await waitFor(() => {
+      expect(screen.getAllByRole('button', { name: /Otwórz formularz ekstrakcji/i })).toHaveLength(4);
+      expect(screen.getAllByRole('button', { name: /jest zablokowana/i })).toHaveLength(16);
+    });
+    expect(screen.getByRole('button', { name: /Zmień szablon/i })).toBeEnabled();
+
+    fireEvent.click(screen.getAllByRole('button', { name: /Otwórz formularz ekstrakcji/i })[0]);
+    expect(await screen.findByText('Typ badania (Study Design)')).toBeInTheDocument();
+    expect(screen.queryByText(/nie ma aktywnej konfiguracji ekstrakcji danych/i)).not.toBeInTheDocument();
+  });
+
+  it('explains when the extraction template catalog is empty', async () => {
+    vi.mocked(extractionApi.getProjectTemplate).mockResolvedValue(null);
+    vi.mocked(extractionApi.listExtractionTemplates).mockResolvedValue([]);
+
+    renderComponent('/projects/proj_test/extract');
+    fireEvent.click(await screen.findByRole('button', { name: /Skonfiguruj ekstrakcję danych/i }));
+
+    expect(await screen.findByRole('status')).toHaveTextContent(/Brak aktywnych, opublikowanych szablonów/i);
+    expect(screen.getByRole('button', { name: /Zapisz konfigurację/i })).toBeDisabled();
+  });
+
+  it('keeps configuration open and reports a save failure', async () => {
+    vi.mocked(extractionApi.getProjectTemplate).mockResolvedValue(null);
+    vi.mocked(extractionApi.setProjectConfiguration).mockRejectedValue(
+      new ExtractionApiError(500, 'Catalog write failed.'),
+    );
+
+    renderComponent('/projects/proj_test/extract');
+    fireEvent.click(await screen.findByRole('button', { name: /Skonfiguruj ekstrakcję danych/i }));
+    fireEvent.click(await screen.findByRole('radio', { name: /Generic Outcomes Extraction/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /Zapisz konfigurację/i }));
+
+    expect(await screen.findByText('Catalog write failed.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Zapisz konfigurację/i })).toBeEnabled();
+  });
+
+  it('shows the configured template and prevents changing it after extraction records exist', async () => {
+    renderComponent('/projects/proj_test/extract');
+
+    expect(await screen.findByText('Generic Outcomes Extraction')).toBeInTheDocument();
+    expect(screen.getByText(/wersja 2.1.0/i)).toBeInTheDocument();
+    expect(screen.getByText('Collects study design and reported outcome details.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Zmień szablon/i })).toBeDisabled();
+    expect(screen.getByText(/Konfiguracja jest zablokowana, ponieważ rozpoczęto już ekstrakcję/i)).toBeInTheDocument();
   });
 
   it('renders an empty table when eligibility returns no publications', async () => {

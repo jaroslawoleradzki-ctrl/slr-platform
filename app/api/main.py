@@ -65,6 +65,7 @@ app.include_router(normalization.router, prefix=API_V1_PREFIX)
 app.include_router(screening.router, prefix=API_V1_PREFIX)
 app.include_router(full_text_screening.router, prefix=API_V1_PREFIX)
 app.include_router(quality_assessment.router, prefix=API_V1_PREFIX)
+app.include_router(extraction.catalog_router, prefix=API_V1_PREFIX)
 app.include_router(extraction.router, prefix=API_V1_PREFIX)
 
 
