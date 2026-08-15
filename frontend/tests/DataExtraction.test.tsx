@@ -237,6 +237,40 @@ describe('Data Extraction Workspace GUI (Phase 9.5 & 9.6)', () => {
     expect(await screen.findByText('Sample Article Title')).toBeInTheDocument();
   });
 
+  it('shows an eligible publication before its first extraction record exists', async () => {
+    vi.mocked(extractionApi.listExtractionRecords).mockResolvedValue({
+      project_id: 'proj_test',
+      total_records: 1,
+      items: [
+        {
+          publication_id: pubId,
+          title: 'First-time extraction candidate',
+          authors: ['Reviewer A.'],
+          publication_year: 2026,
+          extraction_status: 'not_started',
+          latest_revision_index: null,
+          latest_reviewer_id: null,
+          latest_updated_at: null,
+        },
+      ],
+    });
+    vi.mocked(extractionApi.getExtractionRecord).mockResolvedValue(null);
+    vi.mocked(extractionApi.getExtractionHistory).mockResolvedValue({
+      project_id: 'proj_test',
+      publication_id: pubId,
+      total_revisions: 0,
+      revisions: [],
+    });
+
+    renderComponent('/projects/proj_test/extract');
+
+    expect(await screen.findByText('First-time extraction candidate')).toBeInTheDocument();
+    expect(screen.getAllByText('Nie rozpoczęto').length).toBeGreaterThan(0);
+    expect(
+      screen.getByRole('button', { name: /Otwórz formularz ekstrakcji dla First-time extraction candidate/i }),
+    ).toBeInTheDocument();
+  });
+
   it('F. View mode switching between Table View and Form Workspace', async () => {
     renderComponent('/projects/proj_test/extract');
 
