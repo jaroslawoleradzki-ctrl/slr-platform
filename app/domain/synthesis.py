@@ -14,6 +14,13 @@ from uuid import UUID, uuid4
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
+class ValueOrigin(StrEnum):
+    """Origin/attribution of an extracted value."""
+
+    REPORTED = "reported"
+    REVIEWER_CODED = "reviewer_coded"
+
+
 class RelationDirection(StrEnum):
     """Direction of the observed effect on energy performance."""
 
@@ -429,6 +436,68 @@ class MechanismWorkspaceStats(BaseModel):
     unmapped_count: int = Field(ge=0, default=0)
     approved_count: int = Field(ge=0, default=0)
     total_publications: int = Field(ge=0, default=0)
+
+
+class ContextCategory(BaseModel):
+    """Researcher-created analytical context taxonomy category for moderating factors."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    category_id: str = Field(min_length=1)
+    name: str = Field(min_length=1)
+    project_id: str = Field(default="", min_length=0)
+    description: str | None = None
+    display_order: int = 0
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+    @field_validator("created_at", "updated_at")
+    @classmethod
+    def validate_tz(cls, v: datetime) -> datetime:
+        if v.tzinfo is None or v.utcoffset() is None:
+            raise ValueError("timestamps must be timezone-aware")
+        return v
+
+
+class ContextAssignment(BaseModel):
+    """Assignment of source context evidence (E11 moderating_conditions) to an analytical context category."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    assignment_id: UUID = Field(default_factory=uuid4)
+    project_id: str = Field(min_length=1)
+    analytical_relation_id: UUID
+    group_item_id: UUID
+    publication_id: UUID
+    latest_revision_id: UUID
+    source_context_text: str  # The exact E11 moderating conditions text
+    analytical_context_category_id: str | None = None  # Researcher-created category
+    context_impact: str = Field(min_length=1)  # ENABLE, STRENGTHEN, WEAKEN, CONDITION
+    approval_state: ClassificationApprovalState = ClassificationApprovalState.PENDING
+    approved_by: str | None = None
+    approved_at: datetime | None = None
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+    @field_validator("created_at", "updated_at", "approved_at")
+    @classmethod
+    def validate_tz(cls, v: datetime | None) -> datetime | None:
+        if v is None:
+            return None
+        if v.tzinfo is None or v.utcoffset() is None:
+            raise ValueError("timestamps must be timezone-aware")
+        return v
+
+
+class ContextWorkspaceData(BaseModel):
+    """Complete dataset for the Context Synthesis Workspace."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    project_id: str = Field(min_length=1)
+    categories: list[ContextCategory] = Field(default_factory=list)
+    assignments: list[ContextAssignment] = Field(default_factory=list)
+    stats: dict[str, int]
 
 
 class MechanismWorkspaceData(BaseModel):
