@@ -122,7 +122,7 @@ class SynthesisMatrixService:
         materialized: list[AnalyticalRelation] = []
 
         for rec in records:
-            rev: ExtractionRevision | None = self._extraction_repo.get_latest_revision(
+            rev: ExtractionRevision | None = self._adapter.get_latest_complete_revision(
                 project_id, rec.publication_id
             )
             if rev is None or not rev.group_items:
@@ -417,7 +417,7 @@ class SynthesisMatrixService:
             page: str | None = None
             section: str | None = None
 
-            rev = self._extraction_repo.get_latest_revision(project_id, rel.publication_id)
+            rev = self._adapter.get_latest_complete_revision(project_id, rel.publication_id)
             if rev is not None:
                 item = next((i for i in rev.group_items if i.group_item_id == rel.group_item_id), None)
                 if item is not None:

@@ -224,7 +224,7 @@ class SynthesisClassificationService:
         energy_occurrences: dict[str, dict[str, Any]] = {}
 
         for rec in records:
-            rev = self._extraction_repo.get_latest_revision(project_id, rec.publication_id)
+            rev = self._extraction_repo.get_latest_complete_revision(project_id, rec.publication_id)
             if rev is None:
                 continue
 

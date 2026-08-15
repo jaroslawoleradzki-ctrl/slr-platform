@@ -1,16 +1,17 @@
 import React, { useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { Grid, Layers, Tag } from 'lucide-react';
+import { GitFork, Grid, Layers, Tag } from 'lucide-react';
 import { useProject } from '../context/ProjectContext';
 import { ClassificationWorkspace } from '../components/synthesis/ClassificationWorkspace';
 import { LeanEEMatrix } from '../components/synthesis/LeanEEMatrix';
+import { MechanismWorkspace } from '../components/synthesis/MechanismWorkspace';
 
 export const EvidenceSynthesisPage: React.FC = () => {
   const { projectId } = useParams<{ projectId?: string }>();
   const { activeProject } = useProject();
   const currentProjectId = projectId || activeProject?.id || 'lean_energy';
 
-  const [activeSubTab, setActiveSubTab] = useState<'classification' | 'matrix'>('classification');
+  const [activeSubTab, setActiveSubTab] = useState<'classification' | 'matrix' | 'mechanisms'>('classification');
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
@@ -80,6 +81,28 @@ export const EvidenceSynthesisPage: React.FC = () => {
           <Grid size={16} />
           <span>2. Lean–EE Analytical Matrix</span>
         </button>
+
+        <button
+          type="button"
+          data-testid="synthesis-tab-mechanisms"
+          onClick={() => setActiveSubTab('mechanisms')}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            padding: '8px 16px',
+            borderRadius: 'var(--radius-md)',
+            border: 'none',
+            backgroundColor: activeSubTab === 'mechanisms' ? 'var(--accent-subtle)' : 'transparent',
+            color: activeSubTab === 'mechanisms' ? 'var(--accent-primary)' : 'var(--text-secondary)',
+            fontWeight: activeSubTab === 'mechanisms' ? 600 : 400,
+            cursor: 'pointer',
+            fontSize: '0.9rem',
+          }}
+        >
+          <GitFork size={16} />
+          <span>3. Mechanism Synthesis</span>
+        </button>
       </div>
 
       {/* Workspace Content */}
@@ -92,6 +115,10 @@ export const EvidenceSynthesisPage: React.FC = () => {
           projectId={currentProjectId}
           onNavigateToClassifications={() => setActiveSubTab('classification')}
         />
+      )}
+
+      {activeSubTab === 'mechanisms' && (
+        <MechanismWorkspace projectId={currentProjectId} />
       )}
     </div>
   );

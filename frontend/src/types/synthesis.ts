@@ -139,3 +139,72 @@ export interface MatrixCellDetail {
   evidence_character_distribution: Record<string, number>;
   relations: AnalyticalRelationDetail[];
 }
+
+export interface MechanismPathway {
+  pathway_id: string;
+  project_id: string;
+  analytical_relation_id: string;
+  group_item_id: string;
+  publication_id: string;
+  latest_revision_id: string;
+  source_mechanism_text: string | null;
+  analytical_mechanism_category_id: string | null;
+  is_review_synthesized: boolean;
+  approval_state: ClassificationApprovalState;
+  approved_by: string | null;
+  approved_at: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MechanismPathwayDetail {
+  pathway: MechanismPathway;
+  publication_title: string | null;
+  publication_year: number | null;
+  source_practice: string;
+  source_effect: string;
+  analytical_lean_category_id: string | null;
+  analytical_lean_category_name: string | null;
+  analytical_energy_category_id: string | null;
+  analytical_energy_category_name: string | null;
+  analytical_mechanism_category_name: string | null;
+  direction: RelationDirection;
+  evidence_character: EvidenceCharacter;
+  qa_profile: QAProfileSummary | null;
+}
+
+export interface MechanismSynthesisPathway {
+  lean_category_id: string;
+  lean_category_name: string;
+  mechanism_category_id: string;
+  mechanism_category_name: string;
+  energy_category_id: string;
+  energy_category_name: string;
+  pathway_count: number;
+  publication_count: number;
+  relation_count: number;
+  pathways: MechanismPathwayDetail[];
+}
+
+export interface MechanismWorkspaceStats {
+  total_pathways: number;
+  mapped_count: number;
+  unmapped_count: number;
+  approved_count: number;
+  total_publications: number;
+}
+
+export interface MechanismWorkspaceData {
+  project_id: string;
+  categories: Category[];
+  pathways: MechanismPathwayDetail[];
+  synthesis_chains: MechanismSynthesisPathway[];
+  stats: MechanismWorkspaceStats;
+}
+
+export interface AssignMechanismCategoryRequest {
+  category_id: string | null;
+  is_review_synthesized?: boolean;
+  notes?: string | null;
+}

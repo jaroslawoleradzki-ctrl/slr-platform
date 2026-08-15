@@ -1,5 +1,6 @@
 """API Router for Phase 10 Data Synthesis, Terminology Classification, and Analytical Matrix."""
 
+from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query, Response, status
@@ -7,7 +8,9 @@ from fastapi import APIRouter, HTTPException, Query, Response, status
 from app.api.dto.synthesis import (
     AnalyticalRelationDetailDTO,
     AnalyticalRelationDTO,
+    ApproveMechanismPathwayRequestDTO,
     ApproveTermMappingRequestDTO,
+    AssignMechanismCategoryRequestDTO,
     CategoryDTO,
     ClassificationWorkspaceStatsDTO,
     ClassifiedSourceTermDTO,
@@ -16,6 +19,11 @@ from app.api.dto.synthesis import (
     CreateCategoryRequestDTO,
     MatrixCellDetailDTO,
     MatrixCellDTO,
+    MechanismPathwayDetailDTO,
+    MechanismPathwayDTO,
+    MechanismSynthesisPathwayDTO,
+    MechanismWorkspaceDataDTO,
+    MechanismWorkspaceStatsDTO,
     QACriterionAssessmentSummaryDTO,
     QAProfileSummaryDTO,
     SetTermMappingRequestDTO,
@@ -27,6 +35,8 @@ from app.api.dto.synthesis import (
 from app.domain.synthesis import (
     AnalyticalRelation,
     ConvertedValue,
+    MechanismPathway,
+    MechanismPathwayDetail,
     QAProfileSummary,
     TermType,
 )
@@ -43,6 +53,14 @@ from app.services.synthesis_matrix_service import (
     SynthesisMatrixService,
     UnitConversionError,
     default_synthesis_matrix_service,
+)
+from app.services.synthesis_mechanism_service import (
+    MechanismAssignmentError,
+    MechanismCategoryConflictError,
+    MechanismCategoryNotFoundError,
+    MechanismPathwayNotFoundError,
+    SynthesisMechanismService,
+    default_synthesis_mechanism_service,
 )
 
 router = APIRouter(prefix="/projects/{projectId}/synthesis", tags=["Synthesis"])
@@ -63,6 +81,16 @@ def _converted_value_to_dto(cv: ConvertedValue | None) -> ConvertedValueDTO | No
         transformed_value=cv.transformed_value,
         transformed_unit=cv.transformed_unit,
         conversion_rule=cv.conversion_rule,
+    )
+
+
+def _category_to_dto(cat: Any) -> CategoryDTO:
+    return CategoryDTO(
+        category_id=cat.category_id,
+        name=cat.name,
+        project_id=getattr(cat, "project_id", ""),
+        description=cat.description,
+        display_order=cat.display_order,
     )
 
 
@@ -504,3 +532,213 @@ def save_converted_unit(projectId: str, relationId: UUID, req: ConvertUnitReques
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except UnitConversionError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+
+
+# =========================================================
+# Task 10.4: Mechanism Synthesis & Impact Pathways
+# =========================================================
+
+
+def _get_mechanism_service() -> SynthesisMechanismService:
+    return default_synthesis_mechanism_service()
+
+
+def _mechanism_pathway_to_dto(p: MechanismPathway) -> MechanismPathwayDTO:
+    return MechanismPathwayDTO(
+        pathway_id=p.pathway_id,
+        project_id=p.project_id,
+        analytical_relation_id=p.analytical_relation_id,
+        group_item_id=p.group_item_id,
+        publication_id=p.publication_id,
+        latest_revision_id=p.latest_revision_id,
+        source_mechanism_text=p.source_mechanism_text,
+        analytical_mechanism_category_id=p.analytical_mechanism_category_id,
+        is_review_synthesized=p.is_review_synthesized,
+        approval_state=p.approval_state.value,
+        approved_by=p.approved_by,
+        approved_at=p.approved_at,
+        notes=p.notes,
+        created_at=p.created_at,
+        updated_at=p.updated_at,
+    )
+
+
+def _mechanism_pathway_detail_to_dto(d: MechanismPathwayDetail) -> MechanismPathwayDetailDTO:
+    return MechanismPathwayDetailDTO(
+        pathway=_mechanism_pathway_to_dto(d.pathway),
+        publication_title=d.publication_title,
+        publication_year=d.publication_year,
+        source_practice=d.source_practice,
+        source_effect=d.source_effect,
+        analytical_lean_category_id=d.analytical_lean_category_id,
+        analytical_lean_category_name=d.analytical_lean_category_name,
+        analytical_energy_category_id=d.analytical_energy_category_id,
+        analytical_energy_category_name=d.analytical_energy_category_name,
+        analytical_mechanism_category_name=d.analytical_mechanism_category_name,
+        direction=d.direction.value,
+        evidence_character=d.evidence_character.value,
+        qa_profile=_qa_profile_to_dto(d.qa_profile),
+    )
+
+
+@router.get("/mechanisms", response_model=MechanismWorkspaceDataDTO)
+def get_mechanism_workspace(projectId: str):
+    """Retrieves complete dataset for the Mechanism Synthesis Workspace."""
+    service = _get_mechanism_service()
+    try:
+        data = service.get_mechanism_workspace_data(project_id=projectId)
+        return MechanismWorkspaceDataDTO(
+            project_id=data.project_id,
+            categories=[_category_to_dto(c) for c in data.categories],
+            pathways=[_mechanism_pathway_detail_to_dto(p) for p in data.pathways],
+            synthesis_chains=[
+                MechanismSynthesisPathwayDTO(
+                    lean_category_id=c.lean_category_id,
+                    lean_category_name=c.lean_category_name,
+                    mechanism_category_id=c.mechanism_category_id,
+                    mechanism_category_name=c.mechanism_category_name,
+                    energy_category_id=c.energy_category_id,
+                    energy_category_name=c.energy_category_name,
+                    pathway_count=c.pathway_count,
+                    publication_count=c.publication_count,
+                    relation_count=c.relation_count,
+                    pathways=[_mechanism_pathway_detail_to_dto(p) for p in c.pathways],
+                )
+                for c in data.synthesis_chains
+            ],
+            stats=MechanismWorkspaceStatsDTO(
+                total_pathways=data.stats.total_pathways,
+                mapped_count=data.stats.mapped_count,
+                unmapped_count=data.stats.unmapped_count,
+                approved_count=data.stats.approved_count,
+                total_publications=data.stats.total_publications,
+            ),
+        )
+    except ProjectNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+
+
+@router.get("/mechanisms/categories", response_model=list[CategoryDTO])
+def list_mechanism_categories(projectId: str):
+    """Lists all analytical mechanism taxonomy categories for a project."""
+    service = _get_mechanism_service()
+    try:
+        categories = service.list_categories(project_id=projectId)
+        return [_category_to_dto(c) for c in categories]
+    except ProjectNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+
+
+@router.post("/mechanisms/categories", response_model=CategoryDTO, status_code=status.HTTP_201_CREATED)
+def create_mechanism_category(projectId: str, req: CreateCategoryRequestDTO):
+    """Creates a new analytical mechanism taxonomy category."""
+    service = _get_mechanism_service()
+    try:
+        category = service.create_category(
+            project_id=projectId,
+            category_id=req.category_id,
+            name=req.name,
+            description=req.description,
+            display_order=req.display_order,
+        )
+        return _category_to_dto(category)
+    except ProjectNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    except MechanismCategoryConflictError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
+
+
+@router.put("/mechanisms/categories/{categoryId}", response_model=CategoryDTO)
+def update_mechanism_category(projectId: str, categoryId: str, req: UpdateCategoryRequestDTO):
+    """Updates an existing analytical mechanism taxonomy category."""
+    service = _get_mechanism_service()
+    try:
+        category = service.update_category(
+            project_id=projectId,
+            category_id=categoryId,
+            name=req.name,
+            description=req.description,
+            display_order=req.display_order,
+        )
+        return _category_to_dto(category)
+    except (ProjectNotFoundError, MechanismCategoryNotFoundError) as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
+
+
+@router.delete("/mechanisms/categories/{categoryId}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_mechanism_category(projectId: str, categoryId: str):
+    """Deletes an analytical mechanism taxonomy category, unclassifying linked pathways."""
+    service = _get_mechanism_service()
+    try:
+        deleted = service.delete_category(project_id=projectId, category_id=categoryId)
+        if not deleted:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Mechanism category '{categoryId}' not found",
+            )
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+    except ProjectNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+
+
+@router.post("/mechanisms/pathways/{pathwayId}/assign", response_model=MechanismPathwayDTO)
+def assign_mechanism_pathway(projectId: str, pathwayId: UUID, req: AssignMechanismCategoryRequestDTO):
+    """Assigns an analytical mechanism category and synthesis notes to a pathway."""
+    service = _get_mechanism_service()
+    try:
+        pathway = service.assign_mechanism_category(
+            project_id=projectId,
+            pathway_id=pathwayId,
+            category_id=req.category_id,
+            is_review_synthesized=req.is_review_synthesized,
+            notes=req.notes,
+        )
+        return _mechanism_pathway_to_dto(pathway)
+    except (ProjectNotFoundError, MechanismPathwayNotFoundError, MechanismCategoryNotFoundError) as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+
+
+@router.post("/mechanisms/pathways/{pathwayId}/approve", response_model=MechanismPathwayDTO)
+def approve_mechanism_pathway(projectId: str, pathwayId: UUID, req: ApproveMechanismPathwayRequestDTO):
+    """Explicitly approves a mechanism pathway classification."""
+    service = _get_mechanism_service()
+    try:
+        pathway = service.approve_mechanism_pathway(
+            project_id=projectId,
+            pathway_id=pathwayId,
+            reviewer_id=req.reviewer_id,
+        )
+        return _mechanism_pathway_to_dto(pathway)
+    except (ProjectNotFoundError, MechanismPathwayNotFoundError) as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    except (MechanismAssignmentError, ValueError) as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+
+
+@router.get("/mechanisms/synthesis", response_model=list[MechanismSynthesisPathwayDTO])
+def get_mechanism_synthesis(projectId: str):
+    """Retrieves aggregated mechanism synthesis chains: Lean -> Mechanism -> Energy."""
+    service = _get_mechanism_service()
+    try:
+        data = service.get_mechanism_workspace_data(project_id=projectId)
+        return [
+            MechanismSynthesisPathwayDTO(
+                lean_category_id=c.lean_category_id,
+                lean_category_name=c.lean_category_name,
+                mechanism_category_id=c.mechanism_category_id,
+                mechanism_category_name=c.mechanism_category_name,
+                energy_category_id=c.energy_category_id,
+                energy_category_name=c.energy_category_name,
+                pathway_count=c.pathway_count,
+                publication_count=c.publication_count,
+                relation_count=c.relation_count,
+                pathways=[_mechanism_pathway_detail_to_dto(p) for p in c.pathways],
+            )
+            for c in data.synthesis_chains
+        ]
+    except ProjectNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e

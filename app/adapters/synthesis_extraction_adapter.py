@@ -32,6 +32,18 @@ class SynthesisExtractionAdapter:
         self._extraction_repo = extraction_repo
         self._qa_repo = qa_repo
 
+    def get_latest_complete_revision(
+        self, project_id: str, publication_id: UUID
+    ) -> ExtractionRevision | None:
+        """Resolves the latest COMPLETE extraction revision for a publication."""
+        return self._extraction_repo.get_latest_complete_revision(project_id, publication_id)
+
+    def get_latest_complete_revision_batch(
+        self, project_id: str, publication_ids: list[UUID]
+    ) -> dict[UUID, ExtractionRevision | None]:
+        """Resolves latest COMPLETE extraction revisions across multiple publications."""
+        return self._extraction_repo.get_latest_complete_revision_batch(project_id, publication_ids)
+
     def resolve_relation_traceability(
         self,
         project_id: str,
@@ -41,7 +53,7 @@ class SynthesisExtractionAdapter:
     ) -> ExtractionEvidenceReference:
         """Resolves the exact extraction revision and group item for an analytical relation.
 
-        Enforces project scoping, non-empty presence, and durable identity validation.
+        Enforces project scoping, completeness status on latest resolution, and durable identity validation.
         """
         if revision_id is not None:
             # Check history to find the specific revision
@@ -52,7 +64,7 @@ class SynthesisExtractionAdapter:
                     f"Extraction revision '{revision_id}' not found for publication '{publication_id}' in project '{project_id}'"
                 )
         else:
-            target_rev = self._extraction_repo.get_latest_revision(project_id, publication_id)
+            target_rev = self._extraction_repo.get_latest_complete_revision(project_id, publication_id)
             if target_rev is None:
                 raise ValueError(
                     f"No extraction revisions found for publication '{publication_id}' in project '{project_id}'"
@@ -91,7 +103,7 @@ class SynthesisExtractionAdapter:
                     f"Extraction revision '{revision_id}' not found for publication '{publication_id}' in project '{project_id}'"
                 )
         else:
-            target_rev = self._extraction_repo.get_latest_revision(project_id, publication_id)
+            target_rev = self._extraction_repo.get_latest_complete_revision(project_id, publication_id)
             if target_rev is None:
                 raise ValueError(
                     f"No extraction revisions found for publication '{publication_id}' in project '{project_id}'"

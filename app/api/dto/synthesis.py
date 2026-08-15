@@ -245,3 +245,104 @@ class ConvertUnitRequestDTO(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     target_unit: str = Field(min_length=1)
+
+
+class MechanismPathwayDTO(BaseModel):
+    """DTO representing a mechanism pathway."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    pathway_id: UUID
+    project_id: str
+    analytical_relation_id: UUID
+    group_item_id: UUID
+    publication_id: UUID
+    latest_revision_id: UUID
+    source_mechanism_text: str | None = None
+    analytical_mechanism_category_id: str | None = None
+    is_review_synthesized: bool = False
+    approval_state: str
+    approved_by: str | None = None
+    approved_at: datetime | None = None
+    notes: str | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class AssignMechanismCategoryRequestDTO(BaseModel):
+    """Request payload for assigning an analytical mechanism category."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    category_id: str | None = None
+    is_review_synthesized: bool = False
+    notes: str | None = None
+
+
+class ApproveMechanismPathwayRequestDTO(BaseModel):
+    """Request payload for approving a mechanism pathway classification."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    reviewer_id: str = Field(min_length=1)
+
+
+class MechanismPathwayDetailDTO(BaseModel):
+    """Detailed view of a mechanism pathway with relation, publication, and QA provenance."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    pathway: MechanismPathwayDTO
+    publication_title: str | None = None
+    publication_year: int | None = None
+    source_practice: str
+    source_effect: str
+    analytical_lean_category_id: str | None = None
+    analytical_lean_category_name: str | None = None
+    analytical_energy_category_id: str | None = None
+    analytical_energy_category_name: str | None = None
+    analytical_mechanism_category_name: str | None = None
+    direction: str
+    evidence_character: str
+    qa_profile: QAProfileSummaryDTO | None = None
+
+
+class MechanismSynthesisPathwayDTO(BaseModel):
+    """Aggregated synthesis chain: Lean Category -> Mechanism Category -> Energy Category."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    lean_category_id: str
+    lean_category_name: str
+    mechanism_category_id: str
+    mechanism_category_name: str
+    energy_category_id: str
+    energy_category_name: str
+    pathway_count: int
+    publication_count: int
+    relation_count: int
+    pathways: list[MechanismPathwayDetailDTO]
+
+
+class MechanismWorkspaceStatsDTO(BaseModel):
+    """Statistical summary of mechanism synthesis progress."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    total_pathways: int
+    mapped_count: int
+    unmapped_count: int
+    approved_count: int
+    total_publications: int
+
+
+class MechanismWorkspaceDataDTO(BaseModel):
+    """Complete dataset for the Mechanism Synthesis Workspace."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    project_id: str
+    categories: list[CategoryDTO]
+    pathways: list[MechanismPathwayDetailDTO]
+    synthesis_chains: list[MechanismSynthesisPathwayDTO]
+    stats: MechanismWorkspaceStatsDTO
