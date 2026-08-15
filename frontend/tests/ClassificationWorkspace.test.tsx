@@ -251,7 +251,7 @@ describe('ClassificationWorkspace', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Evidence Synthesis')).toBeInTheDocument();
-      expect(screen.getByText('Terminology Classification')).toBeInTheDocument();
+      expect(screen.getByText(/1\.\s*Terminology Classification/)).toBeInTheDocument();
       expect(screen.getByText('Terminology Classification Workspace')).toBeInTheDocument();
     });
   });
