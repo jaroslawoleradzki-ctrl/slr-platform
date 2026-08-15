@@ -220,6 +220,12 @@ not block Title & Abstract Screening.
   template versions with human-readable field previews and configuration
   refresh after save.
 
+### Version 0.4.9 — Extraction Correctness Foundation ✅
+
+- Added ADR-0007 field-state semantics, explicit `UNASSESSED` handling,
+  server-authoritative Draft/Complete validation, narrow legacy compatibility,
+  and safe append-only revision identity handling.
+
 ### Version 0.4.7 — Data Extraction Configuration Visibility ✅
 
 - Data Extraction retains and displays backend eligibility results for projects
