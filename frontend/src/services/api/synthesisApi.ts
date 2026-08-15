@@ -3,11 +3,19 @@ import {
   AnalyticalRelation,
   Category,
   ConvertedValue,
+  CreateResearchGapRequest,
+  LinkEvidenceRequest,
   MatrixCellDetail,
+  ResearchGap,
+  ResearchGapDetail,
+  ResearchGapEvidenceCandidate,
+  ResearchGapLink,
+  ResearchGapWorkspaceData,
   SynthesisMatrix,
   TerminologyClassificationWorkspace,
   TermMappingResponse,
   TermType,
+  UpdateResearchGapRequest,
 } from '../../types/synthesis';
 
 export class SynthesisApiError extends Error {
@@ -234,5 +242,61 @@ export const synthesisApi = {
 
   getMechanismSynthesis: (projectId: string): Promise<any[]> => {
     return request<any[]>(`/projects/${projectId}/synthesis/mechanisms/synthesis`);
+  },
+
+  // Research Gap Synthesis (Task 10.6)
+  getResearchGapWorkspace: (projectId: string): Promise<ResearchGapWorkspaceData> => {
+    return request<ResearchGapWorkspaceData>(`/projects/${projectId}/synthesis/research-gaps`);
+  },
+
+  getResearchGap: (projectId: string, gapId: string): Promise<ResearchGapDetail> => {
+    return request<ResearchGapDetail>(`/projects/${projectId}/synthesis/research-gaps/${gapId}`);
+  },
+
+  createResearchGap: (projectId: string, data: CreateResearchGapRequest): Promise<ResearchGap> => {
+    return request<ResearchGap>(`/projects/${projectId}/synthesis/research-gaps`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  updateResearchGap: (
+    projectId: string,
+    gapId: string,
+    data: UpdateResearchGapRequest
+  ): Promise<ResearchGap> => {
+    return request<ResearchGap>(`/projects/${projectId}/synthesis/research-gaps/${gapId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  },
+
+  deleteResearchGap: (projectId: string, gapId: string): Promise<void> => {
+    return request<void>(`/projects/${projectId}/synthesis/research-gaps/${gapId}`, {
+      method: 'DELETE',
+    });
+  },
+
+  getResearchGapEvidenceCandidates: (projectId: string): Promise<ResearchGapEvidenceCandidate[]> => {
+    return request<ResearchGapEvidenceCandidate[]>(
+      `/projects/${projectId}/synthesis/research-gaps/evidence-candidates`
+    );
+  },
+
+  linkResearchGapEvidence: (
+    projectId: string,
+    gapId: string,
+    data: LinkEvidenceRequest
+  ): Promise<ResearchGapLink> => {
+    return request<ResearchGapLink>(`/projects/${projectId}/synthesis/research-gaps/${gapId}/links`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  unlinkResearchGapEvidence: (projectId: string, gapId: string, linkId: string): Promise<void> => {
+    return request<void>(`/projects/${projectId}/synthesis/research-gaps/${gapId}/links/${linkId}`, {
+      method: 'DELETE',
+    });
   },
 };

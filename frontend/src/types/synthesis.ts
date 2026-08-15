@@ -208,3 +208,105 @@ export interface AssignMechanismCategoryRequest {
   is_review_synthesized?: boolean;
   notes?: string | null;
 }
+
+// -------------------------------------------------------------------------
+// Task 10.6: Research Gap Synthesis
+// -------------------------------------------------------------------------
+
+export type ResearchGapType =
+  | 'thematic'
+  | 'mechanism'
+  | 'methodological'
+  | 'contextual'
+  | 'inconsistent_evidence';
+
+export type ResearchGapLinkType = 'analytical_relation' | 'mechanism_pathway' | 'context_factor_link';
+
+export interface ResearchGap {
+  gap_id: string;
+  project_id: string;
+  gap_type: ResearchGapType;
+  title: string;
+  rationale: string;
+  researcher_id: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ResearchGapLink {
+  link_id: string;
+  project_id: string;
+  gap_id: string;
+  link_type: ResearchGapLinkType;
+  target_id: string;
+  group_item_id: string;
+  publication_id: string;
+  latest_revision_id: string;
+  created_at: string;
+}
+
+export interface ResearchGapDetail {
+  gap: ResearchGap;
+  links: ResearchGapLink[];
+}
+
+export interface ResearchGapWorkspaceStats {
+  total_gaps: number;
+  thematic_count: number;
+  mechanism_count: number;
+  methodological_count: number;
+  contextual_count: number;
+  inconsistent_evidence_count: number;
+  linked_publication_count: number;
+}
+
+export interface ResearchGapWorkspaceData {
+  project_id: string;
+  gaps: ResearchGapDetail[];
+  stats: ResearchGapWorkspaceStats;
+}
+
+export interface ResearchGapEvidenceCandidate {
+  link_type: ResearchGapLinkType;
+  target_id: string;
+  group_item_id: string;
+  publication_id: string;
+  latest_revision_id: string;
+  traceable: boolean;
+  label: string;
+  publication_title: string | null;
+  publication_year: number | null;
+  qa_profile: QAProfileSummary | null;
+}
+
+export interface CreateResearchGapRequest {
+  gap_type: ResearchGapType;
+  title: string;
+  rationale: string;
+  researcher_id: string;
+}
+
+export interface UpdateResearchGapRequest {
+  gap_type?: ResearchGapType;
+  title?: string;
+  rationale?: string;
+}
+
+export interface LinkEvidenceRequest {
+  link_type: ResearchGapLinkType;
+  target_id: string;
+}
+
+export const RESEARCH_GAP_TYPE_LABELS: Record<ResearchGapType, string> = {
+  thematic: 'Thematic Gap',
+  mechanism: 'Mechanism Gap',
+  methodological: 'Methodological Gap',
+  contextual: 'Contextual Gap',
+  inconsistent_evidence: 'Inconsistent Evidence Gap',
+};
+
+export const RESEARCH_GAP_LINK_TYPE_LABELS: Record<ResearchGapLinkType, string> = {
+  analytical_relation: 'Analytical Relation',
+  mechanism_pathway: 'Mechanism Pathway',
+  context_factor_link: 'Context Factor Link',
+};

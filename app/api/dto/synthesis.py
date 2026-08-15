@@ -442,3 +442,119 @@ class ContextWorkspaceDataDTO(BaseModel):
     categories: list[ContextCategoryDTO]
     assignments: list[ContextAssignmentDTO]
     stats: ContextSynthesisSummaryDTO
+
+
+# -------------------------------------------------------------------------
+# Task 10.6: Research Gap Synthesis DTOs
+# -------------------------------------------------------------------------
+
+
+class ResearchGapDTO(BaseModel):
+    """DTO representing a researcher-authored research gap."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    gap_id: UUID
+    project_id: str
+    gap_type: str
+    title: str
+    rationale: str
+    researcher_id: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class ResearchGapLinkDTO(BaseModel):
+    """DTO representing a traceable evidence link for a research gap."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    link_id: UUID
+    project_id: str
+    gap_id: UUID
+    link_type: str
+    target_id: UUID
+    group_item_id: UUID
+    publication_id: UUID
+    latest_revision_id: UUID
+    created_at: datetime
+
+
+class ResearchGapDetailDTO(BaseModel):
+    """DTO representing a research gap with its supporting evidence links."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    gap: ResearchGapDTO
+    links: list[ResearchGapLinkDTO]
+
+
+class ResearchGapWorkspaceStatsDTO(BaseModel):
+    """Count-only statistics for the research gap workspace (no scoring)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    total_gaps: int
+    thematic_count: int
+    mechanism_count: int
+    methodological_count: int
+    contextual_count: int
+    inconsistent_evidence_count: int
+    linked_publication_count: int
+
+
+class ResearchGapWorkspaceDataDTO(BaseModel):
+    """Complete dataset for the Research Gap Synthesis Workspace."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    project_id: str
+    gaps: list[ResearchGapDetailDTO]
+    stats: ResearchGapWorkspaceStatsDTO
+
+
+class ResearchGapEvidenceCandidateDTO(BaseModel):
+    """DTO representing a candidate synthesis artifact eligible for linking."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    link_type: str
+    target_id: UUID
+    group_item_id: UUID
+    publication_id: UUID
+    latest_revision_id: UUID
+    traceable: bool
+    label: str
+    publication_title: str | None = None
+    publication_year: int | None = None
+    qa_profile: QAProfileSummaryDTO | None = None
+
+
+class CreateResearchGapRequestDTO(BaseModel):
+    """Request payload for creating a research gap."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    gap_type: str = Field(min_length=1)
+    title: str = Field(min_length=1)
+    rationale: str = Field(min_length=1)
+    researcher_id: str = Field(min_length=1)
+
+
+class UpdateResearchGapRequestDTO(BaseModel):
+    """Request payload for updating a research gap."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    gap_type: str | None = None
+    title: str | None = None
+    rationale: str | None = None
+
+
+class LinkEvidenceRequestDTO(BaseModel):
+    """Request payload for linking evidence to a research gap."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    link_type: str = Field(pattern="^(analytical_relation|mechanism_pathway|context_factor_link)$")
+    target_id: UUID

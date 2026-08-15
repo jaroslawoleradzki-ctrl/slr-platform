@@ -1,17 +1,20 @@
 import React, { useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { GitFork, Grid, Layers, Tag } from 'lucide-react';
+import { GitFork, Grid, Layers, Tag, Target } from 'lucide-react';
 import { useProject } from '../context/ProjectContext';
 import { ClassificationWorkspace } from '../components/synthesis/ClassificationWorkspace';
 import { LeanEEMatrix } from '../components/synthesis/LeanEEMatrix';
 import { MechanismWorkspace } from '../components/synthesis/MechanismWorkspace';
+import { ResearchGapsWorkspace } from '../components/synthesis/ResearchGapsWorkspace';
 
 export const EvidenceSynthesisPage: React.FC = () => {
   const { projectId } = useParams<{ projectId?: string }>();
   const { activeProject } = useProject();
   const currentProjectId = projectId || activeProject?.id || 'lean_energy';
 
-  const [activeSubTab, setActiveSubTab] = useState<'classification' | 'matrix' | 'mechanisms'>('classification');
+  const [activeSubTab, setActiveSubTab] = useState<
+    'classification' | 'matrix' | 'mechanisms' | 'research-gaps'
+  >('classification');
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
@@ -103,6 +106,28 @@ export const EvidenceSynthesisPage: React.FC = () => {
           <GitFork size={16} />
           <span>3. Mechanism Synthesis</span>
         </button>
+
+        <button
+          type="button"
+          data-testid="synthesis-tab-research-gaps"
+          onClick={() => setActiveSubTab('research-gaps')}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            padding: '8px 16px',
+            borderRadius: 'var(--radius-md)',
+            border: 'none',
+            backgroundColor: activeSubTab === 'research-gaps' ? 'var(--accent-subtle)' : 'transparent',
+            color: activeSubTab === 'research-gaps' ? 'var(--accent-primary)' : 'var(--text-secondary)',
+            fontWeight: activeSubTab === 'research-gaps' ? 600 : 400,
+            cursor: 'pointer',
+            fontSize: '0.9rem',
+          }}
+        >
+          <Target size={16} />
+          <span>4. Research Gap Synthesis</span>
+        </button>
       </div>
 
       {/* Workspace Content */}
@@ -119,6 +144,10 @@ export const EvidenceSynthesisPage: React.FC = () => {
 
       {activeSubTab === 'mechanisms' && (
         <MechanismWorkspace projectId={currentProjectId} />
+      )}
+
+      {activeSubTab === 'research-gaps' && (
+        <ResearchGapsWorkspace projectId={currentProjectId} />
       )}
     </div>
   );

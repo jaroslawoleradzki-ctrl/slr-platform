@@ -510,3 +510,127 @@ class MechanismWorkspaceData(BaseModel):
     pathways: list[MechanismPathwayDetail] = Field(default_factory=list)
     synthesis_chains: list[MechanismSynthesisPathway] = Field(default_factory=list)
     stats: MechanismWorkspaceStats
+
+
+class ResearchGapType(StrEnum):
+    """Researcher-identified research gap dimensions (Task 10.6)."""
+
+    THEMATIC = "thematic"  # Under-studied practices/effects/combinations
+    MECHANISM = "mechanism"  # Reported effects without plausible mechanism explanations
+    METHODOLOGICAL = "methodological"  # Recurring study design or measurement limitations
+    CONTEXTUAL = "contextual"  # Missing evidence in specific industries, countries, or scales
+    INCONSISTENT_EVIDENCE = "inconsistent_evidence"  # Conflicting results not explained by context/methodology
+
+
+class ResearchGapLinkType(StrEnum):
+    """Type of synthesis evidence artifact linked to a research gap."""
+
+    ANALYTICAL_RELATION = "analytical_relation"
+    MECHANISM_PATHWAY = "mechanism_pathway"
+    CONTEXT_FACTOR_LINK = "context_factor_link"
+
+
+class ResearchGap(BaseModel):
+    """Researcher-authored analytical conclusion identifying a research gap.
+
+    A gap is a human interpretation backed by traceable evidence links.
+    Publication count alone never establishes a gap; low publication count
+    is evidence input, not a conclusion. No automated scoring or ranking.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    gap_id: UUID = Field(default_factory=uuid4)
+    project_id: str = Field(min_length=1)
+    gap_type: ResearchGapType
+    title: str = Field(min_length=1)
+    rationale: str = Field(min_length=1)  # Researcher-authored justification for the gap
+    researcher_id: str = Field(min_length=1)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+    @field_validator("created_at", "updated_at")
+    @classmethod
+    def validate_tz(cls, v: datetime) -> datetime:
+        if v.tzinfo is None or v.utcoffset() is None:
+            raise ValueError("timestamps must be timezone-aware")
+        return v
+
+
+class ResearchGapLink(BaseModel):
+    """Traceable evidence link from a research gap to a synthesis artifact.
+
+    Enforces the traceability chain:
+    ResearchGap -> ResearchGapLink -> AnalyticalRelation / MechanismPathway /
+    ContextFactorLink -> group_item_id -> latest eligible COMPLETE extraction
+    revision -> source evidence -> publication -> criterion-level QA profile.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    link_id: UUID = Field(default_factory=uuid4)
+    project_id: str = Field(min_length=1)
+    gap_id: UUID
+    link_type: ResearchGapLinkType
+    target_id: UUID  # relation_id / pathway_id / context link assignment_id
+    group_item_id: UUID
+    publication_id: UUID
+    latest_revision_id: UUID
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+    @field_validator("created_at")
+    @classmethod
+    def validate_tz(cls, v: datetime) -> datetime:
+        if v.tzinfo is None or v.utcoffset() is None:
+            raise ValueError("created_at must be timezone-aware")
+        return v
+
+
+class ResearchGapDetail(BaseModel):
+    """A research gap with its supporting evidence links."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    gap: ResearchGap
+    links: list[ResearchGapLink] = Field(default_factory=list)
+
+
+class ResearchGapWorkspaceStats(BaseModel):
+    """Deterministic count-only summary of research gap workspace (no scoring)."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    total_gaps: int = Field(ge=0, default=0)
+    thematic_count: int = Field(ge=0, default=0)
+    mechanism_count: int = Field(ge=0, default=0)
+    methodological_count: int = Field(ge=0, default=0)
+    contextual_count: int = Field(ge=0, default=0)
+    inconsistent_evidence_count: int = Field(ge=0, default=0)
+    linked_publication_count: int = Field(ge=0, default=0)
+
+
+class ResearchGapWorkspaceData(BaseModel):
+    """Complete dataset for the Research Gap Synthesis Workspace."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    project_id: str = Field(min_length=1)
+    gaps: list[ResearchGapDetail] = Field(default_factory=list)
+    stats: ResearchGapWorkspaceStats
+
+
+class ResearchGapEvidenceCandidate(BaseModel):
+    """Candidate synthesis artifact eligible for linking to a research gap."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    link_type: ResearchGapLinkType
+    target_id: UUID
+    group_item_id: UUID
+    publication_id: UUID
+    latest_revision_id: UUID
+    traceable: bool = False  # True only when it traces to an eligible COMPLETE revision
+    label: str = Field(min_length=1)
+    publication_title: str | None = None
+    publication_year: int | None = None
+    qa_profile: QAProfileSummary | None = None  # Criterion-level QA for researcher inspection

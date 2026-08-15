@@ -13,6 +13,7 @@ from app.api.routers import (
     screening,
     search_strategy,
     synthesis,
+    synthesis_gaps,
 )
 from app.core.config import load_project_config
 
@@ -48,6 +49,7 @@ app.include_router(full_text_screening.router)
 app.include_router(quality_assessment.router)
 app.include_router(extraction.router)
 app.include_router(synthesis.router)
+app.include_router(synthesis_gaps.router)
 
 
 @app.get("/")
