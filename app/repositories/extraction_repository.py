@@ -36,9 +36,7 @@ class ExtractionRevisionConflictError(Exception):
 class SqliteExtractionRepository:
     """Durable, append-only extraction snapshots with batched hydration."""
 
-    def __init__(
-        self, database_path: str | Path, *, query_observer: Callable[[str], None] | None = None
-    ) -> None:
+    def __init__(self, database_path: str | Path, *, query_observer: Callable[[str], None] | None = None) -> None:
         self._database_path = Path(database_path)
         self._query_observer = query_observer
         self._database_path.parent.mkdir(parents=True, exist_ok=True)
@@ -54,8 +52,13 @@ class SqliteExtractionRepository:
                     (record_id, project_id, publication_id, template_id, template_version, current_status, created_at, updated_at)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
                     (
-                        str(record.record_id), record.project_id, str(record.publication_id), record.template_id,
-                        record.template_version, record.current_status.value, record.created_at.isoformat(),
+                        str(record.record_id),
+                        record.project_id,
+                        str(record.publication_id),
+                        record.template_id,
+                        record.template_version,
+                        record.current_status.value,
+                        record.created_at.isoformat(),
                         record.updated_at.isoformat(),
                     ),
                 )
@@ -96,7 +99,9 @@ class SqliteExtractionRepository:
             if record_row is None:
                 raise ExtractionRecordNotFoundError(f"Extraction record '{revision.record_id}' was not found.")
             if record_row[1] != revision.project_id or record_row[2] != str(revision.publication_id):
-                raise ExtractionRevisionConflictError("Revision project_id and publication_id must match its extraction record.")
+                raise ExtractionRevisionConflictError(
+                    "Revision project_id and publication_id must match its extraction record."
+                )
             next_index = connection.execute(
                 "SELECT COALESCE(MAX(revision_index), 0) + 1 FROM extraction_revisions WHERE record_id = ?",
                 (str(revision.record_id),),
@@ -111,9 +116,14 @@ class SqliteExtractionRepository:
                     (revision_id, record_id, project_id, publication_id, revision_index, reviewer_id, completeness_status, created_at)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
                     (
-                        str(revision.revision_id), str(revision.record_id), revision.project_id,
-                        str(revision.publication_id), revision.revision_index, revision.reviewer_id,
-                        revision.completeness_status.value, revision.created_at.isoformat(),
+                        str(revision.revision_id),
+                        str(revision.record_id),
+                        revision.project_id,
+                        str(revision.publication_id),
+                        revision.revision_index,
+                        revision.reviewer_id,
+                        revision.completeness_status.value,
+                        revision.created_at.isoformat(),
                     ),
                 )
                 self._insert_values(connection, revision.revision_id, revision.publication_values, None)
@@ -121,7 +131,12 @@ class SqliteExtractionRepository:
                     connection.execute(
                         """INSERT INTO extracted_group_items
                         (group_item_id, revision_id, group_key, item_index) VALUES (?, ?, ?, ?)""",
-                        (str(group_item.group_item_id), str(revision.revision_id), group_item.group_key, group_item.item_index),
+                        (
+                            str(group_item.group_item_id),
+                            str(revision.revision_id),
+                            group_item.group_key,
+                            group_item.item_index,
+                        ),
                     )
                     self._insert_values(connection, revision.revision_id, group_item.values, group_item.group_item_id)
                 connection.execute(
@@ -165,9 +180,7 @@ class SqliteExtractionRepository:
                 record_ids,
             ).fetchall()
             hydrated = self._hydrate_revisions_with_connection(connection, revisions)
-        result: dict[UUID, ExtractionRevision | None] = {
-            publication_id: None for publication_id in publication_ids
-        }
+        result: dict[UUID, ExtractionRevision | None] = {publication_id: None for publication_id in publication_ids}
         for revision in hydrated:
             result[revision.publication_id] = revision
         return result
@@ -206,9 +219,7 @@ class SqliteExtractionRepository:
         connection.execute("DELETE FROM extraction_revisions WHERE project_id = ?", (project_id,))
         connection.execute("DELETE FROM extraction_records WHERE project_id = ?", (project_id,))
 
-    def set_project_configuration(
-        self, config: ProjectExtractionConfiguration
-    ) -> ProjectExtractionConfiguration:
+    def set_project_configuration(self, config: ProjectExtractionConfiguration) -> ProjectExtractionConfiguration:
         with self._connect() as connection:
             connection.execute(
                 """INSERT INTO project_extraction_configurations
@@ -267,18 +278,31 @@ class SqliteExtractionRepository:
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             [
                 (
-                    str(value.value_id), str(revision_id), str(group_item_id) if group_item_id else None,
-                    value.field_key, value.status.value, value.origin.value, value.text_value, value.int_value,
-                    value.float_value, int(value.bool_value) if value.bool_value is not None else None,
-                    value.unit_value, json.dumps(value.json_value) if value.json_value is not None else None,
-                    value.source_page, value.source_section, value.source_locator, value.source_quote, value.reviewer_note,
+                    str(value.value_id),
+                    str(revision_id),
+                    str(group_item_id) if group_item_id else None,
+                    value.field_key,
+                    value.status.value,
+                    value.origin.value,
+                    value.text_value,
+                    value.int_value,
+                    value.float_value,
+                    int(value.bool_value) if value.bool_value is not None else None,
+                    value.unit_value,
+                    json.dumps(value.json_value) if value.json_value is not None else None,
+                    value.source_page,
+                    value.source_section,
+                    value.source_locator,
+                    value.source_quote,
+                    value.reviewer_note,
                 )
                 for value in values
             ],
         )
 
     def _hydrate_revisions_with_connection(
-        self, connection: sqlite3.Connection, rows: list[tuple]) -> list[ExtractionRevision]:
+        self, connection: sqlite3.Connection, rows: list[tuple]
+    ) -> list[ExtractionRevision]:
         if not rows:
             return []
         revision_ids = [row[0] for row in rows]
@@ -298,28 +322,36 @@ class SqliteExtractionRepository:
         ).fetchall()
         publication_values: dict[str, list[ExtractedValueState]] = defaultdict(list)
         group_items: dict[str, dict[str, ExtractedGroupItemState]] = defaultdict(dict)
-        group_values: dict[str, list[ExtractedValueState]] = defaultdict(list)
-        group_metadata: dict[str, tuple[str, int, str]] = {}
+        group_values: dict[tuple[str, str], list[ExtractedValueState]] = defaultdict(list)
+        group_metadata: dict[tuple[str, str], tuple[str, int]] = {}
         for child in child_rows:
             if child[0] == "group":
-                group_metadata[child[1]] = (child[3], child[4], child[2])
+                group_metadata[(child[2], child[1])] = (child[3], child[4])
                 continue
             value = _value_from_child_row(child)
             group_item_id = child[3]
             if group_item_id is None:
                 publication_values[child[2]].append(value)
             else:
-                group_values[group_item_id].append(value)
-        for group_item_id, (group_key, item_index, revision_id) in group_metadata.items():
+                group_values[(child[2], group_item_id)].append(value)
+        for (revision_id, group_item_id), (group_key, item_index) in group_metadata.items():
             group_items[revision_id][group_item_id] = ExtractedGroupItemState(
-                group_item_id=UUID(group_item_id), group_key=group_key, item_index=item_index,
-                values=group_values[group_item_id],
+                group_item_id=UUID(group_item_id),
+                group_key=group_key,
+                item_index=item_index,
+                values=group_values[(revision_id, group_item_id)],
             )
         return [
             ExtractionRevision(
-                revision_id=UUID(row[0]), record_id=UUID(row[1]), project_id=row[2], publication_id=UUID(row[3]),
-                revision_index=row[4], reviewer_id=row[5], completeness_status=ExtractionCompletenessStatus(row[6]),
-                created_at=_as_datetime(row[7]), publication_values=publication_values[row[0]],
+                revision_id=UUID(row[0]),
+                record_id=UUID(row[1]),
+                project_id=row[2],
+                publication_id=UUID(row[3]),
+                revision_index=row[4],
+                reviewer_id=row[5],
+                completeness_status=ExtractionCompletenessStatus(row[6]),
+                created_at=_as_datetime(row[7]),
+                publication_values=publication_values[row[0]],
                 group_items=sorted(group_items[row[0]].values(), key=lambda item: (item.group_key, item.item_index)),
             )
             for row in rows
@@ -335,19 +367,34 @@ class SqliteExtractionRepository:
 
 def _record_from_row(row: tuple) -> ExtractionRecord:
     return ExtractionRecord(
-        record_id=UUID(row[0]), project_id=row[1], publication_id=UUID(row[2]), template_id=row[3],
-        template_version=row[4], current_status=ExtractionCompletenessStatus(row[5]),
-        created_at=_as_datetime(row[6]), updated_at=_as_datetime(row[7]),
+        record_id=UUID(row[0]),
+        project_id=row[1],
+        publication_id=UUID(row[2]),
+        template_id=row[3],
+        template_version=row[4],
+        current_status=ExtractionCompletenessStatus(row[5]),
+        created_at=_as_datetime(row[6]),
+        updated_at=_as_datetime(row[7]),
     )
 
 
 def _value_from_child_row(row: tuple) -> ExtractedValueState:
     return ExtractedValueState(
-        value_id=UUID(row[1]), field_key=row[5], status=ValueStatus(row[6]), origin=ValueOrigin(row[7]),
-        text_value=row[8], int_value=row[9], float_value=row[10],
-        bool_value=bool(row[11]) if row[11] is not None else None, unit_value=row[12],
-        json_value=json.loads(row[13]) if row[13] is not None else None, source_page=row[14],
-        source_section=row[15], source_locator=row[16], source_quote=row[17], reviewer_note=row[18],
+        value_id=UUID(row[1]),
+        field_key=row[5],
+        status=ValueStatus(row[6]),
+        origin=ValueOrigin(row[7]),
+        text_value=row[8],
+        int_value=row[9],
+        float_value=row[10],
+        bool_value=bool(row[11]) if row[11] is not None else None,
+        unit_value=row[12],
+        json_value=json.loads(row[13]) if row[13] is not None else None,
+        source_page=row[14],
+        source_section=row[15],
+        source_locator=row[16],
+        source_quote=row[17],
+        reviewer_note=row[18],
     )
 
 

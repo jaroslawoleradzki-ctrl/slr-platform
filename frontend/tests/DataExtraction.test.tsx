@@ -335,4 +335,52 @@ describe('Data Extraction Workspace GUI (Phase 9.5 & 9.6)', () => {
     fireEvent.click(await screen.findByRole('button', { name: /Eksport JSON/i }));
     expect(await screen.findByRole('alert')).toHaveTextContent(/Nie udało się pobrać eksportu/i);
   });
+
+  it('L. Repeating group items preserve durable group_item_id across add, edit, delete and submission', async () => {
+    const existingGroupId = 'uuid-arm-123';
+    const mockRecordWithGroup = {
+      ...mockRecord,
+      latest_revision: {
+        ...mockRecord.latest_revision,
+        group_items: [
+          {
+            group_key: 'study_arms',
+            group_item_id: existingGroupId,
+            item_index: 1,
+            values: [],
+          },
+        ],
+      },
+    };
+    vi.spyOn(extractionApi, 'getExtractionRecord').mockResolvedValue(mockRecordWithGroup);
+
+    renderComponent(`/projects/proj_test/extract/${pubId}`);
+    await screen.findByText('7. Ekstrakcja Danych (Data Extraction Workspace)');
+
+    // Add a new element
+    const addBtn = await screen.findByRole('button', { name: /Dodaj element/i });
+    fireEvent.click(addBtn);
+
+    // Save draft
+    const draftBtn = await screen.findByRole('button', { name: /Zapisz Szkic/i });
+    fireEvent.click(draftBtn);
+
+    await waitFor(() => {
+      expect(extractionApi.submitRevision).toHaveBeenCalledWith(
+        'proj_test',
+        pubId,
+        expect.objectContaining({
+          group_items: expect.arrayContaining([
+            expect.objectContaining({
+              group_item_id: existingGroupId,
+              item_index: 1,
+            }),
+            expect.objectContaining({
+              item_index: 2,
+            }),
+          ]),
+        })
+      );
+    });
+  });
 });

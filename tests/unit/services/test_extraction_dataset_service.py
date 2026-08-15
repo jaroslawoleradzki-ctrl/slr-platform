@@ -63,26 +63,45 @@ class FakeDataset:
         ]
         self.revisions = {
             PUB_COMPLETE: SimpleNamespace(
-                revision_id=uuid4(), revision_index=2, reviewer_id="reviewer",
-                completeness_status=ExtractionCompletenessStatus.COMPLETE, created_at=STAMP,
+                revision_id=uuid4(),
+                revision_index=2,
+                reviewer_id="reviewer",
+                completeness_status=ExtractionCompletenessStatus.COMPLETE,
+                created_at=STAMP,
                 publication_values=[
                     _value("multi", json_value=["z", "a"], origin=ValueOrigin.REVIEWER_CODED),
                     _value("missing", status=ValueStatus.NOT_APPLICABLE),
                 ],
                 group_items=[
-                    ExtractedGroupItemState(group_key="relationships", item_index=2, values=[_value("effect", float_value=2.5, unit_value="kWh")]),
-                    ExtractedGroupItemState(group_key="relationships", item_index=1, values=[_value("effect", float_value=1.5, unit_value="kWh")]),
+                    ExtractedGroupItemState(
+                        group_key="relationships",
+                        item_index=2,
+                        values=[_value("effect", float_value=2.5, unit_value="kWh")],
+                    ),
+                    ExtractedGroupItemState(
+                        group_key="relationships",
+                        item_index=1,
+                        values=[_value("effect", float_value=1.5, unit_value="kWh")],
+                    ),
                 ],
             ),
             PUB_IN_PROGRESS: SimpleNamespace(
-                revision_id=uuid4(), revision_index=3, reviewer_id="reviewer",
-                completeness_status=ExtractionCompletenessStatus.IN_PROGRESS, created_at=STAMP,
-                publication_values=[], group_items=[],
+                revision_id=uuid4(),
+                revision_index=3,
+                reviewer_id="reviewer",
+                completeness_status=ExtractionCompletenessStatus.IN_PROGRESS,
+                created_at=STAMP,
+                publication_values=[],
+                group_items=[],
             ),
             PUB_NEEDS_REVIEW: SimpleNamespace(
-                revision_id=uuid4(), revision_index=1, reviewer_id="reviewer",
-                completeness_status=ExtractionCompletenessStatus.NEEDS_REVIEW, created_at=STAMP,
-                publication_values=[], group_items=[],
+                revision_id=uuid4(),
+                revision_index=1,
+                reviewer_id="reviewer",
+                completeness_status=ExtractionCompletenessStatus.NEEDS_REVIEW,
+                created_at=STAMP,
+                publication_values=[],
+                group_items=[],
             ),
         }
         self.publication_calls = 0
@@ -93,9 +112,11 @@ class FakeDataset:
 
     def eligibility_service(self):
         return SimpleNamespace(
-            get_eligible_publications=lambda project_id, reviewer_id="": [
-                SimpleNamespace(publication_id=pub.record_id, is_eligible=True) for pub in self.publications
-            ] if project_id == PROJECT_ID else []
+            get_eligible_publications=lambda project_id, reviewer_id="": (
+                [SimpleNamespace(publication_id=pub.record_id, is_eligible=True) for pub in self.publications]
+                if project_id == PROJECT_ID
+                else []
+            )
         )
 
     def publication_repo(self):
@@ -206,3 +227,26 @@ def test_missing_configuration_is_an_explicit_error() -> None:
         pass
     else:
         raise AssertionError("missing configuration must not produce a dataset")
+
+
+def test_relationship_read_model_and_exports_preserve_group_item_id() -> None:
+    fake = FakeDataset()
+    service = _service(fake)
+    relationships = service.get_relationship_read_models(PROJECT_ID)
+    assert len(relationships) == 2
+    # Verify group_item_id is a UUID and matches fake revision data sorted by item_index
+    sorted_items = sorted(fake.revisions[PUB_COMPLETE].group_items, key=lambda item: item.item_index)
+    expected_ids = [item.group_item_id for item in sorted_items]
+    assert [rel.group_item_id for rel in relationships] == expected_ids
+
+    # Verify JSON export includes group_item_id
+    json_data = service.export_json(PROJECT_ID)
+    exported_group_items = json_data[0]["group_items"]
+    assert len(exported_group_items) == 2
+    assert [item["group_item_id"] for item in exported_group_items] == [str(uid) for uid in expected_ids]
+
+    # Verify CSV export includes group_item_id column and values
+    csv_data = service.export_csv(PROJECT_ID, dataset="relationships")
+    assert "group_item_id" in csv_data
+    for uid in expected_ids:
+        assert str(uid) in csv_data
