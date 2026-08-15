@@ -241,6 +241,7 @@ def test_existing_database_migration_0018_to_0019_preserves_data_and_enables_dur
                 status=ValueStatus.PRESENT,
                 origin=ValueOrigin.REPORTED,
                 text_value="Case Study (Updated)",
+                source_locator="Updated source",
             )
         ],
         group_items=[
@@ -254,6 +255,7 @@ def test_existing_database_migration_0018_to_0019_preserves_data_and_enables_dur
                         status=ValueStatus.PRESENT,
                         origin=ValueOrigin.REPORTED,
                         text_value="Value Stream Mapping Extended",
+                        source_locator="Updated source",
                     ),
                     ExtractedValueState(
                         field_key="effect",
@@ -261,6 +263,7 @@ def test_existing_database_migration_0018_to_0019_preserves_data_and_enables_dur
                         origin=ValueOrigin.REPORTED,
                         float_value=16.5,
                         unit_value="%",
+                        source_locator="Updated source",
                     ),
                 ],
             ),
@@ -270,7 +273,7 @@ def test_existing_database_migration_0018_to_0019_preserves_data_and_enables_dur
                 item_index=2,
                 values=[
                     ExtractedValueState(
-                        field_key="practice", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="5S"
+                        field_key="practice", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="5S", source_locator="Updated source"
                     ),
                     ExtractedValueState(
                         field_key="effect",
@@ -278,6 +281,7 @@ def test_existing_database_migration_0018_to_0019_preserves_data_and_enables_dur
                         origin=ValueOrigin.REPORTED,
                         float_value=5.0,
                         unit_value="%",
+                        source_locator="Updated source",
                     ),
                 ],
             ),
@@ -364,7 +368,7 @@ def test_fresh_database_full_migration_chain_integrity(tmp_path: Path):
                 item_index=1,
                 values=[
                     ExtractedValueState(
-                        field_key="val", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="v1"
+                        field_key="val", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="v1", source_locator="Fixture source"
                     )
                 ],
             )
@@ -384,7 +388,7 @@ def test_fresh_database_full_migration_chain_integrity(tmp_path: Path):
                 item_index=1,
                 values=[
                     ExtractedValueState(
-                        field_key="val", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="v2"
+                        field_key="val", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="v2", source_locator="Fixture source"
                     )
                 ],
             )

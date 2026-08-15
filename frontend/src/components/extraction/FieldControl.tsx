@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { FileText, HelpCircle } from 'lucide-react';
 import {
   ExtractionFieldDefinition,
@@ -11,7 +11,11 @@ interface FieldControlProps {
   fieldDef: ExtractionFieldDefinition;
   valueState: ExtractedValueStateDTO;
   onChange: (updated: ExtractedValueStateDTO) => void;
-  onOpenProvenance: (valueState: ExtractedValueStateDTO, onSave: (p: Partial<ExtractedValueStateDTO>) => void) => void;
+  onOpenProvenance: (
+    valueState: ExtractedValueStateDTO,
+    onSave: (p: Partial<ExtractedValueStateDTO>) => void,
+    options: { allowSourceProvenance: boolean; allowReviewerNote: boolean },
+  ) => void;
   errorMessage?: string;
 }
 
@@ -22,19 +26,76 @@ export const FieldControl: React.FC<FieldControlProps> = ({
   onOpenProvenance,
   errorMessage,
 }) => {
-  const isValueDisabled = valueState.status === 'not_reported' || valueState.status === 'not_applicable';
+  const hasTentativeValue = hasValueForField(valueState, fieldDef.data_type);
+  const isValueDisabled = ['unassessed', 'not_reported', 'not_applicable'].includes(valueState.status);
+  const originAllowed = valueState.status === 'present' || (valueState.status === 'unclear' && hasTentativeValue);
+  const sourceProvenanceAllowed = originAllowed;
+  const reviewerNoteAllowed = valueState.status !== 'unassessed';
+  const selectableStatuses = [
+    'unassessed' as ValueStatus,
+    ...(fieldDef.allowed_statuses || ['present' as ValueStatus]).filter(
+      (status) => status !== 'unassessed',
+    ),
+  ];
 
-  const handleStatusChange = (newStatus: ValueStatus) => {
-    if (newStatus === 'not_reported' || newStatus === 'not_applicable') {
+  useEffect(() => {
+    const hasSourceProvenance = Boolean(
+      valueState.source_page || valueState.source_section || valueState.source_locator || valueState.source_quote,
+    );
+    const hasAnyValue = Boolean(
+      valueState.text_value != null ||
+      valueState.int_value != null ||
+      valueState.float_value != null ||
+      valueState.bool_value != null ||
+      valueState.unit_value != null ||
+      valueState.json_value != null,
+    );
+
+    if (
+      ['unassessed', 'not_reported', 'not_applicable'].includes(valueState.status) &&
+      (hasAnyValue || valueState.origin || hasSourceProvenance ||
+        (valueState.status === 'unassessed' && valueState.reviewer_note))
+    ) {
       onChange({
         ...valueState,
-        status: newStatus,
         text_value: null,
         int_value: null,
         float_value: null,
         bool_value: null,
         unit_value: null,
         json_value: null,
+        origin: null,
+        source_page: null,
+        source_section: null,
+        source_locator: null,
+        source_quote: null,
+        reviewer_note: valueState.status === 'unassessed' ? null : valueState.reviewer_note,
+      });
+    } else if (valueState.status === 'unclear' && !hasTentativeValue && (valueState.origin || hasSourceProvenance)) {
+      onChange({
+        ...valueState,
+        origin: null,
+        source_page: null,
+        source_section: null,
+        source_locator: null,
+        source_quote: null,
+      });
+    }
+  }, [hasTentativeValue, onChange, valueState]);
+
+  const handleStatusChange = (newStatus: ValueStatus) => {
+    if (['unassessed', 'not_reported', 'not_applicable'].includes(newStatus)) {
+      onChange({
+        ...valueState,
+        status: newStatus,
+        origin: null,
+        text_value: null,
+        int_value: null,
+        float_value: null,
+        bool_value: null,
+        unit_value: null,
+        json_value: null,
+        source_page: null, source_section: null, source_locator: null, source_quote: null,
       });
     } else {
       onChange({
@@ -44,7 +105,7 @@ export const FieldControl: React.FC<FieldControlProps> = ({
     }
   };
 
-  const handleOriginChange = (newOrigin: ValueOrigin) => {
+  const handleOriginChange = (newOrigin: ValueOrigin | null) => {
     onChange({ ...valueState, origin: newOrigin });
   };
 
@@ -275,9 +336,12 @@ export const FieldControl: React.FC<FieldControlProps> = ({
         {/* Provenance Button Trigger */}
         <button
           type="button"
+          disabled={!sourceProvenanceAllowed && !reviewerNoteAllowed}
           onClick={() =>
-            onOpenProvenance(valueState, (updated) =>
-              onChange({ ...valueState, ...updated })
+            onOpenProvenance(
+              valueState,
+              (updated) => onChange({ ...valueState, ...updated }),
+              { allowSourceProvenance: sourceProvenanceAllowed, allowReviewerNote: reviewerNoteAllowed },
             )
           }
           style={{
@@ -290,7 +354,8 @@ export const FieldControl: React.FC<FieldControlProps> = ({
             border: hasProvenance ? '1px solid var(--accent-primary)' : '1px solid var(--border-subtle)',
             borderRadius: 'var(--radius-md)',
             fontSize: '0.75rem',
-            cursor: 'pointer',
+            cursor: !sourceProvenanceAllowed && !reviewerNoteAllowed ? 'not-allowed' : 'pointer',
+            opacity: !sourceProvenanceAllowed && !reviewerNoteAllowed ? 0.55 : 1,
           }}
         >
           <FileText size={13} />
@@ -315,10 +380,15 @@ export const FieldControl: React.FC<FieldControlProps> = ({
               borderRadius: 'var(--radius-sm)',
             }}
           >
-            <option value="present">PRESENT (Obecna)</option>
-            <option value="not_reported">NOT_REPORTED (Brak raportowania)</option>
-            <option value="not_applicable">NOT_APPLICABLE (Nie dotyczy)</option>
-            <option value="unclear">UNCLEAR (Niejasna)</option>
+            {selectableStatuses.map((status) => (
+              <option key={status} value={status}>
+                {status === 'unassessed' && 'UNASSESSED (Nie oceniono)'}
+                {status === 'present' && 'PRESENT (Obecna)'}
+                {status === 'not_reported' && 'NOT_REPORTED (Brak raportowania)'}
+                {status === 'not_applicable' && 'NOT_APPLICABLE (Nie dotyczy)'}
+                {status === 'unclear' && 'UNCLEAR (Niejasna)'}
+              </option>
+            ))}
           </select>
         </div>
 
@@ -326,8 +396,9 @@ export const FieldControl: React.FC<FieldControlProps> = ({
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
           <span style={{ color: 'var(--text-muted)', fontWeight: 500 }}>Źródło:</span>
           <select
-            value={valueState.origin}
-            onChange={(e) => handleOriginChange(e.target.value as ValueOrigin)}
+            disabled={!originAllowed}
+            value={valueState.origin || ''}
+            onChange={(e) => handleOriginChange(e.target.value === '' ? null : e.target.value as ValueOrigin)}
             style={{
               padding: '2px 8px',
               fontSize: '0.75rem',
@@ -337,6 +408,7 @@ export const FieldControl: React.FC<FieldControlProps> = ({
               borderRadius: 'var(--radius-sm)',
             }}
           >
+            <option value="">-- wybierz pochodzenie --</option>
             <option value="reported">REPORTED (Wprost z artykułu)</option>
             <option value="reviewer_coded">REVIEWER_CODED (Interpretacja recenzenta)</option>
           </select>
@@ -367,4 +439,17 @@ function inputStyle(disabled: boolean, hasError: boolean): React.CSSProperties {
     fontSize: '0.85rem',
     cursor: disabled ? 'not-allowed' : 'text',
   };
+}
+
+function hasValueForField(value: ExtractedValueStateDTO, dataType: ExtractionFieldDefinition['data_type']): boolean {
+  if (dataType === 'number_with_unit') {
+    return value.int_value != null || value.float_value != null;
+  }
+  return (
+    (value.text_value != null && value.text_value !== '') ||
+    value.int_value != null ||
+    value.float_value != null ||
+    value.bool_value != null ||
+    (value.json_value != null && value.json_value.length > 0)
+  );
 }

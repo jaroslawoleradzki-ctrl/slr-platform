@@ -27,24 +27,25 @@ def _value(
     *,
     text: str | None = None,
     status: ValueStatus = ValueStatus.PRESENT,
-    origin: ValueOrigin = ValueOrigin.REPORTED,
+    origin: ValueOrigin | None = ValueOrigin.REPORTED,
     json_value: list[str] | None = None,
     float_value: float | None = None,
     unit_value: str | None = None,
 ) -> ExtractedValueState:
+    missingness = status in (ValueStatus.UNASSESSED, ValueStatus.NOT_REPORTED, ValueStatus.NOT_APPLICABLE)
     return ExtractedValueState(
         field_key=key,
         status=status,
-        origin=origin,
-        text_value=text,
-        json_value=json_value,
-        float_value=float_value,
-        unit_value=unit_value,
-        source_page="14",
-        source_section="Results",
-        source_locator="Table 2, row 3",
-        source_quote="short quote",
-        reviewer_note="coded note",
+        origin=None if missingness else origin,
+        text_value=None if missingness else text,
+        json_value=None if missingness else json_value,
+        float_value=None if missingness else float_value,
+        unit_value=None if missingness else unit_value,
+        source_page=None if missingness else "14",
+        source_section=None if missingness else "Results",
+        source_locator=None if missingness else "Table 2, row 3",
+        source_quote=None if missingness else "short quote",
+        reviewer_note=None if missingness else "coded note",
     )
 
 

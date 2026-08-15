@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.4.9] — 2026-08-15
+
+### Fixed
+
+- Added the ADR-0007 Extraction Correctness Foundation, including explicit
+  `UNASSESSED` field state, server-authoritative completion validation, narrow
+  legacy hydration compatibility, and safe revision/value identity handling.
+
 ## [0.4.8] — 2026-08-15
 
 ### Added

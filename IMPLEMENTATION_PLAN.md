@@ -10,7 +10,7 @@ Unlike ROADMAP.md, this file is intentionally technical and may change frequentl
 
 Current release:
 
-v0.4.8 — Data Extraction Configuration Workflow
+v0.4.9 — Extraction Correctness Foundation (ADR-0007)
 
 Status:
 

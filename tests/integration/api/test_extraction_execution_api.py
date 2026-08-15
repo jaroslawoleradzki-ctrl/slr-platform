@@ -159,6 +159,7 @@ class TestExtractionExecutionAPI:
                     "status": "present",
                     "origin": "reported",
                     "text_value": "QA-gated text",
+                    "source_locator": "Source text",
                 }
             ],
             "mark_complete": True,
@@ -237,18 +238,11 @@ class TestExtractionExecutionAPI:
         assert rec_data["current_status"] == "complete"
         assert rec_data["latest_revision"]["revision_index"] == 1
 
-        # POST second revision
+        # Submit the exact value IDs returned by the API.  The production
+        # service must create new snapshot identities for revision 2.
         payload2 = {
             "reviewer_id": "rev_1",
-            "publication_values": [
-                {
-                    "field_key": "sample_text",
-                    "status": "present",
-                    "origin": "reviewer_coded",
-                    "text_value": "Second Text",
-                    "source_page": "p. 6",
-                }
-            ],
+            "publication_values": rev1_data["publication_values"],
             "group_items": [],
             "mark_complete": True,
         }
@@ -260,6 +254,7 @@ class TestExtractionExecutionAPI:
         rev2_data = post_resp2.json()
         assert rev2_data["revision_index"] == 2
         assert rev2_data["reviewer_id"] == "rev_1"
+        assert rev2_data["publication_values"][0]["value_id"] != rev1_data["publication_values"][0]["value_id"]
 
         # GET history
         hist_resp = client.get(f"/api/v1/projects/{project_id}/extraction/records/{pub_id}/history")
@@ -282,6 +277,7 @@ class TestExtractionExecutionAPI:
                     "status": "present",
                     "origin": "reported",
                     "text_value": "Some Text",
+                    "source_locator": "Source text",
                 }
             ],
             "group_items": [],
