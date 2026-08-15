@@ -5,7 +5,6 @@ import {
   ExtractedGroupItemStateDTO,
   ExtractedValueStateDTO,
   ValueStatus,
-  ValueOrigin,
 } from '../../api/extractionApi';
 import { FieldControl } from './FieldControl';
 
@@ -13,7 +12,13 @@ interface RelationshipManagerProps {
   groupDef: ExtractionRepeatingGroupDefinition;
   groupItems: ExtractedGroupItemStateDTO[];
   onChange: (updatedItems: ExtractedGroupItemStateDTO[]) => void;
-  onOpenProvenance: (fieldKey: string, fieldName: string, valueState: ExtractedValueStateDTO, onSave: (p: Partial<ExtractedValueStateDTO>) => void) => void;
+  onOpenProvenance: (
+    fieldKey: string,
+    fieldName: string,
+    valueState: ExtractedValueStateDTO,
+    onSave: (p: Partial<ExtractedValueStateDTO>) => void,
+    options: { allowSourceProvenance: boolean; allowReviewerNote: boolean },
+  ) => void;
   validationErrors?: Record<string, string>;
 }
 
@@ -34,8 +39,8 @@ export const RelationshipManager: React.FC<RelationshipManagerProps> = ({
     const nextIndex = groupItems.length > 0 ? Math.max(...groupItems.map((item) => item.item_index)) + 1 : 1;
     const initialValues: ExtractedValueStateDTO[] = groupDef.field_definitions.map((field) => ({
       field_key: field.field_key,
-      status: 'not_reported' as ValueStatus,
-      origin: 'reported' as ValueOrigin,
+      status: 'unassessed' as ValueStatus,
+      origin: null,
     }));
     const newItem: ExtractedGroupItemStateDTO = {
       group_key: groupDef.group_key,
@@ -251,8 +256,8 @@ export const RelationshipManager: React.FC<RelationshipManagerProps> = ({
                       const valueState =
                         item.values.find((val) => val.field_key === fieldDef.field_key) || {
                           field_key: fieldDef.field_key,
-                          status: 'not_reported' as ValueStatus,
-                          origin: 'reported' as ValueOrigin,
+                          status: 'unassessed' as ValueStatus,
+                          origin: null,
                         };
                       const errorMsg = validationErrors[`${groupDef.group_key}.${item.item_index}.${fieldDef.field_key}`];
 
@@ -262,7 +267,7 @@ export const RelationshipManager: React.FC<RelationshipManagerProps> = ({
                           fieldDef={fieldDef}
                           valueState={valueState}
                           onChange={(updated) => handleFieldValueChange(itemIdx, updated)}
-                          onOpenProvenance={(val, onSave) => onOpenProvenance(fieldDef.field_key, fieldDef.name, val, onSave)}
+                          onOpenProvenance={(val, onSave, options) => onOpenProvenance(fieldDef.field_key, fieldDef.name, val, onSave, options)}
                           errorMessage={errorMsg}
                         />
                       );

@@ -4,9 +4,11 @@ This module is completely domain-agnostic. It contains zero hardcoded domain or 
 """
 
 import re
+from contextlib import contextmanager
+from contextvars import ContextVar
 from datetime import datetime, timezone
 from enum import StrEnum
-from typing import Self
+from typing import Iterator, Self
 from uuid import UUID, uuid4
 
 from pydantic import (
@@ -60,6 +62,27 @@ class ExtractionValidationError(ExtractionDomainError):
         super().__init__(f"Extraction revision validation failed: {'; '.join(errors)}")
 
 
+_legacy_hydration_value_ids: ContextVar[frozenset[UUID]] = ContextVar(
+    "legacy_extraction_value_ids", default=frozenset()
+)
+
+
+@contextmanager
+def legacy_extraction_value_hydration(value_ids: set[UUID]) -> Iterator[None]:
+    """Permit only known v0.4.8 snapshots while a repository rebuilds history.
+
+    This is not an input-validation escape hatch.  The repository derives the
+    IDs from rows that match ``is_legacy_missingness_snapshot``; all unrelated
+    values and every parent revision invariant still validate normally.
+    """
+
+    token = _legacy_hydration_value_ids.set(frozenset(value_ids))
+    try:
+        yield
+    finally:
+        _legacy_hydration_value_ids.reset(token)
+
+
 class FieldDataType(StrEnum):
     """Supported field data types for extraction template definitions."""
 
@@ -80,6 +103,7 @@ class FieldDataType(StrEnum):
 class ValueStatus(StrEnum):
     """Explicit status explaining why a value is present or absent."""
 
+    UNASSESSED = "unassessed"
     PRESENT = "present"
     NOT_REPORTED = "not_reported"
     NOT_APPLICABLE = "not_applicable"
@@ -139,7 +163,7 @@ class ExtractedValueState(BaseModel):
     value_id: UUID = Field(default_factory=uuid4)
     field_key: str
     status: ValueStatus
-    origin: ValueOrigin
+    origin: ValueOrigin | None = None
 
     text_value: str | None = None
     int_value: int | None = None
@@ -170,25 +194,49 @@ class ExtractedValueState(BaseModel):
 
     @model_validator(mode="after")
     def validate_value_status_consistency(self) -> Self:
+        # The repository enables this only while rebuilding a historical
+        # revision that contains a documented v0.4.8 missingness snapshot.
+        # It is deliberately keyed by value_id: every other value, and all
+        # revision-level metadata, remains subject to normal validation.
+        if self.value_id in _legacy_hydration_value_ids.get() and is_legacy_missingness_snapshot(self):
+            return self
+
+        # ``unit_value`` qualifies a numeric extraction; it is not evidence on
+        # its own.  Template-level validation enforces its presence whenever a
+        # number_with_unit value is PRESENT.
         has_typed_val = (
             self.text_value is not None
             or self.int_value is not None
             or self.float_value is not None
             or self.bool_value is not None
-            or self.unit_value is not None
             or self.json_value is not None
         )
 
-        if self.status == ValueStatus.PRESENT:
+        source = any((self.source_page, self.source_section, self.source_locator, self.source_quote))
+        if self.status == ValueStatus.UNASSESSED:
+            if has_typed_val or self.origin is not None or source or self.reviewer_note:
+                raise InvalidValueError(f"Unassessed field '{self.field_key}' cannot contain value, origin, provenance, or note.")
+        elif self.status == ValueStatus.PRESENT:
             if not has_typed_val:
                 raise InvalidValueError(
                     f"Extracted value for field '{self.field_key}' with status PRESENT must have at least one typed value."
                 )
+            if self.origin is None or (self.origin == ValueOrigin.REPORTED and not source) or (self.origin == ValueOrigin.REVIEWER_CODED and not self.reviewer_note):
+                raise InvalidValueError(f"Present field '{self.field_key}' has invalid origin or provenance.")
         elif self.status in (ValueStatus.NOT_REPORTED, ValueStatus.NOT_APPLICABLE):
-            if has_typed_val:
+            if has_typed_val or self.origin is not None or source:
                 raise InvalidValueError(
                     f"Extracted value for field '{self.field_key}' with status {self.status.value} must have all typed values set to None."
                 )
+        elif self.status == ValueStatus.UNCLEAR:
+            if (
+                not self.reviewer_note
+                or (has_typed_val and self.origin is None)
+                or (has_typed_val and self.origin == ValueOrigin.REPORTED and not source)
+                or (has_typed_val and self.origin == ValueOrigin.REVIEWER_CODED and not self.reviewer_note)
+                or (not has_typed_val and (self.origin is not None or source))
+            ):
+                raise InvalidValueError(f"Unclear field '{self.field_key}' has invalid value/origin/provenance.")
         return self
 
     @property
@@ -200,6 +248,31 @@ class ExtractedValueState(BaseModel):
             source_quote=self.source_quote,
             reviewer_note=self.reviewer_note,
         )
+
+
+def is_legacy_missingness_snapshot(value: ExtractedValueState) -> bool:
+    """Return whether a value is a documented v0.4.8 missingness snapshot.
+
+    v0.4.8 persisted NOT_REPORTED/NOT_APPLICABLE with its default REPORTED
+    origin and optional source text.  This predicate intentionally does not
+    admit typed values, reviewer-coded origins, or any unrelated invalid row.
+    """
+
+    return (
+        value.status in (ValueStatus.NOT_REPORTED, ValueStatus.NOT_APPLICABLE)
+        and value.origin is ValueOrigin.REPORTED
+        and all(
+            item is None
+            for item in (
+                value.text_value,
+                value.int_value,
+                value.float_value,
+                value.bool_value,
+                value.unit_value,
+                value.json_value,
+            )
+        )
+    )
 
 
 class ExtractedGroupItemState(BaseModel):
@@ -248,6 +321,10 @@ class ExtractionFieldDefinition(BaseModel):
     data_type: FieldDataType
     description: str | None = None
     is_required: bool = False
+    # A required field is complete only when its template expressly permits a
+    # missingness/uncertainty decision.  Existing templates that do not opt in
+    # therefore retain the conservative PRESENT-only contract.
+    allowed_statuses: list[ValueStatus] = Field(default_factory=lambda: [ValueStatus.PRESENT])
     allowed_values: list[str] | None = None
     allow_custom_text: bool = False
     allowed_units: list[str] | None = None
@@ -298,6 +375,12 @@ class ExtractionFieldDefinition(BaseModel):
             )
             return errors
 
+        if val_state.status == ValueStatus.UNASSESSED:
+            if self.is_required:
+                errors.append(f"Required field '{self.field_key}' is unassessed.")
+            return errors
+        if val_state.status not in self.allowed_statuses:
+            return [f"Field '{self.field_key}' does not allow status '{val_state.status.value}'."]
         if val_state.status in (ValueStatus.NOT_REPORTED, ValueStatus.NOT_APPLICABLE):
             return errors
 

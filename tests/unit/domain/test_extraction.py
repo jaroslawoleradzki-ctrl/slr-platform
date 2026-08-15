@@ -46,7 +46,7 @@ class TestFieldDataTypesAndEnums:
 
     def test_value_status_enum(self):
         statuses = {s.value for s in ValueStatus}
-        assert statuses == {"present", "not_reported", "not_applicable", "unclear"}
+        assert statuses == {"unassessed", "present", "not_reported", "not_applicable", "unclear"}
 
     def test_value_origin_enum_has_no_derived(self):
         origins = {o.value for o in ValueOrigin}
@@ -84,6 +84,7 @@ class TestExtractedValueState:
             status=ValueStatus.PRESENT,
             origin=ValueOrigin.REPORTED,
             text_value="100 participants",
+            source_locator="Table 1",
         )
         assert val.field_key == "sample_size"
         assert val.status == ValueStatus.PRESENT
@@ -100,6 +101,37 @@ class TestExtractedValueState:
                 status=ValueStatus.PRESENT,
                 origin=ValueOrigin.REPORTED,
             )
+
+    def test_unit_value_alone_is_not_extracted_evidence(self):
+        with pytest.raises(InvalidValueError, match="PRESENT must have at least one typed value"):
+            ExtractedValueState(
+                field_key="effect_magnitude",
+                status=ValueStatus.PRESENT,
+                origin=ValueOrigin.REPORTED,
+                unit_value="kWh",
+                source_locator="Results table",
+            )
+
+    def test_unclear_unit_value_alone_is_not_tentative_evidence(self):
+        with pytest.raises(InvalidValueError, match="Unclear field 'effect_magnitude'"):
+            ExtractedValueState(
+                field_key="effect_magnitude",
+                status=ValueStatus.UNCLEAR,
+                origin=ValueOrigin.REPORTED,
+                unit_value="kWh",
+                reviewer_note="The unit is mentioned without a magnitude.",
+            )
+
+    def test_numeric_value_with_unit_is_evidence(self):
+        value = ExtractedValueState(
+            field_key="effect_magnitude",
+            status=ValueStatus.PRESENT,
+            origin=ValueOrigin.REPORTED,
+            float_value=12.5,
+            unit_value="kWh",
+            source_locator="Results table",
+        )
+        assert value.float_value == 12.5
 
     def test_not_reported_status_with_typed_value_raises(self):
         with pytest.raises(
@@ -131,13 +163,14 @@ class TestExtractedValueState:
             status=ValueStatus.UNCLEAR,
             origin=ValueOrigin.REVIEWER_CODED,
             text_value="Unclear if UK or USA",
+            reviewer_note="The source does not distinguish the country.",
         )
         assert v1.text_value == "Unclear if UK or USA"
 
         v2 = ExtractedValueState(
             field_key="country",
             status=ValueStatus.UNCLEAR,
-            origin=ValueOrigin.REVIEWER_CODED,
+            reviewer_note="The source is ambiguous.",
         )
         assert v2.text_value is None
 
@@ -162,6 +195,7 @@ class TestExtractedGroupItemState:
                     status=ValueStatus.PRESENT,
                     origin=ValueOrigin.REPORTED,
                     text_value="Positive",
+                    source_locator="Results table",
                 )
             ],
         )
@@ -182,12 +216,14 @@ class TestExtractedGroupItemState:
             status=ValueStatus.PRESENT,
             origin=ValueOrigin.REPORTED,
             text_value="Pos",
+            source_locator="Results table",
         )
         v2 = ExtractedValueState(
             field_key="outcome",
             status=ValueStatus.PRESENT,
             origin=ValueOrigin.REPORTED,
             text_value="Neg",
+            source_locator="Results table",
         )
         with pytest.raises(
             InvalidValueError, match="Duplicate field_key 'outcome' in group item index 1"
@@ -246,6 +282,7 @@ class TestFieldDefinitionsAndValidation:
                 status=ValueStatus.PRESENT,
                 origin=ValueOrigin.REPORTED,
                 text_value="Alpha Study",
+                source_locator="Fixture source",
             )
         ) == []
         assert len(f_text.validate_value(
@@ -254,6 +291,7 @@ class TestFieldDefinitionsAndValidation:
                 status=ValueStatus.PRESENT,
                 origin=ValueOrigin.REPORTED,
                 text_value="al",
+                source_locator="Fixture source",
             )
         )) > 0
 
@@ -267,6 +305,7 @@ class TestFieldDefinitionsAndValidation:
                 status=ValueStatus.PRESENT,
                 origin=ValueOrigin.REPORTED,
                 text_value="Detailed summary text...",
+                source_locator="Fixture source",
             )
         ) == []
 
@@ -284,6 +323,7 @@ class TestFieldDefinitionsAndValidation:
                 status=ValueStatus.PRESENT,
                 origin=ValueOrigin.REPORTED,
                 int_value=50,
+                source_locator="Fixture source",
             )
         ) == []
 
@@ -301,6 +341,7 @@ class TestFieldDefinitionsAndValidation:
                 status=ValueStatus.PRESENT,
                 origin=ValueOrigin.REPORTED,
                 float_value=0.75,
+                source_locator="Fixture source",
             )
         ) == []
 
@@ -314,6 +355,7 @@ class TestFieldDefinitionsAndValidation:
                 status=ValueStatus.PRESENT,
                 origin=ValueOrigin.REPORTED,
                 bool_value=True,
+                source_locator="Fixture source",
             )
         ) == []
 
@@ -327,6 +369,7 @@ class TestFieldDefinitionsAndValidation:
                 status=ValueStatus.PRESENT,
                 origin=ValueOrigin.REPORTED,
                 text_value="2026-08-11",
+                source_locator="Fixture source",
             )
         ) == []
 
@@ -343,6 +386,7 @@ class TestFieldDefinitionsAndValidation:
                 status=ValueStatus.PRESENT,
                 origin=ValueOrigin.REVIEWER_CODED,
                 text_value="Case Study",
+                reviewer_note="Classified by reviewer from the methods description.",
             )
         ) == []
 
@@ -359,6 +403,7 @@ class TestFieldDefinitionsAndValidation:
                 status=ValueStatus.PRESENT,
                 origin=ValueOrigin.REVIEWER_CODED,
                 json_value=["tag1", "tag2"],
+                reviewer_note="Classified by reviewer from the methods description.",
             )
         ) == []
 
@@ -372,6 +417,7 @@ class TestFieldDefinitionsAndValidation:
                 status=ValueStatus.PRESENT,
                 origin=ValueOrigin.REPORTED,
                 text_value="10.1000/182",
+                source_locator="Fixture source",
             )
         ) == []
 
@@ -385,6 +431,7 @@ class TestFieldDefinitionsAndValidation:
                 status=ValueStatus.PRESENT,
                 origin=ValueOrigin.REPORTED,
                 text_value="https://example.com",
+                source_locator="Fixture source",
             )
         ) == []
 
@@ -404,6 +451,7 @@ class TestFieldDefinitionsAndValidation:
                 origin=ValueOrigin.REPORTED,
                 float_value=15.5,
                 unit_value="kWh",
+                source_locator="Fixture source",
             )
         ) == []
 
@@ -422,6 +470,7 @@ class TestExtractionTemplateVersionAndCompleteness:
             data_type=FieldDataType.ENUM,
             allowed_values=["Survey", "Case Study"],
             is_required=True,
+            allowed_statuses=[ValueStatus.PRESENT, ValueStatus.NOT_REPORTED],
         )
         g_child_practice = ExtractionFieldDefinition(
             field_key="practice_name",
@@ -460,11 +509,11 @@ class TestExtractionTemplateVersionAndCompleteness:
             status=ValueStatus.PRESENT,
             origin=ValueOrigin.REPORTED,
             text_value="Sweden",
+            source_locator="Study metadata",
         )
         v_method = ExtractedValueState(
             field_key="method",
             status=ValueStatus.NOT_REPORTED,
-            origin=ValueOrigin.REVIEWER_CODED,
         )
         g_item = ExtractedGroupItemState(
             group_key="practices",
@@ -475,6 +524,7 @@ class TestExtractionTemplateVersionAndCompleteness:
                     status=ValueStatus.PRESENT,
                     origin=ValueOrigin.REPORTED,
                     text_value="Automation",
+                    source_locator="Results table",
                 )
             ],
         )
@@ -503,6 +553,7 @@ class TestExtractionTemplateVersionAndCompleteness:
             status=ValueStatus.PRESENT,
             origin=ValueOrigin.REVIEWER_CODED,
             text_value="Survey",
+            reviewer_note="Classified by reviewer from methods.",
         )
         rev = ExtractionRevision(
             record_id=uuid4(),

@@ -28,7 +28,6 @@ import {
   ExtractionMatrixResponseDTO,
   ExtractionApiError,
   ValueStatus,
-  ValueOrigin,
 } from '../api/extractionApi';
 import { ExtractionFormView } from '../components/extraction/ExtractionFormView';
 import { ProvenanceDrawer } from '../components/extraction/ProvenanceDrawer';
@@ -166,6 +165,8 @@ export const DataExtractionPage: React.FC = () => {
     fieldName: string;
     valueState: ExtractedValueStateDTO;
     onSave: (p: Partial<ExtractedValueStateDTO>) => void;
+    allowSourceProvenance: boolean;
+    allowReviewerNote: boolean;
   } | null>(null);
   const [isHistoryOpen, setIsHistoryOpen] = useState<boolean>(false);
 
@@ -259,8 +260,8 @@ export const DataExtractionPage: React.FC = () => {
             setPublicationValues(
               templateRes.publication_fields.map((field) => ({
                 field_key: field.field_key,
-                status: 'not_reported' as ValueStatus,
-                origin: 'reported' as ValueOrigin,
+        status: 'unassessed' as ValueStatus,
+        origin: null,
               })),
             );
             setGroupItems([]);
@@ -399,9 +400,10 @@ export const DataExtractionPage: React.FC = () => {
     fieldKey: string,
     fieldName: string,
     valueState: ExtractedValueStateDTO,
-    onSave: (p: Partial<ExtractedValueStateDTO>) => void
+    onSave: (p: Partial<ExtractedValueStateDTO>) => void,
+    options: { allowSourceProvenance: boolean; allowReviewerNote: boolean },
   ) => {
-    setActiveProvenanceField({ fieldKey, fieldName, valueState, onSave });
+    setActiveProvenanceField({ fieldKey, fieldName, valueState, onSave, ...options });
     setIsProvenanceOpen(true);
   };
 
@@ -830,6 +832,8 @@ export const DataExtractionPage: React.FC = () => {
           fieldKey={activeProvenanceField.fieldKey}
           fieldName={activeProvenanceField.fieldName}
           valueState={activeProvenanceField.valueState}
+          allowSourceProvenance={activeProvenanceField.allowSourceProvenance}
+          allowReviewerNote={activeProvenanceField.allowReviewerNote}
           onSave={activeProvenanceField.onSave}
         />
       )}

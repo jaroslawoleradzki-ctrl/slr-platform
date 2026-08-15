@@ -1,6 +1,6 @@
 import { API_BASE_URL } from '../../config/api';
 
-export type ValueStatus = 'present' | 'not_reported' | 'not_applicable' | 'unclear';
+export type ValueStatus = 'unassessed' | 'present' | 'not_reported' | 'not_applicable' | 'unclear';
 export type ValueOrigin = 'reported' | 'reviewer_coded';
 export type ExtractionCompletenessStatus = 'not_started' | 'in_progress' | 'complete' | 'needs_review';
 export type ExtractionEligibilityStatus =
@@ -53,7 +53,7 @@ export interface ExtractedValueStateDTO {
   value_id?: string | null;
   field_key: string;
   status: ValueStatus;
-  origin: ValueOrigin;
+  origin?: ValueOrigin | null;
   text_value?: string | null;
   int_value?: number | null;
   float_value?: number | null;
@@ -119,6 +119,7 @@ export interface ExtractionFieldDefinition {
   data_type: FieldDataType;
   description?: string | null;
   is_required?: boolean;
+  allowed_statuses?: ValueStatus[];
   allowed_values?: string[] | null;
   allow_custom_text?: boolean;
   allowed_units?: string[] | null;

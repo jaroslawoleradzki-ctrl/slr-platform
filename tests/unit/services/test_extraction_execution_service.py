@@ -119,7 +119,12 @@ def setup_environment(project_repo, template_repo, config_service, pub_repo, dec
     template_repo.register_template(tmpl)
 
     f_title = ExtractionFieldDefinition(
-        field_key="study_title", name="Study Title", data_type=FieldDataType.TEXT, is_required=True, min_length=3
+        field_key="study_title",
+        name="Study Title",
+        data_type=FieldDataType.TEXT,
+        is_required=True,
+        min_length=3,
+        allowed_statuses=[ValueStatus.PRESENT, ValueStatus.NOT_REPORTED, ValueStatus.NOT_APPLICABLE, ValueStatus.UNCLEAR],
     )
     f_sample = ExtractionFieldDefinition(
         field_key="sample_size", name="Sample Size", data_type=FieldDataType.INTEGER, min_value=1, max_value=1000
@@ -198,6 +203,7 @@ class TestExtractionExecutionService:
             status=ValueStatus.PRESENT,
             origin=ValueOrigin.REPORTED,
             text_value="Initial Title",
+            source_locator="Title in source record",
         )
         rev1 = execution_service.submit_revision(env["project_id"], env["publication_id"], env["reviewer_id"], [val1])
         assert rev1.revision_index == 1
@@ -207,6 +213,7 @@ class TestExtractionExecutionService:
             status=ValueStatus.PRESENT,
             origin=ValueOrigin.REPORTED,
             text_value="Updated Title",
+            source_locator="Title in source record",
         )
         rev2 = execution_service.submit_revision(env["project_id"], env["publication_id"], env["reviewer_id"], [val2])
         assert rev2.revision_index == 2
@@ -218,6 +225,58 @@ class TestExtractionExecutionService:
         assert history[1].revision_index == 2
         assert history[1].publication_values[0].text_value == "Updated Title"
 
+    def test_exact_read_model_round_trip_creates_fresh_value_snapshots(self, execution_service, setup_environment):
+        """The service, not the caller, owns new value identities per revision."""
+        env = setup_environment
+        first = execution_service.submit_revision(
+            env["project_id"],
+            env["publication_id"],
+            env["reviewer_id"],
+            [
+                ExtractedValueState(
+                    field_key="study_title",
+                    status=ValueStatus.PRESENT,
+                    origin=ValueOrigin.REPORTED,
+                    text_value="Initial title",
+                    source_locator="Title in source record",
+                )
+            ],
+            [
+                ExtractedGroupItemState(
+                    group_key="study_arms",
+                    item_index=1,
+                    values=[
+                        ExtractedValueState(
+                            field_key="age_mean",
+                            status=ValueStatus.PRESENT,
+                            origin=ValueOrigin.REPORTED,
+                            float_value=42.0,
+                            source_locator="Results table",
+                        )
+                    ],
+                )
+            ],
+        )
+        read_model = execution_service.get_latest_revision(env["project_id"], env["publication_id"])
+        assert read_model == first
+
+        # Deliberately reuse every ID received through the read-model/API
+        # equivalent.  submit_revision must regenerate snapshot value IDs.
+        second = execution_service.submit_revision(
+            env["project_id"],
+            env["publication_id"],
+            env["reviewer_id"],
+            read_model.publication_values,
+            read_model.group_items,
+        )
+        history = execution_service.get_revision_history(env["project_id"], env["publication_id"])
+        assert len(history) == 2
+        assert second.revision_index == 2
+        assert history[0].publication_values[0].value_id != history[1].publication_values[0].value_id
+        assert history[0].group_items[0].values[0].value_id != history[1].group_items[0].values[0].value_id
+        assert history[0].group_items[0].group_item_id == history[1].group_items[0].group_item_id
+        assert history[0] == first
+
     def test_eligible_vs_ineligible_publication(self, execution_service, setup_environment):
         env = setup_environment
         val = ExtractedValueState(
@@ -225,6 +284,7 @@ class TestExtractionExecutionService:
             status=ValueStatus.PRESENT,
             origin=ValueOrigin.REPORTED,
             text_value="Valid Title",
+            source_locator="Title in source record",
         )
 
         # Eligible accepts
@@ -275,13 +335,13 @@ class TestExtractionExecutionService:
         val_nr = ExtractedValueState(
             field_key="study_title",
             status=ValueStatus.NOT_REPORTED,
-            origin=ValueOrigin.REPORTED,
         )
         arm_val1 = ExtractedValueState(
             field_key="age_mean",
             status=ValueStatus.PRESENT,
             origin=ValueOrigin.REPORTED,
             float_value=45.5,
+            source_locator="Results table",
         )
         group_item1 = ExtractedGroupItemState(
             group_key="study_arms",
@@ -303,13 +363,13 @@ class TestExtractionExecutionService:
         val_na = ExtractedValueState(
             field_key="study_title",
             status=ValueStatus.NOT_APPLICABLE,
-            origin=ValueOrigin.REPORTED,
         )
         arm_val2 = ExtractedValueState(
             field_key="age_mean",
             status=ValueStatus.PRESENT,
             origin=ValueOrigin.REPORTED,
             float_value=45.5,
+            source_locator="Results table",
         )
         group_item2 = ExtractedGroupItemState(
             group_key="study_arms",
@@ -334,6 +394,7 @@ class TestExtractionExecutionService:
             status=ValueStatus.PRESENT,
             origin=ValueOrigin.REPORTED,
             int_value=100,
+            source_locator="Results table",
         )
         rev = execution_service.submit_revision(
             env["project_id"],
@@ -351,6 +412,7 @@ class TestExtractionExecutionService:
             status=ValueStatus.PRESENT,
             origin=ValueOrigin.REPORTED,
             int_value=100,
+            source_locator="Results table",
         )
         with pytest.raises(ExtractionValidationError, match="Cannot mark extraction as COMPLETE"):
             execution_service.submit_revision(
@@ -368,6 +430,7 @@ class TestExtractionExecutionService:
             status=ValueStatus.PRESENT,
             origin=ValueOrigin.REPORTED,
             text_value="invalid_design_type",
+            source_locator="Methods section",
         )
         with pytest.raises(ExtractionValidationError, match="is not in allowed_values"):
             execution_service.submit_revision(
@@ -382,6 +445,7 @@ class TestExtractionExecutionService:
             status=ValueStatus.PRESENT,
             origin=ValueOrigin.REPORTED,
             int_value=5000,  # Max is 1000
+            source_locator="Results table",
         )
         with pytest.raises(ExtractionValidationError, match="exceeds max_value"):
             execution_service.submit_revision(
@@ -398,6 +462,7 @@ class TestExtractionExecutionService:
             status=ValueStatus.PRESENT,
             origin=ValueOrigin.REPORTED,
             text_value="Valid Title",
+            source_locator="Title in source record",
         )
 
         # 0 items when min_items=1 yields IN_PROGRESS for draft, fails for complete
@@ -417,6 +482,7 @@ class TestExtractionExecutionService:
             status=ValueStatus.PRESENT,
             origin=ValueOrigin.REPORTED,
             text_value="Valid Title",
+            source_locator="Title in source record",
         )
         items_exceed = [
             ExtractedGroupItemState(
@@ -428,6 +494,7 @@ class TestExtractionExecutionService:
                         status=ValueStatus.PRESENT,
                         origin=ValueOrigin.REPORTED,
                         float_value=30.0 + i,
+                        source_locator="Results table",
                     )
                 ],
             )
@@ -489,12 +556,14 @@ class TestExtractionExecutionService:
             status=ValueStatus.PRESENT,
             origin=ValueOrigin.REPORTED,
             text_value="Valid Title",
+            source_locator="Title in source record",
         )
         arm_val = ExtractedValueState(
             field_key="age_mean",
             status=ValueStatus.PRESENT,
             origin=ValueOrigin.REPORTED,
             float_value=45.5,
+            source_locator="Results table",
         )
         group_item = ExtractedGroupItemState(
             group_key="study_arms",
@@ -529,6 +598,7 @@ class TestExtractionExecutionService:
             status=ValueStatus.PRESENT,
             origin=ValueOrigin.REPORTED,
             text_value="Valid Title",
+            source_locator="Title in source record",
         )
         arm1 = ExtractedGroupItemState(
             group_key="study_arms",
@@ -539,6 +609,7 @@ class TestExtractionExecutionService:
                     status=ValueStatus.PRESENT,
                     origin=ValueOrigin.REPORTED,
                     float_value=25.0,
+                    source_locator="Results table",
                 )
             ],
         )
@@ -551,6 +622,7 @@ class TestExtractionExecutionService:
                     status=ValueStatus.PRESENT,
                     origin=ValueOrigin.REPORTED,
                     float_value=40.0,
+                    source_locator="Results table",
                 )
             ],
         )
@@ -594,6 +666,7 @@ class TestExtractionExecutionService:
                 status=ValueStatus.PRESENT,
                 origin=ValueOrigin.REPORTED,
                 text_value="Empirical Lean Energy Study",
+                source_locator="Title in source record",
             )
 
         # --- Revision 1: Initial creation of 2 items (A and B) ---
@@ -602,7 +675,7 @@ class TestExtractionExecutionService:
             item_index=1,
             values=[
                 ExtractedValueState(
-                    field_key="age_mean", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, float_value=25.0
+                    field_key="age_mean", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, float_value=25.0, source_locator="Results table"
                 )
             ],
         )
@@ -611,7 +684,7 @@ class TestExtractionExecutionService:
             item_index=2,
             values=[
                 ExtractedValueState(
-                    field_key="age_mean", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, float_value=30.0
+                    field_key="age_mean", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, float_value=30.0, source_locator="Results table"
                 )
             ],
         )
@@ -630,7 +703,7 @@ class TestExtractionExecutionService:
             item_index=1,
             values=[
                 ExtractedValueState(
-                    field_key="age_mean", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, float_value=20.0
+                    field_key="age_mean", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, float_value=20.0, source_locator="Results table"
                 )
             ],
         )
@@ -640,7 +713,7 @@ class TestExtractionExecutionService:
             item_index=2,  # Shifted index
             values=[
                 ExtractedValueState(
-                    field_key="age_mean", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, float_value=27.5
+                    field_key="age_mean", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, float_value=27.5, source_locator="Results table"
                 )
             ],  # Edited value
         )
@@ -650,7 +723,7 @@ class TestExtractionExecutionService:
             item_index=3,  # Shifted index
             values=[
                 ExtractedValueState(
-                    field_key="age_mean", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, float_value=30.0
+                    field_key="age_mean", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, float_value=30.0, source_locator="Results table"
                 )
             ],
         )
@@ -673,7 +746,7 @@ class TestExtractionExecutionService:
             item_index=1,  # Reordered
             values=[
                 ExtractedValueState(
-                    field_key="age_mean", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, float_value=30.0
+                    field_key="age_mean", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, float_value=30.0, source_locator="Results table"
                 )
             ],
         )
@@ -683,7 +756,7 @@ class TestExtractionExecutionService:
             item_index=2,  # Reordered
             values=[
                 ExtractedValueState(
-                    field_key="age_mean", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, float_value=20.0
+                    field_key="age_mean", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, float_value=20.0, source_locator="Results table"
                 )
             ],
         )

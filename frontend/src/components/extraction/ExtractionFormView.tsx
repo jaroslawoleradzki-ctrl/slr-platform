@@ -4,7 +4,6 @@ import {
   ExtractedValueStateDTO,
   ExtractedGroupItemStateDTO,
   ValueStatus,
-  ValueOrigin,
 } from '../../api/extractionApi';
 import { FieldControl } from './FieldControl';
 import { RelationshipManager } from './RelationshipManager';
@@ -15,7 +14,13 @@ interface ExtractionFormViewProps {
   groupItems: ExtractedGroupItemStateDTO[];
   onChangePublicationValues: (updatedValues: ExtractedValueStateDTO[]) => void;
   onChangeGroupItems: (updatedGroups: ExtractedGroupItemStateDTO[]) => void;
-  onOpenProvenance: (fieldKey: string, fieldName: string, valueState: ExtractedValueStateDTO, onSave: (p: Partial<ExtractedValueStateDTO>) => void) => void;
+  onOpenProvenance: (
+    fieldKey: string,
+    fieldName: string,
+    valueState: ExtractedValueStateDTO,
+    onSave: (p: Partial<ExtractedValueStateDTO>) => void,
+    options: { allowSourceProvenance: boolean; allowReviewerNote: boolean },
+  ) => void;
   validationErrors?: Record<string, string>;
 }
 
@@ -63,8 +68,8 @@ export const ExtractionFormView: React.FC<ExtractionFormViewProps> = ({
             const valueState =
               publicationValues.find((val) => val.field_key === fieldDef.field_key) || {
                 field_key: fieldDef.field_key,
-                status: 'not_reported' as ValueStatus,
-                origin: 'reported' as ValueOrigin,
+                status: 'unassessed' as ValueStatus,
+                origin: null,
               };
             const errorMsg = validationErrors[fieldDef.field_key];
 
@@ -74,7 +79,7 @@ export const ExtractionFormView: React.FC<ExtractionFormViewProps> = ({
                 fieldDef={fieldDef}
                 valueState={valueState}
                 onChange={handlePublicationFieldChange}
-                onOpenProvenance={(val, onSave) => onOpenProvenance(fieldDef.field_key, fieldDef.name, val, onSave)}
+                onOpenProvenance={(val, onSave, options) => onOpenProvenance(fieldDef.field_key, fieldDef.name, val, onSave, options)}
                 errorMessage={errorMsg}
               />
             );
