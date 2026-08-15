@@ -493,21 +493,33 @@ class SqliteQualityAssessmentRepository(QualityAssessmentRepository):
         ]
 
     def get_latest_assessment(
-        self, project_id: str, publication_id: UUID, reviewer_id: str, connection: Any = None
+        self, project_id: str, publication_id: UUID, reviewer_id: str = "", connection: Any = None
     ) -> QualityAssessment | None:
         conn = self._get_connection(connection)
         close_conn = connection is None
         try:
-            row = conn.execute(
-                """
-                SELECT assessment_id, project_id, publication_id, reviewer_id, template_id, assessed_at
-                FROM quality_assessments
-                WHERE project_id = ? AND publication_id = ? AND reviewer_id = ?
-                ORDER BY assessed_at DESC
-                LIMIT 1
-                """,
-                (project_id, str(publication_id), reviewer_id),
-            ).fetchone()
+            if reviewer_id:
+                row = conn.execute(
+                    """
+                    SELECT assessment_id, project_id, publication_id, reviewer_id, template_id, assessed_at
+                    FROM quality_assessments
+                    WHERE project_id = ? AND publication_id = ? AND reviewer_id = ?
+                    ORDER BY assessed_at DESC
+                    LIMIT 1
+                    """,
+                    (project_id, str(publication_id), reviewer_id),
+                ).fetchone()
+            else:
+                row = conn.execute(
+                    """
+                    SELECT assessment_id, project_id, publication_id, reviewer_id, template_id, assessed_at
+                    FROM quality_assessments
+                    WHERE project_id = ? AND publication_id = ?
+                    ORDER BY assessed_at DESC
+                    LIMIT 1
+                    """,
+                    (project_id, str(publication_id)),
+                ).fetchone()
             if not row:
                 return None
             aid = UUID(row["assessment_id"])

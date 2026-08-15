@@ -259,3 +259,60 @@ class AnalyticalRelation(BaseModel):
         if v.tzinfo is None or v.utcoffset() is None:
             raise ValueError("timestamps must be timezone-aware")
         return v
+
+
+class MatrixCell(BaseModel):
+    """Aggregated evidence cell for a Lean Category × Energy Effect Category intersection."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    lean_category_id: str
+    lean_category_name: str
+    energy_category_id: str
+    energy_category_name: str
+    relation_count: int = Field(ge=0, default=0)
+    publication_count: int = Field(ge=0, default=0)
+    direction_distribution: dict[str, int] = Field(default_factory=dict)
+    evidence_character_distribution: dict[str, int] = Field(default_factory=dict)
+
+
+class SynthesisMatrix(BaseModel):
+    """Aggregated M × N analytical matrix for a project."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    project_id: str = Field(min_length=1)
+    lean_categories: list[LeanPracticeCategory] = Field(default_factory=list)
+    energy_categories: list[EnergyEffectCategory] = Field(default_factory=list)
+    cells: list[MatrixCell] = Field(default_factory=list)
+    total_relations: int = Field(ge=0, default=0)
+    total_publications: int = Field(ge=0, default=0)
+    unclassified_relations_count: int = Field(ge=0, default=0)
+
+
+class AnalyticalRelationDetail(BaseModel):
+    """Detailed view of an analytical relation with publication info, QA profile, and provenance."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    relation: AnalyticalRelation
+    publication_title: str | None = None
+    publication_year: int | None = None
+    source_quote: str | None = None
+    source_page: str | None = None
+    source_section: str | None = None
+    qa_profile: QAProfileSummary | None = None
+
+
+class MatrixCellDetail(BaseModel):
+    """Detailed drill-down response for an individual matrix cell."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    lean_category: LeanPracticeCategory
+    energy_category: EnergyEffectCategory
+    relation_count: int = Field(ge=0, default=0)
+    publication_count: int = Field(ge=0, default=0)
+    direction_distribution: dict[str, int] = Field(default_factory=dict)
+    evidence_character_distribution: dict[str, int] = Field(default_factory=dict)
+    relations: list[AnalyticalRelationDetail] = Field(default_factory=list)

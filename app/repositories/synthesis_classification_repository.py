@@ -175,6 +175,17 @@ class SqliteSynthesisClassificationRepository(SynthesisClassificationRepository)
                     "DELETE FROM synthesis_term_mappings WHERE project_id = ? AND term_type = ? AND analytical_category_id = ?;",
                     (project_id, TermType.LEAN_PRACTICE.value, category_id),
                 )
+                try:
+                    conn.execute(
+                        """
+                        UPDATE synthesis_analytical_relations
+                        SET analytical_lean_category_id = NULL, updated_at = CURRENT_TIMESTAMP
+                        WHERE project_id = ? AND analytical_lean_category_id = ?;
+                        """,
+                        (project_id, category_id),
+                    )
+                except sqlite3.OperationalError:
+                    pass  # Table might not exist yet during historical migration tests
             if close_conn:
                 conn.commit()
             return deleted
@@ -308,6 +319,17 @@ class SqliteSynthesisClassificationRepository(SynthesisClassificationRepository)
                     "DELETE FROM synthesis_term_mappings WHERE project_id = ? AND term_type = ? AND analytical_category_id = ?;",
                     (project_id, TermType.ENERGY_EFFECT.value, category_id),
                 )
+                try:
+                    conn.execute(
+                        """
+                        UPDATE synthesis_analytical_relations
+                        SET analytical_energy_category_id = NULL, updated_at = CURRENT_TIMESTAMP
+                        WHERE project_id = ? AND analytical_energy_category_id = ?;
+                        """,
+                        (project_id, category_id),
+                    )
+                except sqlite3.OperationalError:
+                    pass
             if close_conn:
                 conn.commit()
             return deleted

@@ -1,15 +1,16 @@
 import React, { useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { Layers, Tag } from 'lucide-react';
+import { Grid, Layers, Tag } from 'lucide-react';
 import { useProject } from '../context/ProjectContext';
 import { ClassificationWorkspace } from '../components/synthesis/ClassificationWorkspace';
+import { LeanEEMatrix } from '../components/synthesis/LeanEEMatrix';
 
 export const EvidenceSynthesisPage: React.FC = () => {
   const { projectId } = useParams<{ projectId?: string }>();
   const { activeProject } = useProject();
   const currentProjectId = projectId || activeProject?.id || 'lean_energy';
 
-  const [activeSubTab, setActiveSubTab] = useState<'classification'>('classification');
+  const [activeSubTab, setActiveSubTab] = useState<'classification' | 'matrix'>('classification');
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
@@ -38,6 +39,7 @@ export const EvidenceSynthesisPage: React.FC = () => {
       <div style={{ display: 'flex', gap: '8px', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '8px' }}>
         <button
           type="button"
+          data-testid="synthesis-tab-classification"
           onClick={() => setActiveSubTab('classification')}
           style={{
             display: 'flex',
@@ -54,13 +56,42 @@ export const EvidenceSynthesisPage: React.FC = () => {
           }}
         >
           <Tag size={16} />
-          <span>Terminology Classification</span>
+          <span>1. Terminology Classification</span>
+        </button>
+
+        <button
+          type="button"
+          data-testid="synthesis-tab-matrix"
+          onClick={() => setActiveSubTab('matrix')}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            padding: '8px 16px',
+            borderRadius: 'var(--radius-md)',
+            border: 'none',
+            backgroundColor: activeSubTab === 'matrix' ? 'var(--accent-subtle)' : 'transparent',
+            color: activeSubTab === 'matrix' ? 'var(--accent-primary)' : 'var(--text-secondary)',
+            fontWeight: activeSubTab === 'matrix' ? 600 : 400,
+            cursor: 'pointer',
+            fontSize: '0.9rem',
+          }}
+        >
+          <Grid size={16} />
+          <span>2. Lean–EE Analytical Matrix</span>
         </button>
       </div>
 
       {/* Workspace Content */}
       {activeSubTab === 'classification' && (
         <ClassificationWorkspace projectId={currentProjectId} />
+      )}
+
+      {activeSubTab === 'matrix' && (
+        <LeanEEMatrix
+          projectId={currentProjectId}
+          onNavigateToClassifications={() => setActiveSubTab('classification')}
+        />
       )}
     </div>
   );

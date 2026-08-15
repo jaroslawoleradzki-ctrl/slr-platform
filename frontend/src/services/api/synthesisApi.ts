@@ -1,6 +1,10 @@
 import { API_BASE_URL } from '../../config/api';
 import {
+  AnalyticalRelation,
   Category,
+  ConvertedValue,
+  MatrixCellDetail,
+  SynthesisMatrix,
   TerminologyClassificationWorkspace,
   TermMappingResponse,
   TermType,
@@ -49,6 +53,7 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
 }
 
 export const synthesisApi = {
+  // Classification Workspace
   getWorkspace: (projectId: string): Promise<TerminologyClassificationWorkspace> => {
     return request<TerminologyClassificationWorkspace>(`/projects/${projectId}/synthesis/classifications`);
   },
@@ -125,5 +130,47 @@ export const synthesisApi = {
       method: 'POST',
       body: JSON.stringify(data),
     });
+  },
+
+  // Matrix & Evidence Aggregation
+  getMatrix: (projectId: string): Promise<SynthesisMatrix> => {
+    return request<SynthesisMatrix>(`/projects/${projectId}/synthesis/matrix`);
+  },
+
+  getCellDetail: (
+    projectId: string,
+    leanCategoryId: string,
+    energyCategoryId: string
+  ): Promise<MatrixCellDetail> => {
+    const params = new URLSearchParams({
+      leanCategoryId,
+      energyCategoryId,
+    });
+    return request<MatrixCellDetail>(`/projects/${projectId}/synthesis/matrix/cell-detail?${params.toString()}`);
+  },
+
+  convertUnit: (
+    projectId: string,
+    relationId: string,
+    targetUnit: string
+  ): Promise<ConvertedValue> => {
+    return request<ConvertedValue>(`/projects/${projectId}/synthesis/relations/${relationId}/convert-unit`, {
+      method: 'POST',
+      body: JSON.stringify({ target_unit: targetUnit }),
+    });
+  },
+
+  saveConvertedUnit: (
+    projectId: string,
+    relationId: string,
+    targetUnit: string
+  ): Promise<AnalyticalRelation> => {
+    return request<AnalyticalRelation>(
+      `/projects/${projectId}/synthesis/relations/${relationId}/save-converted-unit`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ target_unit: targetUnit }),
+      }
+    );
   },
 };
