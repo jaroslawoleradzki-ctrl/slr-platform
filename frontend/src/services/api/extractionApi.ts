@@ -263,9 +263,8 @@ export const extractionApi = {
   async getExtractionRecord(
     projectId: string,
     publicationId: string
-  ): Promise<ExtractionRecordResponseDTO | null> {
+  ): Promise<ExtractionRecordResponseDTO> {
     const res = await fetch(`${EXTRACTION_API_BASE_URL}/${projectId}/extraction/records/${publicationId}`);
-    if (res.status === 404) return null;
     if (!res.ok) {
       const errData = await res.json().catch(() => ({ detail: res.statusText }));
       throw new ExtractionApiError(res.status, errData.detail || 'Failed to fetch extraction record');
