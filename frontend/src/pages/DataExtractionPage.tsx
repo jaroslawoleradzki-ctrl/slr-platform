@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   FileSpreadsheet,
@@ -34,7 +34,10 @@ import { ExtractionFormView } from '../components/extraction/ExtractionFormView'
 import { ProvenanceDrawer } from '../components/extraction/ProvenanceDrawer';
 import { RevisionHistoryDrawer } from '../components/extraction/RevisionHistoryDrawer';
 import { ExtractionProgressHeader } from '../components/extraction/ExtractionProgressHeader';
-import { ExtractionTableView } from '../components/extraction/ExtractionTableView';
+import {
+  ExtractionPublicationRow,
+  ExtractionTableView,
+} from '../components/extraction/ExtractionTableView';
 import { ExtractionMatrixView } from '../components/extraction/ExtractionMatrixView';
 
 // Standard fallback extraction template definition (domain-agnostic)
@@ -164,7 +167,32 @@ export const DataExtractionPage: React.FC = () => {
   } | null>(null);
   const [isHistoryOpen, setIsHistoryOpen] = useState<boolean>(false);
 
-  const selectedPublication = recordsSummary.find((record) => record.publication_id === selectedPubId);
+  const publicationRows = useMemo<ExtractionPublicationRow[]>(() => {
+    const summariesByPublication = new Map(
+      recordsSummary.map((summary) => [summary.publication_id, summary]),
+    );
+
+    return eligibilityList.map((eligibility) => {
+      const summary = summariesByPublication.get(eligibility.publication_id);
+      return {
+        publication_id: eligibility.publication_id,
+        title: summary?.title,
+        authors: summary?.authors,
+        publication_year: summary?.publication_year,
+        extraction_status: summary?.extraction_status ?? 'not_started',
+        latest_revision_index: summary?.latest_revision_index,
+        latest_reviewer_id: summary?.latest_reviewer_id,
+        latest_updated_at: summary?.latest_updated_at,
+        is_eligible: eligibility.is_eligible,
+        eligibility_status: eligibility.status,
+        eligibility_reason: eligibility.reason_details,
+      };
+    });
+  }, [eligibilityList, recordsSummary]);
+
+  const selectedPublication = publicationRows.find(
+    (publication) => publication.publication_id === selectedPubId,
+  );
 
   // Fetch eligibility list, progress, summaries, matrix, and selected record
   useEffect(() => {
@@ -215,30 +243,56 @@ export const DataExtractionPage: React.FC = () => {
           }
 
           const currentElig = eligRes.items.find((item) => item.publication_id === pubIdToLoad);
-          if (currentElig && !currentElig.is_eligible) {
-            setBlockedEligibility(currentElig);
+          if (!currentElig) {
+            setErrorBanner('Wybrana publikacja nie należy do bieżącej listy kwalifikowalności ekstrakcji.');
+            return;
           }
 
-          const rec = await extractionApi.getExtractionRecord(projectId, pubIdToLoad);
+          const initializeBlankRecord = () => {
+            setRecord(null);
+            setPublicationValues(
+              templateRes.publication_fields.map((field) => ({
+                field_key: field.field_key,
+                status: 'not_reported' as ValueStatus,
+                origin: 'reported' as ValueOrigin,
+              })),
+            );
+            setGroupItems([]);
+            setHistory({
+              project_id: projectId,
+              publication_id: pubIdToLoad,
+              total_revisions: 0,
+              revisions: [],
+            });
+          };
+
+          if (!currentElig.is_eligible) {
+            setBlockedEligibility(currentElig);
+            initializeBlankRecord();
+            return;
+          }
+
+          let rec: ExtractionRecordResponseDTO | null;
+          try {
+            rec = await extractionApi.getExtractionRecord(projectId, pubIdToLoad);
+          } catch (err) {
+            if (err instanceof ExtractionApiError && err.statusCode === 404) {
+              rec = null;
+            } else {
+              throw err;
+            }
+          }
           if (!isMounted) return;
           setRecord(rec);
 
           if (rec?.latest_revision) {
             setPublicationValues(rec.latest_revision.publication_values || []);
             setGroupItems(rec.latest_revision.group_items || []);
+            const hist = await extractionApi.getExtractionHistory(projectId, pubIdToLoad);
+            if (isMounted) setHistory(hist);
           } else {
-            setPublicationValues(
-              templateRes.publication_fields.map((f) => ({
-                field_key: f.field_key,
-                status: 'not_reported' as ValueStatus,
-                origin: 'reported' as ValueOrigin,
-              }))
-            );
-            setGroupItems([]);
+            initializeBlankRecord();
           }
-
-          const hist = await extractionApi.getExtractionHistory(projectId, pubIdToLoad);
-          if (isMounted) setHistory(hist);
         }
       } catch (err) {
         if (!isMounted) return;
@@ -471,7 +525,7 @@ export const DataExtractionPage: React.FC = () => {
                 cursor: 'pointer',
               }}
             >
-              <Table size={16} /> Zestawienie Publikacji ({recordsSummary.length})
+              <Table size={16} /> Zestawienie Publikacji ({publicationRows.length})
             </button>
             <button
               onClick={() => setTableTab('matrix')}
@@ -496,7 +550,7 @@ export const DataExtractionPage: React.FC = () => {
           {/* Tab Content */}
           {tableTab === 'summary' ? (
             <ExtractionTableView
-              records={recordsSummary}
+              records={publicationRows}
               isLoading={isLoading}
               onSelectPublication={handleSelectPublication}
             />
@@ -661,11 +715,13 @@ export const DataExtractionPage: React.FC = () => {
                 marginBottom: '20px',
               }}
             >
-              <strong>{selectedPublication.title}</strong>
-              <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginTop: '4px' }}>
-                {selectedPublication.authors.join('; ')}{selectedPublication.publication_year ? ` · ${selectedPublication.publication_year}` : ''}
-                {' · E1: canonical publication metadata'}
-              </div>
+              <strong>{selectedPublication.title || selectedPublication.publication_id}</strong>
+              {(selectedPublication.authors?.length || selectedPublication.publication_year) && (
+                <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginTop: '4px' }}>
+                  {selectedPublication.authors?.join('; ')}{selectedPublication.publication_year ? ` · ${selectedPublication.publication_year}` : ''}
+                  {' · E1: canonical publication metadata'}
+                </div>
+              )}
             </div>
           )}
 

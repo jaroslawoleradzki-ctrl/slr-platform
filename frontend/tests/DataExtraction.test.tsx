@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { DataExtractionPage } from '../src/pages/DataExtractionPage';
-import { extractionApi } from '../src/api/extractionApi';
+import { ExtractionApiError, extractionApi } from '../src/api/extractionApi';
 import { ProjectProvider } from '../src/context/ProjectContext';
 
 const pubId = '27ae7210-a6b3-418d-8e31-b9e33a695762';
@@ -235,26 +235,18 @@ describe('Data Extraction Workspace GUI (Phase 9.5 & 9.6)', () => {
     expect(await screen.findByText('Postęp Ekstrakcji Danych (Data Extraction Progress)')).toBeInTheDocument();
     expect(await screen.findByText('33.3%')).toBeInTheDocument();
     expect(await screen.findByText('Sample Article Title')).toBeInTheDocument();
+    expect(screen.getByText('W trakcie')).toBeInTheDocument();
   });
 
-  it('shows an eligible publication before its first extraction record exists', async () => {
+  it('shows and saves an eligible publication before its first extraction record exists', async () => {
     vi.mocked(extractionApi.listExtractionRecords).mockResolvedValue({
       project_id: 'proj_test',
-      total_records: 1,
-      items: [
-        {
-          publication_id: pubId,
-          title: 'First-time extraction candidate',
-          authors: ['Reviewer A.'],
-          publication_year: 2026,
-          extraction_status: 'not_started',
-          latest_revision_index: null,
-          latest_reviewer_id: null,
-          latest_updated_at: null,
-        },
-      ],
+      total_records: 0,
+      items: [],
     });
-    vi.mocked(extractionApi.getExtractionRecord).mockResolvedValue(null);
+    vi.mocked(extractionApi.getExtractionRecord).mockRejectedValue(
+      new ExtractionApiError(404, 'Extraction record was not found.'),
+    );
     vi.mocked(extractionApi.getExtractionHistory).mockResolvedValue({
       project_id: 'proj_test',
       publication_id: pubId,
@@ -264,11 +256,80 @@ describe('Data Extraction Workspace GUI (Phase 9.5 & 9.6)', () => {
 
     renderComponent('/projects/proj_test/extract');
 
-    expect(await screen.findByText('First-time extraction candidate')).toBeInTheDocument();
+    expect(await screen.findByText('Zestawienie Publikacji (1)')).toBeInTheDocument();
+    expect(screen.getByText(pubId)).toBeInTheDocument();
     expect(screen.getAllByText('Nie rozpoczęto').length).toBeGreaterThan(0);
-    expect(
-      screen.getByRole('button', { name: /Otwórz formularz ekstrakcji dla First-time extraction candidate/i }),
-    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: new RegExp(`Otwórz formularz ekstrakcji dla ${pubId}`) }));
+
+    expect(await screen.findByText('Typ badania (Study Design)')).toBeInTheDocument();
+    expect(screen.queryByText(/Błąd pobierania danych ekstrakcji/i)).not.toBeInTheDocument();
+
+    vi.mocked(extractionApi.getExtractionRecord).mockResolvedValue(mockRecord);
+    vi.mocked(extractionApi.listExtractionRecords).mockResolvedValue(mockRecordsSummary);
+    fireEvent.click(screen.getByRole('button', { name: /Zapisz Szkic/i }));
+
+    await waitFor(() => {
+      expect(extractionApi.submitRevision).toHaveBeenCalledWith('proj_test', pubId, expect.objectContaining({
+        mark_complete: false,
+      }));
+    });
+    expect(await screen.findByText(/Zapisano szkic ekstrakcji/i)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /Powrót do Widoku Tabelarycznego/i }));
+    expect(await screen.findByText('W trakcie')).toBeInTheDocument();
+  });
+
+  it('keeps completed extraction records visible with their completed status', async () => {
+    vi.mocked(extractionApi.listExtractionRecords).mockResolvedValue({
+      ...mockRecordsSummary,
+      items: [{ ...mockRecordsSummary.items[0], extraction_status: 'complete' }],
+    });
+
+    renderComponent('/projects/proj_test/extract');
+
+    expect(await screen.findByText('Sample Article Title')).toBeInTheDocument();
+    expect(screen.getAllByText('Zakończone').length).toBeGreaterThan(0);
+  });
+
+  it('shows blocked publications as non-editable eligibility candidates', async () => {
+    vi.mocked(extractionApi.getExtractionEligibility).mockResolvedValue({
+      project_id: 'proj_test',
+      total_publications: 1,
+      eligible_count: 0,
+      items: [{
+        publication_id: pubId,
+        status: 'blocked_qa_incomplete',
+        is_eligible: false,
+        reason_details: 'Quality Assessment is incomplete.',
+      }],
+    });
+    vi.mocked(extractionApi.listExtractionRecords).mockResolvedValue({
+      project_id: 'proj_test',
+      total_records: 0,
+      items: [],
+    });
+
+    renderComponent('/projects/proj_test/extract');
+
+    expect(await screen.findByText('Zestawienie Publikacji (1)')).toBeInTheDocument();
+    expect(screen.getByText('Zablokowana: blocked_qa_incomplete')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: new RegExp(`Publikacja ${pubId} jest zablokowana`) })).toBeDisabled();
+    expect(extractionApi.getExtractionRecord).not.toHaveBeenCalled();
+  });
+
+  it('renders an empty table when eligibility returns no publications', async () => {
+    vi.mocked(extractionApi.getExtractionEligibility).mockResolvedValue({
+      project_id: 'proj_test',
+      total_publications: 0,
+      eligible_count: 0,
+      items: [],
+    });
+
+    renderComponent('/projects/proj_test/extract');
+
+    expect(await screen.findByText('Zestawienie Publikacji (0)')).toBeInTheDocument();
+    expect(screen.getByText('Brak zakwalifikowanych publikacji do ekstrakcji w tym projekcie.')).toBeInTheDocument();
   });
 
   it('F. View mode switching between Table View and Form Workspace', async () => {
