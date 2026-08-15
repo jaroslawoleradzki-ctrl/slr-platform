@@ -214,6 +214,12 @@ not block Title & Abstract Screening.
   publication identity context, 1:N Lean–EE repeating groups, and full
   quality gate verification.
 
+### Version 0.4.7 — Data Extraction Configuration Visibility ✅
+
+- Data Extraction retains and displays backend eligibility results for projects
+  without an assigned extraction template, including the explicit
+  `no_extraction_configuration` block reason in the table view.
+
 ### Version 0.4.6 — Structured Data Extraction Dataset Export ✅
 
 - **Phase 9.8 — Structured Dataset Export** ✅ — Generic publication and

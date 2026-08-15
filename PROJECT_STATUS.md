@@ -1,6 +1,6 @@
 # SLR Platform — Project Status
 
-_Last updated: 2026-08-12_
+_Last updated: 2026-08-15_
 
 ## Current status
 
@@ -14,11 +14,12 @@ development
 
 Current version:
 
-v0.4.6
+v0.4.7
 
 Current release status:
 
-Phase 9 Data Extraction is formally completed and released in v0.4.6.
+Phase 9 Data Extraction is formally completed and released in v0.4.6, with
+the v0.4.7 Data Extraction configuration visibility patch on development.
 Phase 10 remains unimplemented.
 
 Current development phase:
