@@ -108,6 +108,7 @@ class ValueStatus(StrEnum):
     NOT_REPORTED = "not_reported"
     NOT_APPLICABLE = "not_applicable"
     UNCLEAR = "unclear"
+    UNASSESSED = "unassessed"
 
 
 class ValueOrigin(StrEnum):

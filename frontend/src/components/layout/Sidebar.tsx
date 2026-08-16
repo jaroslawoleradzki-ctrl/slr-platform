@@ -9,6 +9,7 @@ import {
   Filter,
   Award,
   FileSpreadsheet,
+  Layers,
   FileCheck2,
 } from 'lucide-react';
 import { useProject } from '../../context/ProjectContext';
@@ -21,8 +22,8 @@ export const Sidebar: React.FC = () => {
   const { activeProject, workflowStatus } = useProject();
   const currentId = projectId || activeProject?.id || '';
 
-  const renderBadge = (stage: keyof WorkflowNavigationStatus | 'dashboard') => {
-    if (!workflowStatus || stage === 'dashboard') return null;
+  const renderBadge = (stage: keyof WorkflowNavigationStatus | 'dashboard' | 'synthesis') => {
+    if (!workflowStatus || stage === 'dashboard' || stage === 'synthesis') return null;
     const item = workflowStatus[stage];
 
     if (stage === 'deduplication') {
@@ -114,8 +115,14 @@ export const Sidebar: React.FC = () => {
       stage: 'dataExtraction' as const,
     },
     {
-      to: buildPath('exports'),
-      label: '8. Exports & PRISMA',
+      to: `/projects/${currentId}/synthesis`,
+      label: '8. Evidence Synthesis',
+      icon: Layers,
+      stage: 'synthesis' as const,
+    },
+    {
+      to: `/projects/${currentId}/exports`,
+      label: '9. Exports & PRISMA',
       icon: FileCheck2,
       stage: 'exports' as const,
     },
