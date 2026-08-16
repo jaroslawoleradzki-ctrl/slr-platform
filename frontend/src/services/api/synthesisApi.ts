@@ -1,12 +1,21 @@
 import { API_BASE_URL } from '../../config/api';
 import {
   AnalyticalRelation,
+  AssignContextByGroupItemRequest,
+  AssignContextToRelationRequest,
   Category,
+  ContextAssignment,
+  ContextCategory,
+  ContextSynthesisSummary,
+  ContextWorkspaceData,
   ConvertedValue,
   CreateResearchGapRequest,
   CreateSnapshotRequest,
   LinkEvidenceRequest,
   MatrixCellDetail,
+  MechanismPathway,
+  MechanismSynthesisPathway,
+  MechanismWorkspaceData,
   ResearchGap,
   ResearchGapDetail,
   ResearchGapEvidenceCandidate,
@@ -187,8 +196,8 @@ export const synthesisApi = {
   },
 
   // Mechanism Synthesis & Pathways (Task 10.4)
-  getMechanismWorkspace: (projectId: string): Promise<any> => {
-    return request<any>(`/projects/${projectId}/synthesis/mechanisms`);
+  getMechanismWorkspace: (projectId: string): Promise<MechanismWorkspaceData> => {
+    return request<MechanismWorkspaceData>(`/projects/${projectId}/synthesis/mechanisms`);
   },
 
   listMechanismCategories: (projectId: string): Promise<Category[]> => {
@@ -226,8 +235,8 @@ export const synthesisApi = {
     projectId: string,
     pathwayId: string,
     data: { category_id: string | null; is_review_synthesized?: boolean; notes?: string | null }
-  ): Promise<any> => {
-    return request<any>(`/projects/${projectId}/synthesis/mechanisms/pathways/${pathwayId}/assign`, {
+  ): Promise<MechanismPathway> => {
+    return request<MechanismPathway>(`/projects/${projectId}/synthesis/mechanisms/pathways/${pathwayId}/assign`, {
       method: 'POST',
       body: JSON.stringify(data),
     });
@@ -237,15 +246,97 @@ export const synthesisApi = {
     projectId: string,
     pathwayId: string,
     reviewerId: string
-  ): Promise<any> => {
-    return request<any>(`/projects/${projectId}/synthesis/mechanisms/pathways/${pathwayId}/approve`, {
+  ): Promise<MechanismPathway> => {
+    return request<MechanismPathway>(`/projects/${projectId}/synthesis/mechanisms/pathways/${pathwayId}/approve`, {
       method: 'POST',
       body: JSON.stringify({ reviewer_id: reviewerId }),
     });
   },
 
-  getMechanismSynthesis: (projectId: string): Promise<any[]> => {
-    return request<any[]>(`/projects/${projectId}/synthesis/mechanisms/synthesis`);
+  getMechanismSynthesis: (projectId: string): Promise<MechanismSynthesisPathway[]> => {
+    return request<MechanismSynthesisPathway[]>(`/projects/${projectId}/synthesis/mechanisms/synthesis`);
+  },
+
+  // Context Synthesis & Moderating Factors (Task 10.5)
+  getContextWorkspace: (projectId: string): Promise<ContextWorkspaceData> => {
+    return request<ContextWorkspaceData>(`/projects/${projectId}/synthesis/context/synthesize`, {
+      method: 'POST',
+    });
+  },
+
+  getContextCategories: (projectId: string): Promise<ContextCategory[]> => {
+    return request<ContextCategory[]>(`/projects/${projectId}/synthesis/context/categories`);
+  },
+
+  createContextCategory: (
+    projectId: string,
+    data: { category_id: string; name: string; description?: string | null; display_order?: number }
+  ): Promise<ContextCategory> => {
+    return request<ContextCategory>(`/projects/${projectId}/synthesis/context/categories`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  updateContextCategory: (
+    projectId: string,
+    categoryId: string,
+    data: { name: string; description?: string | null; display_order?: number }
+  ): Promise<ContextCategory> => {
+    return request<ContextCategory>(`/projects/${projectId}/synthesis/context/categories/${categoryId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  },
+
+  deleteContextCategory: (projectId: string, categoryId: string): Promise<void> => {
+    return request<void>(`/projects/${projectId}/synthesis/context/categories/${categoryId}`, {
+      method: 'DELETE',
+    });
+  },
+
+  assignContextByGroupItem: (
+    projectId: string,
+    data: AssignContextByGroupItemRequest
+  ): Promise<ContextAssignment> => {
+    const body = new URLSearchParams();
+    body.set('categoryId', data.categoryId);
+    body.set('contextImpact', data.contextImpact);
+    body.set('groupItemId', data.groupItemId);
+    body.set('publicationId', data.publicationId);
+    body.set('latestRevisionId', data.latestRevisionId);
+    body.set('sourceContextText', data.sourceContextText);
+    return request<ContextAssignment>(`/projects/${projectId}/synthesis/context/assign-by-group-item`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: body.toString(),
+    });
+  },
+
+  remapContextAssignment: (
+    projectId: string,
+    linkId: string,
+    data: AssignContextToRelationRequest
+  ): Promise<ContextAssignment> => {
+    const params = new URLSearchParams({ linkId, projectId });
+    return request<ContextAssignment>(`/projects/${projectId}/synthesis/context/remap?${params.toString()}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  },
+
+  unassignContext: (projectId: string, linkId: string): Promise<ContextAssignment> => {
+    const params = new URLSearchParams({ projectId });
+    return request<ContextAssignment>(
+      `/projects/${projectId}/synthesis/context/unassign/${linkId}?${params.toString()}`,
+      {
+        method: 'PUT',
+      }
+    );
+  },
+
+  getContextSummary: (projectId: string): Promise<ContextSynthesisSummary> => {
+    return request<ContextSynthesisSummary>(`/projects/${projectId}/synthesis/context/summary`);
   },
 
   // Research Gap Synthesis (Task 10.6)

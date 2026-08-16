@@ -279,7 +279,12 @@ def delete_lean_category(projectId: str, categoryId: str):
     """Deletes a Lean analytical category."""
     service = _get_classification_service()
     try:
-        service.delete_lean_category(projectId, categoryId)
+        deleted = service.delete_lean_category(projectId, categoryId)
+        if not deleted:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Lean category '{categoryId}' not found",
+            )
         return Response(status_code=status.HTTP_204_NO_CONTENT)
     except ProjectNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
@@ -340,7 +345,12 @@ def delete_energy_category(projectId: str, categoryId: str):
     """Deletes an Energy analytical category."""
     service = _get_classification_service()
     try:
-        service.delete_energy_category(projectId, categoryId)
+        deleted = service.delete_energy_category(projectId, categoryId)
+        if not deleted:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Energy category '{categoryId}' not found",
+            )
         return Response(status_code=status.HTTP_204_NO_CONTENT)
     except ProjectNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
@@ -925,6 +935,7 @@ def remap_context_assignment(linkId: str, projectId: str, req: AssignContextToRe
             link_id=linkId,
             new_category_id=req.category_id,
             project_id=projectId,
+            context_impact=req.context_impact,
         )
         if remapped is None:
             raise HTTPException(
@@ -934,26 +945,32 @@ def remap_context_assignment(linkId: str, projectId: str, req: AssignContextToRe
         return _context_assignment_to_dto(remapped)
     except ProjectNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
 
 @router.put("/context/unassign/{linkId}", response_model=ContextAssignmentDTO)
 def unassign_context(projectId: str, linkId: str):
     """Unassigns context from a relation identified by link_id."""
+    from app.repositories.synthesis_context_repository import default_synthesis_context_repository
     from app.services.synthesis_context_service import default_synthesis_context_service
     service = default_synthesis_context_service()
     try:
-        unassigned = service.unassign_context_from_relation(link_id=linkId, project_id=projectId)
-        if not unassigned:
+        # Capture the assignment state before removal so the response reflects
+        # the unassigned link (the link is hard-deleted below).
+        repo = default_synthesis_context_repository()
+        link = repo.get_link(linkId)
+        if link is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Context assignment not found",
             )
-        # Fetch the link state after unassignment
-        from app.repositories.synthesis_context_repository import default_synthesis_context_repository
-        repo = default_synthesis_context_repository()
-        link = repo.get_link(linkId)
-        if link is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Link not found")
+        removed = service.unassign_context_from_relation(link_id=linkId, project_id=projectId)
+        if not removed:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Context assignment not found",
+            )
         return _context_assignment_to_dto(ContextAssignment(
             assignment_id=UUID(link["link_id"]),
             project_id=link["project_id"],

@@ -46,7 +46,7 @@ class TestFieldDataTypesAndEnums:
 
     def test_value_status_enum(self):
         statuses = {s.value for s in ValueStatus}
-        assert statuses == {"present", "not_reported", "not_applicable", "unclear"}
+        assert statuses == {"present", "not_reported", "not_applicable", "unclear", "unassessed"}
 
     def test_value_origin_enum_has_no_derived(self):
         origins = {o.value for o in ValueOrigin}

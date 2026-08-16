@@ -210,7 +210,8 @@ class SynthesisMatrixService:
                 # In Lean/Energy, negative change in energy use or positive improvement is positive outcome
                 direction = RelationDirection.POSITIVE
             else:
-                direction = RelationDirection.POSITIVE
+                # No directional signal and no magnitude: remain explicitly undetermined.
+                direction = RelationDirection.CANNOT_DETERMINE
 
         # Resolve analytical category assignments from researcher mappings
         lean_cat_id: str | None = None

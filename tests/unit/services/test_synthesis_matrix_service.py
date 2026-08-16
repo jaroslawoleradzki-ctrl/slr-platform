@@ -1042,3 +1042,91 @@ def test_project_isolation_relations_categories_publications(service_env):
 
     with pytest.raises(CategoryNotFoundError):
         service.get_matrix_cell_detail(proj_a, "cat_tpm_b", "cat_gas_b")
+
+
+def test_unstated_direction_without_magnitude_stays_cannot_determine(service_env):
+    """Task 10.8 regression: a relation with no directional signal and no magnitude
+    must remain CANNOT_DETERMINE instead of being silently forced to POSITIVE."""
+    from app.domain.synthesis import RelationDirection
+
+    service: SynthesisMatrixService = service_env["service"]
+    class_service = service_env["class_service"]
+    extraction_repo = service_env["extraction_repo"]
+    pub_repo = service_env["pub_repo"]
+    proj_id = "proj_alpha"
+
+    class_service.create_lean_category(project_id=proj_id, category_id="vsm", name="VSM")
+    class_service.create_energy_category(project_id=proj_id, category_id="elec", name="Electricity")
+    class_service.set_term_mapping(proj_id, TermType.LEAN_PRACTICE, "Energy VSM", "vsm")
+    class_service.approve_term_mapping(proj_id, TermType.LEAN_PRACTICE, "Energy VSM", "rev-1")
+    class_service.set_term_mapping(proj_id, TermType.ENERGY_EFFECT, "Electricity Consumption", "elec")
+    class_service.approve_term_mapping(proj_id, TermType.ENERGY_EFFECT, "Electricity Consumption", "rev-1")
+
+    pub_id = uuid4()
+    pub_repo.add_publications(proj_id, [Publication(record_id=pub_id, title="No direction study", publication_year=2024)])
+    _save_sample_revision(
+        extraction_repo,
+        proj_id,
+        pub_id,
+        [
+            # direction omitted entirely, no magnitude
+            ExtractedGroupItemState(
+                group_item_id=uuid4(),
+                group_key="lean_energy_relationships",
+                item_index=1,
+                values=[
+                    ExtractedValueState(field_key="lean_practice", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="Energy VSM"),
+                    ExtractedValueState(field_key="energy_effect_indicator", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="Electricity Consumption"),
+                ],
+            )
+        ],
+    )
+
+    matrix = service.get_matrix(proj_id)
+    cell = next(c for c in matrix.cells if c.lean_category_id == "vsm" and c.energy_category_id == "elec")
+    assert cell.direction_distribution == {"cannot_determine": 1}
+
+    relations = service_env["matrix_repo"].list_analytical_relations(proj_id)
+    assert len(relations) == 1
+    assert relations[0].direction == RelationDirection.CANNOT_DETERMINE
+
+
+def test_unstated_direction_with_magnitude_preserves_approved_heuristic(service_env):
+    """Task 10.8 guard: the approved Lean/Energy heuristic (magnitude present without
+    an explicit direction defaults to POSITIVE) is preserved."""
+    service: SynthesisMatrixService = service_env["service"]
+    class_service = service_env["class_service"]
+    extraction_repo = service_env["extraction_repo"]
+    pub_repo = service_env["pub_repo"]
+    proj_id = "proj_alpha"
+
+    class_service.create_lean_category(project_id=proj_id, category_id="vsm", name="VSM")
+    class_service.create_energy_category(project_id=proj_id, category_id="elec", name="Electricity")
+    class_service.set_term_mapping(proj_id, TermType.LEAN_PRACTICE, "Energy VSM", "vsm")
+    class_service.approve_term_mapping(proj_id, TermType.LEAN_PRACTICE, "Energy VSM", "rev-1")
+    class_service.set_term_mapping(proj_id, TermType.ENERGY_EFFECT, "Electricity Consumption", "elec")
+    class_service.approve_term_mapping(proj_id, TermType.ENERGY_EFFECT, "Electricity Consumption", "rev-1")
+
+    pub_id = uuid4()
+    pub_repo.add_publications(proj_id, [Publication(record_id=pub_id, title="Magnitude study", publication_year=2024)])
+    _save_sample_revision(
+        extraction_repo,
+        proj_id,
+        pub_id,
+        [
+            ExtractedGroupItemState(
+                group_item_id=uuid4(),
+                group_key="lean_energy_relationships",
+                item_index=1,
+                values=[
+                    ExtractedValueState(field_key="lean_practice", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="Energy VSM"),
+                    ExtractedValueState(field_key="energy_effect_indicator", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="Electricity Consumption"),
+                    ExtractedValueState(field_key="effect_magnitude", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, float_value=15.0, unit_value="kWh"),
+                ],
+            )
+        ],
+    )
+
+    matrix = service.get_matrix(proj_id)
+    cell = next(c for c in matrix.cells if c.lean_category_id == "vsm" and c.energy_category_id == "elec")
+    assert cell.direction_distribution == {"positive": 1}

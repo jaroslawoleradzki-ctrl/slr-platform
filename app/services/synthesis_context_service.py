@@ -107,6 +107,10 @@ class SynthesisContextService:
     ) -> ContextCategory:
         _ensure_project_isolation(project_id, project_id)
 
+        existing = self._context_repo.get_category(project_id, category_id)
+        if existing is not None:
+            raise ValueError(f"Context category '{category_id}' already exists in project '{project_id}'")
+
         self._context_repo.create_category(
             category_id=category_id,
             name=name,
@@ -212,11 +216,12 @@ class SynthesisContextService:
         # Check if there's already a link for this group_item_id in this project
         existing = self._context_repo.get_link_by_group_item(project_id, group_item_id)
         if existing is not None:
-            # Link already exists - remap/assign to same relation
+            # Link already exists - remap/assign to same relation, preserving impact
             remapped = self.remap_context_assignment(
                 link_id=existing["link_id"],
                 new_category_id=category_id,
                 project_id=project_id,
+                context_impact=context_impact,
             )
             if remapped is None:
                 raise ValueError(f"Failed to remap context assignment for link '{existing['link_id']}'")
@@ -270,18 +275,25 @@ class SynthesisContextService:
         link_id: str,
         new_category_id: str,
         project_id: str,
+        context_impact: str | None = None,
     ) -> ContextAssignment | None:
         _ensure_project_isolation(project_id, project_id)
+
+        # Resolve the link first so a missing link is a 404, not a 400/500.
+        link = self._context_repo.get_link(link_id)
+        if link is None:
+            return None
 
         # Verify new category exists and belongs to project
         new_category = self._context_repo.get_category(project_id, new_category_id)
         if new_category is None:
             raise ValueError(f"Context category '{new_category_id}' not found in project '{project_id}'")
 
-        # Update the link's category
+        # Update the link's category (and impact when the researcher provides one)
         link = self._context_repo.update_link(
             link_id=link_id,
             analytical_context_category_id=new_category_id,
+            context_impact=context_impact,
         )
         if link is None:
             return None

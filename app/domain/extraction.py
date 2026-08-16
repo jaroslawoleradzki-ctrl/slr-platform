@@ -84,6 +84,7 @@ class ValueStatus(StrEnum):
     NOT_REPORTED = "not_reported"
     NOT_APPLICABLE = "not_applicable"
     UNCLEAR = "unclear"
+    UNASSESSED = "unassessed"
 
 
 class ValueOrigin(StrEnum):
@@ -139,7 +140,7 @@ class ExtractedValueState(BaseModel):
     value_id: UUID = Field(default_factory=uuid4)
     field_key: str
     status: ValueStatus
-    origin: ValueOrigin
+    origin: ValueOrigin | None = None
 
     text_value: str | None = None
     int_value: int | None = None

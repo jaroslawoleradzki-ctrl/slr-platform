@@ -210,6 +210,65 @@ export interface AssignMechanismCategoryRequest {
 }
 
 // -------------------------------------------------------------------------
+// Task 10.5: Context & Moderating Factors
+// -------------------------------------------------------------------------
+
+export type ContextImpact = 'ENABLE' | 'STRENGTHEN' | 'WEAKEN' | 'CONDITION';
+
+export interface ContextCategory {
+  category_id: string;
+  name: string;
+  project_id: string;
+  description: string | null;
+  display_order: number;
+}
+
+export interface ContextAssignment {
+  assignment_id: string;
+  project_id: string;
+  analytical_relation_id: string;
+  group_item_id: string;
+  publication_id: string;
+  latest_revision_id: string;
+  source_context_text: string;
+  analytical_context_category_id: string | null;
+  context_impact: ContextImpact;
+  approval_state: ClassificationApprovalState;
+  approved_by: string | null;
+  approved_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ContextSynthesisSummary {
+  context_evidence_count: number;
+  distinct_publication_count: number;
+  distinct_analytical_relation_count: number;
+  distinct_mechanism_pathway_count: number;
+}
+
+export interface ContextWorkspaceData {
+  project_id: string;
+  categories: ContextCategory[];
+  assignments: ContextAssignment[];
+  stats: ContextSynthesisSummary;
+}
+
+export interface AssignContextToRelationRequest {
+  category_id: string;
+  context_impact: ContextImpact;
+}
+
+export interface AssignContextByGroupItemRequest {
+  categoryId: string;
+  contextImpact: ContextImpact;
+  groupItemId: string;
+  publicationId: string;
+  latestRevisionId: string;
+  sourceContextText: string;
+}
+
+// -------------------------------------------------------------------------
 // Task 10.6: Research Gap Synthesis
 // -------------------------------------------------------------------------
 
@@ -319,14 +378,14 @@ export interface SynthesisSnapshotContent {
   project_id: string;
   relations: AnalyticalRelation[];
   mechanism_pathways: MechanismPathway[];
-  context_assignments: any[];
+  context_assignments: ContextAssignment[];
   research_gaps: ResearchGap[];
   research_gap_links: ResearchGapLink[];
   term_mappings: TermMappingResponse[];
   lean_categories: Category[];
   energy_categories: Category[];
   mechanism_categories: Category[];
-  context_categories: any[];
+  context_categories: ContextCategory[];
   qa_profiles: QAProfileSummary[];
 }
 

@@ -326,14 +326,30 @@ class TestContextAssignment:
             link_id=link_id,
             new_category_id="cat_002",
             project_id="test_project",
+            context_impact="WEAKEN",
         )
         assert remapped is not None
         assert remapped.analytical_context_category_id == "cat_002"
+        assert remapped.context_impact == "WEAKEN"
 
         # Direct DB check
         link = repo.get_link(link_id)
         assert link is not None
         assert link["analytical_context_category_id"] == "cat_002"
+        assert link["context_impact"] == "WEAKEN"
+
+    def test_remap_missing_link_returns_none_not_value_error(self, service):
+        """Regression: a missing link must yield None (404), never a category ValueError (500/400)."""
+        service.create_context_category(
+            project_id="test_project", category_id="cat_001", name="Category 1"
+        )
+        result = service.remap_context_assignment(
+            link_id=str(uuid4()),
+            new_category_id="no-such-category",
+            project_id="test_project",
+            context_impact="ENABLE",
+        )
+        assert result is None
 
     def test_unassign_context_from_relation(self, service):
         """Test unassigning context from a relation."""

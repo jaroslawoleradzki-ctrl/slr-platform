@@ -287,7 +287,7 @@ def _serialize_csv_field(value: ExtractedValueState | None, data_type: FieldData
     else:
         typed = ""
 
-    result = [typed, value.status.value, value.origin.value]
+    result = [typed, value.status.value, value.origin.value if value.origin is not None else ""]
     if data_type is FieldDataType.NUMBER_WITH_UNIT:
         result.append(value.unit_value or "")
     return result + [
