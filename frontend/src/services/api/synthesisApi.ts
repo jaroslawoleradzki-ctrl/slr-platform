@@ -4,6 +4,7 @@ import {
   Category,
   ConvertedValue,
   CreateResearchGapRequest,
+  CreateSnapshotRequest,
   LinkEvidenceRequest,
   MatrixCellDetail,
   ResearchGap,
@@ -11,7 +12,10 @@ import {
   ResearchGapEvidenceCandidate,
   ResearchGapLink,
   ResearchGapWorkspaceData,
+  SnapshotExport,
   SynthesisMatrix,
+  SynthesisSnapshot,
+  SynthesisSnapshotDetail,
   TerminologyClassificationWorkspace,
   TermMappingResponse,
   TermType,
@@ -298,5 +302,27 @@ export const synthesisApi = {
     return request<void>(`/projects/${projectId}/synthesis/research-gaps/${gapId}/links/${linkId}`, {
       method: 'DELETE',
     });
+  },
+
+  // Synthesis Snapshots (Task 10.7)
+  createSnapshot: (projectId: string, data: CreateSnapshotRequest): Promise<SynthesisSnapshotDetail> => {
+    return request<SynthesisSnapshotDetail>(`/projects/${projectId}/synthesis/snapshots`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  listSnapshots: (projectId: string): Promise<SynthesisSnapshot[]> => {
+    return request<SynthesisSnapshot[]>(`/projects/${projectId}/synthesis/snapshots`);
+  },
+
+  getSnapshot: (projectId: string, version: number): Promise<SynthesisSnapshotDetail> => {
+    return request<SynthesisSnapshotDetail>(`/projects/${projectId}/synthesis/snapshots/${version}`);
+  },
+
+  exportSnapshot: (projectId: string, version: number, format: 'json' | 'csv'): Promise<SnapshotExport> => {
+    return request<SnapshotExport>(
+      `/projects/${projectId}/synthesis/snapshots/${version}/export?format=${format}`
+    );
   },
 };

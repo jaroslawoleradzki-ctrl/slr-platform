@@ -558,3 +558,84 @@ class LinkEvidenceRequestDTO(BaseModel):
 
     link_type: str = Field(pattern="^(analytical_relation|mechanism_pathway|context_factor_link)$")
     target_id: UUID
+
+
+# -------------------------------------------------------------------------
+# Task 10.7: Synthesis Snapshots DTOs
+# -------------------------------------------------------------------------
+
+
+class CreateSnapshotRequestDTO(BaseModel):
+    """Request payload for explicitly creating a new immutable snapshot."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    actor: str = Field(min_length=1)
+
+
+class SynthesisSnapshotContentDTO(BaseModel):
+    """DTO representing the frozen snapshot content payload."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    project_id: str
+    relations: list[AnalyticalRelationDTO] = Field(default_factory=list)
+    mechanism_pathways: list[MechanismPathwayDTO] = Field(default_factory=list)
+    context_assignments: list[ContextAssignmentDTO] = Field(default_factory=list)
+    research_gaps: list[ResearchGapDTO] = Field(default_factory=list)
+    research_gap_links: list[ResearchGapLinkDTO] = Field(default_factory=list)
+    term_mappings: list[TermMappingDTO] = Field(default_factory=list)
+    lean_categories: list[CategoryDTO] = Field(default_factory=list)
+    energy_categories: list[CategoryDTO] = Field(default_factory=list)
+    mechanism_categories: list[CategoryDTO] = Field(default_factory=list)
+    context_categories: list[ContextCategoryDTO] = Field(default_factory=list)
+    qa_profiles: list[QAProfileSummaryDTO] = Field(default_factory=list)
+
+
+class SynthesisSnapshotDTO(BaseModel):
+    """DTO representing a synthesis snapshot list entry."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    snapshot_id: UUID
+    project_id: str
+    version: int
+    actor: str
+    extraction_dataset_hash: str
+    classification_version: str
+    content_hash: str
+    created_at: datetime
+
+
+class SynthesisSnapshotDetailDTO(BaseModel):
+    """DTO representing a full synthesis snapshot with its frozen content."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    snapshot_id: UUID
+    project_id: str
+    version: int
+    actor: str
+    extraction_dataset_hash: str
+    classification_version: str
+    content_hash: str
+    created_at: datetime
+    content: SynthesisSnapshotContentDTO
+
+
+class SnapshotExportDTO(BaseModel):
+    """DTO representing a snapshot export payload (JSON or CSV)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    snapshot_id: UUID
+    project_id: str
+    version: int
+    actor: str
+    created_at: datetime
+    format: str
+    extraction_dataset_hash: str | None = None
+    classification_version: str | None = None
+    content_hash: str | None = None
+    content: SynthesisSnapshotContentDTO | None = None
+    content_csv: str | None = None

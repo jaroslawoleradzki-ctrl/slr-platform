@@ -310,3 +310,55 @@ export const RESEARCH_GAP_LINK_TYPE_LABELS: Record<ResearchGapLinkType, string> 
   mechanism_pathway: 'Mechanism Pathway',
   context_factor_link: 'Context Factor Link',
 };
+
+// -------------------------------------------------------------------------
+// Task 10.7: Synthesis Snapshots
+// -------------------------------------------------------------------------
+
+export interface SynthesisSnapshotContent {
+  project_id: string;
+  relations: AnalyticalRelation[];
+  mechanism_pathways: MechanismPathway[];
+  context_assignments: any[];
+  research_gaps: ResearchGap[];
+  research_gap_links: ResearchGapLink[];
+  term_mappings: TermMappingResponse[];
+  lean_categories: Category[];
+  energy_categories: Category[];
+  mechanism_categories: Category[];
+  context_categories: any[];
+  qa_profiles: QAProfileSummary[];
+}
+
+export interface SynthesisSnapshot {
+  snapshot_id: string;
+  project_id: string;
+  version: number;
+  actor: string;
+  extraction_dataset_hash: string;
+  classification_version: string;
+  content_hash: string;
+  created_at: string;
+}
+
+export interface SynthesisSnapshotDetail extends SynthesisSnapshot {
+  content: SynthesisSnapshotContent;
+}
+
+export interface SnapshotExport {
+  snapshot_id: string;
+  project_id: string;
+  version: number;
+  actor: string;
+  created_at: string;
+  format: string;
+  extraction_dataset_hash: string | null;
+  classification_version: string | null;
+  content_hash: string | null;
+  content: SynthesisSnapshotContent | null;
+  content_csv: string | null;
+}
+
+export interface CreateSnapshotRequest {
+  actor: string;
+}

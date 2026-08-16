@@ -7,11 +7,20 @@ and QA profile integration.
 
 from __future__ import annotations
 
+import hashlib
+import json
 from datetime import datetime, timezone
 from enum import StrEnum
+from typing import Any
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from app.domain.extraction import (
+    ExtractedValueState,
+    ExtractionCompletenessStatus,
+    ExtractionRevision,
+)
 
 
 class ValueOrigin(StrEnum):
@@ -634,3 +643,257 @@ class ResearchGapEvidenceCandidate(BaseModel):
     publication_title: str | None = None
     publication_year: int | None = None
     qa_profile: QAProfileSummary | None = None  # Criterion-level QA for researcher inspection
+
+
+# ---------------------------------------------------------------------------
+# Task 10.7: Synthesis Snapshots (Reproducibility & Snapshot Engine)
+# ---------------------------------------------------------------------------
+
+_DATASET_HASH_BYTES = 64
+
+
+def _canonical_json_bytes(value: Any) -> bytes:
+    """Serializes a value into deterministic canonical JSON bytes (sorted keys)."""
+
+    def _default(obj: Any) -> Any:
+        if isinstance(obj, UUID):
+            return str(obj)
+        if isinstance(obj, datetime):
+            return obj.isoformat()
+        if isinstance(obj, BaseModel):
+            return obj.model_dump(mode="json")
+        raise TypeError(f"Object of type {type(obj).__name__} is not JSON serializable")
+
+    return json.dumps(
+        value,
+        sort_keys=True,
+        separators=(",", ":"),
+        default=_default,
+    ).encode("utf-8")
+
+
+def sha256_hexdigest(data: bytes) -> str:
+    """Returns the lowercase SHA-256 hex digest of the given bytes."""
+    return hashlib.sha256(data).hexdigest()
+
+
+def canonicalize_extraction_value(value: ExtractedValueState) -> dict[str, Any]:
+    """Canonical, deterministic representation of a single extracted value."""
+    return {
+        "field_key": value.field_key,
+        "status": value.status.value,
+        "origin": value.origin.value,
+        "text_value": value.text_value,
+        "int_value": value.int_value,
+        "float_value": value.float_value,
+        "bool_value": value.bool_value,
+        "unit_value": value.unit_value,
+        "json_value": value.json_value,
+        "source_page": value.source_page,
+        "source_section": value.source_section,
+        "source_locator": value.source_locator,
+        "source_quote": value.source_quote,
+        "reviewer_note": value.reviewer_note,
+    }
+
+
+def build_extraction_dataset_items(revisions: list[ExtractionRevision]) -> list[dict[str, Any]]:
+    """Builds canonical extraction item dicts from eligible COMPLETE revisions.
+
+    DRAFT / IN_PROGRESS / NEEDS_REVIEW revisions never contribute to the
+    extraction dataset identity (dataset hashing and snapshot reproducibility
+    are strictly tied to eligible COMPLETE extraction evidence).
+    """
+    items: list[dict[str, Any]] = []
+    for rev in revisions:
+        if rev.completeness_status != ExtractionCompletenessStatus.COMPLETE:
+            continue
+        for gi in rev.group_items:
+            items.append(
+                {
+                    "publication_id": str(rev.publication_id),
+                    "revision_id": str(rev.revision_id),
+                    "group_item_id": str(gi.group_item_id),
+                    "group_key": gi.group_key,
+                    "item_index": gi.item_index,
+                    "completeness_status": ExtractionCompletenessStatus.COMPLETE.value,
+                    "values": [canonicalize_extraction_value(v) for v in gi.values],
+                }
+            )
+    return items
+
+
+def compute_extraction_dataset_hash(items: list[dict[str, Any]]) -> str:
+    """Deterministic SHA-256 of the eligible COMPLETE extraction dataset.
+
+    Ordering-insensitive: items are sorted by (publication_id, group_item_id)
+    and each item's values are sorted by field_key before hashing, so the same
+    logical input dataset always yields the same hash regardless of database or
+    query ordering. Only items whose ``completeness_status`` is ``complete``
+    contribute to the dataset identity.
+    """
+    eligible = [item for item in items if item.get("completeness_status") == ExtractionCompletenessStatus.COMPLETE.value]
+    normalized: list[dict[str, Any]] = []
+    for item in sorted(eligible, key=lambda i: (str(i["publication_id"]), str(i["group_item_id"]))):
+        normalized.append(
+            {
+                "publication_id": item["publication_id"],
+                "group_item_id": item["group_item_id"],
+                "group_key": item["group_key"],
+                "item_index": item["item_index"],
+                "values": sorted(item["values"], key=lambda v: v["field_key"]),
+            }
+        )
+    return sha256_hexdigest(_canonical_json_bytes(normalized))
+
+
+def compute_classification_version(
+    *,
+    lean_categories: list[LeanPracticeCategory] | None = None,
+    energy_categories: list[EnergyEffectCategory] | None = None,
+    mechanism_categories: list[AnalyticalMechanismCategory] | None = None,
+    context_categories: list[ContextCategory] | None = None,
+    term_mappings: list[TermMapping] | None = None,
+    qa_configs: list[Any] | None = None,
+) -> str:
+    """Deterministic SHA-256 over canonicalized classification rules and QA configurations.
+
+    Canonicalizes categories (sorted by category_id), term mappings (sorted by
+    term_type then source_value), and QA configurations (sorted by template_id).
+    The same classification rule set always yields the same version string.
+    """
+    payload: dict[str, Any] = {
+        "lean_categories": sorted(
+            (
+                {"category_id": c.category_id, "name": c.name, "description": c.description, "display_order": c.display_order}
+                for c in (lean_categories or [])
+            ),
+            key=lambda c: c["category_id"],
+        ),
+        "energy_categories": sorted(
+            (
+                {"category_id": c.category_id, "name": c.name, "description": c.description, "display_order": c.display_order}
+                for c in (energy_categories or [])
+            ),
+            key=lambda c: c["category_id"],
+        ),
+        "mechanism_categories": sorted(
+            (
+                {"category_id": c.category_id, "name": c.name, "description": c.description, "display_order": c.display_order}
+                for c in (mechanism_categories or [])
+            ),
+            key=lambda c: c["category_id"],
+        ),
+        "context_categories": sorted(
+            (
+                {"category_id": c.category_id, "name": c.name, "description": c.description, "display_order": c.display_order}
+                for c in (context_categories or [])
+            ),
+            key=lambda c: c["category_id"],
+        ),
+        "term_mappings": sorted(
+            (
+                {
+                    "term_type": m.term_type.value,
+                    "source_value": m.source_value,
+                    "analytical_category_id": m.analytical_category_id,
+                    "approval_state": m.approval_state.value,
+                    "approved_by": m.approved_by,
+                }
+                for m in (term_mappings or [])
+            ),
+            key=lambda m: (m["term_type"], m["source_value"]),
+        ),
+    }
+    if qa_configs:
+        payload["qa_configs"] = sorted(
+            (
+                {
+                    "template_id": str(getattr(q, "template_id", "")),
+                    "name": getattr(q, "name", ""),
+                    "version": getattr(q, "version", ""),
+                    "criteria": sorted(
+                        (
+                            {
+                                "criterion_id": str(c.criterion_id),
+                                "question": c.question,
+                                "guidance": c.guidance,
+                                "is_required": c.is_required,
+                                "display_order": c.display_order,
+                            }
+                            for c in getattr(q, "criteria", [])
+                        ),
+                        key=lambda c: c["criterion_id"],
+                    ),
+                }
+                for q in qa_configs
+            ),
+            key=lambda q: q["template_id"],
+        )
+    return sha256_hexdigest(_canonical_json_bytes(payload))
+
+
+class SynthesisSnapshotContent(BaseModel):
+    """Immutable assembled synthesis state captured by a snapshot.
+
+    Stores the full analytical synthesis state (relations, mechanism pathways,
+    context assignments, research gaps with links, term mappings, category
+    taxonomies, and criterion-level QA profiles) so that an exported snapshot
+    allows complete external reconstruction of the synthesis matrices.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    project_id: str = Field(min_length=1)
+    relations: list[AnalyticalRelation] = Field(default_factory=list)
+    mechanism_pathways: list[MechanismPathway] = Field(default_factory=list)
+    context_assignments: list[ContextAssignment] = Field(default_factory=list)
+    research_gaps: list[ResearchGap] = Field(default_factory=list)
+    research_gap_links: list[ResearchGapLink] = Field(default_factory=list)
+    term_mappings: list[TermMapping] = Field(default_factory=list)
+    lean_categories: list[LeanPracticeCategory] = Field(default_factory=list)
+    energy_categories: list[EnergyEffectCategory] = Field(default_factory=list)
+    mechanism_categories: list[AnalyticalMechanismCategory] = Field(default_factory=list)
+    context_categories: list[ContextCategory] = Field(default_factory=list)
+    qa_profiles: list[QAProfileSummary] = Field(default_factory=list)
+
+
+def compute_content_hash(content: SynthesisSnapshotContent) -> str:
+    """Deterministic SHA-256 over canonicalized snapshot content.
+
+    Lists are sorted by their canonical JSON representation so the content hash
+    is insensitive to the ordering in which state was assembled.
+    """
+    payload = content.model_dump(mode="json")
+    for key, value in payload.items():
+        if isinstance(value, list):
+            payload[key] = sorted(value, key=_canonical_json_bytes)
+    return sha256_hexdigest(_canonical_json_bytes(payload))
+
+
+class SynthesisSnapshot(BaseModel):
+    """Immutable, reproducible synthesis snapshot artifact.
+
+    Snapshots are append-only: a snapshot is never modified or deleted, and its
+    ``content`` reflects the exact synthesis state at creation time (not a live
+    pointer). Versioning is per-project, monotonic, and versions are never reused.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    snapshot_id: UUID = Field(default_factory=uuid4)
+    project_id: str = Field(min_length=1)
+    version: int = Field(ge=1)
+    actor: str = Field(min_length=1)
+    extraction_dataset_hash: str = Field(min_length=_DATASET_HASH_BYTES, max_length=_DATASET_HASH_BYTES)
+    classification_version: str = Field(min_length=_DATASET_HASH_BYTES, max_length=_DATASET_HASH_BYTES)
+    content_hash: str = Field(min_length=_DATASET_HASH_BYTES, max_length=_DATASET_HASH_BYTES)
+    content: SynthesisSnapshotContent
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+    @field_validator("created_at")
+    @classmethod
+    def validate_tz(cls, v: datetime) -> datetime:
+        if v.tzinfo is None or v.utcoffset() is None:
+            raise ValueError("created_at must be timezone-aware")
+        return v
