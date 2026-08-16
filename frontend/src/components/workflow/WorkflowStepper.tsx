@@ -65,6 +65,13 @@ export const WorkflowStepper: React.FC = () => {
       alertCount: null,
     },
     {
+      id: 'synthesis',
+      label: 'Evidence Synthesis',
+      path: `/projects/${currentId}/synthesis`,
+      status: 'in_progress' as const,
+      alertCount: null,
+    },
+    {
       id: 'exports',
       label: 'Exports & PRISMA',
       path: `/projects/${currentId}/exports`,

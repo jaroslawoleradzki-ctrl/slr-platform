@@ -314,13 +314,12 @@ def get_extraction_revision_history(project_id: str, publication_id: UUID) -> Ex
 
 
 def _dto_to_value_state(dto: ExtractedValueStateDTO) -> ExtractedValueState:
-    origin = ValueOrigin(dto.origin) if dto.origin is not None else None
     if dto.value_id is not None:
         return ExtractedValueState(
             value_id=dto.value_id,
             field_key=dto.field_key,
             status=ValueStatus(dto.status),
-            origin=origin,
+            origin=ValueOrigin(dto.origin) if dto.origin is not None else None,
             text_value=dto.text_value,
             int_value=dto.int_value,
             float_value=dto.float_value,
@@ -336,7 +335,7 @@ def _dto_to_value_state(dto: ExtractedValueStateDTO) -> ExtractedValueState:
     return ExtractedValueState(
         field_key=dto.field_key,
         status=ValueStatus(dto.status),
-        origin=origin,
+        origin=ValueOrigin(dto.origin) if dto.origin is not None else None,
         text_value=dto.text_value,
         int_value=dto.int_value,
         float_value=dto.float_value,

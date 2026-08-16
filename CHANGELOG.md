@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.5.0] — 2026-08-16
+
+### Added
+
+- Completed Phase 10 Data Synthesis: researcher-controlled deterministic
+  terminology classification, Lean–EE Analytical Matrix, mechanism and
+  context synthesis, Research Gap synthesis, and immutable Synthesis
+  Snapshots with deterministic identity and JSON/CSV exports.
+- Preserved project isolation and traceability, COMPLETE-only eligible
+  evidence semantics, and criterion-level QA integration across synthesis.
+- Confirmed that SLR Platform provides no built-in AI/LLM functionality.
+
 ## [0.4.9] — 2026-08-15
 
 ### Fixed

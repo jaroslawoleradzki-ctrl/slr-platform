@@ -90,8 +90,44 @@ def _make_service(db_path: Path) -> SqliteProjectDeletionService:
         full_text_availability_repo=SqliteFullTextAvailabilityRepository(db_path),
         screening_reviewer_assignment_repo=SqliteScreeningReviewerAssignmentRepository(db_path),
         conflict_resolution_repo=SqliteConflictResolutionRepository(db_path),
+        classification_repo=_synthesis_classification_repo(db_path),
+        matrix_repo=_synthesis_matrix_repo(db_path),
+        mechanism_repo=_synthesis_mechanism_repo(db_path),
+        context_repo=_synthesis_context_repo(db_path),
+        gap_repo=_synthesis_gap_repo(db_path),
+        snapshot_repo=_synthesis_snapshot_repo(db_path),
         tx_manager=SqliteTransactionManager(db_path),
     )
+
+
+def _synthesis_classification_repo(db_path: Path):
+    from app.repositories.synthesis_classification_repository import SqliteSynthesisClassificationRepository
+    return SqliteSynthesisClassificationRepository(db_path)
+
+
+def _synthesis_matrix_repo(db_path: Path):
+    from app.repositories.synthesis_matrix_repository import SqliteSynthesisMatrixRepository
+    return SqliteSynthesisMatrixRepository(db_path)
+
+
+def _synthesis_mechanism_repo(db_path: Path):
+    from app.repositories.synthesis_mechanism_repository import SqliteSynthesisMechanismRepository
+    return SqliteSynthesisMechanismRepository(db_path)
+
+
+def _synthesis_context_repo(db_path: Path):
+    from app.repositories.synthesis_context_repository import SqliteSynthesisContextRepository
+    return SqliteSynthesisContextRepository(db_path)
+
+
+def _synthesis_gap_repo(db_path: Path):
+    from app.repositories.synthesis_gap_repository import SqliteSynthesisGapRepository
+    return SqliteSynthesisGapRepository(db_path)
+
+
+def _synthesis_snapshot_repo(db_path: Path):
+    from app.repositories.synthesis_snapshot_repository import SqliteSynthesisSnapshotRepository
+    return SqliteSynthesisSnapshotRepository(db_path)
 
 
 @pytest.fixture()
@@ -221,6 +257,12 @@ def test_delete_rolls_back_all_cleanup_on_failure(
         search_result_snapshot_repo=snapshots,
         screening_reviewer_assignment_repo=SqliteScreeningReviewerAssignmentRepository(db_path),
         conflict_resolution_repo=SqliteConflictResolutionRepository(db_path),
+        classification_repo=_synthesis_classification_repo(db_path),
+        matrix_repo=_synthesis_matrix_repo(db_path),
+        mechanism_repo=_synthesis_mechanism_repo(db_path),
+        context_repo=_synthesis_context_repo(db_path),
+        gap_repo=_synthesis_gap_repo(db_path),
+        snapshot_repo=_synthesis_snapshot_repo(db_path),
         tx_manager=SqliteTransactionManager(db_path),
     )
 
@@ -301,6 +343,119 @@ def test_delete_is_project_scoped_and_accepts_archived_project(
             "SELECT COUNT(*) FROM screening_conflict_resolution_decisions WHERE resolution_id = ?",
             ("resolution-b",),
         ).fetchone()[0] == 1
+
+
+def test_delete_removes_all_synthesis_data(
+    db_path: Path, repo: SqliteProjectRepository, created_project_id: str
+) -> None:
+    """Phase 10 synthesis rows (Tasks 10.2-10.7) are removed on project hard-delete.
+
+    Regression guard: before Task 10.8 the project deletion service did not clean
+    any synthesis table, and FK cascades never fired because the transaction
+    manager connection did not enable PRAGMA foreign_keys.
+    """
+    _seed_synthesis_rows(db_path, created_project_id)
+
+    with sqlite3.connect(db_path) as connection:
+        for table in _SYNTHESIS_TABLES:
+            assert connection.execute(
+                f"SELECT COUNT(*) FROM {table} WHERE project_id = ?",  # noqa: S608 - fixed allowlist
+                (created_project_id,),
+            ).fetchone()[0] == 1, f"expected seed row in {table}"
+
+    _make_service(db_path).delete_project(created_project_id)
+
+    with sqlite3.connect(db_path) as connection:
+        for table in _SYNTHESIS_TABLES:
+            assert connection.execute(
+                f"SELECT COUNT(*) FROM {table} WHERE project_id = ?",  # noqa: S608 - fixed allowlist
+                (created_project_id,),
+            ).fetchone()[0] == 0, f"synthesis rows remained in {table} after delete"
+
+
+_SYNTHESIS_TABLES = (
+    "synthesis_lean_categories",
+    "synthesis_term_mappings",
+    "synthesis_analytical_relations",
+    "synthesis_mechanism_categories",
+    "synthesis_mechanism_pathways",
+    "synthesis_context_categories",
+    "synthesis_relation_context_links",
+    "synthesis_research_gaps",
+    "synthesis_research_gap_links",
+    "synthesis_snapshots",
+)
+
+
+def _seed_synthesis_rows(db_path: Path, project_id: str) -> None:
+    now = datetime.now(timezone.utc).isoformat()
+    pub_id = str(uuid4())
+    group_item_id = str(uuid4())
+    revision_id = str(uuid4())
+    relation_id = str(uuid4())
+    pathway_id = str(uuid4())
+    link_id = str(uuid4())
+    gap_id = str(uuid4())
+    snapshot_id = str(uuid4())
+    with sqlite3.connect(db_path) as connection:
+        connection.execute(
+            "INSERT INTO synthesis_lean_categories (project_id, category_id, name, display_order) VALUES (?, 'cat_1', 'Cat', 1)",
+            (project_id,),
+        )
+        connection.execute(
+            "INSERT INTO synthesis_term_mappings "
+            "(mapping_id, project_id, term_type, source_value, analytical_category_id, approval_state) "
+            "VALUES (?, ?, 'lean_practice', '5S', 'cat_1', 'pending')",
+            (str(uuid4()), project_id),
+        )
+        connection.execute(
+            "INSERT INTO synthesis_analytical_relations "
+            "(relation_id, project_id, publication_id, latest_revision_id, group_item_id, item_index, "
+            "source_practice, source_effect, direction, evidence_character, approval_state) "
+            "VALUES (?, ?, ?, ?, ?, 1, '5S', 'elec', 'positive', 'empirical', 'approved')",
+            (relation_id, project_id, pub_id, revision_id, group_item_id),
+        )
+        connection.execute(
+            "INSERT INTO synthesis_mechanism_categories (project_id, category_id, name, display_order) VALUES (?, 'mc1', 'MC', 1)",
+            (project_id,),
+        )
+        connection.execute(
+            "INSERT INTO synthesis_mechanism_pathways "
+            "(pathway_id, project_id, analytical_relation_id, group_item_id, publication_id, "
+            "latest_revision_id, is_review_synthesized, approval_state) "
+            "VALUES (?, ?, ?, ?, ?, ?, 0, 'pending')",
+            (pathway_id, project_id, relation_id, group_item_id, pub_id, revision_id),
+        )
+        connection.execute(
+            "INSERT INTO synthesis_context_categories (project_id, category_id, name, display_order) VALUES (?, 'cc1', 'CC', 1)",
+            (project_id,),
+        )
+        connection.execute(
+            "INSERT INTO synthesis_relation_context_links "
+            "(link_id, project_id, analytical_relation_id, group_item_id, publication_id, "
+            "latest_revision_id, source_context_text, context_impact, approval_state) "
+            "VALUES (?, ?, ?, ?, ?, ?, 'context text', 'ENABLE', 'pending')",
+            (link_id, project_id, relation_id, group_item_id, pub_id, revision_id),
+        )
+        connection.execute(
+            "INSERT INTO synthesis_research_gaps "
+            "(project_id, gap_id, gap_type, title, rationale, researcher_id, created_at, updated_at) "
+            "VALUES (?, ?, 'thematic', 'Gap', 'Rationale', 'researcher', ?, ?)",
+            (project_id, gap_id, now, now),
+        )
+        connection.execute(
+            "INSERT INTO synthesis_research_gap_links "
+            "(link_id, project_id, gap_id, link_type, target_id, group_item_id, publication_id, latest_revision_id) "
+            "VALUES (?, ?, ?, 'analytical_relation', ?, ?, ?, ?)",
+            (str(uuid4()), project_id, gap_id, relation_id, group_item_id, pub_id, revision_id),
+        )
+        connection.execute(
+            "INSERT INTO synthesis_snapshots "
+            "(snapshot_id, project_id, version, actor, extraction_dataset_hash, classification_version, "
+            "content_hash, content_json, created_at) "
+            "VALUES (?, ?, 1, 'researcher', ?, ?, ?, '{}', ?)",
+            (snapshot_id, project_id, "a" * 64, "b" * 64, "c" * 64, now),
+        )
 
 
 def _snapshot(project_id: str, source_id: str) -> SearchResultSnapshot:

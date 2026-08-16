@@ -555,3 +555,5 @@ export interface ApiProjectWorkflowStatusResponse {
     eligible_count: number;
   };
 }
+
+export * from './synthesis';
