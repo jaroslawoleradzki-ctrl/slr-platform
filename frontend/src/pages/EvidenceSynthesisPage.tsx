@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { GitFork, Grid, Layers, Tag, Target } from 'lucide-react';
+import { Camera, GitFork, Grid, Layers, Tag, Target } from 'lucide-react';
 import { useProject } from '../context/ProjectContext';
 import { ClassificationWorkspace } from '../components/synthesis/ClassificationWorkspace';
 import { LeanEEMatrix } from '../components/synthesis/LeanEEMatrix';
 import { MechanismWorkspace } from '../components/synthesis/MechanismWorkspace';
 import { ResearchGapsWorkspace } from '../components/synthesis/ResearchGapsWorkspace';
+import { SnapshotsWorkspace } from '../components/synthesis/SnapshotsWorkspace';
 
 export const EvidenceSynthesisPage: React.FC = () => {
   const { projectId } = useParams<{ projectId?: string }>();
@@ -13,7 +14,7 @@ export const EvidenceSynthesisPage: React.FC = () => {
   const currentProjectId = projectId || activeProject?.id || 'lean_energy';
 
   const [activeSubTab, setActiveSubTab] = useState<
-    'classification' | 'matrix' | 'mechanisms' | 'research-gaps'
+    'classification' | 'matrix' | 'mechanisms' | 'research-gaps' | 'snapshots'
   >('classification');
 
   return (
@@ -128,6 +129,28 @@ export const EvidenceSynthesisPage: React.FC = () => {
           <Target size={16} />
           <span>4. Research Gap Synthesis</span>
         </button>
+
+        <button
+          type="button"
+          data-testid="synthesis-tab-snapshots"
+          onClick={() => setActiveSubTab('snapshots')}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            padding: '8px 16px',
+            borderRadius: 'var(--radius-md)',
+            border: 'none',
+            backgroundColor: activeSubTab === 'snapshots' ? 'var(--accent-subtle)' : 'transparent',
+            color: activeSubTab === 'snapshots' ? 'var(--accent-primary)' : 'var(--text-secondary)',
+            fontWeight: activeSubTab === 'snapshots' ? 600 : 400,
+            cursor: 'pointer',
+            fontSize: '0.9rem',
+          }}
+        >
+          <Camera size={16} />
+          <span>5. Synthesis Snapshots</span>
+        </button>
       </div>
 
       {/* Workspace Content */}
@@ -148,6 +171,10 @@ export const EvidenceSynthesisPage: React.FC = () => {
 
       {activeSubTab === 'research-gaps' && (
         <ResearchGapsWorkspace projectId={currentProjectId} />
+      )}
+
+      {activeSubTab === 'snapshots' && (
+        <SnapshotsWorkspace projectId={currentProjectId} />
       )}
     </div>
   );

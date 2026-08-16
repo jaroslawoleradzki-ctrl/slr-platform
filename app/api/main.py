@@ -14,6 +14,7 @@ from app.api.routers import (
     search_strategy,
     synthesis,
     synthesis_gaps,
+    synthesis_snapshots,
 )
 from app.core.config import load_project_config
 
@@ -50,6 +51,7 @@ app.include_router(quality_assessment.router)
 app.include_router(extraction.router)
 app.include_router(synthesis.router)
 app.include_router(synthesis_gaps.router)
+app.include_router(synthesis_snapshots.router)
 
 
 @app.get("/")
