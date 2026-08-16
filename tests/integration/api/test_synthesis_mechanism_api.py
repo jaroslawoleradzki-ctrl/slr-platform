@@ -183,6 +183,7 @@ def test_mechanism_workspace_and_synthesis_flow(client):
                 status=ValueStatus.PRESENT,
                 origin=ValueOrigin.REPORTED,
                 text_value="Turning off idle hydraulic pumps during batch changeover reduced peak kW.",
+                source_locator="Table 1",
             ),
         ],
     )

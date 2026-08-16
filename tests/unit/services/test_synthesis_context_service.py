@@ -422,10 +422,10 @@ class TestSynchronizationFromExtraction:
                         group_key="lean_energy_relationships",
                         item_index=1,
                         values=[
-                            ExtractedValueState(field_key="lean_practice", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="Value Stream Mapping"),
-                            ExtractedValueState(field_key="energy_effect_indicator", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="Natural Gas"),
-                            ExtractedValueState(field_key="impact_mechanism", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="Elimination of thermal bottlenecks in drying ovens."),
-                            ExtractedValueState(field_key="moderating_conditions", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="Batch manufacturing with high seasonal ambient temperature variation."),
+                            ExtractedValueState(field_key="lean_practice", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="Value Stream Mapping", source_locator="Table 1"),
+                            ExtractedValueState(field_key="energy_effect_indicator", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="Natural Gas", source_locator="Table 1"),
+                            ExtractedValueState(field_key="impact_mechanism", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="Elimination of thermal bottlenecks in drying ovens.", source_locator="Table 1"),
+                            ExtractedValueState(field_key="moderating_conditions", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="Batch manufacturing with high seasonal ambient temperature variation.", source_locator="Table 1"),
                         ],
                     )
                 ],
@@ -502,7 +502,7 @@ class TestSynchronizationFromExtraction:
                         group_key="lean_energy_relationships",
                         item_index=1,
                         values=[
-                            ExtractedValueState(field_key="moderating_conditions", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="DRAFT MODERATING CONDITION - MUST NOT ENTER SYNTHESIS"),
+                            ExtractedValueState(field_key="moderating_conditions", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="DRAFT MODERATING CONDITION - MUST NOT ENTER SYNTHESIS", source_locator="Table 1"),
                         ],
                     )
                 ],
@@ -549,10 +549,10 @@ class TestSynchronizationFromExtraction:
                         group_key="lean_energy_relationships",
                         item_index=1,
                         values=[
-                            ExtractedValueState(field_key="lean_practice", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="Value Stream Mapping"),
-                            ExtractedValueState(field_key="energy_effect_indicator", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="Natural Gas"),
-                            ExtractedValueState(field_key="impact_mechanism", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="Elimination of thermal bottlenecks in drying ovens."),
-                            ExtractedValueState(field_key="moderating_conditions", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="Batch manufacturing with high seasonal temperature and humidity."),
+                            ExtractedValueState(field_key="lean_practice", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="Value Stream Mapping", source_locator="Table 1"),
+                            ExtractedValueState(field_key="energy_effect_indicator", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="Natural Gas", source_locator="Table 1"),
+                            ExtractedValueState(field_key="impact_mechanism", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="Elimination of thermal bottlenecks in drying ovens.", source_locator="Table 1"),
+                            ExtractedValueState(field_key="moderating_conditions", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="Batch manufacturing with high seasonal temperature and humidity.", source_locator="Table 1"),
                         ],
                     )
                 ],
@@ -599,10 +599,10 @@ class TestSynchronizationFromExtraction:
                         group_key="lean_energy_relationships",
                         item_index=1,
                         values=[
-                            ExtractedValueState(field_key="lean_practice", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="Value Stream Mapping"),
-                            ExtractedValueState(field_key="energy_effect_indicator", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="Natural Gas"),
+                            ExtractedValueState(field_key="lean_practice", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="Value Stream Mapping", source_locator="Table 1"),
+                            ExtractedValueState(field_key="energy_effect_indicator", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="Natural Gas", source_locator="Table 1"),
                             # E10 present
-                            ExtractedValueState(field_key="impact_mechanism", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="Elimination of thermal bottlenecks in drying ovens."),
+                            ExtractedValueState(field_key="impact_mechanism", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="Elimination of thermal bottlenecks in drying ovens.", source_locator="Table 1"),
                             # E11 moderating_conditions REMOVED
                         ],
                     )
@@ -662,9 +662,9 @@ class TestSynchronizationFromExtraction:
                         group_key="lean_energy_relationships",
                         item_index=1,
                         values=[
-                            ExtractedValueState(field_key="lean_practice", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="TPM"),
-                            ExtractedValueState(field_key="energy_effect_indicator", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="Electricity"),
-                            ExtractedValueState(field_key="impact_mechanism", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="E10 Mechanism Only Text"),
+                            ExtractedValueState(field_key="lean_practice", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="TPM", source_locator="Table 1"),
+                            ExtractedValueState(field_key="energy_effect_indicator", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="Electricity", source_locator="Table 1"),
+                            ExtractedValueState(field_key="impact_mechanism", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="E10 Mechanism Only Text", source_locator="Table 1"),
                             # E11 moderating_conditions is NOT present
                         ],
                     )

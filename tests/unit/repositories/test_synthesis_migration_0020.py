@@ -177,6 +177,7 @@ def test_existing_database_migration_from_0019_to_0020(tmp_path: Path):
                 status=ValueStatus.PRESENT,
                 origin=ValueOrigin.REPORTED,
                 text_value="Case Study",
+                source_locator="Table 1",
             )
         ],
         group_items=[
@@ -190,12 +191,14 @@ def test_existing_database_migration_from_0019_to_0020(tmp_path: Path):
                         status=ValueStatus.PRESENT,
                         origin=ValueOrigin.REPORTED,
                         text_value="5S Visual Management",
+                        source_locator="Table 1",
                     ),
                     ExtractedValueState(
                         field_key="energy_effect_indicator",
                         status=ValueStatus.PRESENT,
                         origin=ValueOrigin.REPORTED,
                         text_value="15% electricity reduction",
+                        source_locator="Table 1",
                     ),
                 ],
             )

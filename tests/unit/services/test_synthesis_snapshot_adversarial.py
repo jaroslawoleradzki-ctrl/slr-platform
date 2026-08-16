@@ -164,12 +164,14 @@ def _seed_complete_evidence(project_id="test_project"):
                             status=ValueStatus.PRESENT,
                             origin=ValueOrigin.REPORTED,
                             text_value="Single Minute Exchange of Die",
+                            source_locator="Table 1",
                         ),
                         ExtractedValueState(
                             field_key="energy_effect_indicator",
                             status=ValueStatus.PRESENT,
                             origin=ValueOrigin.REPORTED,
                             text_value="Compressed Air",
+                            source_locator="Table 1",
                         ),
                     ],
                 )
@@ -292,6 +294,7 @@ class TestF4DatasetHashOrderingInsensitive:
                     status=ValueStatus.PRESENT,
                     origin=ValueOrigin.REPORTED,
                     text_value="5S",
+                    source_locator="Table 1",
                 )
             ],
         )
@@ -305,6 +308,7 @@ class TestF4DatasetHashOrderingInsensitive:
                     status=ValueStatus.PRESENT,
                     origin=ValueOrigin.REPORTED,
                     text_value="reduction",
+                    source_locator="Table 1",
                 )
             ],
         )

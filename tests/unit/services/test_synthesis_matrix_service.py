@@ -146,6 +146,7 @@ def _create_sample_group_item(
             status=ValueStatus.PRESENT,
             origin=ValueOrigin.REPORTED,
             text_value=practice_text,
+            source_locator="Table 1",
             source_quote=quote,
         ),
         ExtractedValueState(
@@ -153,18 +154,21 @@ def _create_sample_group_item(
             status=ValueStatus.PRESENT,
             origin=ValueOrigin.REPORTED,
             text_value=effect_text,
+            source_locator="Table 1",
         ),
         ExtractedValueState(
             field_key="evidence_character",
             status=ValueStatus.PRESENT,
             origin=ValueOrigin.REPORTED,
             text_value=evidence_character,
+            source_locator="Table 1",
         ),
         ExtractedValueState(
             field_key="direction",
             status=ValueStatus.PRESENT,
             origin=ValueOrigin.REPORTED,
             text_value=direction,
+            source_locator="Table 1",
         ),
     ]
     if magnitude is not None:
@@ -175,6 +179,7 @@ def _create_sample_group_item(
                 origin=ValueOrigin.REPORTED,
                 float_value=float(magnitude),
                 unit_value=unit,
+                source_locator="Table 1",
             )
         )
     return ExtractedGroupItemState(
@@ -1075,8 +1080,8 @@ def test_unstated_direction_without_magnitude_stays_cannot_determine(service_env
                 group_key="lean_energy_relationships",
                 item_index=1,
                 values=[
-                    ExtractedValueState(field_key="lean_practice", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="Energy VSM"),
-                    ExtractedValueState(field_key="energy_effect_indicator", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="Electricity Consumption"),
+                    ExtractedValueState(field_key="lean_practice", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="Energy VSM", source_locator="Table 1"),
+                    ExtractedValueState(field_key="energy_effect_indicator", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="Electricity Consumption", source_locator="Table 1"),
                 ],
             )
         ],
@@ -1119,9 +1124,9 @@ def test_unstated_direction_with_magnitude_preserves_approved_heuristic(service_
                 group_key="lean_energy_relationships",
                 item_index=1,
                 values=[
-                    ExtractedValueState(field_key="lean_practice", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="Energy VSM"),
-                    ExtractedValueState(field_key="energy_effect_indicator", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="Electricity Consumption"),
-                    ExtractedValueState(field_key="effect_magnitude", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, float_value=15.0, unit_value="kWh"),
+                    ExtractedValueState(field_key="lean_practice", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="Energy VSM", source_locator="Table 1"),
+                    ExtractedValueState(field_key="energy_effect_indicator", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="Electricity Consumption", source_locator="Table 1"),
+                    ExtractedValueState(field_key="effect_magnitude", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, float_value=15.0, unit_value="kWh", source_locator="Table 1"),
                 ],
             )
         ],

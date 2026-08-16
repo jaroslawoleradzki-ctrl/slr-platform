@@ -175,18 +175,22 @@ def _seed_complete_evidence(project_id="test_project"):
                     ExtractedValueState(
                         field_key="lean_practice", status=ValueStatus.PRESENT,
                         origin=ValueOrigin.REPORTED, text_value="Value Stream Mapping",
+                        source_locator="Table 1",
                     ),
                     ExtractedValueState(
                         field_key="energy_effect_indicator", status=ValueStatus.PRESENT,
                         origin=ValueOrigin.REPORTED, text_value="Natural Gas",
+                        source_locator="Table 1",
                     ),
                     ExtractedValueState(
                         field_key="impact_mechanism", status=ValueStatus.PRESENT,
                         origin=ValueOrigin.REPORTED, text_value="Elimination of thermal bottlenecks.",
+                        source_locator="Table 1",
                     ),
                     ExtractedValueState(
                         field_key="moderating_conditions", status=ValueStatus.PRESENT,
                         origin=ValueOrigin.REPORTED, text_value="Batch manufacturing with high ambient variation.",
+                        source_locator="Table 1",
                     ),
                 ],
             )
@@ -537,10 +541,12 @@ class TestLinkEvidence:
                             ExtractedValueState(
                                 field_key="lean_practice", status=ValueStatus.PRESENT,
                                 origin=ValueOrigin.REPORTED, text_value="Kaizen",
+                                source_locator="Table 1",
                             ),
                             ExtractedValueState(
                                 field_key="energy_effect_indicator", status=ValueStatus.PRESENT,
                                 origin=ValueOrigin.REPORTED, text_value="Electricity",
+                                source_locator="Table 1",
                             ),
                         ],
                     )
@@ -620,10 +626,12 @@ class TestLinkEvidence:
                             ExtractedValueState(
                                 field_key="lean_practice", status=ValueStatus.PRESENT,
                                 origin=ValueOrigin.REPORTED, text_value="Value Stream Mapping",
+                                source_locator="Table 1",
                             ),
                             ExtractedValueState(
                                 field_key="energy_effect_indicator", status=ValueStatus.PRESENT,
                                 origin=ValueOrigin.REPORTED, text_value="Natural Gas",
+                                source_locator="Table 1",
                             ),
                         ],
                     )
@@ -656,10 +664,12 @@ class TestLinkRevisionAdvancement:
                     ExtractedValueState(
                         field_key="lean_practice", status=ValueStatus.PRESENT,
                         origin=ValueOrigin.REPORTED, text_value="Value Stream Mapping",
+                        source_locator="Table 1",
                     ),
                     ExtractedValueState(
                         field_key="energy_effect_indicator", status=ValueStatus.PRESENT,
                         origin=ValueOrigin.REPORTED, text_value="Natural Gas",
+                        source_locator="Table 1",
                     ),
                 ],
             )

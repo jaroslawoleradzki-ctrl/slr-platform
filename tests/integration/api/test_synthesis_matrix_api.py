@@ -154,12 +154,14 @@ def client(tmp_path: Path, monkeypatch):
                         status=ValueStatus.PRESENT,
                         origin=ValueOrigin.REPORTED,
                         text_value="5S Practice",
+                        source_locator="Table 1",
                     ),
                     ExtractedValueState(
                         field_key="energy_effect_indicator",
                         status=ValueStatus.PRESENT,
                         origin=ValueOrigin.REPORTED,
                         text_value="Energy Use",
+                        source_locator="Table 1",
                     ),
                     ExtractedValueState(
                         field_key="effect_magnitude",
@@ -167,12 +169,14 @@ def client(tmp_path: Path, monkeypatch):
                         origin=ValueOrigin.REPORTED,
                         float_value=100.0,
                         unit_value="kWh",
+                        source_locator="Table 1",
                     ),
                     ExtractedValueState(
                         field_key="evidence_character",
                         status=ValueStatus.PRESENT,
                         origin=ValueOrigin.REPORTED,
                         text_value="Empirical",
+                        source_locator="Table 1",
                     ),
                 ],
             )

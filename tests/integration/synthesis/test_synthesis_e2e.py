@@ -118,10 +118,12 @@ def _seed_evidence(
     group_item_id = group_item_id or uuid4()
     values = [
         ExtractedValueState(
-            field_key="lean_practice", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value=practice
+            field_key="lean_practice", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value=practice,
+            source_locator="Table 1",
         ),
         ExtractedValueState(
-            field_key="energy_effect_indicator", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value=effect
+            field_key="energy_effect_indicator", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value=effect,
+            source_locator="Table 1",
         ),
     ]
     if magnitude is not None:
@@ -132,18 +134,21 @@ def _seed_evidence(
                 origin=ValueOrigin.REPORTED,
                 text_value=str(magnitude),
                 float_value=magnitude,
+                source_locator="Table 1",
             )
         )
     if direction is not None:
         values.append(
             ExtractedValueState(
-                field_key="direction", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value=direction
+                field_key="direction", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value=direction,
+                source_locator="Table 1",
             )
         )
     if mechanism is not None:
         values.append(
             ExtractedValueState(
-                field_key="impact_mechanism", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value=mechanism
+                field_key="impact_mechanism", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value=mechanism,
+                source_locator="Table 1",
             )
         )
     if moderating is not None:
@@ -153,6 +158,7 @@ def _seed_evidence(
                 status=ValueStatus.PRESENT,
                 origin=ValueOrigin.REPORTED,
                 text_value=moderating,
+                source_locator="Table 1",
             )
         )
 
@@ -176,12 +182,14 @@ def _seed_evidence(
                         status=ValueStatus.PRESENT,
                         origin=ValueOrigin.REPORTED,
                         text_value=f"{practice} v{idx}",
+                        source_locator="Table 1",
                     ),
                     ExtractedValueState(
                         field_key="energy_effect_indicator",
                         status=ValueStatus.PRESENT,
                         origin=ValueOrigin.REPORTED,
                         text_value=f"{effect} v{idx}",
+                        source_locator="Table 1",
                     ),
                 ],
             )

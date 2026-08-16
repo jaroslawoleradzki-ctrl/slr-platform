@@ -75,6 +75,7 @@ def test_env(tmp_path: Path):
                 status=ValueStatus.PRESENT,
                 origin=ValueOrigin.REPORTED,
                 text_value="Study 1 Title",
+                source_locator="Table 1",
             )
         ],
         group_items=[
@@ -84,7 +85,8 @@ def test_env(tmp_path: Path):
                 item_index=1,
                 values=[
                     ExtractedValueState(
-                        field_key="practice", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="5S"
+                        field_key="practice", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="5S",
+                        source_locator="Table 1",
                     )
                 ],
             )
@@ -106,6 +108,7 @@ def test_env(tmp_path: Path):
                 status=ValueStatus.PRESENT,
                 origin=ValueOrigin.REPORTED,
                 text_value="Study 1 Title (Updated)",
+                source_locator="Table 1",
             )
         ],
         group_items=[
@@ -119,6 +122,7 @@ def test_env(tmp_path: Path):
                         status=ValueStatus.PRESENT,
                         origin=ValueOrigin.REPORTED,
                         text_value="5S Advanced",
+                        source_locator="Table 1",
                     )
                 ],
             )

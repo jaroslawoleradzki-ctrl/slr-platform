@@ -58,12 +58,14 @@ def _revision(
                         status=ValueStatus.PRESENT,
                         origin=ValueOrigin.REPORTED,
                         text_value=lean_practice,
+                        source_locator="Table 1",
                     ),
                     ExtractedValueState(
                         field_key="energy_effect_indicator",
                         status=ValueStatus.PRESENT,
                         origin=ValueOrigin.REPORTED,
                         text_value=energy_effect,
+                        source_locator="Table 1",
                     ),
                 ],
             )

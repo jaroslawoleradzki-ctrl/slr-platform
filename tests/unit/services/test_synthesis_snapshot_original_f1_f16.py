@@ -232,12 +232,14 @@ def _append_revision(
                             status=ValueStatus.PRESENT,
                             origin=ValueOrigin.REPORTED,
                             text_value=practice,
+                            source_locator="Table 1",
                         ),
                         ExtractedValueState(
                             field_key="energy_effect_indicator",
                             status=ValueStatus.PRESENT,
                             origin=ValueOrigin.REPORTED,
                             text_value=effect,
+                            source_locator="Table 1",
                         ),
                     ],
                 )
@@ -630,6 +632,7 @@ class TestF8OrderingInsensitiveIdentity:
                     status=ValueStatus.PRESENT,
                     origin=ValueOrigin.REPORTED,
                     text_value="5S",
+                    source_locator="Table 1",
                 )
             ],
         )
@@ -643,6 +646,7 @@ class TestF8OrderingInsensitiveIdentity:
                     status=ValueStatus.PRESENT,
                     origin=ValueOrigin.REPORTED,
                     text_value="reduction",
+                    source_locator="Table 1",
                 )
             ],
         )

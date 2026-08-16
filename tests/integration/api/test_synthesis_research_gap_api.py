@@ -134,18 +134,22 @@ def _seed_evidence(db_path: str, proj_id: str) -> dict:
                         ExtractedValueState(
                             field_key="lean_practice", status=ValueStatus.PRESENT,
                             origin=ValueOrigin.REPORTED, text_value="Single Minute Exchange of Die",
+                            source_locator="Table 1",
                         ),
                         ExtractedValueState(
                             field_key="energy_effect_indicator", status=ValueStatus.PRESENT,
                             origin=ValueOrigin.REPORTED, text_value="Compressed Air",
+                            source_locator="Table 1",
                         ),
                         ExtractedValueState(
                             field_key="impact_mechanism", status=ValueStatus.PRESENT,
                             origin=ValueOrigin.REPORTED, text_value="Reduced idle time in die changeovers.",
+                            source_locator="Table 1",
                         ),
                         ExtractedValueState(
                             field_key="moderating_conditions", status=ValueStatus.PRESENT,
                             origin=ValueOrigin.REPORTED, text_value="High product mix environment.",
+                            source_locator="Table 1",
                         ),
                     ],
                 )

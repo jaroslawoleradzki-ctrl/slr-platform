@@ -104,18 +104,21 @@ def _seed_evidence(db_path: str, proj_id: str) -> dict:
                             status=ValueStatus.PRESENT,
                             origin=ValueOrigin.REPORTED,
                             text_value="SMED",
+                            source_locator="Table 1",
                         ),
                         ExtractedValueState(
                             field_key="energy_effect_indicator",
                             status=ValueStatus.PRESENT,
                             origin=ValueOrigin.REPORTED,
                             text_value="Compressed Air",
+                            source_locator="Table 1",
                         ),
                         ExtractedValueState(
                             field_key="moderating_conditions",
                             status=ValueStatus.PRESENT,
                             origin=ValueOrigin.REPORTED,
                             text_value="Context text.",
+                            source_locator="Table 1",
                         ),
                     ],
                 )

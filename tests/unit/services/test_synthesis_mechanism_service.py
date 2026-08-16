@@ -234,18 +234,21 @@ def test_discovery_of_source_mechanism_text_and_synchronization(env):
                 status=ValueStatus.PRESENT,
                 origin=ValueOrigin.REPORTED,
                 text_value="Kaizen Event",
+                source_locator="Table 1",
             ),
             ExtractedValueState(
                 field_key="energy_effect_indicator",
                 status=ValueStatus.PRESENT,
                 origin=ValueOrigin.REPORTED,
                 text_value="Electricity Draw",
+                source_locator="Table 1",
             ),
             ExtractedValueState(
                 field_key="impact_mechanism",
                 status=ValueStatus.PRESENT,
                 origin=ValueOrigin.REPORTED,
                 text_value=source_mech,
+                source_locator="Table 1",
             ),
         ],
     )
@@ -454,6 +457,7 @@ def test_source_evidence_immutability(env):
                 status=ValueStatus.PRESENT,
                 origin=ValueOrigin.REPORTED,
                 text_value=original_source_text,
+                source_locator="Table 1",
             ),
         ],
     )
@@ -584,9 +588,9 @@ def test_complete_rev1_and_draft_rev2_uses_rev1(env):
                     group_key="lean_energy_relationships",
                     item_index=1,
                     values=[
-                        ExtractedValueState(field_key="lean_practice", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="Kaizen Rev1"),
-                        ExtractedValueState(field_key="energy_effect_indicator", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="Electricity Rev1"),
-                        ExtractedValueState(field_key="impact_mechanism", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="Mechanism Rev1"),
+                        ExtractedValueState(field_key="lean_practice", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="Kaizen Rev1", source_locator="Table 1"),
+                        ExtractedValueState(field_key="energy_effect_indicator", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="Electricity Rev1", source_locator="Table 1"),
+                        ExtractedValueState(field_key="impact_mechanism", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="Mechanism Rev1", source_locator="Table 1"),
                     ],
                 )
             ],
@@ -608,9 +612,9 @@ def test_complete_rev1_and_draft_rev2_uses_rev1(env):
                     group_key="lean_energy_relationships",
                     item_index=1,
                     values=[
-                        ExtractedValueState(field_key="lean_practice", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="Kaizen Rev2 Draft"),
-                        ExtractedValueState(field_key="energy_effect_indicator", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="Electricity Rev2 Draft"),
-                        ExtractedValueState(field_key="impact_mechanism", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="Mechanism Rev2 Draft"),
+                        ExtractedValueState(field_key="lean_practice", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="Kaizen Rev2 Draft", source_locator="Table 1"),
+                        ExtractedValueState(field_key="energy_effect_indicator", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="Electricity Rev2 Draft", source_locator="Table 1"),
+                        ExtractedValueState(field_key="impact_mechanism", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="Mechanism Rev2 Draft", source_locator="Table 1"),
                     ],
                 )
             ],
@@ -664,9 +668,9 @@ def test_draft_only_extraction_excluded_from_synthesis(env):
                     group_key="lean_energy_relationships",
                     item_index=1,
                     values=[
-                        ExtractedValueState(field_key="lean_practice", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="5S Draft"),
-                        ExtractedValueState(field_key="energy_effect_indicator", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="Energy Draft"),
-                        ExtractedValueState(field_key="impact_mechanism", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="Mechanism Draft"),
+                        ExtractedValueState(field_key="lean_practice", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="5S Draft", source_locator="Table 1"),
+                        ExtractedValueState(field_key="energy_effect_indicator", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="Energy Draft", source_locator="Table 1"),
+                        ExtractedValueState(field_key="impact_mechanism", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="Mechanism Draft", source_locator="Table 1"),
                     ],
                 )
             ],
@@ -715,9 +719,9 @@ def test_later_complete_rev3_advances_synthesis(env):
                     group_key="lean_energy_relationships",
                     item_index=1,
                     values=[
-                        ExtractedValueState(field_key="lean_practice", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="Kaizen"),
-                        ExtractedValueState(field_key="energy_effect_indicator", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="Electricity"),
-                        ExtractedValueState(field_key="impact_mechanism", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="Rev1 Mechanism Text"),
+                        ExtractedValueState(field_key="lean_practice", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="Kaizen", source_locator="Table 1"),
+                        ExtractedValueState(field_key="energy_effect_indicator", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="Electricity", source_locator="Table 1"),
+                        ExtractedValueState(field_key="impact_mechanism", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="Rev1 Mechanism Text", source_locator="Table 1"),
                     ],
                 )
             ],
@@ -744,9 +748,9 @@ def test_later_complete_rev3_advances_synthesis(env):
                     group_key="lean_energy_relationships",
                     item_index=1,
                     values=[
-                        ExtractedValueState(field_key="lean_practice", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="Kaizen Draft"),
-                        ExtractedValueState(field_key="energy_effect_indicator", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="Electricity Draft"),
-                        ExtractedValueState(field_key="impact_mechanism", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="Rev2 Draft Mechanism"),
+                        ExtractedValueState(field_key="lean_practice", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="Kaizen Draft", source_locator="Table 1"),
+                        ExtractedValueState(field_key="energy_effect_indicator", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="Electricity Draft", source_locator="Table 1"),
+                        ExtractedValueState(field_key="impact_mechanism", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="Rev2 Draft Mechanism", source_locator="Table 1"),
                     ],
                 )
             ],
@@ -773,9 +777,9 @@ def test_later_complete_rev3_advances_synthesis(env):
                     group_key="lean_energy_relationships",
                     item_index=1,
                     values=[
-                        ExtractedValueState(field_key="lean_practice", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="Kaizen Final"),
-                        ExtractedValueState(field_key="energy_effect_indicator", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="Electricity Final"),
-                        ExtractedValueState(field_key="impact_mechanism", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="Rev3 Complete Mechanism Text"),
+                        ExtractedValueState(field_key="lean_practice", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="Kaizen Final", source_locator="Table 1"),
+                        ExtractedValueState(field_key="energy_effect_indicator", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="Electricity Final", source_locator="Table 1"),
+                        ExtractedValueState(field_key="impact_mechanism", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="Rev3 Complete Mechanism Text", source_locator="Table 1"),
                     ],
                 )
             ],
@@ -821,10 +825,10 @@ def test_e10_absent_and_e11_present_produces_none_source_mechanism_text(env):
                     group_key="lean_energy_relationships",
                     item_index=1,
                     values=[
-                        ExtractedValueState(field_key="lean_practice", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="5S"),
-                        ExtractedValueState(field_key="energy_effect_indicator", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="Fuel"),
+                        ExtractedValueState(field_key="lean_practice", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="5S", source_locator="Table 1"),
+                        ExtractedValueState(field_key="energy_effect_indicator", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="Fuel", source_locator="Table 1"),
                         # E11 present, E10 absent
-                        ExtractedValueState(field_key="moderating_conditions", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="High ambient operating temperature in factory."),
+                        ExtractedValueState(field_key="moderating_conditions", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="High ambient operating temperature in factory.", source_locator="Table 1"),
                     ],
                 )
             ],
@@ -871,10 +875,10 @@ def test_e10_present_and_e11_present_exact_e10_wins(env):
                     group_key="lean_energy_relationships",
                     item_index=1,
                     values=[
-                        ExtractedValueState(field_key="lean_practice", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="TPM"),
-                        ExtractedValueState(field_key="energy_effect_indicator", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="Electricity"),
-                        ExtractedValueState(field_key="impact_mechanism", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="Preventative motor lubrication cuts frictional resistance."),
-                        ExtractedValueState(field_key="moderating_conditions", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="Continuous assembly operations with high uptime."),
+                        ExtractedValueState(field_key="lean_practice", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="TPM", source_locator="Table 1"),
+                        ExtractedValueState(field_key="energy_effect_indicator", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="Electricity", source_locator="Table 1"),
+                        ExtractedValueState(field_key="impact_mechanism", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="Preventative motor lubrication cuts frictional resistance.", source_locator="Table 1"),
+                        ExtractedValueState(field_key="moderating_conditions", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="Continuous assembly operations with high uptime.", source_locator="Table 1"),
                     ],
                 )
             ],
@@ -920,9 +924,9 @@ def test_task_10_3_and_10_4_resolve_same_complete_evidence_revision(env):
                     group_key="lean_energy_relationships",
                     item_index=1,
                     values=[
-                        ExtractedValueState(field_key="lean_practice", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="VSM"),
-                        ExtractedValueState(field_key="energy_effect_indicator", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="Peak Demand"),
-                        ExtractedValueState(field_key="impact_mechanism", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="Staggering heavy furnace startup across shifts."),
+                        ExtractedValueState(field_key="lean_practice", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="VSM", source_locator="Table 1"),
+                        ExtractedValueState(field_key="energy_effect_indicator", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="Peak Demand", source_locator="Table 1"),
+                        ExtractedValueState(field_key="impact_mechanism", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="Staggering heavy furnace startup across shifts.", source_locator="Table 1"),
                     ],
                 )
             ],
@@ -972,9 +976,9 @@ def test_researcher_assignments_preserved_when_newer_draft_appears(env):
                     group_key="lean_energy_relationships",
                     item_index=1,
                     values=[
-                        ExtractedValueState(field_key="lean_practice", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="Kaizen"),
-                        ExtractedValueState(field_key="energy_effect_indicator", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="Electricity"),
-                        ExtractedValueState(field_key="impact_mechanism", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="Turning off idle conveyers."),
+                        ExtractedValueState(field_key="lean_practice", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="Kaizen", source_locator="Table 1"),
+                        ExtractedValueState(field_key="energy_effect_indicator", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="Electricity", source_locator="Table 1"),
+                        ExtractedValueState(field_key="impact_mechanism", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="Turning off idle conveyers.", source_locator="Table 1"),
                     ],
                 )
             ],
@@ -1006,8 +1010,8 @@ def test_researcher_assignments_preserved_when_newer_draft_appears(env):
                     group_key="lean_energy_relationships",
                     item_index=1,
                     values=[
-                        ExtractedValueState(field_key="lean_practice", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="Kaizen Incomplete"),
-                        ExtractedValueState(field_key="energy_effect_indicator", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="Electricity Incomplete"),
+                        ExtractedValueState(field_key="lean_practice", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="Kaizen Incomplete", source_locator="Table 1"),
+                        ExtractedValueState(field_key="energy_effect_indicator", status=ValueStatus.PRESENT, origin=ValueOrigin.REPORTED, text_value="Electricity Incomplete", source_locator="Table 1"),
                     ],
                 )
             ],

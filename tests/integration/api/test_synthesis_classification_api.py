@@ -64,12 +64,14 @@ def client(tmp_path: Path, monkeypatch):
                             status=ValueStatus.PRESENT,
                             origin=ValueOrigin.REPORTED,
                             text_value="5S Visuals",
+                            source_locator="Table 1",
                         ),
                         ExtractedValueState(
                             field_key="energy_effect_indicator",
                             status=ValueStatus.PRESENT,
                             origin=ValueOrigin.REPORTED,
                             text_value="10% kWh reduction",
+                            source_locator="Table 1",
                         ),
                     ],
                 )

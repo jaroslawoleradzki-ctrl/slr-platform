@@ -47,8 +47,10 @@ DEV_EXTRA = "0023_extraction_field_state_contract.sql"
 def _all_reconciled_files() -> list[Path]:
     """The final merged migration set in sorted application order."""
     files = sorted(MIGRATIONS_DIR.glob("*.sql"))
-    assert FIXTURE_0023.exists(), "0023 fixture must be present"
-    return sorted([*files, FIXTURE_0023])
+    if not any(f.name == DEV_EXTRA for f in files):
+        assert FIXTURE_0023.exists(), "0023 fixture must be present"
+        files = [*files, FIXTURE_0023]
+    return sorted(files)
 
 
 def _apply(db_path: Path, files: list[Path], up_to: str | None = None) -> None:
@@ -132,6 +134,7 @@ def _seed_extraction_rows(db_path: Path, proj_id: str) -> None:
                             status=ValueStatus.PRESENT,
                             origin=ValueOrigin.REPORTED,
                             text_value="5S",
+                            source_locator="Table 1",
                         )
                     ],
                 )
@@ -185,7 +188,7 @@ def test_scenario_1_fresh_db_reconciled_schema(tmp_path: Path) -> None:
 def test_scenario_2_development_db_including_0023_to_phase10(tmp_path: Path) -> None:
     """An existing development DB (0023 applied) upgrades to the Phase 10 schema cleanly."""
     db_path = tmp_path / "dev.db"
-    dev_files = [*sorted(MIGRATIONS_DIR.glob("*.sql")), FIXTURE_0023]
+    dev_files = sorted(MIGRATIONS_DIR.glob("*.sql"))
     _apply(db_path, dev_files, up_to="0023_extraction_field_state_contract.sql")
     _check_integrity(db_path)
 
@@ -224,7 +227,7 @@ def test_scenario_2_development_db_including_0023_to_phase10(tmp_path: Path) -> 
 def test_scenario_2b_adr0007_rows_are_tolerated_by_synthesis_read_path(tmp_path: Path) -> None:
     """Extraction values written under the ADR-0007 contract hydrate without crashing."""
     db_path = tmp_path / "dev_read.db"
-    dev_files = [*sorted(MIGRATIONS_DIR.glob("*.sql")), FIXTURE_0023]
+    dev_files = sorted(MIGRATIONS_DIR.glob("*.sql"))
     _apply(db_path, dev_files, up_to="0023_extraction_field_state_contract.sql")
 
     SqliteProjectRepository(db_path).create(Project(project_id="p", title="P", description=""))
@@ -252,8 +255,7 @@ def test_scenario_3_phase10_db_to_reconciled(tmp_path: Path) -> None:
     SqliteProjectRepository(db_path).create(Project(project_id="p10", title="P10", description=""))
     _seed_extraction_rows(db_path, "p10")
 
-    # 0023 is applied last; extracted_values are rebuilt preserving all rows.
-    _apply(db_path, [FIXTURE_0023])
+    # 0023 is part of the reconciled migration set and applied in sorted order.
     _check_integrity(db_path)
 
     assert "0023_extraction_field_state_contract.sql" in _applied_versions(db_path)

@@ -154,14 +154,17 @@ def _values(lean_practice="Value Stream Mapping", energy_effect="reduction", *, 
         ExtractedValueState(
             field_key="lean_practice", status=ValueStatus.PRESENT,
             origin=ValueOrigin.REPORTED, text_value=lean_practice,
+            source_locator="Table 1",
         ),
         ExtractedValueState(
             field_key="energy_effect_indicator", status=ValueStatus.PRESENT,
             origin=ValueOrigin.REPORTED, text_value=energy_effect,
+            source_locator="Table 1",
         ),
         ExtractedValueState(
             field_key="direction", status=ValueStatus.PRESENT,
             origin=ValueOrigin.REPORTED, text_value="improvement",
+            source_locator="Table 1",
         ),
     ]
     if impact_mechanism is not None:
@@ -169,6 +172,7 @@ def _values(lean_practice="Value Stream Mapping", energy_effect="reduction", *, 
             ExtractedValueState(
                 field_key="impact_mechanism", status=ValueStatus.PRESENT,
                 origin=ValueOrigin.REPORTED, text_value=impact_mechanism,
+                source_locator="Table 1",
             )
         )
     if moderating_conditions is not None:
@@ -176,6 +180,7 @@ def _values(lean_practice="Value Stream Mapping", energy_effect="reduction", *, 
             ExtractedValueState(
                 field_key="moderating_conditions", status=ValueStatus.PRESENT,
                 origin=ValueOrigin.REPORTED, text_value=moderating_conditions,
+                source_locator="Table 1",
             )
         )
     return values
@@ -349,11 +354,13 @@ class TestOriginalE4NoAutoInconsistentGap:
         values_a[2] = ExtractedValueState(
             field_key="direction", status=ValueStatus.PRESENT,
             origin=ValueOrigin.REPORTED, text_value="improvement",
+            source_locator="Table 1",
         )
         values_b = _values()
         values_b[2] = ExtractedValueState(
             field_key="direction", status=ValueStatus.PRESENT,
             origin=ValueOrigin.REPORTED, text_value="degradation",
+            source_locator="Table 1",
         )
 
         _append_revision(

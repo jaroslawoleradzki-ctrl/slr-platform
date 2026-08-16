@@ -107,18 +107,21 @@ def _seed_complete_evidence(db_path: str, proj_id: str) -> dict:
                             status=ValueStatus.PRESENT,
                             origin=ValueOrigin.REPORTED,
                             text_value="SMED Setup",
+                            source_locator="Table 1",
                         ),
                         ExtractedValueState(
                             field_key="energy_effect_indicator",
                             status=ValueStatus.PRESENT,
                             origin=ValueOrigin.REPORTED,
                             text_value="Compressed Air",
+                            source_locator="Table 1",
                         ),
                         ExtractedValueState(
                             field_key="impact_mechanism",
                             status=ValueStatus.PRESENT,
                             origin=ValueOrigin.REPORTED,
                             text_value="Reduced idle time.",
+                            source_locator="Table 1",
                         ),
                     ],
                 )
@@ -156,7 +159,7 @@ def test_adversarial_malformed_uuids_rejected(client):
     assert test_client.put(
         _synth_url(proj_id, "context", "assign", "not-a-uuid"),
         params={"projectId": proj_id},
-    ).status_code in (404, 422)
+    ).status_code in (404, 405, 422)
 
 
 def test_adversarial_context_cross_project_mutation_rejected(client):

@@ -171,12 +171,14 @@ def _seed_evidence(db_path: str, proj_id: str) -> dict:
                             status=ValueStatus.PRESENT,
                             origin=ValueOrigin.REPORTED,
                             text_value="Single Minute Exchange of Die",
+                            source_locator="Table 1",
                         ),
                         ExtractedValueState(
                             field_key="energy_effect_indicator",
                             status=ValueStatus.PRESENT,
                             origin=ValueOrigin.REPORTED,
                             text_value="Compressed Air",
+                            source_locator="Table 1",
                         ),
                     ],
                 )
@@ -375,6 +377,7 @@ def test_c4_relevant_data_change_changes_dataset_hash(service_env):
                             status=ValueStatus.PRESENT,
                             origin=ValueOrigin.REPORTED,
                             text_value="Changed Practice Value",
+                            source_locator="Table 1",
                         )
                     ],
                 )
@@ -415,6 +418,7 @@ def test_c5_draft_revision_does_not_change_dataset_hash(service_env):
                             status=ValueStatus.PRESENT,
                             origin=ValueOrigin.REPORTED,
                             text_value="Draft practice value",
+                            source_locator="Table 1",
                         )
                     ],
                 )
