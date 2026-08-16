@@ -682,7 +682,7 @@ def canonicalize_extraction_value(value: ExtractedValueState) -> dict[str, Any]:
     return {
         "field_key": value.field_key,
         "status": value.status.value,
-        "origin": value.origin.value,
+        "origin": value.origin.value if value.origin is not None else None,
         "text_value": value.text_value,
         "int_value": value.int_value,
         "float_value": value.float_value,

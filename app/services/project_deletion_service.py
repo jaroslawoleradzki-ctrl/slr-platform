@@ -50,6 +50,30 @@ from app.repositories.sqlite_quality_assessment_repository import (
     default_project_quality_assessment_configuration_repository,
     default_quality_assessment_repository,
 )
+from app.repositories.synthesis_classification_repository import (
+    SynthesisClassificationRepository,
+    default_synthesis_classification_repository,
+)
+from app.repositories.synthesis_context_repository import (
+    SqliteSynthesisContextRepository,
+    default_synthesis_context_repository,
+)
+from app.repositories.synthesis_gap_repository import (
+    SqliteSynthesisGapRepository,
+    default_synthesis_gap_repository,
+)
+from app.repositories.synthesis_matrix_repository import (
+    SqliteSynthesisMatrixRepository,
+    default_synthesis_matrix_repository,
+)
+from app.repositories.synthesis_mechanism_repository import (
+    SqliteSynthesisMechanismRepository,
+    default_synthesis_mechanism_repository,
+)
+from app.repositories.synthesis_snapshot_repository import (
+    SqliteSynthesisSnapshotRepository,
+    default_synthesis_snapshot_repository,
+)
 from app.repositories.transaction_manager import SqliteTransactionManager, default_transaction_manager
 
 
@@ -78,6 +102,12 @@ class SqliteProjectDeletionService:
         quality_assessment_repo: QualityAssessmentRepository | None = None,
         quality_assessment_config_repo: ProjectQualityAssessmentConfigurationRepository | None = None,
         extraction_repo: SqliteExtractionRepository | None = None,
+        classification_repo: SynthesisClassificationRepository | None = None,
+        matrix_repo: SqliteSynthesisMatrixRepository | None = None,
+        mechanism_repo: SqliteSynthesisMechanismRepository | None = None,
+        context_repo: SqliteSynthesisContextRepository | None = None,
+        gap_repo: SqliteSynthesisGapRepository | None = None,
+        snapshot_repo: SqliteSynthesisSnapshotRepository | None = None,
         tx_manager: SqliteTransactionManager | None = None,
     ) -> None:
         self._project_repo = project_repo or default_project_repository()
@@ -104,6 +134,12 @@ class SqliteProjectDeletionService:
         )
         self._conflict_resolution_repo = conflict_resolution_repo or default_conflict_resolution_repository()
         self._extraction_repo = extraction_repo or default_extraction_repository()
+        self._classification_repo = classification_repo or default_synthesis_classification_repository()
+        self._matrix_repo = matrix_repo or default_synthesis_matrix_repository()
+        self._mechanism_repo = mechanism_repo or default_synthesis_mechanism_repository()
+        self._context_repo = context_repo or default_synthesis_context_repository()
+        self._gap_repo = gap_repo or default_synthesis_gap_repository()
+        self._snapshot_repo = snapshot_repo or default_synthesis_snapshot_repository()
         self._tx_manager = tx_manager or default_transaction_manager()
 
     def delete_project(self, project_id: str) -> None:
@@ -123,6 +159,14 @@ class SqliteProjectDeletionService:
             self._search_strategy_repo.delete_for_project(project_id, connection=conn)
             self._quality_assessment_repo.delete_for_project(project_id, connection=conn)
             self._quality_assessment_config_repo.delete_for_project(project_id, connection=conn)
+            # Phase 10 synthesis data (Tasks 10.2-10.7). Deletion is ordered so that
+            # dependent tables are removed before their parents.
+            self._snapshot_repo.delete_for_project(project_id, connection=conn)
+            self._gap_repo.delete_for_project(project_id, connection=conn)
+            self._context_repo.delete_for_project(project_id, connection=conn)
+            self._mechanism_repo.delete_for_project(project_id, connection=conn)
+            self._matrix_repo.delete_for_project(project_id, connection=conn)
+            self._classification_repo.delete_for_project(project_id, connection=conn)
             # Delete the project row last. The repository existence check is
             # deliberately inside this transaction so a missing project also
             # rolls back every preceding cleanup statement.

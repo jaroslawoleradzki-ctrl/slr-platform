@@ -74,6 +74,8 @@ class SynthesisClassificationRepository(Protocol):
         self, project_id: str, term_type: TermType, source_value: str, connection: Any = None
     ) -> bool: ...
 
+    def delete_for_project(self, project_id: str, connection: Any = None) -> None: ...
+
 
 class SqliteSynthesisClassificationRepository(SynthesisClassificationRepository):
     """SQLite implementation of terminology classification repository."""
@@ -533,6 +535,20 @@ class SqliteSynthesisClassificationRepository(SynthesisClassificationRepository)
             if close_conn:
                 conn.commit()
             return deleted
+        finally:
+            if close_conn:
+                conn.close()
+
+    def delete_for_project(self, project_id: str, connection: Any = None) -> None:
+        """Deletes all classification data for a project (project lifecycle cleanup)."""
+        conn = self._get_connection(connection)
+        close_conn = connection is None
+        try:
+            conn.execute("DELETE FROM synthesis_term_mappings WHERE project_id = ?;", (project_id,))
+            conn.execute("DELETE FROM synthesis_lean_categories WHERE project_id = ?;", (project_id,))
+            conn.execute("DELETE FROM synthesis_energy_categories WHERE project_id = ?;", (project_id,))
+            if close_conn:
+                conn.commit()
         finally:
             if close_conn:
                 conn.close()

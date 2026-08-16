@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { Camera, GitFork, Grid, Layers, Tag, Target } from 'lucide-react';
+import { Camera, GitFork, Grid, Layers, SlidersHorizontal, Tag, Target } from 'lucide-react';
 import { useProject } from '../context/ProjectContext';
 import { ClassificationWorkspace } from '../components/synthesis/ClassificationWorkspace';
 import { LeanEEMatrix } from '../components/synthesis/LeanEEMatrix';
 import { MechanismWorkspace } from '../components/synthesis/MechanismWorkspace';
+import { ContextWorkspace } from '../components/synthesis/ContextWorkspace';
 import { ResearchGapsWorkspace } from '../components/synthesis/ResearchGapsWorkspace';
 import { SnapshotsWorkspace } from '../components/synthesis/SnapshotsWorkspace';
 
@@ -14,7 +15,7 @@ export const EvidenceSynthesisPage: React.FC = () => {
   const currentProjectId = projectId || activeProject?.id || 'lean_energy';
 
   const [activeSubTab, setActiveSubTab] = useState<
-    'classification' | 'matrix' | 'mechanisms' | 'research-gaps' | 'snapshots'
+    'classification' | 'matrix' | 'mechanisms' | 'context' | 'research-gaps' | 'snapshots'
   >('classification');
 
   return (
@@ -110,6 +111,28 @@ export const EvidenceSynthesisPage: React.FC = () => {
 
         <button
           type="button"
+          data-testid="synthesis-tab-context"
+          onClick={() => setActiveSubTab('context')}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            padding: '8px 16px',
+            borderRadius: 'var(--radius-md)',
+            border: 'none',
+            backgroundColor: activeSubTab === 'context' ? 'var(--accent-subtle)' : 'transparent',
+            color: activeSubTab === 'context' ? 'var(--accent-primary)' : 'var(--text-secondary)',
+            fontWeight: activeSubTab === 'context' ? 600 : 400,
+            cursor: 'pointer',
+            fontSize: '0.9rem',
+          }}
+        >
+          <SlidersHorizontal size={16} />
+          <span>4. Context Synthesis</span>
+        </button>
+
+        <button
+          type="button"
           data-testid="synthesis-tab-research-gaps"
           onClick={() => setActiveSubTab('research-gaps')}
           style={{
@@ -127,7 +150,7 @@ export const EvidenceSynthesisPage: React.FC = () => {
           }}
         >
           <Target size={16} />
-          <span>4. Research Gap Synthesis</span>
+          <span>5. Research Gap Synthesis</span>
         </button>
 
         <button
@@ -149,7 +172,7 @@ export const EvidenceSynthesisPage: React.FC = () => {
           }}
         >
           <Camera size={16} />
-          <span>5. Synthesis Snapshots</span>
+          <span>6. Synthesis Snapshots</span>
         </button>
       </div>
 
@@ -167,6 +190,10 @@ export const EvidenceSynthesisPage: React.FC = () => {
 
       {activeSubTab === 'mechanisms' && (
         <MechanismWorkspace projectId={currentProjectId} />
+      )}
+
+      {activeSubTab === 'context' && (
+        <ContextWorkspace projectId={currentProjectId} />
       )}
 
       {activeSubTab === 'research-gaps' && (

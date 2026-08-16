@@ -17,6 +17,9 @@ class SqliteTransactionManager:
     def transaction(self) -> Generator[sqlite3.Connection, None, None]:
         connection = sqlite3.connect(self._database_path)
         try:
+            # Enforce ON DELETE CASCADE during atomic multi-repository operations
+            # (project lifecycle cleanup relies on it for cascade-deleted tables).
+            connection.execute("PRAGMA foreign_keys = ON;")
             with connection:
                 yield connection
         finally:

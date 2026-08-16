@@ -15,6 +15,7 @@ from app.domain.extraction import (
     ExtractionCompletenessStatus,
     ExtractionRecord,
     ExtractionRevision,
+    ExtractionValidationError,
     ProjectExtractionConfiguration,
     ValueOrigin,
     ValueStatus,
@@ -310,6 +311,15 @@ class SqliteExtractionRepository:
         values: list[ExtractedValueState],
         group_item_id: UUID | None,
     ) -> None:
+        def _origin_required(value: ExtractedValueState) -> str:
+            if value.origin is None:
+                raise ExtractionValidationError(
+                    [
+                        f"Extracted value for field '{value.field_key}' must declare an origin when persisted."
+                    ]
+                )
+            return value.origin.value
+
         connection.executemany(
             """INSERT INTO extracted_values (
             value_id, revision_id, group_item_id, field_key, status, origin,
@@ -323,7 +333,7 @@ class SqliteExtractionRepository:
                     str(group_item_id) if group_item_id else None,
                     value.field_key,
                     value.status.value,
-                    value.origin.value,
+                    _origin_required(value),
                     value.text_value,
                     value.int_value,
                     value.float_value,
@@ -423,7 +433,7 @@ def _value_from_child_row(row: tuple) -> ExtractedValueState:
         value_id=UUID(row[1]),
         field_key=row[5],
         status=ValueStatus(row[6]),
-        origin=ValueOrigin(row[7]),
+        origin=ValueOrigin(row[7]) if row[7] is not None else None,
         text_value=row[8],
         int_value=row[9],
         float_value=row[10],
