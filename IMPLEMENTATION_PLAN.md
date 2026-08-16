@@ -10,7 +10,7 @@ Unlike ROADMAP.md, this file is intentionally technical and may change frequentl
 
 Current release:
 
-v0.4.9 — Extraction Correctness Foundation (ADR-0007)
+v0.5.0 — Data Synthesis (Phase 10)
 
 Status:
 
@@ -44,10 +44,16 @@ Release scope:
 - Data Extraction eligibility diagnostics: projects without an extraction
   configuration retain their blocked publication list and show the required
   configuration message in the default table view.
+- Phase 10 Data Synthesis: deterministic researcher-controlled terminology
+  classification, Lean–EE Analytical Matrix, mechanism/context/Research Gap
+  synthesis, immutable deterministic Synthesis Snapshots, JSON snapshot and
+  CSV Analytical Relations exports, project isolation and traceability,
+  COMPLETE-only eligible evidence semantics, and criterion-level QA
+  integration. No built-in AI/LLM functionality.
 
 Next milestone:
 
-Phase 7.9 — Screening Integration and Release (Implemented; manual acceptance pending after Phase 8 integration)
+Phase 11 — Integrated GUI MVP
 
 ---
 
@@ -868,7 +874,11 @@ Status:
 
 ---
 
-# Phase 10 — Evidence Synthesis
+# Phase 10 — Evidence Synthesis ✅
+
+Phase 10 is complete in v0.5.0 through Tasks 10.1–10.8. The detailed
+architecture and implementation record is maintained in
+`docs/plans/phase-10-data-synthesis-architecture.md`.
 
 ## 10.1 Evidence Synthesis Domain
 

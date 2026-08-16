@@ -226,6 +226,16 @@ not block Title & Abstract Screening.
   server-authoritative Draft/Complete validation, narrow legacy compatibility,
   and safe append-only revision identity handling.
 
+### Version 0.5.0 — Data Synthesis ✅
+
+- **Phase 10 — Data Synthesis** ✅ — Completed Tasks 10.1–10.8: researcher-
+  controlled deterministic terminology classification, Lean–EE Analytical
+  Matrix, mechanism synthesis, context synthesis, Research Gap synthesis,
+  immutable Synthesis Snapshots with deterministic identity, JSON snapshot and
+  CSV Analytical Relations exports, project isolation and traceability,
+  COMPLETE-only eligible evidence semantics, criterion-level QA integration,
+  and E2E verification. No built-in AI/LLM functionality is included.
+
 ### Version 0.4.7 — Data Extraction Configuration Visibility ✅
 
 - Data Extraction retains and displays backend eligibility results for projects

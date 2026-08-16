@@ -1,6 +1,6 @@
 # SLR Platform — Project Status
 
-_Last updated: 2026-08-15_
+_Last updated: 2026-08-16_
 
 ## Current status
 
@@ -14,20 +14,24 @@ development
 
 Current version:
 
-v0.4.9
+v0.5.0
 
 Current release status:
 
-Phase 9 Data Extraction is formally completed and released in v0.4.6, with
-the v0.4.7 configuration visibility patch, v0.4.8 project template
-configuration workflow, and v0.4.9 Extraction Correctness Foundation on
-development.
-Phase 10 remains unimplemented.
+Phase 9 Data Extraction is formally completed and released through v0.4.9.
+Phase 10 Data Synthesis is complete in v0.5.0.
 
 Current development phase:
 
-Phase 9 — Data Extraction is complete through 9.8 and released. Phase 10 has
-not started.
+Phase 10 — Data Synthesis is complete through Tasks 10.1–10.8 and released in
+v0.5.0.
+
+Phase 10 provides researcher-controlled deterministic synthesis with
+terminology classification, the Lean–EE Analytical Matrix, mechanism,
+context, and Research Gap synthesis, immutable Synthesis Snapshots with
+deterministic identity and JSON/CSV exports, project isolation and
+traceability, COMPLETE-only eligible evidence semantics, and criterion-level
+QA integration. The application has no built-in AI/LLM functionality.
 
 Phase 6.7 & Phase 6.8 Workflow State:
 - **Phase 6.7 (Modules 1–4 Functional Workflow)**: ✅ Completed (6.7.1, 6.7.2a, 6.7.2b).
@@ -1007,7 +1011,7 @@ Every feature must:
 
 # Next milestone
 
-Phase 7.6 — Full-Text Screening (Phase 7 — Screening).
+Phase 11 — Integrated GUI MVP.
 
 ---
 
