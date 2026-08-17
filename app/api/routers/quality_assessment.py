@@ -1,7 +1,7 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from app.api.dto.quality_assessment import (
     ProjectQualityAssessmentConfigurationRequest,
@@ -185,20 +185,35 @@ def get_quality_assessment_overview(
 )
 def list_quality_assessment_eligible_records(
     project_id: str,
-    reviewer_id: str,
+    reviewer_id: str = Query(..., min_length=1),
     service: Annotated[
         QualityAssessmentExecutionService, Depends(get_execution_service)
-    ],
-    status_filter: QualityAssessmentStatusFilter = QualityAssessmentStatusFilter.ALL,
-    page: int = 1,
-    page_size: int = 20,
+    ] = None,  # type: ignore[assignment]
+    filter_status: QualityAssessmentStatusFilter | None = Query(default=None, alias="status"),
+    status_filter: QualityAssessmentStatusFilter | None = Query(default=None),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
 ) -> QualityAssessmentRecordListResponse:
     """List eligible publications for Quality Assessment with current assessment state."""
+    if filter_status is not None and status_filter is not None:
+        if filter_status != status_filter:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Conflicting query parameters provided: status='{filter_status.value}' and status_filter='{status_filter.value}'",
+            )
+        effective_filter = filter_status
+    elif filter_status is not None:
+        effective_filter = filter_status
+    elif status_filter is not None:
+        effective_filter = status_filter
+    else:
+        effective_filter = QualityAssessmentStatusFilter.ALL
+
     try:
         record_list = service.list_eligible_records(
             project_id=project_id,
             reviewer_id=reviewer_id,
-            status_filter=status_filter,
+            status_filter=effective_filter,
             page=page,
             page_size=page_size,
         )

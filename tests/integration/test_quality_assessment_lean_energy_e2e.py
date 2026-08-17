@@ -557,14 +557,39 @@ class TestLeanEnergyNegativeValidation:
 
         from app.domain.quality_assessment import QualityAssessmentResponseValue
 
-        # All responses with blank (whitespace-only) justification
+        # NO responses with blank (whitespace-only) justification must raise error
         blank_inputs = [
-            CriterionResponseInput(criterion_id=c.criterion_id, response_value=QualityAssessmentResponseValue.YES, justification="   ")
+            CriterionResponseInput(criterion_id=c.criterion_id, response_value=QualityAssessmentResponseValue.NO, justification="   ")
             for c in criteria
         ]
 
         with pytest.raises((ValueError, Exception)):
             execution_service.save_assessment(project_id, pub_id, reviewer_id, blank_inputs)
+
+    def test_yes_response_with_empty_justification_succeeds(
+        self,
+        configured_project: tuple[str, UUID, str],
+        execution_service: DefaultQualityAssessmentExecutionService,
+        catalog_repo: SqliteQualityAssessmentCatalogRepository,
+    ) -> None:
+        project_id, pub_id, reviewer_id = configured_project
+        template = catalog_repo.get_template_version(LEAN_ENERGY_TEMPLATE_ID)
+        assert template is not None
+        criteria = sorted(template.criteria, key=lambda c: c.display_order)
+
+        from app.domain.quality_assessment import QualityAssessmentResponseValue
+
+        # YES responses with empty justification are valid
+        yes_inputs = [
+            CriterionResponseInput(criterion_id=c.criterion_id, response_value=QualityAssessmentResponseValue.YES, justification="")
+            for c in criteria
+        ]
+
+        assessment = execution_service.save_assessment(project_id, pub_id, reviewer_id, yes_inputs)
+        assert assessment is not None
+        assert len(assessment.responses) == len(criteria)
+        assert all(r.response_value == QualityAssessmentResponseValue.YES for r in assessment.responses)
+        assert all(r.justification == "" for r in assessment.responses)
 
     def test_duplicate_criterion_response_raises_error(
         self,

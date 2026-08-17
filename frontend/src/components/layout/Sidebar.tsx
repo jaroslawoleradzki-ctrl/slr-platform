@@ -56,6 +56,22 @@ export const Sidebar: React.FC = () => {
       return <span style={{ fontSize: '0.7rem', color: 'var(--status-error-text)' }}>{item.label || 'Błąd'}</span>;
     }
 
+    if (item.state === 'completed') {
+      return (
+        <span style={{ fontSize: '0.7rem', color: 'var(--status-success-text)', fontWeight: 600 }}>
+          {item.label || 'Skończono'}
+        </span>
+      );
+    }
+
+    if (item.state === 'in_progress' || item.state === 'pending_action') {
+      return (
+        <Badge variant={item.state === 'pending_action' ? 'pending_action' : 'default'}>
+          {item.label}
+        </Badge>
+      );
+    }
+
     if (item.label) {
       return <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{item.label}</span>;
     }
