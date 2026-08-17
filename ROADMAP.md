@@ -236,6 +236,18 @@ not block Title & Abstract Screening.
   COMPLETE-only eligible evidence semantics, criterion-level QA integration,
   and E2E verification. No built-in AI/LLM functionality is included.
 
+### Version 0.5.1 — Quality Assessment & Workflow State Bugfixes ✅
+
+- **Reviewer persistence**: Reviewer identity persists across page refreshes via
+  canonical `useReviewerIdentity()`, avoiding duplicate page-level state.
+- **Quality Assessment workflow**: Optional YES justification with required
+  NO / CANNOT_DETERMINE justifications, deterministic Save & Next queue
+  advancement without reset or backward jumps, canonical `status` filter parameter
+  with legacy `status_filter` compatibility and 422 conflict validation.
+- **Workflow & dashboard status**: Shared workflow state derivation across
+  Dashboard and Sidebar, with derived actionable/pending_action semantics
+  for Exports & PRISMA.
+
 ### Version 0.4.7 — Data Extraction Configuration Visibility ✅
 
 - Data Extraction retains and displays backend eligibility results for projects
