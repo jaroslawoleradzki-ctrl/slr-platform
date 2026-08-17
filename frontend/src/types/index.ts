@@ -522,14 +522,18 @@ export interface WorkflowNavigationStatus {
   };
   qualityAssessment: {
     state: WorkflowStageState;
+    count?: number | null;
+    total?: number | null;
     label: string;
   };
   dataExtraction: {
-    state: 'not_available';
+    state: WorkflowStageState;
+    count?: number | null;
+    total?: number | null;
     label: string;
   };
   exports: {
-    state: 'not_available' | 'available';
+    state: WorkflowStageState;
     label: string;
   };
 }

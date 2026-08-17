@@ -113,33 +113,18 @@ const StageCard: React.FC<StageCardProps> = ({ id, icon, label, state, primary, 
   );
 };
 
-// ─── Unavailable row (stages 5–8, no navigation) ─────────────────────────────
-
-const UnavailableRow: React.FC<{ icon: React.ReactNode; label: string }> = ({ icon, label }) => (
-  <div
-    aria-disabled="true"
-    style={{
-      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-      padding: '9px 12px',
-      borderRadius: 'var(--radius-md)',
-      border: '1px solid var(--border-subtle)',
-      backgroundColor: 'var(--bg-surface)',
-      opacity: 0.5,
-    }}
-  >
-    <div style={{ display: 'flex', alignItems: 'center', gap: '7px', color: 'var(--text-muted)', fontSize: '0.8rem' }}>
-      {icon}<span>{label}</span>
-    </div>
-    <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 600 }}>Niedostępne</span>
-  </div>
-);
-
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export const ProjectDashboardPage: React.FC = () => {
-  const { activeProject, workflowStatus, workflowStatusLoading } = useProject();
+  const { activeProject, workflowStatus, workflowStatusLoading, refreshWorkflowStatus } = useProject();
   const { projectId } = useParams<{ projectId?: string }>();
   const pid = projectId || activeProject?.id || '';
+
+  React.useEffect(() => {
+    if (pid) {
+      void refreshWorkflowStatus(pid);
+    }
+  }, [pid, refreshWorkflowStatus]);
 
   if (!activeProject) return null;
 
@@ -180,7 +165,7 @@ export const ProjectDashboardPage: React.FC = () => {
         </div>
       )}
 
-      {/* Stage status cards 1–4 (render when workflowStatus available) */}
+      {/* Stage status cards 1–5 (render when workflowStatus available) */}
       {s && (
         <div>
           <h3 style={{ fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', fontWeight: 600, marginBottom: '10px' }}>
@@ -260,30 +245,77 @@ export const ProjectDashboardPage: React.FC = () => {
         </div>
       )}
 
-      {/* Later stages remain unavailable; Full Text is executable after 7.6. */}
-      <Card
-        title={
-          <span style={{ fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', fontWeight: 600 }}>
-            Etapy Przyszłe
-          </span>
-        }
-        style={{ gap: '6px' }}
-      >
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-          <StageCard
-            id="stage-card-full-text-screening"
-            icon={<Filter size={13} style={{ color: 'var(--accent-primary)' }} />}
-            label="5b. Full-Text Screening"
-            state="not_started"
-            primary="Dostępne"
-            secondary="Eligible publikacje po Title & Abstract Screening"
-            route={`/projects/${pid}/screen/full-text`}
-          />
-          <UnavailableRow icon={<Award size={13} />}         label="6. Quality Assessment" />
-          <UnavailableRow icon={<FileSpreadsheet size={13} />} label="7. Data Extraction" />
-          <UnavailableRow icon={<FileCheck2 size={13} />}    label="8. Exports & PRISMA" />
-        </div>
-      </Card>
+      {/* Subsequent Stages (Screening onward) */}
+      {s && (
+        <Card
+          title={
+            <span style={{ fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', fontWeight: 600 }}>
+              Kolejne Etapy Badania
+            </span>
+          }
+          style={{ gap: '6px' }}
+        >
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '10px' }}>
+            <StageCard
+              id="stage-card-full-text-screening"
+              icon={<Filter size={13} style={{ color: 'var(--accent-primary)' }} />}
+              label="5b. Full-Text Screening"
+              state={s.fullTextScreening.state}
+              primary={
+                s.fullTextScreening.state === 'not_started'
+                  ? 'Dostępne'
+                  : s.fullTextScreening.total !== null && s.fullTextScreening.total > 0
+                    ? `${s.fullTextScreening.count ?? 0}/${s.fullTextScreening.total} oceniono`
+                    : s.fullTextScreening.label || 'Dostępne'
+              }
+              secondary={s.fullTextScreening.label}
+              route={`/projects/${pid}/screen/full-text`}
+            />
+
+            <StageCard
+              id="stage-card-quality-assessment"
+              icon={<Award size={13} style={{ color: 'var(--status-warning-text)' }} />}
+              label="6. Quality Assessment"
+              state={s.qualityAssessment.state}
+              primary={
+                s.qualityAssessment.state === 'completed'
+                  ? 'Skończono'
+                  : s.qualityAssessment.total !== undefined && s.qualityAssessment.total !== null && s.qualityAssessment.total > 0
+                    ? `${s.qualityAssessment.count ?? 0}/${s.qualityAssessment.total} oceniono`
+                    : s.qualityAssessment.label
+              }
+              secondary={s.qualityAssessment.state === 'completed' ? 'Ocena jakościowa zakończona' : s.qualityAssessment.label}
+              route={`/projects/${pid}/quality-assessment`}
+            />
+
+            <StageCard
+              id="stage-card-data-extraction"
+              icon={<FileSpreadsheet size={13} style={{ color: 'var(--status-info-text)' }} />}
+              label="7. Data Extraction"
+              state={s.dataExtraction.state}
+              primary={
+                s.dataExtraction.state === 'completed'
+                  ? 'Skończono'
+                  : s.dataExtraction.total !== undefined && s.dataExtraction.total !== null && s.dataExtraction.total > 0
+                    ? `${s.dataExtraction.count ?? 0}/${s.dataExtraction.total} wyekstrahowano`
+                    : s.dataExtraction.label
+              }
+              secondary={s.dataExtraction.state === 'completed' ? 'Ekstrakcja zakończona' : s.dataExtraction.label}
+              route={`/projects/${pid}/extract`}
+            />
+
+            <StageCard
+              id="stage-card-exports"
+              icon={<FileCheck2 size={13} style={{ color: 'var(--status-success-text)' }} />}
+              label="8. Exports & PRISMA"
+              state={s.exports.state}
+              primary={s.exports.label}
+              secondary="Eksport danych i diagram PRISMA"
+              route={`/projects/${pid}/exports`}
+            />
+          </div>
+        </Card>
+      )}
     </div>
   );
 };

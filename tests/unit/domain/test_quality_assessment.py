@@ -151,3 +151,57 @@ def test_quality_assessment_response_and_assessment_validation():
             template_id=tid,
             responses=[r1, r_dup],
         )
+
+
+def test_quality_assessment_justification_rules():
+    aid = uuid4()
+    cid = uuid4()
+
+    # 1. YES with empty justification is valid
+    r_yes_empty = QualityAssessmentResponse(
+        assessment_id=aid,
+        criterion_id=cid,
+        question_snapshot="Is there a clear objective?",
+        response_value=QualityAssessmentResponseValue.YES,
+        justification="",
+    )
+    assert r_yes_empty.justification == ""
+
+    # 2. YES with default justification is valid
+    r_yes_default = QualityAssessmentResponse(
+        assessment_id=aid,
+        criterion_id=cid,
+        question_snapshot="Is there a clear objective?",
+        response_value=QualityAssessmentResponseValue.YES,
+    )
+    assert r_yes_default.justification == ""
+
+    # 3. NO with empty justification raises ValidationError
+    with pytest.raises(ValidationError, match="Non-blank justification required"):
+        QualityAssessmentResponse(
+            assessment_id=aid,
+            criterion_id=cid,
+            question_snapshot="Is there a clear objective?",
+            response_value=QualityAssessmentResponseValue.NO,
+            justification="",
+        )
+
+    # 4. CANNOT_DETERMINE with empty justification raises ValidationError
+    with pytest.raises(ValidationError, match="Non-blank justification required"):
+        QualityAssessmentResponse(
+            assessment_id=aid,
+            criterion_id=cid,
+            question_snapshot="Is there a clear objective?",
+            response_value=QualityAssessmentResponseValue.CANNOT_DETERMINE,
+            justification="   ",
+        )
+
+    # 5. NO with non-blank justification is valid
+    r_no = QualityAssessmentResponse(
+        assessment_id=aid,
+        criterion_id=cid,
+        question_snapshot="Is there a clear objective?",
+        response_value=QualityAssessmentResponseValue.NO,
+        justification="No objective found.",
+    )
+    assert r_no.justification == "No objective found."

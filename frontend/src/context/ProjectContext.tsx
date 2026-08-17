@@ -16,15 +16,29 @@ import {
   SearchResultsImportMetadata,
 } from '../types';
 import { projectApiService } from '../services/api/projectApi';
-import { screeningApi, TitleAbstractOverview } from '../services/api/screeningApi';
+import { screeningApi, TitleAbstractOverview, FullTextOverview } from '../services/api/screeningApi';
+import { qualityAssessmentApi, QualityAssessmentOverview } from '../services/api/qualityAssessmentApi';
+import { extractionApi, ExtractionProgressResponseDTO } from '../services/api/extractionApi';
 
-const computeWorkflowStatus = (
+export const computeWorkflowStatus = (
   searchStrategy: SearchStrategy | null,
   imports: BibliographicImportHistoryRecord[] | null,
   normalization: NormalizationResponse | null,
   deduplication: ApiDuplicateGroupListResponse | null,
   screeningOverview: TitleAbstractOverview | null,
-  errors: { search?: boolean; sources?: boolean; normalization?: boolean; deduplication?: boolean; screening?: boolean } = {}
+  fullTextOverview: FullTextOverview | null,
+  qaOverview: QualityAssessmentOverview | null,
+  extractionProgress: ExtractionProgressResponseDTO | null,
+  errors: {
+    search?: boolean;
+    sources?: boolean;
+    normalization?: boolean;
+    deduplication?: boolean;
+    screening?: boolean;
+    fullText?: boolean;
+    qualityAssessment?: boolean;
+    dataExtraction?: boolean;
+  } = {}
 ): WorkflowNavigationStatus => {
   // Stage 1: Search Strategy
   let searchState: WorkflowStageState = 'not_started';
@@ -108,7 +122,7 @@ const computeWorkflowStatus = (
     }
   }
 
-// Stage 5: Title & Abstract Screening
+  // Stage 5: Title & Abstract Screening
   let screeningState: WorkflowStageState = 'not_started';
   let screeningCount: number | null = null;
   let screeningTotal: number | null = null;
@@ -144,9 +158,135 @@ const computeWorkflowStatus = (
   let ftTotal: number | null = null;
   let ftLabel: string | null = 'Oczekuje';
 
+  if (fullTextOverview && fullTextOverview.ready) {
+    if (fullTextOverview.progress && fullTextOverview.progress.total > 0) {
+      const p = fullTextOverview.progress;
+      ftCount = p.completed;
+      ftTotal = p.total;
+      if (p.completed === p.total) {
+        ftState = 'completed';
+        ftLabel = 'Skończono';
+      } else if (p.completed > 0) {
+        ftState = 'in_progress';
+        ftLabel = `${p.completed}/${p.total} oceniono`;
+      } else {
+        ftState = 'pending_action';
+        ftLabel = `${p.unscreened} do oceny`;
+      }
+    } else if (fullTextOverview.eligible_records_count > 0) {
+      ftState = 'pending_action';
+      ftTotal = fullTextOverview.eligible_records_count;
+      ftCount = 0;
+      ftLabel = `${fullTextOverview.eligible_records_count} do oceny`;
+    } else {
+      ftState = 'not_started';
+      ftLabel = 'Brak publikacji';
+    }
+  } else if (screeningState === 'completed') {
+    ftState = 'not_started';
+    ftLabel = 'Dostępne';
+  } else {
+    ftState = 'not_available';
+    ftLabel = 'Oczekuje';
+  }
+
   // Stage 6: Quality Assessment
   let qaState: WorkflowStageState = 'not_available';
+  let qaCount: number | null = null;
+  let qaTotal: number | null = null;
   let qaLabel = 'Niedostępne';
+
+  if (qaOverview) {
+    if (qaOverview.readiness === 'ready') {
+      qaTotal = qaOverview.total_eligible;
+      qaCount = qaOverview.total_assessed;
+      if (qaOverview.total_eligible > 0) {
+        if (qaOverview.total_assessed === qaOverview.total_eligible) {
+          qaState = 'completed';
+          qaLabel = 'Skończono';
+        } else if (qaOverview.total_assessed > 0) {
+          qaState = 'in_progress';
+          qaLabel = `${qaOverview.total_assessed}/${qaOverview.total_eligible} oceniono`;
+        } else {
+          qaState = 'pending_action';
+          qaLabel = `${qaOverview.total_remaining} do oceny`;
+        }
+      } else {
+        qaState = 'not_started';
+        qaLabel = 'Dostępne';
+      }
+    } else if (qaOverview.readiness === 'no_quality_assessment_configuration') {
+      qaState = 'pending_action';
+      qaLabel = 'Wymaga konfiguracji';
+    } else if (qaOverview.readiness === 'no_eligible_publications') {
+      if (ftState === 'completed') {
+        qaState = 'not_started';
+        qaLabel = 'Brak zakwalifikowanych prac';
+      } else {
+        qaState = 'not_available';
+        qaLabel = 'Oczekuje na Full-Text';
+      }
+    } else {
+      qaState = 'not_available';
+      qaLabel = 'Niedostępne';
+    }
+  } else if (ftState === 'completed') {
+    qaState = 'not_started';
+    qaLabel = 'Dostępne';
+  }
+
+  // Stage 7: Data Extraction
+  let extractionState: WorkflowStageState = 'not_available';
+  let extractionCount: number | null = null;
+  let extractionTotal: number | null = null;
+  let extractionLabel = 'Niedostępne';
+
+  if (extractionProgress) {
+    extractionTotal = extractionProgress.total_eligible_publications;
+    extractionCount = extractionProgress.complete_count;
+    if (extractionProgress.total_eligible_publications > 0) {
+      if (extractionProgress.complete_count === extractionProgress.total_eligible_publications) {
+        extractionState = 'completed';
+        extractionLabel = 'Skończono';
+      } else if (extractionProgress.complete_count > 0 || extractionProgress.in_progress_count > 0) {
+        extractionState = 'in_progress';
+        extractionLabel = `${extractionProgress.complete_count}/${extractionProgress.total_eligible_publications} wyekstrahowano`;
+      } else {
+        extractionState = 'pending_action';
+        extractionLabel = `${extractionProgress.total_eligible_publications} do ekstrakcji`;
+      }
+    } else if (qaState === 'completed' || qaState === 'in_progress') {
+      extractionState = 'not_started';
+      extractionLabel = 'Dostępne';
+    } else {
+      extractionState = 'not_available';
+      extractionLabel = 'Oczekuje na QA';
+    }
+  } else if (qaState === 'completed') {
+    extractionState = 'not_started';
+    extractionLabel = 'Dostępne';
+  }
+
+  // Stage 8: Exports & PRISMA
+  // NOTE: Stage 8 availability is DERIVED from the completion or readiness of upstream milestones
+  // (Title & Abstract screening, Full-Text screening, Quality Assessment, or Data Extraction).
+  // It indicates that exportable data exists and is actionable ('pending_action'), rather than reflecting
+  // an independent persisted export completion entity ('completed').
+  let exportsState: WorkflowStageState = 'not_available';
+  let exportsLabel = 'Niedostępne';
+
+  if (
+    screeningState === 'completed' ||
+    ftState === 'completed' ||
+    qaState === 'completed' ||
+    extractionState === 'completed'
+  ) {
+    exportsState = 'pending_action';
+    exportsLabel = 'Dostępne';
+  } else {
+    exportsState = 'not_available';
+    exportsLabel = 'Niedostępne';
+  }
 
   return {
     search: { state: searchState, count: searchCount, label: searchLabel },
@@ -172,9 +312,22 @@ const computeWorkflowStatus = (
       total: ftTotal,
       label: ftLabel,
     },
-    qualityAssessment: { state: qaState, label: qaLabel },
-    dataExtraction: { state: 'not_available', label: 'Niedostępne' },
-    exports: { state: 'not_available', label: 'Niedostępne' },
+    qualityAssessment: {
+      state: qaState,
+      count: qaCount,
+      total: qaTotal,
+      label: qaLabel,
+    },
+    dataExtraction: {
+      state: extractionState,
+      count: extractionCount,
+      total: extractionTotal,
+      label: extractionLabel,
+    },
+    exports: {
+      state: exportsState,
+      label: exportsLabel,
+    },
   };
 };
 
@@ -253,12 +406,26 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setWorkflowStatusError(null);
     setDuplicateGroupError(null);
 
-    const [searchRes, importsRes, normRes, dedupRes, screeningRes] = await Promise.allSettled([
+    const reviewer = localStorage.getItem('slr_screening_reviewer_id') || 'default_reviewer';
+
+    const [
+      searchRes,
+      importsRes,
+      normRes,
+      dedupRes,
+      screeningRes,
+      fullTextRes,
+      qaRes,
+      extractionProgressRes,
+    ] = await Promise.allSettled([
       projectApiService.getSearchStrategy(targetProjectId),
       projectApiService.getBibliographicImports(targetProjectId),
       projectApiService.getNormalization(targetProjectId),
       projectApiService.getDuplicateGroups(targetProjectId),
-      screeningApi.getOverview(targetProjectId, 'default_reviewer'),
+      screeningApi.getOverview(targetProjectId, reviewer),
+      screeningApi.getFullTextOverview(targetProjectId, reviewer),
+      qualityAssessmentApi.getOverview(targetProjectId, reviewer),
+      extractionApi.getExtractionProgress(targetProjectId, reviewer),
     ]);
 
     if (activeProjectIdRef.current !== targetProjectId) return;
@@ -268,6 +435,9 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const normalization = normRes.status === 'fulfilled' ? normRes.value : null;
     const deduplication = dedupRes.status === 'fulfilled' ? dedupRes.value : null;
     const screeningOverview = screeningRes.status === 'fulfilled' ? screeningRes.value : null;
+    const fullTextOverview = fullTextRes.status === 'fulfilled' ? fullTextRes.value : null;
+    const qaOverview = qaRes.status === 'fulfilled' ? qaRes.value : null;
+    const extractionProgress = extractionProgressRes.status === 'fulfilled' ? extractionProgressRes.value : null;
 
     if (searchRes.status === 'fulfilled' && searchStrategy) {
       const conceptGroups = searchStrategy.concept_groups.map((cg) => ({
@@ -336,6 +506,9 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
       normalization: normRes.status === 'rejected',
       deduplication: dedupRes.status === 'rejected',
       screening: screeningRes.status === 'rejected',
+      fullText: fullTextRes.status === 'rejected',
+      qualityAssessment: qaRes.status === 'rejected',
+      dataExtraction: extractionProgressRes.status === 'rejected',
     };
 
     const status = computeWorkflowStatus(
@@ -344,6 +517,9 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
       normalization,
       deduplication,
       screeningOverview,
+      fullTextOverview,
+      qaOverview,
+      extractionProgress,
       errors
     );
 

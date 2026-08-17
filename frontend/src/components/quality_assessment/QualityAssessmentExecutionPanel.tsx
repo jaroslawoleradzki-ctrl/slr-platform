@@ -93,11 +93,11 @@ export const QualityAssessmentExecutionPanel: React.FC<QualityAssessmentExecutio
   const pub = detail.publication;
   const template = detail.template;
 
-  // Validation: Check if all required criteria are answered with non-blank justification
+  // Validation: Check if all required criteria are answered, and justification is provided when required (NO / CANNOT_DETERMINE)
   const missingRequired = template.criteria.some((crit) => {
     const draft = draftResponses[crit.criterion_id];
     if (crit.is_required && !draft?.value) return true;
-    if (draft?.value && (!draft.justification || !draft.justification.trim())) return true;
+    if (draft?.value && draft.value !== 'YES' && (!draft.justification || !draft.justification.trim())) return true;
     return false;
   });
 
@@ -354,7 +354,11 @@ export const QualityAssessmentExecutionPanel: React.FC<QualityAssessmentExecutio
                     htmlFor={`justification-${crit.criterion_id}`}
                     style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '4px' }}
                   >
-                    Uzasadnienie (wymagane w przypadku wyboru odpowiedzi):
+                    {selectedVal === 'YES'
+                      ? 'Uzasadnienie (opcjonalne):'
+                      : selectedVal
+                        ? 'Uzasadnienie (wymagane w przypadku wyboru odpowiedzi):'
+                        : 'Uzasadnienie:'}
                   </label>
 
                   <textarea
@@ -375,7 +379,7 @@ export const QualityAssessmentExecutionPanel: React.FC<QualityAssessmentExecutio
                       resize: 'vertical',
                     }}
                   />
-                  {selectedVal && (!draft.justification || !draft.justification.trim()) && (
+                  {selectedVal && selectedVal !== 'YES' && (!draft.justification || !draft.justification.trim()) && (
                     <span style={{ fontSize: '0.75rem', color: 'var(--status-error-text)', marginTop: '2px', display: 'block' }}>
                       Wymagane jest wprowadzenie niepustego uzasadnienia.
                     </span>
