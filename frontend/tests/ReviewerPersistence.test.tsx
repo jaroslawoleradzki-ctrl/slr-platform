@@ -183,9 +183,7 @@ describe('Reviewer identity persistence (bugfix/reviewer-persistence)', () => {
     await screen.findByText('Lean Energy Effectiveness Study');
 
     fireEvent.click(screen.getAllByRole('button', { name: 'TAK' })[0]);
-    const textareas = screen.getAllByLabelText('Uzasadnienie (wymagane w przypadku wyboru odpowiedzi):', {
-      exact: false,
-    });
+    const textareas = screen.getAllByLabelText(/Uzasadnienie/i);
     fireEvent.change(textareas[0], { target: { value: 'Well-defined cohort.' } });
     fireEvent.click(screen.getByRole('button', { name: 'Zapisz' }));
 
