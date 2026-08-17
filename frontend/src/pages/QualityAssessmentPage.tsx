@@ -20,8 +20,8 @@ import { QualityAssessmentConfigPanel } from '../components/quality_assessment/Q
 import { QualityAssessmentExecutionPanel } from '../components/quality_assessment/QualityAssessmentExecutionPanel';
 import { Award, Filter, RefreshCw, User, Settings } from 'lucide-react';
 import { screeningControlStyle, screeningLabelStyle } from '../components/screening/screeningFormStyles';
+import { useReviewerIdentity } from '../hooks/useReviewerIdentity';
 
-const REVIEWER_KEY = 'slr_screening_reviewer_id';
 const PAGE_SIZE = 20;
 
 const filterOptions: Array<{ value: QualityAssessmentStatusFilter; label: string }> = [
@@ -44,7 +44,7 @@ export const QualityAssessmentPage: React.FC = () => {
       ? requestedStatus
       : 'unassessed';
 
-  const [reviewer, setReviewer] = useState<string>(() => localStorage.getItem(REVIEWER_KEY) || '');
+  const { reviewerId: reviewer, setReviewerId: setReviewer } = useReviewerIdentity();
   const [reviewerDraft, setReviewerDraft] = useState<string>(reviewer);
   const [reviewerModal, setReviewerModal] = useState<boolean>(!reviewer);
 
@@ -187,7 +187,6 @@ export const QualityAssessmentPage: React.FC = () => {
       setError('Identyfikator recenzenta nie może być pusty.');
       return;
     }
-    localStorage.setItem(REVIEWER_KEY, value);
     setReviewer(value);
     setReviewerModal(false);
     setError(null);
