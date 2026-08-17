@@ -167,16 +167,33 @@ class QualityAssessmentResponse(BaseModel):
     guidance_snapshot: StrictStr | None = None
     is_required_snapshot: StrictBool = True
     response_value: QualityAssessmentResponseValue
-    justification: StrictStr = Field(min_length=1)
+    justification: StrictStr = ""
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
-    @field_validator("question_snapshot", "justification")
+    @field_validator("question_snapshot")
     @classmethod
-    def validate_non_blank_text(cls, value: str) -> str:
+    def validate_non_blank_question(cls, value: str) -> str:
         stripped = value.strip()
         if not stripped:
-            raise ValueError("text fields must not be blank")
+            raise ValueError("question_snapshot must not be blank")
         return stripped
+
+    @field_validator("justification")
+    @classmethod
+    def normalize_justification(cls, value: str) -> str:
+        return value.strip()
+
+    @model_validator(mode="after")
+    def validate_justification_requirement(self) -> "QualityAssessmentResponse":
+        if self.response_value in (
+            QualityAssessmentResponseValue.NO,
+            QualityAssessmentResponseValue.CANNOT_DETERMINE,
+        ):
+            if not self.justification:
+                raise ValueError(
+                    f"Non-blank justification required for response_value '{self.response_value.value}'"
+                )
+        return self
 
     @field_validator("guidance_snapshot")
     @classmethod

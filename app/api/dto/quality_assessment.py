@@ -137,7 +137,7 @@ class CriterionResponseInputDto(BaseModel):
 
     criterion_id: UUID
     response_value: QualityAssessmentResponseValue
-    justification: str = Field(min_length=1)
+    justification: str = ""
 
 
 class SaveQualityAssessmentRequest(BaseModel):

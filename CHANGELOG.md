@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.5.1] — 2026-08-17
+
+### Fixed
+
+- **Reviewer Identity Persistence**: Reviewer identity now persists across page
+  refreshes through canonical `useReviewerIdentity()`, eliminating duplicate
+  page-level persistence state.
+- **Quality Assessment Justification Rules**: Assessment justification is now
+  optional for `YES` responses while remaining strictly required for `NO` and
+  `CANNOT_DETERMINE`.
+- **Quality Assessment Save & Next Progression**: `Save and Next` now advances
+  deterministically to the next publication in sequence without resetting to the
+  first publication or jumping backward at the end of the unassessed queue.
+- **Quality Assessment Filtering**: Standardized on canonical `status` query
+  parameter for QA filtering, maintaining backwards compatibility for legacy
+  `status_filter`, and returning HTTP 422 if conflicting values are supplied.
+- **Workflow & Dashboard State Synchronization**: Dashboard and Sidebar navigation
+  now use shared workflow status derivation reflecting actual project stage
+  readiness instead of duplicated stale page state.
+- **Exports & PRISMA Actionable Semantics**: Exports and PRISMA availability is
+  derived as actionable/pending_action once upstream stages are satisfied,
+  preventing false premature completed status.
+
 ## [0.5.0] — 2026-08-16
 
 ### Added

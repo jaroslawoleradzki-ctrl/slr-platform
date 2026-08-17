@@ -20,8 +20,8 @@ import { QualityAssessmentConfigPanel } from '../components/quality_assessment/Q
 import { QualityAssessmentExecutionPanel } from '../components/quality_assessment/QualityAssessmentExecutionPanel';
 import { Award, Filter, RefreshCw, User, Settings } from 'lucide-react';
 import { screeningControlStyle, screeningLabelStyle } from '../components/screening/screeningFormStyles';
+import { useReviewerIdentity } from '../hooks/useReviewerIdentity';
 
-const REVIEWER_KEY = 'slr_screening_reviewer_id';
 const PAGE_SIZE = 20;
 
 const filterOptions: Array<{ value: QualityAssessmentStatusFilter; label: string }> = [
@@ -44,7 +44,7 @@ export const QualityAssessmentPage: React.FC = () => {
       ? requestedStatus
       : 'unassessed';
 
-  const [reviewer, setReviewer] = useState<string>(() => localStorage.getItem(REVIEWER_KEY) || '');
+  const { reviewerId: reviewer, setReviewerId: setReviewer } = useReviewerIdentity();
   const [reviewerDraft, setReviewerDraft] = useState<string>(reviewer);
   const [reviewerModal, setReviewerModal] = useState<boolean>(!reviewer);
 
@@ -187,7 +187,6 @@ export const QualityAssessmentPage: React.FC = () => {
       setError('Identyfikator recenzenta nie może być pusty.');
       return;
     }
-    localStorage.setItem(REVIEWER_KEY, value);
     setReviewer(value);
     setReviewerModal(false);
     setError(null);
@@ -241,6 +240,11 @@ export const QualityAssessmentPage: React.FC = () => {
   const handleSaveAssessment = async (goNext: boolean) => {
     if (!currentDetail || saving) return;
 
+    const currentPubId = currentDetail.publication.record_id;
+    const currentIndex = records.findIndex(
+      (item) => item.publication.record_id === currentPubId
+    );
+
     const payloadResponses = currentDetail.template.criteria.flatMap((crit) => {
       const draft = draftResponses[crit.criterion_id];
       if (!draft || !draft.value) return [];
@@ -259,27 +263,14 @@ export const QualityAssessmentPage: React.FC = () => {
     try {
       await qualityAssessmentApi.saveAssessment(projectId, {
         reviewer_id: reviewer,
-        publication_id: currentDetail.publication.record_id,
+        publication_id: currentPubId,
         responses: payloadResponses,
       });
 
-      // Reload fresh overview & detail
+      // Reload fresh overview & records list
       const freshOverview = await qualityAssessmentApi.getOverview(projectId, reviewer);
       setOverview(freshOverview);
 
-      const updatedDetail = await qualityAssessmentApi.getRecordDetail(
-        projectId,
-        currentDetail.publication.record_id,
-        reviewer
-      );
-      setCurrentDetail(updatedDetail);
-      initDraftForDetail(updatedDetail);
-
-      if (!goNext) return;
-
-      // Save & Next logic for UNASSESSED filter invariant:
-      // When saving an UNASSESSED record, it disappears from the UNASSESSED list.
-      // Keeping current offset re-fetches records, so index 0 is the NEXT unassessed item.
       const currentPage = Math.floor(offset / PAGE_SIZE) + 1;
       const recordList = await qualityAssessmentApi.listRecords(
         projectId,
@@ -292,25 +283,55 @@ export const QualityAssessmentPage: React.FC = () => {
       setRecords(recordList.items);
       setTotal(recordList.total);
 
-      if (recordList.items.length > 0) {
-        let nextPubId = recordList.items[0].publication.record_id;
+      if (!goNext) {
+        // Stay on current publication with refreshed assessment detail
+        const updatedDetail = await qualityAssessmentApi.getRecordDetail(
+          projectId,
+          currentPubId,
+          reviewer
+        );
+        setCurrentDetail(updatedDetail);
+        initDraftForDetail(updatedDetail);
+        return;
+      }
 
-        if (selectedFilter !== 'unassessed') {
-          const currentIndex = recordList.items.findIndex(
-            (item) => item.publication.record_id === currentDetail.publication.record_id
-          );
-          if (currentIndex >= 0 && currentIndex + 1 < recordList.items.length) {
-            nextPubId = recordList.items[currentIndex + 1].publication.record_id;
-          }
-        }
-
-        const nextDetail = await qualityAssessmentApi.getRecordDetail(projectId, nextPubId, reviewer);
-        setCurrentDetail(nextDetail);
-        initDraftForDetail(nextDetail);
-        navigate(pathFor(nextPubId) + filterQuery);
-      } else {
+      // Next publication selection logic
+      if (recordList.items.length === 0) {
         setCurrentDetail(null);
         initDraftForDetail(null);
+        navigate(pathFor() + filterQuery, { replace: true });
+        return;
+      }
+
+      let nextPubId: string;
+      if (selectedFilter === 'unassessed') {
+        // In unassessed mode, the saved record is removed from the unassessed list.
+        // The publication that immediately follows it in forward order shifts into slot `currentIndex`.
+        if (currentIndex >= 0 && currentIndex < recordList.items.length) {
+          nextPubId = recordList.items[currentIndex].publication.record_id;
+        } else {
+          // The saved item was the last unassessed publication in forward order.
+          // Never jump backward to earlier items; stay on the current publication with its refreshed state.
+          nextPubId = currentPubId;
+        }
+      } else {
+        // In 'all' or 'assessed' mode, find position of current record
+        const curIdx = recordList.items.findIndex(
+          (item) => item.publication.record_id === currentPubId
+        );
+        if (curIdx >= 0 && curIdx + 1 < recordList.items.length) {
+          nextPubId = recordList.items[curIdx + 1].publication.record_id;
+        } else {
+          // Last publication in visible list: stay on current publication without jumping backward
+          nextPubId = currentPubId;
+        }
+      }
+
+      const nextDetail = await qualityAssessmentApi.getRecordDetail(projectId, nextPubId, reviewer);
+      setCurrentDetail(nextDetail);
+      initDraftForDetail(nextDetail);
+      if (nextPubId !== publicationId) {
+        navigate(pathFor(nextPubId) + filterQuery);
       }
     } catch (caught) {
       const apiErr = caught as QualityAssessmentApiError;

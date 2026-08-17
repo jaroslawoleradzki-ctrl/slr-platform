@@ -202,3 +202,97 @@ def test_quality_assessment_execution_api_errors(exec_api_client):
         json=save_payload,
     )
     assert save_resp.status_code == 422
+
+
+def test_quality_assessment_api_status_filter_and_justification(exec_api_client):
+    client, pub_id, crit_id, _ = exec_api_client
+
+    # 1. Unassessed filter via 'status' param before saving
+    resp_unassessed = client.get(
+        "/api/v1/projects/proj_api/quality-assessment/records",
+        params={"reviewer_id": "rev_1", "status": "unassessed"},
+    )
+    assert resp_unassessed.status_code == 200
+    assert resp_unassessed.json()["total"] == 1
+
+    # 2. Assessed filter via 'status' param before saving -> 0 records
+    resp_assessed_before = client.get(
+        "/api/v1/projects/proj_api/quality-assessment/records",
+        params={"reviewer_id": "rev_1", "status": "assessed"},
+    )
+    assert resp_assessed_before.status_code == 200
+    assert resp_assessed_before.json()["total"] == 0
+
+    # 3. Save assessment with YES and empty justification
+    save_yes_empty = client.post(
+        "/api/v1/projects/proj_api/quality-assessment/assessments",
+        json={
+            "reviewer_id": "rev_1",
+            "publication_id": str(pub_id),
+            "responses": [
+                {
+                    "criterion_id": str(crit_id),
+                    "response_value": QualityAssessmentResponseValue.YES,
+                    "justification": "",
+                }
+            ],
+        },
+    )
+    assert save_yes_empty.status_code == 201
+
+    # 4. Filter 'assessed' via status param -> 1 record
+    resp_assessed_after = client.get(
+        "/api/v1/projects/proj_api/quality-assessment/records",
+        params={"reviewer_id": "rev_1", "status": "assessed"},
+    )
+    assert resp_assessed_after.status_code == 200
+    assert resp_assessed_after.json()["total"] == 1
+
+    # 5. Filter 'unassessed' via status param -> 0 records
+    resp_unassessed_after = client.get(
+        "/api/v1/projects/proj_api/quality-assessment/records",
+        params={"reviewer_id": "rev_1", "status": "unassessed"},
+    )
+    assert resp_unassessed_after.status_code == 200
+    assert resp_unassessed_after.json()["total"] == 0
+
+    # 6. Filter via status_filter param is also supported
+    resp_sf_assessed = client.get(
+        "/api/v1/projects/proj_api/quality-assessment/records",
+        params={"reviewer_id": "rev_1", "status_filter": "assessed"},
+    )
+    assert resp_sf_assessed.status_code == 200
+    assert resp_sf_assessed.json()["total"] == 1
+
+    # 6b. Both status and status_filter identical -> 200 OK
+    resp_both_matching = client.get(
+        "/api/v1/projects/proj_api/quality-assessment/records",
+        params={"reviewer_id": "rev_1", "status": "assessed", "status_filter": "assessed"},
+    )
+    assert resp_both_matching.status_code == 200
+    assert resp_both_matching.json()["total"] == 1
+
+    # 6c. Conflicting status and status_filter -> 422 Unprocessable Entity
+    resp_conflict = client.get(
+        "/api/v1/projects/proj_api/quality-assessment/records",
+        params={"reviewer_id": "rev_1", "status": "unassessed", "status_filter": "assessed"},
+    )
+    assert resp_conflict.status_code == 422
+    assert "Conflicting query parameters" in resp_conflict.json()["detail"]
+
+    # 7. NO with blank justification returns 422
+    save_no_blank = client.post(
+        "/api/v1/projects/proj_api/quality-assessment/assessments",
+        json={
+            "reviewer_id": "rev_1",
+            "publication_id": str(pub_id),
+            "responses": [
+                {
+                    "criterion_id": str(crit_id),
+                    "response_value": QualityAssessmentResponseValue.NO,
+                    "justification": "   ",
+                }
+            ],
+        },
+    )
+    assert save_no_blank.status_code == 422

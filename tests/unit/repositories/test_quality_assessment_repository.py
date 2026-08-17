@@ -28,9 +28,9 @@ def db_path(tmp_path: Path) -> Path:
     return tmp_path / "test_qa.db"
 
 
-def test_repository_protocols_runtime_checkable():
-    assert isinstance(SqliteQualityAssessmentCatalogRepository("dummy"), QualityAssessmentCatalogRepository)
-    assert isinstance(SqliteQualityAssessmentRepository("dummy"), QualityAssessmentRepository)
+def test_repository_protocols_runtime_checkable(tmp_path: Path):
+    assert isinstance(SqliteQualityAssessmentCatalogRepository(tmp_path / "dummy.db"), QualityAssessmentCatalogRepository)
+    assert isinstance(SqliteQualityAssessmentRepository(tmp_path / "dummy.db"), QualityAssessmentRepository)
 
 
 def test_sqlite_repository_automatically_applies_0013_migration(tmp_path: Path):

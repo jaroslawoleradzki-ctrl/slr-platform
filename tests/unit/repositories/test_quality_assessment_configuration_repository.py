@@ -23,9 +23,9 @@ def db_path(tmp_path: Path) -> Path:
     return tmp_path / "test_qa_config.db"
 
 
-def test_configuration_repository_protocol_runtime_checkable():
+def test_configuration_repository_protocol_runtime_checkable(tmp_path: Path):
     assert isinstance(
-        SqliteProjectQualityAssessmentConfigurationRepository("dummy"),
+        SqliteProjectQualityAssessmentConfigurationRepository(tmp_path / "dummy.db"),
         ProjectQualityAssessmentConfigurationRepository,
     )
 

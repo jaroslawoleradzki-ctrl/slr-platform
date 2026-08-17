@@ -89,7 +89,7 @@ class CriterionResponseInput(BaseModel):
 
     criterion_id: UUID
     response_value: QualityAssessmentResponseValue
-    justification: str = Field(min_length=1)
+    justification: str = ""
 
 
 class QualityAssessmentOverview(BaseModel):
@@ -386,8 +386,13 @@ class DefaultQualityAssessmentExecutionService:
                 raise ValueError(
                     f"Criterion '{inp.criterion_id}' does not belong to active assessment template '{template.template_id}'"
                 )
-            if not inp.justification.strip():
-                raise ValueError(f"Non-blank justification required for criterion '{inp.criterion_id}'")
+            if inp.response_value in (
+                QualityAssessmentResponseValue.NO,
+                QualityAssessmentResponseValue.CANNOT_DETERMINE,
+            ) and not inp.justification.strip():
+                raise ValueError(
+                    f"Non-blank justification required for criterion '{inp.criterion_id}' with response '{inp.response_value.value}'"
+                )
             input_map[inp.criterion_id] = inp
 
         # Check required criteria

@@ -337,7 +337,7 @@ def test_assessment_save_completeness_and_validation(env):
     with pytest.raises(MissingRequiredQualityCriterionResponseError):
         service.save_assessment("proj_qa", pub1.record_id, "rev_R1", [])
 
-    # 2. Blank justification rejected
+    # 2. Blank justification rejected for NO / CANNOT_DETERMINE
     with pytest.raises(ValueError, match="justification"):
         service.save_assessment(
             "proj_qa",
@@ -346,11 +346,27 @@ def test_assessment_save_completeness_and_validation(env):
             [
                 CriterionResponseInput(
                     criterion_id=crit1_id,
-                    response_value=QualityAssessmentResponseValue.YES,
+                    response_value=QualityAssessmentResponseValue.NO,
                     justification="   ",
                 )
             ],
         )
+
+    # 2b. Empty justification accepted for YES
+    saved_yes = service.save_assessment(
+        "proj_qa",
+        pub1.record_id,
+        "rev_R1",
+        [
+            CriterionResponseInput(
+                criterion_id=crit1_id,
+                response_value=QualityAssessmentResponseValue.YES,
+                justification="",
+            )
+        ],
+    )
+    assert saved_yes is not None
+    assert saved_yes.responses[0].justification == ""
 
     # 3. Duplicate criterion response rejected
     with pytest.raises(ValueError, match="Duplicate"):

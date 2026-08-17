@@ -10,7 +10,7 @@ Unlike ROADMAP.md, this file is intentionally technical and may change frequentl
 
 Current release:
 
-v0.5.0 — Data Synthesis (Phase 10)
+v0.5.1 — Quality Assessment & Workflow State Bugfixes
 
 Status:
 
@@ -50,6 +50,14 @@ Release scope:
   CSV Analytical Relations exports, project isolation and traceability,
   COMPLETE-only eligible evidence semantics, and criterion-level QA
   integration. No built-in AI/LLM functionality.
+- Reviewer identity persistence across page refresh via canonical `useReviewerIdentity()`.
+- Quality Assessment workflow corrections: optional YES justification, required
+  NO / CANNOT_DETERMINE justification, deterministic Save & Next queue progression
+  without reset or backward jumps, canonical `status` filter parameter with legacy
+  `status_filter` compatibility and 422 conflict validation.
+- Workflow and dashboard status corrections: shared workflow state derivation
+  across Dashboard and Sidebar, and derived actionable/pending_action semantics
+  for Exports & PRISMA.
 
 Next milestone:
 

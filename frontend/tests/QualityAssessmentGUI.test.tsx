@@ -259,7 +259,7 @@ describe('Quality Assessment GUI (Phase 8.4)', () => {
     expect(screen.getAllByRole('button', { name: 'NIE MOŻNA OKREŚLIĆ' }).length).toBeGreaterThan(0);
   });
 
-  it('5. SAVE & VALIDATION: requires non-blank justification and required criteria before allowing Save', async () => {
+  it('5. SAVE & VALIDATION: allows optional justification for YES, requires non-blank justification for NO', async () => {
     render(
       <MemoryRouter initialEntries={['/projects/proj-1/quality-assessment']}>
         <Routes>
@@ -274,19 +274,25 @@ describe('Quality Assessment GUI (Phase 8.4)', () => {
     const saveBtn = screen.getByRole('button', { name: 'Zapisz' });
     expect(saveBtn).toBeDisabled();
 
-    // Select TAK for criterion 1
-    const takBtns = screen.getAllByRole('button', { name: 'TAK' });
-    fireEvent.click(takBtns[0]);
-
-    // Still disabled without justification
+    // 1. Select NIE for criterion 1 -> save must remain disabled without justification
+    const nieBtns = screen.getAllByRole('button', { name: 'NIE' });
+    fireEvent.click(nieBtns[0]);
     expect(saveBtn).toBeDisabled();
 
-    // Provide justification
-    const textareas = screen.getAllByLabelText('Uzasadnienie (wymagane w przypadku wyboru odpowiedzi):', { exact: false });
-    fireEvent.change(textareas[0], { target: { value: 'Well defined study cohort and clear outcome criteria.' } });
-
-    // Now save is enabled
+    // 2. Select TAK for criterion 1 -> save is enabled immediately (justification optional)
+    const takBtns = screen.getAllByRole('button', { name: 'TAK' });
+    fireEvent.click(takBtns[0]);
     expect(saveBtn).not.toBeDisabled();
+
+    // 3. Switch back to NIE -> save becomes disabled again
+    fireEvent.click(nieBtns[0]);
+    expect(saveBtn).toBeDisabled();
+
+    // 4. Provide justification for NIE -> save becomes enabled
+    const textareas = screen.getAllByLabelText(/Uzasadnienie/i);
+    fireEvent.change(textareas[0], { target: { value: 'Well defined reason for NO response.' } });
+    expect(saveBtn).not.toBeDisabled();
+
     fireEvent.click(saveBtn);
 
     await waitFor(() => {
@@ -296,8 +302,8 @@ describe('Quality Assessment GUI (Phase 8.4)', () => {
         responses: [
           {
             criterion_id: 'crit-1',
-            response_value: 'YES',
-            justification: 'Well defined study cohort and clear outcome criteria.',
+            response_value: 'NO',
+            justification: 'Well defined reason for NO response.',
           },
         ],
       });
@@ -345,10 +351,6 @@ describe('Quality Assessment GUI (Phase 8.4)', () => {
     await screen.findByText('Lean Energy Effectiveness Study');
 
     fireEvent.click(screen.getAllByRole('button', { name: 'TAK' })[0]);
-    const textareas = screen.getAllByLabelText('Uzasadnienie (wymagane w przypadku wyboru odpowiedzi):', { exact: false });
-    fireEvent.change(textareas[0], {
-      target: { value: 'Valid study' },
-    });
 
     const saveNextBtn = screen.getByRole('button', { name: 'Zapisz i następny' });
     fireEvent.click(saveNextBtn);
