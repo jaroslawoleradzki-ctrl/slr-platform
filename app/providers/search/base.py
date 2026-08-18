@@ -25,3 +25,5 @@ class ProviderSearchOutput:
     total_count: int | None = None
     next_cursor: str | None = None
     has_more: bool = False
+    warnings: tuple[str, ...] = ()
+    is_lossless: bool | None = None
