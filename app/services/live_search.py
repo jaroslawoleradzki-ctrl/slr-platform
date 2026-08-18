@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from datetime import datetime, timezone
 from typing import Protocol
 
@@ -13,7 +14,7 @@ from app.domain.search import (
     SearchQuery,
     SearchTerm,
 )
-from app.providers.crossref import CrossrefClient
+from app.providers.crossref import CrossrefClient, CrossrefSearchFilters
 from app.providers.openalex import OpenAlexClient, OpenAlexSearchFilters
 from app.providers.search.crossref import CrossrefProvider
 from app.providers.search.openalex import OpenAlexProvider
@@ -26,7 +27,14 @@ from app.storage.raw_response_archive import RawResponseArchiveEntry
 
 
 class _InMemoryRawResponseArchive:
-    """Request-process archive used until durable raw-response storage exists."""
+    """Request-scoped in-memory archive used during the execution lifecycle.
+
+    NOTE/LIMITATION: Raw JSON responses are held in memory for the duration of
+    one search execution request. Mapped publication records and search run
+    provenance are durably persisted in SQLite via SearchResultSnapshotRepository.
+    TODO: Implement a durable raw response storage backend (e.g. SQLite blob or
+    compressed filesystem store) if long-term raw API response archiving is required.
+    """
 
     def __init__(self) -> None:
         self.entries: list[RawResponseArchiveEntry] = []
@@ -102,11 +110,17 @@ class LiveSearchService:
         http_client: httpx.AsyncClient,
     ) -> list[SearchProvider]:
         providers: list[SearchProvider] = []
+        openalex_email = os.getenv("OPENALEX_EMAIL") or os.getenv("CROSSREF_EMAIL") or None
+        crossref_email = os.getenv("CROSSREF_EMAIL") or os.getenv("OPENALEX_EMAIL") or None
+
         for name in strategy.providers:
             if name == "openalex":
                 providers.append(
                     OpenAlexProvider(
-                        client=OpenAlexClient(http_client=http_client),
+                        client=OpenAlexClient(
+                            http_client=http_client,
+                            mailto=openalex_email,
+                        ),
                         paginate=True,
                         filters=OpenAlexSearchFilters(
                             publication_year_from=strategy.publication_year_from,
@@ -120,8 +134,19 @@ class LiveSearchService:
             elif name == "crossref":
                 providers.append(
                     CrossrefProvider(
-                        client=CrossrefClient(http_client=http_client),
+                        client=CrossrefClient(
+                            http_client=http_client,
+                            mailto=crossref_email,
+                            requests_per_second=20.0,
+                        ),
                         paginate=True,
+                        filters=CrossrefSearchFilters(
+                            publication_year_from=strategy.publication_year_from,
+                            publication_year_to=strategy.publication_year_to,
+                            languages=tuple(strategy.languages),
+                            publication_types=tuple(strategy.publication_types),
+                            open_access=strategy.open_access,
+                        ),
                     )
                 )
         return providers

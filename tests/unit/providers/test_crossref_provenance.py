@@ -5,7 +5,7 @@ import httpx
 import pytest
 
 from app.domain.search import SearchQuery, SearchRun, SearchTerm
-from app.providers.crossref import CrossrefClient
+from app.providers.crossref import CrossrefClient, CrossrefSearchFilters
 from app.providers.search.crossref import CrossrefProvider
 
 _RETRIEVED_AT = datetime(2026, 7, 24, 8, 30, tzinfo=timezone.utc)
@@ -243,11 +243,11 @@ async def test_iterate_maps_provenance_for_each_work() -> None:
 
 
 @pytest.mark.anyio
-async def test_search_rejects_work_without_doi_for_provenance() -> None:
+async def test_search_preserves_work_without_doi_with_deterministic_fallback_provenance() -> None:
     async def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(
             200,
-            json={"message": {"items": [{"title": ["No DOI"]}]}},
+            json={"message": {"items": [{"title": ["No DOI Work"], "published": {"date-parts": [[2023]]}}]}},
             request=request,
         )
 
@@ -255,15 +255,241 @@ async def test_search_rejects_work_without_doi_for_provenance() -> None:
     async with httpx.AsyncClient(
         transport=httpx.MockTransport(handler)
     ) as http_client:
-        provider = CrossrefProvider(client=CrossrefClient(http_client=http_client))
-        with pytest.raises(
-            ValueError,
-            match="Crossref work DOI must be a non-blank string for provenance",
-        ):
-            await provider.search(
-                search_run=search_run,
-                search_query=search_query,
-            )
+        provider = CrossrefProvider(
+            client=CrossrefClient(http_client=http_client),
+            retrieval_clock=lambda: _RETRIEVED_AT,
+        )
+        publications = await provider.search(
+            search_run=search_run,
+            search_query=search_query,
+        )
+        repeated_publications = await provider.search(
+            search_run=search_run,
+            search_query=search_query,
+        )
+
+    assert len(publications) == 1
+    assert publications[0].title == "No DOI Work"
+    assert publications[0].identifiers == []
+    assert len(publications[0].provenance) == 1
+    provenance = publications[0].provenance[0]
+    assert provenance.source == "crossref"
+    assert provenance.source_record_id == "fallback:no doi work:2023"
+    assert publications[0].record_id == repeated_publications[0].record_id
+
+
+@pytest.mark.anyio
+async def test_search_preserves_work_without_abstract() -> None:
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={"message": {"items": [{"title": ["No Abstract Work"], "DOI": "10.1000/no-abs"}]}},
+            request=request,
+        )
+
+    search_run, search_query = _search_context()
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(handler)
+    ) as http_client:
+        provider = CrossrefProvider(
+            client=CrossrefClient(http_client=http_client),
+            retrieval_clock=lambda: _RETRIEVED_AT,
+        )
+        publications = await provider.search(
+            search_run=search_run,
+            search_query=search_query,
+        )
+
+    assert len(publications) == 1
+    assert publications[0].title == "No Abstract Work"
+    assert publications[0].abstract is None
+    assert publications[0].identifiers[0].value == "10.1000/no-abs"
+
+
+@pytest.mark.anyio
+async def test_search_with_raw_returns_total_count_next_cursor_and_has_more() -> None:
+    payload = {
+        "message": {
+            "total-results": 1420,
+            "next-cursor": "cursor-page-2",
+            "items": [{"DOI": "10.1000/item1", "title": ["Item 1"]}],
+        }
+    }
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=payload, request=request)
+
+    search_run, search_query = _search_context()
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(handler)
+    ) as http_client:
+        provider = CrossrefProvider(
+            client=CrossrefClient(http_client=http_client),
+            retrieval_clock=lambda: _RETRIEVED_AT,
+        )
+        output = await provider.search_with_raw(
+            search_run=search_run,
+            search_query=search_query,
+            cursor="*",
+        )
+
+    assert output.total_count == 1420
+    assert output.next_cursor == "cursor-page-2"
+    assert output.has_more is True
+    assert len(output.publications) == 1
+
+
+@pytest.mark.anyio
+async def test_search_with_raw_empty_page_returns_has_more_false() -> None:
+    payload = {
+        "message": {
+            "total-results": 0,
+            "next-cursor": "cursor-empty",
+            "items": [],
+        }
+    }
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=payload, request=request)
+
+    search_run, search_query = _search_context()
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(handler)
+    ) as http_client:
+        provider = CrossrefProvider(
+            client=CrossrefClient(http_client=http_client),
+            retrieval_clock=lambda: _RETRIEVED_AT,
+        )
+        output = await provider.search_with_raw(
+            search_run=search_run,
+            search_query=search_query,
+            cursor="*",
+        )
+
+    assert output.total_count == 0
+    assert output.next_cursor is None
+    assert output.has_more is False
+    assert output.publications == []
+
+
+@pytest.mark.anyio
+async def test_search_with_raw_repeating_cursor_returns_has_more_false() -> None:
+    payload = {
+        "message": {
+            "total-results": 1,
+            "next-cursor": "same-cursor",
+            "items": [{"DOI": "10.1000/item1", "title": ["Item 1"]}],
+        }
+    }
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=payload, request=request)
+
+    search_run, search_query = _search_context()
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(handler)
+    ) as http_client:
+        provider = CrossrefProvider(
+            client=CrossrefClient(http_client=http_client),
+            retrieval_clock=lambda: _RETRIEVED_AT,
+        )
+        output = await provider.search_with_raw(
+            search_run=search_run,
+            search_query=search_query,
+            cursor="same-cursor",
+        )
+
+    assert output.total_count == 1
+    assert output.next_cursor is None
+    assert output.has_more is False
+
+
+@pytest.mark.anyio
+async def test_search_paginated_with_raw_fetches_more_than_100_records() -> None:
+    search_run, search_query = _search_context()
+    requested_cursors: list[str] = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        cursor = request.url.params["cursor"]
+        requested_cursors.append(cursor)
+        page_num = len(requested_cursors)
+        items = [{"DOI": f"10.1000/item-{page_num}-{i}", "title": [f"Item {page_num}-{i}"]} for i in range(50)]
+        next_cursor = f"cursor-page-{page_num + 1}"
+        return httpx.Response(
+            200,
+            json={
+                "message": {
+                    "total-results": 500,
+                    "items": items,
+                    "next-cursor": next_cursor,
+                }
+            },
+            request=request,
+        )
+
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(handler)
+    ) as http_client:
+        provider = CrossrefProvider(
+            client=CrossrefClient(http_client=http_client),
+            paginate=True,
+            max_results=150,
+        )
+        output = await provider.search_with_raw(
+            search_run=search_run,
+            search_query=search_query,
+            rows=50,
+            cursor="*",
+        )
+
+    assert requested_cursors == ["*", "cursor-page-2", "cursor-page-3"]
+    assert len(output.publications) == 150
+    assert len(output.raw_responses) == 3
+    assert output.total_count == 500
+    assert output.next_cursor == "cursor-page-4"
+    assert output.has_more is True
+
+
+@pytest.mark.anyio
+async def test_search_with_raw_propagates_filters_and_warnings() -> None:
+    payload = {
+        "message": {
+            "total-results": 10,
+            "next-cursor": None,
+            "items": [{"DOI": "10.1000/f1", "title": ["Filtered 1"]}],
+        }
+    }
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.params["filter"] == "from-pub-date:2021-01-01,until-pub-date:2025-12-31,type:journal-article"
+        return httpx.Response(200, json=payload, request=request)
+
+    search_run, search_query = _search_context()
+    filters = CrossrefSearchFilters(
+        publication_year_from=2021,
+        publication_year_to=2025,
+        languages=("en",),
+        publication_types=("article", "review"),
+        open_access=True,
+    )
+
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(handler)
+    ) as http_client:
+        provider = CrossrefProvider(
+            client=CrossrefClient(http_client=http_client),
+            filters=filters,
+        )
+        output = await provider.search_with_raw(
+            search_run=search_run,
+            search_query=search_query,
+        )
+
+    assert len(output.warnings) == 3
+    assert output.is_lossless is False
+    assert output.total_count == 10
+    assert len(output.publications) == 1
+
 
 
 @pytest.mark.anyio

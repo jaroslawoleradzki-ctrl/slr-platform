@@ -1499,3 +1499,33 @@ Each increment should:
 ### Long-term vision
 
 The SLR Platform is intended to become a reusable research tool rather than software dedicated only to the current PhD project.
+
+---
+
+### Crossref REST API Hardening & Parity
+
+**Context**:
+The Crossref search integration required hardening for production-grade SLR operations, achieving parity with OpenAlex while strictly adhering to Crossref's polite pool and rate-limiting guidelines.
+
+**Key Architecture & Design Decisions**:
+1. **Cursor Pagination & Metadata**:
+   - Deep cursor pagination (`cursor=*`, `next-cursor`) is supported across batches without artificial limits.
+   - Bound is configurable via `max_results`.
+   - Cycle/loop prevention guards against repeating cursors or empty item payloads.
+   - Pagination metadata (`total_count` from `message.total-results`, `next_cursor`, `has_more`) is returned in `ProviderSearchOutput` and propagated to `ProviderSearchResult`.
+2. **Search Strategy Filters & Lossless Tracking**:
+   - Supported filters mapped to Crossref API:
+     - `publication_year_from` → `from-pub-date:YYYY-01-01`
+     - `publication_year_to` → `until-pub-date:YYYY-12-31`
+     - `publication_types` → `type:journal-article`, `type:proceedings-article`, `type:book-chapter`
+   - Unsupported filters (`languages`, `open_access`, `review` type) are not silently dropped; they emit explicit audit warnings and mark query execution as `is_lossless=False`.
+3. **Polite Access, Rate Limiting & Resilient Retries**:
+   - Application version is dynamically read via `app.core.version.get_app_version()` from the root `VERSION` file.
+   - `User-Agent` includes application name, dynamic version, repository link, and optional `mailto:` parameter from `CROSSREF_EMAIL` or `OPENALEX_EMAIL`.
+   - Rate limiting is managed politely (default 20 rps).
+   - Retries use exponential backoff for retryable errors (429, 500, 502, 503, 504 and network timeouts) with support for `Retry-After` header parsing. Permanent 4xx client errors (400, 401, 403, 404, 422) fail immediately without retrying.
+4. **Deterministic Fallback for Records Lacking DOI**:
+   - While DOI is normalized and preferred as `source_record_id`, records without DOI are preserved using a deterministic fallback `source_record_id = f"fallback:{clean_title}:{year}"`, generating stable `record_id` identifiers via `deterministic_search_record_id`.
+5. **Raw Response Storage Scope**:
+   - Documented `_InMemoryRawResponseArchive` as request-scoped memory storage during execution lifecycle; durable audit trail of search records and provenance is preserved in SQLite `search_result_snapshots`.
+
