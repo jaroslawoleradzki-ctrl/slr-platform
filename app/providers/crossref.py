@@ -5,6 +5,8 @@ import math
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 from typing import Any
 
 import httpx
@@ -87,10 +89,17 @@ def _parse_retry_after(response: httpx.Response) -> float | None:
     retry_after_header = response.headers.get("retry-after") or response.headers.get("Retry-After")
     if not retry_after_header:
         return None
+    cleaned = retry_after_header.strip()
     try:
-        seconds = float(retry_after_header.strip())
+        seconds = float(cleaned)
         return seconds if seconds > 0 else None
     except ValueError:
+        pass
+    try:
+        retry_dt = parsedate_to_datetime(cleaned)
+        delay = (retry_dt - datetime.now(timezone.utc)).total_seconds()
+        return delay if delay > 0 else None
+    except Exception:
         return None
 
 

@@ -112,6 +112,22 @@ def test_build_providers_configures_openalex_filters_and_mailto() -> None:
     assert client._mailto == "test@openalex.example.org"
 
 
+def test_build_providers_handles_blank_or_whitespace_emails() -> None:
+    strategy = _sample_strategy(providers=["crossref", "openalex"])
+
+    with patch.dict("os.environ", {"OPENALEX_EMAIL": "   ", "CROSSREF_EMAIL": ""}):
+        async_client = httpx.AsyncClient()
+        providers = LiveSearchService._build_providers(strategy, async_client)
+
+    assert len(providers) == 2
+    crossref_provider = providers[0]
+    openalex_provider = providers[1]
+    assert isinstance(crossref_provider, CrossrefProvider)
+    assert crossref_provider._client._mailto is None
+    assert isinstance(openalex_provider, OpenAlexProvider)
+    assert openalex_provider._client._mailto is None
+
+
 @pytest.mark.anyio
 async def test_live_search_service_executes_crossref_end_to_end() -> None:
     strategy = _sample_strategy(providers=["crossref"])

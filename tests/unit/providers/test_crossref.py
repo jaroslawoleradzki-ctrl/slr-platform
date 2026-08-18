@@ -1370,3 +1370,66 @@ async def test_search_works_retries_timeout_then_succeeds() -> None:
     assert request_count == 2
     assert payload == _SUCCESS_PAYLOAD
 
+
+def test_map_work_collective_and_organizational_authors() -> None:
+    provider = CrossrefProvider()
+    work = {
+        "title": ["Global Health Report"],
+        "author": [
+            {"name": "World Health Organization"},
+            {"given": "Alice", "family": "Smith"},
+            {"name": "  "},  # blank collective author skipped
+        ],
+    }
+    publication = provider.map_work(work)
+    assert len(publication.authors) == 2
+    assert publication.authors[0].display_name == "World Health Organization"
+    assert publication.authors[0].given_name is None
+    assert publication.authors[0].family_name is None
+    assert publication.authors[1].display_name == "Alice Smith"
+    assert publication.authors[1].given_name == "Alice"
+    assert publication.authors[1].family_name == "Smith"
+
+
+def test_map_work_invalid_day_falls_back_to_year_only() -> None:
+    provider = CrossrefProvider()
+    work = {
+        "title": ["Test Invalid Day"],
+        "published": {"date-parts": [[2024, 2, 31]]},
+    }
+    publication = provider.map_work(work)
+    assert publication.publication_year == 2024
+    assert publication.publication_date is None
+
+
+@pytest.mark.anyio
+async def test_retry_respects_http_date_retry_after_header() -> None:
+    from datetime import datetime, timedelta, timezone
+    from email.utils import format_datetime
+
+    fake_time = FakeTime()
+    request_start_times: list[float] = []
+
+    retry_after_dt = datetime.now(timezone.utc) + timedelta(seconds=12)
+    http_date_str = format_datetime(retry_after_dt)
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        request_start_times.append(fake_time.monotonic())
+        if len(request_start_times) == 1:
+            return httpx.Response(429, headers={"Retry-After": http_date_str}, request=request)
+        return httpx.Response(200, json=_SUCCESS_PAYLOAD, request=request)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client:
+        client = CrossrefClient(
+            http_client=http_client,
+            requests_per_second=None,
+            retry_attempts=3,
+            clock=fake_time.monotonic,
+            sleep=fake_time.sleep,
+        )
+        await client.search_works("lean")
+
+    assert len(fake_time.sleep_calls) == 1
+    assert 10.0 <= fake_time.sleep_calls[0] <= 14.0
+
+

@@ -110,8 +110,16 @@ class LiveSearchService:
         http_client: httpx.AsyncClient,
     ) -> list[SearchProvider]:
         providers: list[SearchProvider] = []
-        openalex_email = os.getenv("OPENALEX_EMAIL") or os.getenv("CROSSREF_EMAIL") or None
-        crossref_email = os.getenv("CROSSREF_EMAIL") or os.getenv("OPENALEX_EMAIL") or None
+        openalex_email = (
+            (os.getenv("OPENALEX_EMAIL") or "").strip()
+            or (os.getenv("CROSSREF_EMAIL") or "").strip()
+            or None
+        )
+        crossref_email = (
+            (os.getenv("CROSSREF_EMAIL") or "").strip()
+            or (os.getenv("OPENALEX_EMAIL") or "").strip()
+            or None
+        )
 
         for name in strategy.providers:
             if name == "openalex":

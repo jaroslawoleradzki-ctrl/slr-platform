@@ -1526,6 +1526,10 @@ The Crossref search integration required hardening for production-grade SLR oper
    - Retries use exponential backoff for retryable errors (429, 500, 502, 503, 504 and network timeouts) with support for `Retry-After` header parsing. Permanent 4xx client errors (400, 401, 403, 404, 422) fail immediately without retrying.
 4. **Deterministic Fallback for Records Lacking DOI**:
    - While DOI is normalized and preferred as `source_record_id`, records without DOI are preserved using a deterministic fallback `source_record_id = f"fallback:{clean_title}:{year}"`, generating stable `record_id` identifiers via `deterministic_search_record_id`.
-5. **Raw Response Storage Scope**:
+5. **Author Mapping & Collective Authors**:
+   - Both personal authors (`given`, `family`) and collective/corporate authors (`name` in Crossref author array) are mapped faithfully.
+6. **Date Parsing Fallbacks**:
+   - Date parts with 3 elements (year, month, day) where month is valid but day is invalid (e.g. 31 February) fall back safely to `(year, None)` instead of losing the year.
+7. **Raw Response Storage Scope**:
    - Documented `_InMemoryRawResponseArchive` as request-scoped memory storage during execution lifecycle; durable audit trail of search records and provenance is preserved in SQLite `search_result_snapshots`.
 

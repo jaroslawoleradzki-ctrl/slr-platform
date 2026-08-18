@@ -80,11 +80,13 @@ def _parse_crossref_date(date_dict: Any) -> tuple[int, date | None] | None:
     elif len(parts) == 3:
         month = parts[1]
         day = parts[2]
+        if not (1 <= month <= 12):
+            return None
         try:
             d = date(year, month, day)
             return year, d
         except ValueError:
-            return None
+            return year, None
     return None
 
 
@@ -329,9 +331,14 @@ class CrossrefProvider:
                         parts.append(given_name)
                     if family_name:
                         parts.append(family_name)
-                    if not parts:
-                        continue
-                    display_name = " ".join(parts)
+                    if parts:
+                        display_name = " ".join(parts)
+                    else:
+                        org_name = clean_string(a_dict.get("name"))
+                        if org_name:
+                            display_name = org_name
+                        else:
+                            continue
 
                     author_identifiers = []
                     orcid = normalize_orcid(a_dict.get("ORCID"))
