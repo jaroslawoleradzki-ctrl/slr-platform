@@ -5,9 +5,10 @@ from typing import Any, cast
 import httpx
 import pytest
 
+from app.core.version import get_app_version
 from app.domain import IdentifierType
 from app.domain.publication import DocumentType
-from app.providers.crossref import CrossrefClient
+from app.providers.crossref import CrossrefClient, CrossrefSearchFilters
 from app.providers.search.crossref import CrossrefProvider
 
 _SUCCESS_PAYLOAD = {
@@ -29,8 +30,9 @@ class FakeTime:
         self.now += seconds
 
     async def sleep(self, seconds: float) -> None:
-        self.sleep_calls.append(seconds)
-        self.advance(seconds)
+        if seconds > 0:
+            self.sleep_calls.append(seconds)
+            self.advance(seconds)
         await asyncio.sleep(0)
 
 
@@ -52,7 +54,7 @@ async def test_search_works_sends_expected_request_without_cursor() -> None:
         assert request.url.params["query"] == "lean energy"
         assert request.url.params["rows"] == "50"
         assert "cursor" not in request.url.params
-        assert request.headers["User-Agent"].startswith("slr-platform/0.1.0")
+        assert request.headers["User-Agent"].startswith(f"slr-platform/{get_app_version()}")
         return httpx.Response(200, json=expected_payload, request=request)
 
     async with httpx.AsyncClient(
@@ -420,6 +422,7 @@ async def test_retry_attempts_are_rate_limited() -> None:
         client = CrossrefClient(
             http_client=http_client,
             requests_per_second=4,
+            retry_wait_multiplier=0,
             clock=fake_time.monotonic,
             sleep=fake_time.sleep,
         )
@@ -1182,3 +1185,251 @@ def test_map_work_non_dictionary_rejected() -> None:
     provider = CrossrefProvider()
     with pytest.raises(TypeError, match="work must be a dictionary"):
         provider.map_work(cast(Any, "not-a-dict"))
+
+
+@pytest.mark.anyio
+async def test_user_agent_and_query_param_include_mailto_when_provided() -> None:
+    expected_payload = {
+        "status": "ok",
+        "message": {"items": []},
+    }
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.params["mailto"] == "researcher@example.org"
+        user_agent = request.headers["User-Agent"]
+        assert f"slr-platform/{get_app_version()}" in user_agent
+        assert "mailto:researcher@example.org" in user_agent
+        return httpx.Response(200, json=expected_payload, request=request)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client:
+        client = CrossrefClient(
+            http_client=http_client,
+            mailto=" researcher@example.org ",
+        )
+        payload = await client.search_works("lean")
+
+    assert payload == expected_payload
+
+
+@pytest.mark.anyio
+async def test_client_rejects_blank_mailto() -> None:
+    async with httpx.AsyncClient() as http_client:
+        with pytest.raises(ValueError, match="mailto must not be blank"):
+            CrossrefClient(http_client=http_client, mailto="   ")
+
+
+@pytest.mark.anyio
+async def test_search_works_sends_strategy_filters() -> None:
+    async def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.params["filter"] == (
+            "from-pub-date:2020-01-01,until-pub-date:2024-12-31,"
+            "type:journal-article,type:proceedings-article,type:book-chapter"
+        )
+        return httpx.Response(200, json=_SUCCESS_PAYLOAD, request=request)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client:
+        client = CrossrefClient(http_client=http_client)
+        filters = CrossrefSearchFilters(
+            publication_year_from=2020,
+            publication_year_to=2024,
+            publication_types=("article", "conference_paper", "book_chapter"),
+        )
+        await client.search_works("lean", filters=filters)
+
+
+def test_crossref_filters_warning_and_lossless() -> None:
+    # All supported filters: lossless
+    filters_supported = CrossrefSearchFilters(
+        publication_year_from=2020,
+        publication_year_to=2024,
+        publication_types=("article", "conference_paper"),
+    )
+    assert filters_supported.get_warnings() == ()
+    assert filters_supported.is_lossless is True
+    assert filters_supported.to_filter_param() == "from-pub-date:2020-01-01,until-pub-date:2024-12-31,type:journal-article,type:proceedings-article"
+
+    # Unsupported language
+    filters_lang = CrossrefSearchFilters(languages=("en", "pl"))
+    assert len(filters_lang.get_warnings()) == 1
+    assert "language filtering" in filters_lang.get_warnings()[0]
+    assert filters_lang.is_lossless is False
+
+    # Unsupported open_access
+    filters_oa = CrossrefSearchFilters(open_access=True)
+    assert len(filters_oa.get_warnings()) == 1
+    assert "open access filtering" in filters_oa.get_warnings()[0]
+    assert filters_oa.is_lossless is False
+
+    # Unsupported review type
+    filters_review = CrossrefSearchFilters(publication_types=("review", "article"))
+    assert len(filters_review.get_warnings()) == 1
+    assert "publication type filter for ['review']" in filters_review.get_warnings()[0]
+    assert filters_review.is_lossless is False
+    assert filters_review.to_filter_param() == "type:journal-article"
+
+
+@pytest.mark.anyio
+async def test_retry_attempts_exponential_backoff() -> None:
+    fake_time = FakeTime()
+    request_start_times: list[float] = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        request_start_times.append(fake_time.monotonic())
+        if len(request_start_times) < 3:
+            return httpx.Response(503, request=request)
+        return httpx.Response(200, json=_SUCCESS_PAYLOAD, request=request)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client:
+        client = CrossrefClient(
+            http_client=http_client,
+            requests_per_second=None,
+            retry_attempts=3,
+            retry_wait_multiplier=1.0,
+            retry_wait_max=10.0,
+            clock=fake_time.monotonic,
+            sleep=fake_time.sleep,
+        )
+        await client.search_works("lean")
+
+    assert fake_time.sleep_calls == [
+        pytest.approx(1.0),
+        pytest.approx(2.0),
+    ]
+    assert request_start_times == [0.0, 1.0, 3.0]
+
+
+@pytest.mark.anyio
+async def test_retry_respects_retry_after_header() -> None:
+    fake_time = FakeTime()
+    request_start_times: list[float] = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        request_start_times.append(fake_time.monotonic())
+        if len(request_start_times) == 1:
+            return httpx.Response(429, headers={"Retry-After": "5"}, request=request)
+        return httpx.Response(200, json=_SUCCESS_PAYLOAD, request=request)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client:
+        client = CrossrefClient(
+            http_client=http_client,
+            requests_per_second=None,
+            retry_attempts=3,
+            clock=fake_time.monotonic,
+            sleep=fake_time.sleep,
+        )
+        await client.search_works("lean")
+
+    assert fake_time.sleep_calls == [pytest.approx(5.0)]
+    assert request_start_times == [0.0, 5.0]
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("status_code", [400, 401, 403, 404, 422])
+async def test_search_works_does_not_retry_permanent_4xx(status_code: int) -> None:
+    request_count = 0
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal request_count
+        request_count += 1
+        return httpx.Response(status_code, request=request)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client:
+        client = CrossrefClient(
+            http_client=http_client,
+            retry_attempts=3,
+        )
+        with pytest.raises(httpx.HTTPStatusError) as exc_info:
+            await client.search_works("lean")
+
+    assert request_count == 1
+    assert exc_info.value.response.status_code == status_code
+
+
+@pytest.mark.anyio
+async def test_search_works_retries_timeout_then_succeeds() -> None:
+    fake_time = FakeTime()
+    request_count = 0
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal request_count
+        request_count += 1
+        if request_count == 1:
+            raise httpx.ReadTimeout("read timeout", request=request)
+        return httpx.Response(200, json=_SUCCESS_PAYLOAD, request=request)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client:
+        client = CrossrefClient(
+            http_client=http_client,
+            requests_per_second=None,
+            retry_attempts=3,
+            clock=fake_time.monotonic,
+            sleep=fake_time.sleep,
+        )
+        payload = await client.search_works("lean")
+
+    assert request_count == 2
+    assert payload == _SUCCESS_PAYLOAD
+
+
+def test_map_work_collective_and_organizational_authors() -> None:
+    provider = CrossrefProvider()
+    work = {
+        "title": ["Global Health Report"],
+        "author": [
+            {"name": "World Health Organization"},
+            {"given": "Alice", "family": "Smith"},
+            {"name": "  "},  # blank collective author skipped
+        ],
+    }
+    publication = provider.map_work(work)
+    assert len(publication.authors) == 2
+    assert publication.authors[0].display_name == "World Health Organization"
+    assert publication.authors[0].given_name is None
+    assert publication.authors[0].family_name is None
+    assert publication.authors[1].display_name == "Alice Smith"
+    assert publication.authors[1].given_name == "Alice"
+    assert publication.authors[1].family_name == "Smith"
+
+
+def test_map_work_invalid_day_falls_back_to_year_only() -> None:
+    provider = CrossrefProvider()
+    work = {
+        "title": ["Test Invalid Day"],
+        "published": {"date-parts": [[2024, 2, 31]]},
+    }
+    publication = provider.map_work(work)
+    assert publication.publication_year == 2024
+    assert publication.publication_date is None
+
+
+@pytest.mark.anyio
+async def test_retry_respects_http_date_retry_after_header() -> None:
+    from datetime import datetime, timedelta, timezone
+    from email.utils import format_datetime
+
+    fake_time = FakeTime()
+    request_start_times: list[float] = []
+
+    retry_after_dt = datetime.now(timezone.utc) + timedelta(seconds=12)
+    http_date_str = format_datetime(retry_after_dt)
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        request_start_times.append(fake_time.monotonic())
+        if len(request_start_times) == 1:
+            return httpx.Response(429, headers={"Retry-After": http_date_str}, request=request)
+        return httpx.Response(200, json=_SUCCESS_PAYLOAD, request=request)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client:
+        client = CrossrefClient(
+            http_client=http_client,
+            requests_per_second=None,
+            retry_attempts=3,
+            clock=fake_time.monotonic,
+            sleep=fake_time.sleep,
+        )
+        await client.search_works("lean")
+
+    assert len(fake_time.sleep_calls) == 1
+    assert 10.0 <= fake_time.sleep_calls[0] <= 14.0
+
+

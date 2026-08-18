@@ -19,11 +19,8 @@ from app.api.routers import (
     synthesis_gaps,
     synthesis_snapshots,
 )
+from app.core.version import get_app_version
 from app.repositories.project_repository import default_project_repository
-
-
-def _application_version() -> str:
-    return (Path(__file__).parents[2] / "VERSION").read_text(encoding="utf-8").strip()
 
 
 @asynccontextmanager
@@ -36,7 +33,7 @@ API_V1_PREFIX = "/api/v1"
 
 app = FastAPI(
     title="SLR Platform",
-    version=_application_version(),
+    version=get_app_version(),
     lifespan=lifespan,
     docs_url="/api/docs",
     redoc_url="/api/redoc",
@@ -82,7 +79,7 @@ def health():
 
 @app.get("/api/version")
 def api_version():
-    return {"name": "SLR Platform", "version": _application_version()}
+    return {"name": "SLR Platform", "version": get_app_version()}
 
 
 _FRONTEND_DIST = Path(__file__).parents[2] / "frontend" / "dist"
@@ -96,7 +93,7 @@ def root():
     index_file = _FRONTEND_DIST / "index.html"
     if index_file.is_file():
         return FileResponse(index_file)
-    return {"name": "SLR Platform", "version": _application_version()}
+    return {"name": "SLR Platform", "version": get_app_version()}
 
 
 @app.get("/{full_path:path}")

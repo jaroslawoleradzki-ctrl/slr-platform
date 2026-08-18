@@ -104,3 +104,51 @@ def test_crossref_renderer_deterministic() -> None:
     rendered1 = renderer.render(query)
     rendered2 = renderer.render(query)
     assert rendered1 == rendered2
+
+
+def test_crossref_renderer_complex_boolean_query_with_or_and_not() -> None:
+    renderer = CrossrefQueryRenderer()
+    # ("lean manufacturing" OR "lean production") AND ("energy efficiency" OR "energy consumption") NOT ("building")
+    expression = SearchGroup(
+        operator=BooleanOperator.AND,
+        children=[
+            SearchGroup(
+                operator=BooleanOperator.OR,
+                children=[
+                    SearchTerm(value="lean manufacturing", exact_phrase=True),
+                    SearchTerm(value="lean production", exact_phrase=True),
+                ],
+            ),
+            SearchGroup(
+                operator=BooleanOperator.OR,
+                children=[
+                    SearchTerm(value="energy efficiency", exact_phrase=True),
+                    SearchTerm(value="energy consumption", exact_phrase=True),
+                ],
+            ),
+            SearchGroup(
+                operator=BooleanOperator.NOT,
+                children=[
+                    SearchTerm(value="building", exact_phrase=True),
+                ],
+            ),
+        ],
+    )
+    query = SearchQuery(name="Complex Strategy Query", expression=expression)
+    rendered = renderer.render(query)
+
+    assert rendered.provider == "crossref"
+    assert (
+        rendered.query_string
+        == '"lean manufacturing" "lean production" "energy efficiency" "energy consumption"'
+    )
+    assert rendered.is_lossless is False
+    assert len(rendered.warnings) == 2
+    assert any("does not support NOT operators" in w for w in rendered.warnings)
+    assert any("does not support OR operators" in w for w in rendered.warnings)
+    assert rendered.metadata["canonical_query"] == (
+        '(("lean manufacturing" OR "lean production") AND '
+        '("energy efficiency" OR "energy consumption") AND '
+        'NOT ("building"))'
+    )
+

@@ -185,8 +185,22 @@ class SearchEngine:
                     normalize_publication(publication)
                     for publication in output.publications
                 ]
+                combined_warnings = list(search_run.warnings)
+                for w in output.warnings:
+                    if w not in combined_warnings:
+                        combined_warnings.append(w)
+                is_lossless = search_run.is_lossless
+                if output.is_lossless is False:
+                    is_lossless = False
+
+                search_run_with_output_metadata = search_run.model_copy(
+                    update={
+                        "warnings": combined_warnings,
+                        "is_lossless": is_lossless,
+                    }
+                )
                 final_search_run = self._finish_search_run(
-                    search_run,
+                    search_run_with_output_metadata,
                     status=SearchRunStatus.COMPLETED,
                     finished_at=self._clock(),
                     records_retrieved=len(normalized_publications),

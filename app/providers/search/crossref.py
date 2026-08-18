@@ -11,7 +11,7 @@ from app.domain.provenance import ProvenanceEntry
 from app.domain.publication import DocumentType, Publication
 from app.domain.search import SearchQuery, SearchRun
 from app.normalization import normalize_orcid
-from app.providers.crossref import CrossrefClient
+from app.providers.crossref import CrossrefClient, CrossrefSearchFilters
 from app.providers.search.base import JsonObject, ProviderSearchOutput
 from app.providers.search.mapping_utils import (
     clean_string,
@@ -80,11 +80,13 @@ def _parse_crossref_date(date_dict: Any) -> tuple[int, date | None] | None:
     elif len(parts) == 3:
         month = parts[1]
         day = parts[2]
+        if not (1 <= month <= 12):
+            return None
         try:
             d = date(year, month, day)
             return year, d
         except ValueError:
-            return None
+            return year, None
     return None
 
 
@@ -98,6 +100,7 @@ class CrossrefProvider:
         retrieval_clock: Callable[[], datetime] = _utc_now,
         paginate: bool = False,
         max_results: int = 100,
+        filters: CrossrefSearchFilters | None = None,
     ) -> None:
         if max_results < 1:
             raise ValueError("max_results must be at least 1")
@@ -105,6 +108,35 @@ class CrossrefProvider:
         self._retrieval_clock = retrieval_clock
         self._paginate = paginate
         self._max_results = max_results
+        self._filters = filters
+
+    @staticmethod
+    def _read_total_count(payload: dict[str, Any]) -> int | None:
+        message = payload.get("message")
+        if not isinstance(message, dict):
+            raise ValueError("Crossref response message must be a JSON object")
+        total_results = message.get("total-results")
+        if total_results is None:
+            return None
+        if (
+            not isinstance(total_results, int)
+            or isinstance(total_results, bool)
+            or total_results < 0
+        ):
+            raise ValueError("Crossref message.total-results must be a non-negative integer")
+        return total_results
+
+    @staticmethod
+    def _read_next_cursor(payload: dict[str, Any]) -> str | None:
+        message = payload.get("message")
+        if not isinstance(message, dict):
+            raise ValueError("Crossref response message must be a JSON object")
+        next_cursor = message.get("next-cursor")
+        if next_cursor is None:
+            return None
+        if not isinstance(next_cursor, str) or not next_cursor.strip():
+            raise ValueError("Crossref response message.next-cursor must be a non-blank string or null")
+        return next_cursor.strip()
 
     async def search(
         self,
@@ -148,6 +180,7 @@ class CrossrefProvider:
             search_run.rendered_query,
             rows=rows,
             cursor=cursor,
+            filters=self._filters,
         )
         message = payload["message"]
         items = message["items"]
@@ -161,9 +194,19 @@ class CrossrefProvider:
             )
             for work in items
         ]
+        total_count = self._read_total_count(payload)
+        raw_next_cursor = self._read_next_cursor(payload)
+        next_cursor = raw_next_cursor if items and raw_next_cursor != cursor else None
+        filter_warnings = self._filters.get_warnings() if self._filters else ()
+        is_lossless = self._filters.is_lossless if self._filters else True
         return ProviderSearchOutput(
             publications=publications,
             raw_responses=[cast(JsonObject, payload)],
+            total_count=total_count,
+            next_cursor=next_cursor,
+            has_more=next_cursor is not None,
+            warnings=filter_warnings,
+            is_lossless=is_lossless,
         )
 
     async def _search_paginated_with_raw(
@@ -178,13 +221,21 @@ class CrossrefProvider:
         publications: list[Publication] = []
         raw_responses: list[JsonObject] = []
         seen_cursors: set[str] = set()
+        total_count: int | None = None
+        next_cursor: str | None = None
         while len(publications) < self._max_results:
             payload = await client.search_works(
                 search_run.rendered_query,
                 rows=min(rows, self._max_results - len(publications)),
                 cursor=cursor,
+                filters=self._filters,
             )
             raw_responses.append(cast(JsonObject, payload))
+            page_total_count = self._read_total_count(payload)
+            if total_count is None:
+                total_count = page_total_count
+            elif page_total_count != total_count:
+                raise ValueError("Crossref message.total-results changed during pagination")
             message = payload["message"]
             items = message["items"]
             retrieved_at = self._retrieval_clock()
@@ -201,20 +252,25 @@ class CrossrefProvider:
                 )
                 if len(publications) >= self._max_results:
                     break
-            next_cursor = message.get("next-cursor")
+            next_cursor = self._read_next_cursor(payload)
             if next_cursor is None or not items:
+                next_cursor = None
                 break
-            if not isinstance(next_cursor, str) or not next_cursor.strip():
-                raise ValueError(
-                    "Crossref response message.next-cursor must be a non-blank string"
-                )
             if next_cursor == cursor or next_cursor in seen_cursors:
+                next_cursor = None
                 break
             seen_cursors.add(cursor)
             cursor = next_cursor
+        filter_warnings = self._filters.get_warnings() if self._filters else ()
+        is_lossless = self._filters.is_lossless if self._filters else True
         return ProviderSearchOutput(
             publications=publications,
             raw_responses=raw_responses,
+            total_count=total_count,
+            next_cursor=next_cursor,
+            has_more=next_cursor is not None,
+            warnings=filter_warnings,
+            is_lossless=is_lossless,
         )
 
     async def iterate(
@@ -232,6 +288,7 @@ class CrossrefProvider:
             search_run.rendered_query,
             rows=rows,
             limit=limit,
+            filters=self._filters,
         ):
             yield self._map_work_with_provenance(
                 work,
@@ -274,9 +331,14 @@ class CrossrefProvider:
                         parts.append(given_name)
                     if family_name:
                         parts.append(family_name)
-                    if not parts:
-                        continue
-                    display_name = " ".join(parts)
+                    if parts:
+                        display_name = " ".join(parts)
+                    else:
+                        org_name = clean_string(a_dict.get("name"))
+                        if org_name:
+                            display_name = org_name
+                        else:
+                            continue
 
                     author_identifiers = []
                     orcid = normalize_orcid(a_dict.get("ORCID"))
@@ -385,11 +447,15 @@ class CrossrefProvider:
         search_query: SearchQuery,
         retrieved_at: datetime,
     ) -> Publication:
-        source_record_id = normalize_doi(work.get("DOI"))
-        if source_record_id is None:
-            raise ValueError("Crossref work DOI must be a non-blank string for provenance")
-
+        doi = normalize_doi(work.get("DOI"))
         publication = self.map_work(work)
+        if doi is not None:
+            source_record_id = doi
+        else:
+            clean_title = " ".join(publication.title.split()).casefold()
+            year_str = str(publication.publication_year) if publication.publication_year else ""
+            source_record_id = f"fallback:{clean_title}:{year_str}"
+
         provenance = ProvenanceEntry(
             source=self.name,
             source_record_id=source_record_id,
@@ -403,7 +469,7 @@ class CrossrefProvider:
                 "record_id": deterministic_search_record_id(
                     provider=self.name,
                     source_id=source_record_id,
-                    doi=source_record_id,
+                    doi=doi,
                     title=publication.title,
                     publication_year=publication.publication_year,
                 ),
