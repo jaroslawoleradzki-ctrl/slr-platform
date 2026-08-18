@@ -236,6 +236,23 @@ not block Title & Abstract Screening.
   COMPLETE-only eligible evidence semantics, criterion-level QA integration,
   and E2E verification. No built-in AI/LLM functionality is included.
 
+### Version 0.5.2 — Crossref REST API Hardening & Parity ✅
+
+- **Crossref REST API Hardening**: Production-grade Crossref search integration
+  achieving parity with OpenAlex and adhering to Crossref polite pool guidelines.
+- **Bounded Cursor Pagination**: Deep cursor pagination (`cursor=*`, `next-cursor`)
+  with configurable `max_results` bound, loop/cycle prevention, and accurate response metadata.
+- **Filter Mapping & Audit Warnings**: Publication year range and document types mapped
+  to Crossref filters, with explicit audit warnings and lossy tracking for unsupported filters.
+- **Boolean Syntax Handling**: Flattened OR keywords, excluded NOT clauses, with preserved
+  canonical query audit metadata.
+- **Polite Access & Resilient Retries**: Dynamic `User-Agent` with version from `VERSION`,
+  `mailto:` identification, rate limiting (20 rps), exponential backoff retries, `Retry-After`
+  header parsing (seconds and HTTP-date), and no retry on permanent 4xx.
+- **Metadata Mapping & Collective Authors**: Individual and collective author mapping (`name` field),
+  date hierarchy with year fallback on invalid day parts, abstract HTML/JATS sanitization,
+  and deterministic fallback `source_record_id` and UUID5 `record_id` for works without DOI.
+
 ### Version 0.5.1 — Quality Assessment & Workflow State Bugfixes ✅
 
 - **Reviewer persistence**: Reviewer identity persists across page refreshes via

@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.5.2] — 2026-08-18
+
+### Fixed & Improved
+
+- **Crossref REST API Hardening**: Production-grade Crossref search integration
+  achieving parity with OpenAlex and adhering to Crossref polite pool guidelines.
+- **Bounded Cursor Pagination**: Deep cursor pagination (`cursor=*`, `next-cursor`)
+  with configurable `max_results` bound, cycle prevention for repeating cursors,
+  and accurate `total_count`, `next_cursor`, and `has_more` response metadata.
+- **Filter Mapping & Audit Warnings**: Mapped publication year range and supported
+  document types to Crossref API filters; explicit audit warnings and lossy state
+  tracking (`is_lossless=False`) for unsupported filters (`languages`, `open_access`, `review`).
+- **Boolean Syntax Handling**: Flattened OR terms to keywords and excluded NOT clauses
+  from physical query string with preserved canonical query audit metadata and warnings.
+- **Polite Access & Resilient Retries**: Dynamic `User-Agent` with application version,
+  `mailto:` identification, polite rate limiting (20 rps), exponential backoff for 429,
+  5xx, and timeouts, `Retry-After` header parsing (seconds and HTTP-date), and immediate
+  failure without retrying permanent 4xx errors.
+- **Metadata Mapping & Collective Authors**: Faithful mapping of individual and
+  collective/corporate authors (`name` field), robust date hierarchy with year fallback
+  on invalid day parts, clean abstract sanitization, and deterministic fallback `source_record_id`
+  and UUID5 `record_id` for works lacking DOI.
+
 ## [0.5.1] — 2026-08-17
 
 ### Fixed
