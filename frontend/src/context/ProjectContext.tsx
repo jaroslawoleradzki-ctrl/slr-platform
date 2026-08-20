@@ -15,7 +15,7 @@ import {
   ProjectUpdatePayload,
   SearchResultsImportMetadata,
 } from '../types';
-import { projectApiService } from '../services/api/projectApi';
+import { projectApiService, mapPrismaMetricsResponseToFunnel } from '../services/api/projectApi';
 import { screeningApi, TitleAbstractOverview, FullTextOverview } from '../services/api/screeningApi';
 import { qualityAssessmentApi, QualityAssessmentOverview } from '../services/api/qualityAssessmentApi';
 import { extractionApi, ExtractionProgressResponseDTO } from '../services/api/extractionApi';
@@ -339,6 +339,8 @@ interface ProjectContextType {
   workflowStatus: WorkflowNavigationStatus | null;
   workflowStatusLoading: boolean;
   workflowStatusError: string | null;
+  prismaMetricsLoading: boolean;
+  prismaMetricsError: string | null;
   duplicateData: ApiDuplicateGroupListResponse | null;
   duplicateGroupError: string | null;
   setActiveProjectId: (id: string) => void;
@@ -384,6 +386,8 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const [workflowStatusLoading, setWorkflowStatusLoading] = useState<boolean>(true);
   const [workflowStatusError, setWorkflowStatusError] = useState<string | null>(null);
+  const [prismaMetricsLoading, setPrismaMetricsLoading] = useState<boolean>(false);
+  const [prismaMetricsError, setPrismaMetricsError] = useState<string | null>(null);
   const [duplicateData, setDuplicateData] = useState<ApiDuplicateGroupListResponse | null>(null);
   const [duplicateGroupError, setDuplicateGroupError] = useState<string | null>(null);
 
@@ -405,6 +409,8 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setWorkflowStatusLoading(true);
     setWorkflowStatusError(null);
     setDuplicateGroupError(null);
+    setPrismaMetricsLoading(true);
+    setPrismaMetricsError(null);
 
     const reviewer = localStorage.getItem('slr_screening_reviewer_id') || 'default_reviewer';
 
@@ -417,6 +423,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
       fullTextRes,
       qaRes,
       extractionProgressRes,
+      prismaMetricsRes,
     ] = await Promise.allSettled([
       projectApiService.getSearchStrategy(targetProjectId),
       projectApiService.getBibliographicImports(targetProjectId),
@@ -426,6 +433,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
       screeningApi.getFullTextOverview(targetProjectId, reviewer),
       qualityAssessmentApi.getOverview(targetProjectId, reviewer),
       extractionApi.getExtractionProgress(targetProjectId, reviewer),
+      projectApiService.getPrismaMetrics(targetProjectId, reviewer),
     ]);
 
     if (activeProjectIdRef.current !== targetProjectId) return;
@@ -499,6 +507,20 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
       const errMsg = dedupRes.reason instanceof Error ? dedupRes.reason.message : 'Nie udało się pobrać grup duplikatów.';
       setDuplicateGroupError(errMsg);
     }
+
+    if (prismaMetricsRes.status === 'fulfilled') {
+      const prismaMetrics = mapPrismaMetricsResponseToFunnel(prismaMetricsRes.value);
+      setProjects((currentProjects) => currentProjects.map((project) => (
+        project.id === targetProjectId ? { ...project, prismaMetrics } : project
+      )));
+      setPrismaMetricsError(null);
+    } else {
+      const errMsg = prismaMetricsRes.reason instanceof Error
+        ? prismaMetricsRes.reason.message
+        : 'Nie udało się pobrać metryk PRISMA.';
+      setPrismaMetricsError(errMsg);
+    }
+    setPrismaMetricsLoading(false);
 
     const errors = {
       search: searchRes.status === 'rejected',
@@ -582,6 +604,8 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setLastSearchImportResult(null);
 
     setWorkflowStatus(null);
+    setPrismaMetricsError(null);
+    setPrismaMetricsLoading(true);
     void refreshWorkflowStatus(id);
   }, [refreshWorkflowStatus]);
 
@@ -839,6 +863,8 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
         workflowStatus,
         workflowStatusLoading,
         workflowStatusError,
+        prismaMetricsLoading,
+        prismaMetricsError,
         duplicateData,
         duplicateGroupError,
         setActiveProjectId,

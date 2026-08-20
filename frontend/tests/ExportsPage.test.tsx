@@ -6,7 +6,21 @@ import { ExportsPage } from '../src/pages/ExportsPage';
 import { projectApiService } from '../src/services/api/projectApi';
 import { screeningApi } from '../src/services/api/screeningApi';
 import { extractionApi, ExtractionApiError } from '../src/api/extractionApi';
-import { SLRProject } from '../src/types';
+import { SLRProject, PrismaMetricsResponse } from '../src/types';
+
+const PRISMA_METRICS: PrismaMetricsResponse = {
+  project_id: 'proj_test',
+  records_identified_providers: 12,
+  records_identified_imports: 3,
+  total_identified: 15,
+  records_after_normalization: 15,
+  records_before_dedup: 15,
+  records_after_technical_merger: 14,
+  duplicate_groups_pending_review: 2,
+  records_screened_title_abstract: 10,
+  records_screened_full_text: 5,
+  studies_included_synthesis: 4,
+};
 
 const PROJECT: SLRProject = {
   id: 'proj_test',
@@ -55,6 +69,7 @@ describe('ExportsPage — exports & PRISMA', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     vi.spyOn(projectApiService, 'getProjects').mockResolvedValue([PROJECT]);
+    vi.spyOn(projectApiService, 'getPrismaMetrics').mockResolvedValue(PRISMA_METRICS);
     vi.spyOn(screeningApi, 'getOverview').mockResolvedValue({
       project_id: 'proj_test',
       reviewer_id: 'default_reviewer',
@@ -131,6 +146,40 @@ describe('ExportsPage — exports & PRISMA', () => {
 
     fireEvent.click(screen.getAllByRole('button', { name: /Pobierz/i })[0]);
     expect(await screen.findByRole('alert')).toHaveTextContent(/Query parameter format must be json or csv/i);
+  });
+
+  it('fetches PRISMA metrics from the backend for the active project', async () => {
+    renderExports();
+    await screen.findByText('8. Eksporty i Generowanie Raportu PRISMA (Exports & Reporting)');
+    await waitFor(() =>
+      expect(projectApiService.getPrismaMetrics).toHaveBeenCalledWith('proj_test', 'default_reviewer')
+    );
+  });
+
+  it('shows a loader while PRISMA metrics are being fetched', async () => {
+    let resolveMetrics: (value: PrismaMetricsResponse) => void = () => {};
+    vi.spyOn(projectApiService, 'getPrismaMetrics').mockReturnValue(
+      new Promise((resolve) => {
+        resolveMetrics = resolve;
+      })
+    );
+    renderExports();
+    expect(
+      await screen.findByText(/Ładowanie żywych metryk PRISMA z backendu/)
+    ).toBeInTheDocument();
+    resolveMetrics(PRISMA_METRICS);
+    expect(
+      await screen.findByText('Dynamic PRISMA 2020 Flow Diagram')
+    ).toBeInTheDocument();
+  });
+
+  it('shows an error alert and no diagram when PRISMA metrics cannot be fetched', async () => {
+    vi.spyOn(projectApiService, 'getPrismaMetrics').mockRejectedValue(new Error('backend offline'));
+    renderExports();
+    await screen.findByText('8. Eksporty i Generowanie Raportu PRISMA (Exports & Reporting)');
+    expect(await screen.findByRole('alert')).toHaveTextContent(/backend offline/i);
+    expect(screen.queryByText('Dynamic PRISMA 2020 Flow Diagram')).not.toBeInTheDocument();
+    expect(screen.getByText(/Diagram PRISMA jest niedostępny/)).toBeInTheDocument();
   });
 });
 
