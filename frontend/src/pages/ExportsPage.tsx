@@ -1,20 +1,59 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useProject } from '../context/ProjectContext';
 import { Card } from '../components/common/Card';
-import { FileCheck2, Download, FileSpreadsheet, Code2, Share2, Layers } from 'lucide-react';
+import { ErrorAlert } from '../components/common/ErrorAlert';
+import { LivePrismaFlowChart } from '../components/workflow/LivePrismaFlowChart';
+import { extractionApi, ExtractionApiError } from '../services/api/extractionApi';
+import { FileCheck2, Download, FileSpreadsheet, Code2, Share2, Layers, Loader2, Lock } from 'lucide-react';
+
+interface ExportFormat {
+  id: string;
+  name: string;
+  desc: string;
+  icon: React.ElementType;
+  available: boolean;
+}
 
 export const ExportsPage: React.FC = () => {
   const { activeProject } = useProject();
+  const [exportingId, setExportingId] = useState<string | null>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
+  const [exportSuccess, setExportSuccess] = useState<string | null>(null);
+
+  const exportFormats: ExportFormat[] = [
+    { id: 'csv', name: 'Zestawienie Rekordów CSV', desc: 'Dane publikacji i wyników ekstrakcji w formacie CSV (metadane, DOI, status kompletności)', icon: FileSpreadsheet, available: true },
+    { id: 'json', name: 'Zestawienie rekordów JSON', desc: 'Dane publikacji i wyników ekstrakcji w formacie JSON', icon: Share2, available: true },
+    { id: 'bib', name: 'Eksport Bazy BibTeX (.bib)', desc: 'Format kanoniczny dla systemów LaTeX i Reference Managerów', icon: Code2, available: false },
+    { id: 'ris', name: 'Eksport Bazy RIS (.ris)', desc: 'Format zgodny z EndNote, Zotero, Mendeley i RefMan', icon: Download, available: false },
+    { id: 'excel', name: 'Arkusz Excel Matrix (.xlsx)', desc: 'Tabela syntezy z podziałem na etapy i statusy decyzji', icon: FileSpreadsheet, available: false },
+  ];
 
   if (!activeProject) return null;
 
-  const exportFormats = [
-    { id: 'csv', name: 'Zestawienie Rekordów CSV', desc: 'Pełna tabela z metadanymi, DOI, abstrakty i tagi', icon: FileSpreadsheet },
-    { id: 'bib', name: 'Eksport Bazy BibTeX (.bib)', desc: 'Format kanoniczny dla systemów LaTeX i Reference Managerów', icon: Code2 },
-    { id: 'ris', name: 'Eksport Bazy RIS (.ris)', desc: 'Format zgodny z EndNote, Zotero, Mendeley i RefMan', icon: Download },
-    { id: 'json', name: 'Struktura JSON Project Dump', desc: 'Pełny dump stanu projektu SLR ze statystykami i audit trailem', icon: Share2 },
-    { id: 'excel', name: 'Arkusz Excel Matrix (.xlsx)', desc: 'Tabela syntezy z podziałem na etapy i statusy decyzji', icon: FileSpreadsheet },
-  ];
+  const handleExport = async (format: ExportFormat) => {
+    if (!format.available) return;
+    setExportingId(format.id);
+    setExportError(null);
+    setExportSuccess(null);
+    try {
+      const blob = await extractionApi.exportDataset(activeProject.id, format.id as 'json' | 'csv', 'publications');
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${activeProject.id}_publications.${format.id}`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => {
+        URL.revokeObjectURL(url);
+      }, 0);
+      setExportSuccess(`Pobrano plik ${format.name} dla projektu ${activeProject.title}.`);
+    } catch (err) {
+      setExportError(err instanceof ExtractionApiError ? err.message : 'Nie udało się pobrać eksportu danych.');
+    } finally {
+      setExportingId(null);
+    }
+  };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
@@ -26,6 +65,24 @@ export const ExportsPage: React.FC = () => {
           Eksport bazy danych w powszechnych formatach badawczych oraz generowanie oficjalnego schematu PRISMA 2020 Flow.
         </p>
       </div>
+
+      {exportError && <ErrorAlert message={exportError} />}
+      {exportSuccess && (
+        <div
+          role="status"
+          style={{
+            padding: '12px 16px',
+            borderRadius: 'var(--radius-md)',
+            backgroundColor: 'var(--status-success-bg)',
+            border: '1px solid var(--status-success-border)',
+            color: 'var(--status-success-text)',
+            fontSize: '0.85rem',
+            fontWeight: 600,
+          }}
+        >
+          {exportSuccess}
+        </div>
+      )}
 
       <Card
         title={
@@ -61,7 +118,7 @@ export const ExportsPage: React.FC = () => {
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      color: 'var(--accent-primary)',
+                      color: fmt.available ? 'var(--accent-primary)' : 'var(--text-muted)',
                     }}
                   >
                     <Icon size={18} />
@@ -76,21 +133,54 @@ export const ExportsPage: React.FC = () => {
                   </div>
                 </div>
 
-                <button
-                  style={{
-                    padding: '6px 12px',
-                    borderRadius: 'var(--radius-md)',
-                    backgroundColor: 'var(--bg-surface-elevated)',
-                    border: '1px solid var(--border-strong)',
-                    color: 'var(--text-primary)',
-                    fontSize: '0.75rem',
-                    fontWeight: 600,
-                    whiteSpace: 'nowrap',
-                  }}
-                  title="Pobierz eksport"
-                >
-                  Pobierz
-                </button>
+                {fmt.available ? (
+                  <button
+                    onClick={() => handleExport(fmt)}
+                    disabled={exportingId !== null}
+                    style={{
+                      padding: '6px 12px',
+                      borderRadius: 'var(--radius-md)',
+                      backgroundColor: 'var(--bg-surface-elevated)',
+                      border: '1px solid var(--border-strong)',
+                      color: 'var(--text-primary)',
+                      fontSize: '0.75rem',
+                      fontWeight: 600,
+                      whiteSpace: 'nowrap',
+                      cursor: exportingId !== null ? 'not-allowed' : 'pointer',
+                      opacity: exportingId !== null && exportingId !== fmt.id ? 0.6 : 1,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                    }}
+                    title="Pobierz eksport"
+                  >
+                    {exportingId === fmt.id && <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} />}
+                    {exportingId === fmt.id ? 'Pobieranie...' : 'Pobierz'}
+                  </button>
+                ) : (
+                  <button
+                    disabled
+                    style={{
+                      padding: '6px 12px',
+                      borderRadius: 'var(--radius-md)',
+                      backgroundColor: 'var(--bg-surface-elevated)',
+                      border: '1px dashed var(--border-subtle)',
+                      color: 'var(--text-muted)',
+                      fontSize: '0.75rem',
+                      fontWeight: 600,
+                      whiteSpace: 'nowrap',
+                      cursor: 'not-allowed',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      opacity: 0.8,
+                    }}
+                    title="Not yet available"
+                  >
+                    <Lock size={14} />
+                    Not yet available
+                  </button>
+                )}
               </div>
             );
           })}
@@ -107,21 +197,30 @@ export const ExportsPage: React.FC = () => {
         subtitle="Eksportuj wygenerowany wyżej schemat PRISMA do formatów SVG, PNG lub PDF dla celów publikacyjnych."
         action={
           <button
+            disabled
             style={{
               padding: '8px 16px',
               borderRadius: 'var(--radius-md)',
-              backgroundColor: 'var(--accent-primary)',
-              color: '#fff',
+              backgroundColor: 'var(--bg-surface-elevated)',
+              color: 'var(--text-muted)',
               fontWeight: 600,
               fontSize: '0.85rem',
+              border: '1px dashed var(--border-subtle)',
+              cursor: 'not-allowed',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
             }}
+            title="Not yet available"
           >
-            Eksportuj PRISMA Flow (SVG/PDF)
+            <Lock size={14} />
+            Eksportuj PRISMA Flow (SVG/PDF) — Not yet available
           </button>
         }
       >
-        <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-          Generowany raport zawiera dokładne zliczenia rekordów na każdym etapie (Live Providers, Manual Imports, Exact DOI Merges, Deduplication Decisions, Screening Triage, Full-Text Eligibility oraz Included Studies) w pełnej zgodności ze standardem PRISMA 2020 Statement.
+        <LivePrismaFlowChart metrics={activeProject.prismaMetrics} />
+        <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
+          Dane do diagramu PRISMA nie są jeszcze dostępne z backendu. Diagram zostanie automatycznie uzupełniony po wdrożeniu raportowania metryk projektu.
         </div>
       </Card>
     </div>
