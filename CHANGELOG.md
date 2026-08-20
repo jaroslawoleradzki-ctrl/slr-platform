@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.5.4] — 2026-08-20
+
+### Added
+
+- **Live PRISMA Metrics**: Added authoritative backend PRISMA project metrics.
+- **Live PRISMA diagram**: The PRISMA flow diagram now reflects actual live
+  workflow counts computed from the project's persisted ingestion,
+  deduplication, and screening state.
+- **Partial workflow support**: Metrics are reported independently per stage, so
+  partially completed SLR workflows show real counts for completed stages while
+  later stages remain zero until decisions exist.
+- **Persisted state**: Metrics use persisted ingestion, deduplication and
+  screening state as the single source of truth.
+- **Removed placeholder behavior**: Removed the placeholder zero-only PRISMA
+  behavior in favor of real backend-provided funnel metrics.
+- **Improved Exports & PRISMA reporting accuracy**: `GET
+  /projects/{project_id}/prisma/metrics` exposes the authoritative funnel read
+  model to the Exports page, with loading, error, and live-data states.
+
 ## [0.5.3] — 2026-08-20
 
 ### Added

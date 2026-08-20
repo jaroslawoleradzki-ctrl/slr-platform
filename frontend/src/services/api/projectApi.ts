@@ -22,6 +22,8 @@ import {
   ApiProjectListResponse,
   ProjectUpdatePayload,
   ApiProjectWorkflowStatusResponse,
+  PrismaMetricsResponse,
+  PrismaFunnelMetrics,
 } from '../../types';
 import { API_BASE_URL } from '../../config/api';
 
@@ -128,6 +130,7 @@ export interface ProjectApiService {
     projectId: string,
     reviewerId?: string
   ): Promise<ApiProjectWorkflowStatusResponse | null>;
+  getPrismaMetrics(projectId: string, reviewerId?: string): Promise<PrismaMetricsResponse>;
 }
 
 const mapApiProjectToSLRProject = (p: ApiProjectResponse): SLRProject => ({
@@ -215,6 +218,19 @@ const mapApiProjectToSLRProject = (p: ApiProjectResponse): SLRProject => ({
     recordsScreenedFullText: 0,
     studiesIncludedSynthesis: 0,
   },
+});
+
+const mapPrismaMetricsResponseToFunnel = (p: PrismaMetricsResponse): PrismaFunnelMetrics => ({
+  recordsIdentifiedProviders: p.records_identified_providers,
+  recordsIdentifiedImports: p.records_identified_imports,
+  totalIdentified: p.total_identified,
+  recordsAfterNormalization: p.records_after_normalization,
+  recordsBeforeDedup: p.records_before_dedup,
+  recordsAfterTechnicalMerger: p.records_after_technical_merger,
+  duplicateGroupsPendingReview: p.duplicate_groups_pending_review,
+  recordsScreenedTitleAbstract: p.records_screened_title_abstract,
+  recordsScreenedFullText: p.records_screened_full_text,
+  studiesIncludedSynthesis: p.studies_included_synthesis,
 });
 
 class MixedProjectApiService implements ProjectApiService {
@@ -668,6 +684,24 @@ class MixedProjectApiService implements ProjectApiService {
     if (!response.ok) return null;
     return response.json() as Promise<ApiProjectWorkflowStatusResponse>;
   }
+
+  async getPrismaMetrics(
+    projectId: string,
+    reviewerId = 'default_reviewer'
+  ): Promise<PrismaMetricsResponse> {
+    let response: Response;
+    try {
+      response = await fetch(
+        `${API_BASE_URL}/projects/${projectId}/prisma/metrics?reviewer_id=${encodeURIComponent(reviewerId)}`,
+        { headers: { Accept: 'application/json' } }
+      );
+    } catch {
+      throw new Error('Nie udało się połączyć z backendem. Sprawdź połączenie.');
+    }
+    if (!response.ok) throw new Error(await formatFastApiError(response, 'pobrać metryk PRISMA'));
+    return response.json() as Promise<PrismaMetricsResponse>;
+  }
 }
 
 export const projectApiService: ProjectApiService = new MixedProjectApiService();
+export { mapPrismaMetricsResponseToFunnel };

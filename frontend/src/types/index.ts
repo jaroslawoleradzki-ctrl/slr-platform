@@ -538,6 +538,20 @@ export interface WorkflowNavigationStatus {
   };
 }
 
+export interface PrismaMetricsResponse {
+  project_id: string;
+  records_identified_providers: number;
+  records_identified_imports: number;
+  total_identified: number;
+  records_after_normalization: number;
+  records_before_dedup: number;
+  records_after_technical_merger: number;
+  duplicate_groups_pending_review: number;
+  records_screened_title_abstract: number;
+  records_screened_full_text: number;
+  studies_included_synthesis: number;
+}
+
 export interface ApiProjectWorkflowStatusResponse {
   project_id: string;
   title_abstract_screening: {

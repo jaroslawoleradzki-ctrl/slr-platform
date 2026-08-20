@@ -236,6 +236,22 @@ not block Title & Abstract Screening.
   COMPLETE-only eligible evidence semantics, criterion-level QA integration,
   and E2E verification. No built-in AI/LLM functionality is included.
 
+### Version 0.5.4 — Live PRISMA Metrics ✅
+
+- **Authoritative backend PRISMA metrics**: Added `GET
+  /projects/{project_id}/prisma/metrics` returning the authoritative PRISMA
+  funnel read model derived from persisted ingestion, deduplication, and
+  screening state.
+- **Live PRISMA diagram**: The `LivePrismaFlowChart` now renders real live
+  workflow counts instead of placeholder zeros.
+- **Partial workflow support**: Each funnel stage is reported independently, so
+  partially completed SLR workflows show real counts for completed stages.
+- **Persisted state only**: Metrics use persisted ingestion, deduplication and
+  screening state; no fabricated or AI-derived counts.
+- **Removed placeholder behavior**: The zero-only PRISMA placeholder was removed
+  in favor of backend-provided metrics.
+- **PRISMA SVG/PNG/PDF export**: Remains intentionally unavailable.
+
 ### Version 0.5.3 — Exports & PRISMA UI ✅
 
 - **Functional Exports**: CSV and JSON exports download the publications
