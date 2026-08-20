@@ -3,6 +3,7 @@ from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
+from app.api.dto.prisma import PrismaMetricsResponse
 from app.api.dto.project import (
     ProjectCreateRequest,
     ProjectListResponse,
@@ -11,11 +12,16 @@ from app.api.dto.project import (
 )
 from app.api.dto.workflow_status import ProjectWorkflowStatusResponse
 from app.domain.project import Project
+from app.repositories.project_publication_repository import ProjectNotFoundError as ProjectPublicationNotFoundError
 from app.repositories.project_repository import (
     ProjectAlreadyExistsError,
     ProjectNotFoundError,
     ProjectRepository,
     default_project_repository,
+)
+from app.services.prisma_metrics_service import (
+    PrismaMetricsService,
+    default_prisma_metrics_service,
 )
 from app.services.project_deletion_service import (
     ProjectDeletionService,
@@ -35,6 +41,10 @@ def get_project_repository() -> ProjectRepository:
 
 def get_project_workflow_status_service() -> ProjectWorkflowStatusService:
     return default_project_workflow_status_service()
+
+
+def get_prisma_metrics_service() -> PrismaMetricsService:
+    return default_prisma_metrics_service
 
 
 def get_project_deletion_service() -> ProjectDeletionService:
@@ -226,6 +236,38 @@ def delete_project(
         service.delete_project(project_id)
     except ProjectNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+
+@router.get(
+    "/{project_id}/prisma/metrics",
+    response_model=PrismaMetricsResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Get authoritative PRISMA funnel metrics for a project",
+    description=(
+        "Returns authoritative PRISMA funnel metrics derived from the project's persisted "
+        "ingestion, deduplication, and screening state. Supports partially completed "
+        "workflows: completed stages return real counts while later stages return zero "
+        "until their decisions exist."
+    ),
+)
+def get_prisma_metrics(
+    project_id: str,
+    reviewer_id: str = Query(default="default_reviewer"),
+    service: PrismaMetricsService = Depends(get_prisma_metrics_service),
+) -> PrismaMetricsResponse:
+    try:
+        metrics = service.get_metrics(project_id, reviewer_id=reviewer_id)
+        return service.to_response(metrics)
+    except ProjectPublicationNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
 
 
 @router.get(

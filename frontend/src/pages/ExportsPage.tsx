@@ -15,7 +15,7 @@ interface ExportFormat {
 }
 
 export const ExportsPage: React.FC = () => {
-  const { activeProject } = useProject();
+  const { activeProject, prismaMetricsLoading, prismaMetricsError } = useProject();
   const [exportingId, setExportingId] = useState<string | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
   const [exportSuccess, setExportSuccess] = useState<string | null>(null);
@@ -218,10 +218,36 @@ export const ExportsPage: React.FC = () => {
           </button>
         }
       >
-        <LivePrismaFlowChart metrics={activeProject.prismaMetrics} />
-        <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
-          Dane do diagramu PRISMA nie są jeszcze dostępne z backendu. Diagram zostanie automatycznie uzupełniony po wdrożeniu raportowania metryk projektu.
-        </div>
+        {prismaMetricsLoading ? (
+          <div
+            role="status"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px',
+              padding: '20px',
+              fontSize: '0.85rem',
+              color: 'var(--text-secondary)',
+            }}
+          >
+            <Loader2 size={18} style={{ animation: 'spin 1s linear infinite', color: 'var(--accent-primary)' }} />
+            Ładowanie żywych metryk PRISMA z backendu...
+          </div>
+        ) : prismaMetricsError ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <ErrorAlert message={prismaMetricsError} />
+            <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
+              Diagram PRISMA jest niedostępny, ponieważ nie udało się pobrać metryk z backendu. Sprawdź połączenie i odśwież dane projektu.
+            </div>
+          </div>
+        ) : (
+          <>
+            <LivePrismaFlowChart metrics={activeProject.prismaMetrics} />
+            <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
+              Diagram odzwierciedla bieżący stan przebiegu procesu SLR na podstawie metryk pobranych z backendu. Po ukończeniu wszystkich etapów (deduplikacji, screeningu i oceny jakości) diagram może stanowić podstawę oficjalnego raportu PRISMA 2020.
+            </div>
+          </>
+        )}
       </Card>
     </div>
   );
