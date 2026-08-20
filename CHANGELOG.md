@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.5.3] — 2026-08-20
+
+### Added
+
+- **Functional Exports & PRISMA UI**: CSV and JSON exports now download the
+  publications extraction dataset through the existing extraction export
+  endpoint. BibTeX, RIS, and Excel exports remain clearly disabled as "Not yet
+  available" until a backend implementation exists.
+- **Live PRISMA 2020 Flow Diagram**: The existing `LivePrismaFlowChart` is now
+  integrated into the Exports page, rendering from project metrics. PRISMA
+  SVG/PNG/PDF export remains intentionally unavailable, and backend-provided
+  PRISMA funnel metrics are not yet available, so the diagram currently depends
+  on existing project metrics.
+
 ## [0.5.2] — 2026-08-18
 
 ### Fixed & Improved

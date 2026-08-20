@@ -236,6 +236,19 @@ not block Title & Abstract Screening.
   COMPLETE-only eligible evidence semantics, criterion-level QA integration,
   and E2E verification. No built-in AI/LLM functionality is included.
 
+### Version 0.5.3 — Exports & PRISMA UI ✅
+
+- **Functional Exports**: CSV and JSON exports download the publications
+  extraction dataset through the existing extraction export endpoint.
+- **Unavailable formats clearly disabled**: BibTeX, RIS, and Excel exports are
+  shown as "Not yet available" until backend implementations exist.
+- **Live PRISMA 2020 Flow Diagram**: The existing `LivePrismaFlowChart` is
+  integrated into the Exports page, rendering from project metrics.
+- **PRISMA SVG/PNG/PDF export**: Remains intentionally unavailable.
+- **Backend PRISMA metrics**: Not yet available; the diagram currently depends
+  on existing project metrics and will be filled automatically once backend
+  metric reporting is deployed.
+
 ### Version 0.5.2 — Crossref REST API Hardening & Parity ✅
 
 - **Crossref REST API Hardening**: Production-grade Crossref search integration

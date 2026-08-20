@@ -13,4 +13,4 @@ def get_app_version() -> str:
                 return content
     except Exception:
         pass
-    return "0.5.2"
+    return "0.5.3"

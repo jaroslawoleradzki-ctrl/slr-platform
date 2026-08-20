@@ -1,6 +1,6 @@
 # SLR Platform — Project Status
 
-_Last updated: 2026-08-18_
+_Last updated: 2026-08-20_
 
 ## Current status
 
@@ -14,7 +14,7 @@ development
 
 Current version:
 
-v0.5.2
+v0.5.3
 
 Current release status:
 
