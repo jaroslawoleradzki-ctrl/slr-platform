@@ -9,4 +9,6 @@ services:
     volumes:
       - ./projects:/app/projects
       - ./data:/app/data
+    environment:
+      - SEMANTIC_SCHOLAR_API_KEY=${SEMANTIC_SCHOLAR_API_KEY}
     restart: unless-stopped
