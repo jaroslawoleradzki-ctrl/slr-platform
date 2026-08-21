@@ -23,3 +23,4 @@ class PrismaMetricsResponse(BaseModel):
     records_screened_title_abstract: int = Field(ge=0)
     records_screened_full_text: int = Field(ge=0)
     studies_included_synthesis: int = Field(ge=0)
+    manual_source_breakdown: dict[str, int] = Field(default_factory=dict)

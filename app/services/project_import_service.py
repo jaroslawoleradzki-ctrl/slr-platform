@@ -4,7 +4,10 @@ import sqlite3
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
-from app.api.dto.search_strategy import SearchResultRecordResponse
+from app.api.dto.search_strategy import (
+    ManualSourceDatabase,
+    SearchResultRecordResponse,
+)
 from app.domain.author import Author
 from app.domain.identifiers import Identifier, IdentifierType
 from app.domain.provenance import ProvenanceEntry
@@ -155,14 +158,32 @@ class ProjectImportService:
         filename: str,
         file_format: str,
         publications: list[Publication],
+        source_database: ManualSourceDatabase | None = None,
+        source_label: str | None = None,
         *,
         connection: sqlite3.Connection | None = None,
     ) -> tuple[PublicationImportResult, ImportHistoryRecord]:
         if connection is not None:
-            return self._import_file_with_conn(connection, project_id, filename, file_format, publications)
+            return self._import_file_with_conn(
+                connection,
+                project_id,
+                filename,
+                file_format,
+                publications,
+                source_database,
+                source_label,
+            )
 
         with self._tx_manager.transaction() as conn:
-            return self._import_file_with_conn(conn, project_id, filename, file_format, publications)
+            return self._import_file_with_conn(
+                conn,
+                project_id,
+                filename,
+                file_format,
+                publications,
+                source_database,
+                source_label,
+            )
 
     def _import_file_with_conn(
         self,
@@ -171,6 +192,8 @@ class ProjectImportService:
         filename: str,
         file_format: str,
         publications: list[Publication],
+        source_database: ManualSourceDatabase | None = None,
+        source_label: str | None = None,
     ) -> tuple[PublicationImportResult, ImportHistoryRecord]:
         if isinstance(self._pub_repo, SqliteProjectPublicationRepository):
             import_result = self._pub_repo.import_source_publications(project_id, publications, connection=conn)
@@ -195,6 +218,8 @@ class ProjectImportService:
             status="warning" if warnings else "success",
             warnings=tuple(warnings),
             created_at=datetime.now(timezone.utc),
+            source_database=source_database,
+            source_label=source_label,
         )
 
         if isinstance(self._history_repo, SqliteImportHistoryRepository):

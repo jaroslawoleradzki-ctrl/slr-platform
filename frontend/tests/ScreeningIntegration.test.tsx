@@ -70,7 +70,7 @@ describe('Screening Integration Frontend Test Suite', () => {
         duplicateGroups: [],
         screening: { titleAbstract: { pending: 0, included: 0, excluded: 0, unresolved: 0, total: 5 }, fullText: { pending: 3, included: 0, excluded: 0, unresolved: 0, total: 3 }, status: 'completed' },
         qualityAssessment: { totalToAssess: 0, completedAssessments: 0, reviewerConflictsCount: 0, status: 'pending' },
-        prismaMetrics: { recordsIdentifiedProviders: 0, recordsIdentifiedImports: 0, totalIdentified: 0, recordsAfterNormalization: 0, recordsBeforeDedup: 0, recordsAfterTechnicalMerger: 0, duplicateGroupsPendingReview: 0, recordsScreenedTitleAbstract: 5, recordsScreenedFullText: 0, studiesIncludedSynthesis: 0 },
+        prismaMetrics: { recordsIdentifiedProviders: 0, recordsIdentifiedImports: 0, totalIdentified: 0, recordsAfterNormalization: 0, recordsBeforeDedup: 0, recordsAfterTechnicalMerger: 0, duplicateGroupsPendingReview: 0, recordsScreenedTitleAbstract: 5, recordsScreenedFullText: 0, studiesIncludedSynthesis: 0, manualSourceBreakdown: {} },
       },
     ]);
 

@@ -24,6 +24,7 @@ import {
   ApiProjectWorkflowStatusResponse,
   PrismaMetricsResponse,
   PrismaFunnelMetrics,
+  ManualSourceDatabase,
 } from '../../types';
 import { API_BASE_URL } from '../../config/api';
 
@@ -217,6 +218,7 @@ const mapApiProjectToSLRProject = (p: ApiProjectResponse): SLRProject => ({
     recordsScreenedTitleAbstract: 0,
     recordsScreenedFullText: 0,
     studiesIncludedSynthesis: 0,
+    manualSourceBreakdown: {},
   },
 });
 
@@ -231,6 +233,7 @@ const mapPrismaMetricsResponseToFunnel = (p: PrismaMetricsResponse): PrismaFunne
   recordsScreenedTitleAbstract: p.records_screened_title_abstract,
   recordsScreenedFullText: p.records_screened_full_text,
   studiesIncludedSynthesis: p.studies_included_synthesis,
+  manualSourceBreakdown: p.manual_source_breakdown ?? {},
 });
 
 class MixedProjectApiService implements ProjectApiService {
@@ -434,9 +437,13 @@ class MixedProjectApiService implements ProjectApiService {
   async importBibliographicFile(
     projectId: string,
     file: File,
+    sourceDatabase?: ManualSourceDatabase,
+    sourceLabel?: string,
   ): Promise<BibliographicImportResponse> {
     const formData = new FormData();
     formData.append('file', file);
+    if (sourceDatabase) formData.append('source_database', sourceDatabase);
+    if (sourceLabel) formData.append('source_label', sourceLabel);
     let response: Response;
     try {
       response = await fetch(`${API_BASE_URL}/projects/${projectId}/imports`, {

@@ -108,6 +108,7 @@ def test_prisma_metrics_empty_project_returns_zeros(environment) -> None:
         "records_screened_title_abstract": 0,
         "records_screened_full_text": 0,
         "studies_included_synthesis": 0,
+        "manual_source_breakdown": {},
     }
 
 

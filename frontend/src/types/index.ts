@@ -1,5 +1,24 @@
 export type StageStatus = 'completed' | 'in_progress' | 'pending_action' | 'pending' | 'error';
 
+export type ManualSourceDatabase =
+  | 'google_scholar_pop'
+  | 'scopus'
+  | 'web_of_science'
+  | 'pubmed'
+  | 'ebsco'
+  | 'proquest'
+  | 'other';
+
+export const MANUAL_SOURCE_DATABASE_LABELS: Record<ManualSourceDatabase, string> = {
+  google_scholar_pop: 'Google Scholar (Publish or Perish)',
+  scopus: 'Scopus',
+  web_of_science: 'Web of Science',
+  pubmed: 'PubMed',
+  ebsco: 'EBSCO',
+  proquest: 'ProQuest',
+  other: 'Other',
+};
+
 export interface ConceptGroup {
   id: string;
   name: string;
@@ -166,6 +185,8 @@ export interface ImportFileRecord {
   importedAt: string;
   status: 'success' | 'warning' | 'failed' | 'error';
   warnings?: string[];
+  sourceDatabase?: ManualSourceDatabase;
+  sourceLabel?: string | null;
 }
 
 export interface BibliographicImportResponse {
@@ -201,6 +222,8 @@ export interface ImportHistoryItemDTO {
   status: 'success' | 'warning' | 'failed';
   warnings: string[];
   created_at: string;
+  source_database?: ManualSourceDatabase;
+  source_label?: string | null;
 }
 
 export interface SourcesSummaryResponse {
@@ -223,6 +246,8 @@ export interface BibliographicImportHistoryRecord {
   status: 'success' | 'warning' | 'failed' | 'error';
   created_at: string;
   warnings: string[];
+  source_database?: ManualSourceDatabase;
+  source_label?: string | null;
 }
 
 export interface NormalizationStatus {
@@ -417,6 +442,7 @@ export interface PrismaFunnelMetrics {
   recordsScreenedTitleAbstract: number;
   recordsScreenedFullText: number;
   studiesIncludedSynthesis: number;
+  manualSourceBreakdown: Record<string, number>;
 }
 
 export type ProjectStatusType = 'active' | 'archived';
@@ -550,6 +576,7 @@ export interface PrismaMetricsResponse {
   records_screened_title_abstract: number;
   records_screened_full_text: number;
   studies_included_synthesis: number;
+  manual_source_breakdown: Record<string, number>;
 }
 
 export interface ApiProjectWorkflowStatusResponse {

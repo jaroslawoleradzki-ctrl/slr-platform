@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from enum import Enum
 from typing import Literal
 from uuid import UUID
 
@@ -204,6 +205,30 @@ class SearchResultsImportResponse(BaseModel):
     working_collection_count: int
 
 
+class ManualSourceDatabase(str, Enum):
+    """Enumeration of known bibliographic sources for manual imports."""
+
+    GOOGLE_SCHOLAR_POP = "google_scholar_pop"
+    SCOPUS = "scopus"
+    WEB_OF_SCIENCE = "web_of_science"
+    PUBMED = "pubmed"
+    EBSCO = "ebsco"
+    PROQUEST = "proquest"
+    OTHER = "other"
+
+    @classmethod
+    def labels(cls) -> dict[str, str]:
+        return {
+            cls.GOOGLE_SCHOLAR_POP: "Google Scholar (Publish or Perish)",
+            cls.SCOPUS: "Scopus",
+            cls.WEB_OF_SCIENCE: "Web of Science",
+            cls.PUBMED: "PubMed",
+            cls.EBSCO: "EBSCO",
+            cls.PROQUEST: "ProQuest",
+            cls.OTHER: "Other",
+        }
+
+
 class BibliographicImportResponse(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -228,6 +253,8 @@ class BibliographicImportHistoryResponse(BaseModel):
     status: Literal["success", "warning"]
     created_at: datetime
     warnings: list[str] = Field(default_factory=list)
+    source_database: ManualSourceDatabase | None = None
+    source_label: str | None = None
 
 
 SearchStrategyExecutionResponse.model_rebuild()

@@ -25,6 +25,8 @@ class ImportHistoryRecord:
     warnings: tuple[str, ...]
     created_at: datetime
     fingerprint: str | None = None
+    source_database: str | None = None
+    source_label: str | None = None
 
 
 @runtime_checkable
@@ -82,8 +84,8 @@ class SqliteImportHistoryRepository:
             INSERT INTO import_history (
                 import_id, project_id, source_type, filename, format,
                 provider, query, records_count, total_available, status,
-                warnings, created_at, fingerprint
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                warnings, created_at, fingerprint, source_database, source_label
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 str(record.import_id),
@@ -99,6 +101,8 @@ class SqliteImportHistoryRepository:
                 json.dumps(list(record.warnings), ensure_ascii=False),
                 record.created_at.isoformat(),
                 record.fingerprint,
+                record.source_database,
+                record.source_label,
             ),
         )
 
@@ -181,6 +185,8 @@ class SqliteImportHistoryRepository:
             warnings=tuple(json.loads(str(row[10]))),
             created_at=datetime.fromisoformat(str(row[11])),
             fingerprint=row[12] if isinstance(row[12], str) else None,
+            source_database=row[13] if isinstance(row[13], str) else None,
+            source_label=row[14] if isinstance(row[14], str) else None,
         )
 
     def _connect(self) -> sqlite3.Connection:

@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.5.6] — 2026-08-21
+
+### Added
+
+- **Manual Import Source Provenance**: Explicit bibliographic source tracking for manual file imports (RIS/BibTeX). Researchers can now record the true source database: Google Scholar (Publish or Perish), Scopus, Web of Science, PubMed, EBSCO, ProQuest, or Other.
+- **Optional Source Labels**: Free-text source labels (e.g., "Google Scholar search 2026-08-21") for additional context on manual imports.
+- **Provenance Preservation**: Source database metadata preserved through normalization pipeline and deduplication merge. Merged publications retain all source provenance entries.
+- **Import History Metadata**: Import history records now store `source_database` and `source_label` fields, displayed in the Sources & Imports UI.
+- **PRISMA Manual Source Breakdown**: PRISMA funnel metrics now include `manual_source_breakdown` showing per-source record counts (e.g., `google_scholar_pop: 312, scopus: 180`) while preserving aggregate `records_identified_imports`.
+- **Import History UI**: FileDropzone now shows source database badges with icons and optional source labels in the import history table.
+- **PRISMA Flow Diagram Enhancement**: LivePrismaFlowChart now displays manual import source breakdown with per-source counts.
+- **Database Migration**: Added `source_database` and `source_label` columns to `import_history` table (migration 0021).
+
+### Known Limitations
+
+- Google Scholar remains an external workflow via Publish or Perish → RIS/BibTeX → SLR Platform import; no direct API integration.
+- `source_label` remains optional; UI does not enforce it for `other` source.
+
 ## [0.5.5] — 2026-08-21
 
 ### Added

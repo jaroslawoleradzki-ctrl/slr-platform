@@ -4,11 +4,12 @@ from pathlib import Path
 from typing import Literal, cast
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 
 from app.api.dto.search_strategy import (
     BibliographicImportHistoryResponse,
     BibliographicImportResponse,
+    ManualSourceDatabase,
     ProviderQueryResponse,
     SearchProviderErrorResponse,
     SearchResultRecordResponse,
@@ -422,6 +423,8 @@ def import_search_results(
 async def import_bibliographic_file(
     project_id: str,
     file: UploadFile | None = File(default=None),
+    source_database: ManualSourceDatabase | None = Form(default=None),
+    source_label: str | None = Form(default=None),
     repository: ProjectPublicationRepository = Depends(get_project_publication_repository),
     import_service: ProjectImportService = Depends(get_project_import_service),
 ) -> BibliographicImportResponse:
@@ -450,11 +453,17 @@ async def import_bibliographic_file(
 
         if suffix == ".ris":
             parsed_ris = parse_ris(content)
-            publications = [normalize_publication(map_ris_record(record, source="ris")) for record in parsed_ris]
+            publications = [
+                normalize_publication(map_ris_record(record, source="ris", source_database=source_database or "ris"))
+                for record in parsed_ris
+            ]
         else:
             parsed_bibtex = parse_bibtex(content)
             publications = [
-                normalize_publication(map_bibtex_record(record, source="bibtex")) for record in parsed_bibtex
+                normalize_publication(
+                    map_bibtex_record(record, source="bibtex", source_database=source_database or "bibtex")
+                )
+                for record in parsed_bibtex
             ]
 
         if not publications:
@@ -465,6 +474,8 @@ async def import_bibliographic_file(
             filename=file.filename,
             file_format="RIS" if suffix == ".ris" else "BibTeX",
             publications=publications,
+            source_database=source_database,
+            source_label=source_label,
         )
     except ProjectNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
