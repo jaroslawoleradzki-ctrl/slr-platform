@@ -79,6 +79,7 @@ def map_ris_record(
     record: dict[str, list[str]],
     *,
     source: str,
+    source_database: str | None = None,
 ) -> Publication:
     """Map one parsed RIS record to a canonical :class:`Publication`.
 
@@ -90,17 +91,17 @@ def map_ris_record(
     source:
         Non-blank identifier of the bibliography origin, e.g.
         ``"google_scholar"`` or ``"zotero"``.
-
-    Raises
-    ------
-    ValueError
-        If *source* is blank, or if no title can be resolved from
-        ``TI`` / ``T1`` / ``CT``.
+    source_database:
+        Optional bibliographic source/database identifier, e.g.
+        ``"google_scholar_pop"`` or ``"scopus"``.  When provided, this is
+        used as the provenance source instead of the generic *source*.
     """
     # 0. Validate source
     source_stripped = source.strip()
     if not source_stripped:
         raise ValueError("source must be a non-blank string")
+
+    provenance_source = source_database or source_stripped
 
     # 1. Title (required)
     title = _first_non_blank(record, "TI", "T1", "CT")
@@ -142,9 +143,10 @@ def map_ris_record(
     source_record_id = normalized_doi if normalized_doi else title
     provenance = [
         ProvenanceEntry(
-            source=source_stripped,
+            source=provenance_source,
             source_record_id=source_record_id,
             retrieved_at=datetime.now(timezone.utc),
+            transformation="ris_to_publication",
         )
     ]
 

@@ -20,6 +20,7 @@ const PRISMA_METRICS: PrismaMetricsResponse = {
   records_screened_title_abstract: 10,
   records_screened_full_text: 5,
   studies_included_synthesis: 4,
+  manual_source_breakdown: {},
 };
 
 const PROJECT: SLRProject = {
@@ -51,6 +52,7 @@ const PROJECT: SLRProject = {
     recordsScreenedTitleAbstract: 10,
     recordsScreenedFullText: 5,
     studiesIncludedSynthesis: 4,
+    manualSourceBreakdown: {},
   },
 };
 

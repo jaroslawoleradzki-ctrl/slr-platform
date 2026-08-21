@@ -124,11 +124,14 @@ def map_bibtex_record(
     record: BibTeXRecord,
     *,
     source: str,
+    source_database: str | None = None,
 ) -> Publication:
     """Map one parsed BibTeX record to a canonical publication."""
     source_stripped = source.strip()
     if not source_stripped:
         raise ValueError("source must be a non-blank string")
+
+    provenance_source = source_database or source_stripped
 
     fields = record["fields"]
     title = _non_blank(fields, "title")
@@ -158,7 +161,7 @@ def map_bibtex_record(
         venue=_map_venue(fields),
         provenance=[
             ProvenanceEntry(
-                source=source_stripped,
+                source=provenance_source,
                 source_record_id=source_record_id,
                 retrieved_at=datetime.now(timezone.utc),
                 transformation="bibtex_to_publication",

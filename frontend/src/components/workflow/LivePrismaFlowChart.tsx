@@ -1,12 +1,39 @@
 import React from 'react';
-import { ArrowDown, Database, FileSpreadsheet, GitMerge, Filter, Award, CheckCircle2 } from 'lucide-react';
-import { PrismaFunnelMetrics } from '../../types';
+import { ArrowDown, Database, FileSpreadsheet, GitMerge, Filter, Award, CheckCircle2, FileText, FolderKanban, Globe, BookOpen, Database as DatabaseIcon } from 'lucide-react';
+import { PrismaFunnelMetrics, ManualSourceDatabase, MANUAL_SOURCE_DATABASE_LABELS } from '../../types';
 
 interface LivePrismaFlowChartProps {
   metrics: PrismaFunnelMetrics;
 }
 
 export const LivePrismaFlowChart: React.FC<LivePrismaFlowChartProps> = ({ metrics }) => {
+  const getSourceIcon = (source: string): React.ReactNode => {
+    switch (source) {
+      case 'google_scholar_pop':
+        return <Globe size={14} />;
+      case 'scopus':
+        return <DatabaseIcon size={14} />;
+      case 'web_of_science':
+        return <Globe size={14} />;
+      case 'pubmed':
+        return <BookOpen size={14} />;
+      case 'ebsco':
+        return <DatabaseIcon size={14} />;
+      case 'proquest':
+        return <Globe size={14} />;
+      case 'other':
+        return <FolderKanban size={14} />;
+      default:
+        return <FileText size={14} />;
+    }
+  };
+
+  const getSourceLabel = (source: string): string => {
+    return MANUAL_SOURCE_DATABASE_LABELS[source as ManualSourceDatabase] ?? source;
+  };
+
+  const manualBreakdown = metrics.manualSourceBreakdown ?? {};
+
   return (
     <div
       style={{
@@ -80,7 +107,32 @@ export const LivePrismaFlowChart: React.FC<LivePrismaFlowChartProps> = ({ metric
             <div style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-primary)', marginTop: '4px' }}>
               {metrics.recordsIdentifiedImports.toLocaleString()} rekordów
             </div>
-            <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Pliki BibTeX, RIS (np. wyeksportowane z Google Scholar, Scopus)</span>
+            {Object.keys(manualBreakdown).length > 0 && (
+              <div style={{ marginTop: '12px', display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                {Object.entries(manualBreakdown).map(([source, count]) => (
+                  <span
+                    key={source}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      fontSize: '0.7rem',
+                      color: 'var(--text-secondary)',
+                      backgroundColor: 'var(--bg-surface-elevated)',
+                      padding: '4px 8px',
+                      borderRadius: 'var(--radius-sm)',
+                      border: '1px solid var(--border-subtle)',
+                    }}
+                  >
+                    {getSourceIcon(source)}
+                    <span>{getSourceLabel(source)}: {count.toLocaleString()}</span>
+                  </span>
+                ))}
+              </div>
+            )}
+            {Object.keys(manualBreakdown).length === 0 && (
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Pliki BibTeX, RIS (np. wyeksportowane z Google Scholar, Scopus)</span>
+            )}
           </div>
         </div>
 

@@ -14,7 +14,7 @@ development
 
 Current version:
 
-v0.5.5
+v0.5.6
 
 Current release status:
 
@@ -24,6 +24,9 @@ Phase 11 — Integrated GUI MVP — v0.5.4 delivers authoritative backend PRISMA
 funnel metrics powering the live PRISMA 2020 flow diagram on the Exports page.
 v0.5.5 restores Semantic Scholar as a fully functional Live API Provider
 with rate-limited search, pagination, provenance, and PRISMA integration.
+v0.5.6 adds manual import source provenance (Google Scholar, Scopus, Web of Science,
+PubMed, EBSCO, ProQuest, Other) with optional labels, provenance preservation
+through normalization/deduplication, and PRISMA manual source breakdown.
 
 Current development phase:
 

@@ -185,7 +185,7 @@ Before starting v0.5.5, inspect the current repository and verify:
 
 Reuse existing architecture wherever possible.
 
-Status: IMPLEMENTED (working tree; not yet committed/released)
+Status: IMPLEMENTED (committed in f7c2592, released in v0.5.5 tag e471b17)
 Target: v0.5.5
 Dependency: v0.5.4 Live PRISMA Metrics
 Implementation decision: restored via the existing SemanticScholarClient/SemanticScholarProvider and

@@ -71,6 +71,7 @@ class PrismaMetrics:
     records_screened_title_abstract: int
     records_screened_full_text: int
     studies_included_synthesis: int
+    manual_source_breakdown: dict[str, int]
 
 
 class PrismaMetricsService:
@@ -100,6 +101,7 @@ class PrismaMetricsService:
 
         identified_providers = 0
         identified_imports = 0
+        manual_breakdown: dict[str, int] = {}
         for record in self._history.list_for_project(project_id):
             if record.status not in _SUCCESS_STATUSES:
                 continue
@@ -107,6 +109,9 @@ class PrismaMetricsService:
                 identified_providers += record.records_count
             elif record.source_type == "file":
                 identified_imports += record.records_count
+                # Track manual import source breakdown
+                source_key = record.source_database or "unknown"
+                manual_breakdown[source_key] = manual_breakdown.get(source_key, 0) + record.records_count
 
         publications = self._publications.get_publications(project_id)
         groups = self._builder.build(publications)
@@ -132,6 +137,7 @@ class PrismaMetricsService:
             records_screened_title_abstract=workflow.title_abstract_screening.evaluated_count,
             records_screened_full_text=workflow.full_text_screening.evaluated_count,
             studies_included_synthesis=workflow.quality_assessment.eligible_count,
+            manual_source_breakdown=manual_breakdown,
         )
 
     def to_response(self, metrics: PrismaMetrics) -> PrismaMetricsResponse:
@@ -147,6 +153,7 @@ class PrismaMetricsService:
             records_screened_title_abstract=metrics.records_screened_title_abstract,
             records_screened_full_text=metrics.records_screened_full_text,
             studies_included_synthesis=metrics.studies_included_synthesis,
+            manual_source_breakdown=metrics.manual_source_breakdown,
         )
 
 
