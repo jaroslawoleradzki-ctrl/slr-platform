@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.5.5] — 2026-08-21
+
+### Added
+
+- **Semantic Scholar Live API Provider**: Restored Semantic Scholar as a fully functional live search provider alongside OpenAlex and Crossref.
+- **Official Academic Graph API Integration**: Implemented `SemanticScholarClient` for the Graph API paper search endpoint (`GET /graph/v1/paper/search`) with query, limit, offset, and fields parameters.
+- **Optional Backend API Key**: Added `SEMANTIC_SCHOLAR_API_KEY` environment variable (backend-only, sent via `x-api-key` header, never exposed to frontend).
+- **Rate-Limit Handling & Resilience**: Tenacity-based retries for HTTP 429/500/502/503/504, exponential backoff, `Retry-After` header support (seconds and HTTP-date), bounded attempts (default 3), in-process throttling at 1 request/second.
+- **Pagination & Completeness Handling**: Offset-based pagination using API's `total`/`offset`/`next` fields; explicit truncation warnings when the relevance search endpoint caps results at 1000; `next_cursor`/`has_more` metadata for load-more flow.
+- **Canonical Mapping & Provenance**: Semantic Scholar paper records mapped to canonical `Publication` via existing normalization pipeline; paperId preserved as provenance `source_record_id` and identifier; DOI/PMID extracted from `externalIds`; abstract mapped when available (no fabrication).
+- **Filter Transparency**: Strategy filters (year range, languages, publication types, open access) not applied by endpoint generate explicit warnings (`is_lossless=False`) rather than silently dropping constraints.
+- **Frontend Provider Selection**: Semantic Scholar enabled in Search Strategy provider selector; checkbox no longer disabled.
+- **Live PRISMA Integration**: Semantic Scholar provider imports counted in `records_identified_providers` via existing import history aggregation (provider-agnostic).
+- **Comprehensive Test Coverage**: 50 new backend tests covering client resilience, pagination, deterministic record IDs, truncation warnings, filter warnings, live search wiring, and PRISMA integration; frontend test updated for enabled provider.
+
+### Known Limitation
+
+- Semantic Scholar relevance search has an upstream result ceiling (1000 records); SLR Platform reports retrieval completeness/truncation via warnings and `total_count`/`has_more` rather than silently presenting incomplete retrieval as complete.
+
 ## [0.5.4] — 2026-08-20
 
 ### Added

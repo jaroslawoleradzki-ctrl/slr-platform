@@ -41,7 +41,9 @@ class SearchStrategyExecutionRequest(BaseModel):
 
     publication_year_from: int = Field(ge=1000, le=9999)
     publication_year_to: int = Field(ge=1000, le=9999)
-    providers: list[Literal["openalex", "crossref"]] = Field(min_length=1)
+    providers: list[
+        Literal["openalex", "crossref", "semantic_scholar"]
+    ] = Field(min_length=1)
     concept_groups: list[ConceptGroupRequest] = Field(min_length=1)
     languages: list[str] = Field(default_factory=list)
     publication_types: list[
@@ -171,7 +173,7 @@ class SearchResultRecordResponse(BaseModel):
     title: str
     authors: list[str]
     year: int
-    provider: Literal["openalex", "crossref"]
+    provider: Literal["openalex", "crossref", "semantic_scholar"]
     source_id: str
     doi: str | None = None
 
@@ -179,7 +181,7 @@ class SearchResultRecordResponse(BaseModel):
 class SearchProviderErrorResponse(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    provider: Literal["openalex", "crossref"]
+    provider: Literal["openalex", "crossref", "semantic_scholar"]
     message: str
 
 
@@ -187,7 +189,7 @@ class SearchResultsImportRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     records: list[SearchResultRecordResponse]
-    provider: Literal["openalex", "crossref"] | None = None
+    provider: Literal["openalex", "crossref", "semantic_scholar"] | None = None
     query: str | None = None
     total_available: int | None = Field(default=None, ge=0)
 

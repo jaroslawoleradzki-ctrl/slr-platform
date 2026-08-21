@@ -430,11 +430,11 @@ export const SearchStrategyPage: React.FC = () => {
           }}
         >
           {(() => {
-            const supportedProviderIds = ['openalex', 'crossref'];
+            const supportedProviderIds = ['openalex', 'crossref', 'semantic_scholar'];
             const knownProviders: { id: SearchProviderId; name: string; supported: boolean }[] = [
               { id: 'openalex', name: 'OpenAlex', supported: true },
               { id: 'crossref', name: 'Crossref', supported: true },
-              { id: 'semantic_scholar', name: 'Semantic Scholar', supported: false },
+              { id: 'semantic_scholar', name: 'Semantic Scholar', supported: true },
             ];
             return knownProviders.map((kp) => ({
               ...kp,

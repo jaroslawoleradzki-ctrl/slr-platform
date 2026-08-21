@@ -187,6 +187,30 @@ def test_openalex_and_crossref_success_are_returned_without_deduplication() -> N
     assert body["provider_errors"] == []
 
 
+def test_execution_accepts_semantic_scholar_provider() -> None:
+    provider = _Provider(
+        "semantic_scholar",
+        [_publication("Semantic result", provider="semantic_scholar", source_id="S1")],
+        total_count=1,
+    )
+    response = _client_with_executor(_Executor([provider])).post(
+        "/api/v1/projects/lean_energy/search-strategy/executions",
+        json=_payload(["semantic_scholar"]),
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["providers"] == ["semantic_scholar"]
+    assert body["total_count"] == 1
+    assert body["returned_count"] == 1
+    assert body["results"][0]["provider"] == "semantic_scholar"
+    assert body["results"][0]["source_id"] == "S1"
+    assert any(
+        pq["provider"] == "semantic_scholar" for pq in body["provider_queries"]
+    )
+    assert body["provider_errors"] == []
+
+
 @pytest.mark.parametrize(
     ("failed_provider", "successful_provider"),
     [("openalex", "crossref"), ("crossref", "openalex")],

@@ -220,7 +220,7 @@ def _map_result(
         title=publication.title,
         authors=[author.display_name for author in publication.authors],
         year=cast(int, publication.publication_year),
-        provider=cast(Literal["openalex", "crossref"], provider),
+        provider=cast(Literal["openalex", "crossref", "semantic_scholar"], provider),
         source_id=_source_id(publication),
         doi=_doi(publication),
     )
@@ -291,7 +291,7 @@ async def execute_search_strategy(
     provider_errors = [
         SearchProviderErrorResponse(
             provider=cast(
-                Literal["openalex", "crossref"],
+                Literal["openalex", "crossref", "semantic_scholar"],
                 provider_result.search_run.provider,
             ),
             message=(f"{type(provider_result.error).__name__}: {provider_result.error}"),

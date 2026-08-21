@@ -1,17 +1,24 @@
 from __future__ import annotations
 
-from datetime import date, datetime
-from typing import Any
+from collections.abc import AsyncIterator, Callable
+from datetime import date, datetime, timezone
+from typing import Any, cast
 
 from app.domain import Author, Identifier, IdentifierType, Venue, VenueType
 from app.domain.provenance import ProvenanceEntry
 from app.domain.publication import DocumentType, Publication
 from app.domain.search import SearchQuery, SearchRun
+from app.providers.search.base import JsonObject, ProviderSearchOutput
 from app.providers.search.mapping_utils import (
     clean_string,
+    deterministic_search_record_id,
     normalize_doi,
     normalize_issn,
     normalize_url,
+)
+from app.providers.semantic_scholar import (
+    SemanticScholarClient,
+    SemanticScholarSearchFilters,
 )
 
 _DOC_TYPE_MAP = {
@@ -29,6 +36,47 @@ _DOC_TYPE_MAP = {
     "dataset": DocumentType.DATASET,
 }
 
+# Canonical fields requested from the paper/search endpoint; keep minimal to
+# reduce response size and latency (Semantic Scholar guidance).
+_FIELDS = [
+    "paperId",
+    "title",
+    "abstract",
+    "authors",
+    "year",
+    "publicationDate",
+    "publicationVenue",
+    "venue",
+    "publicationTypes",
+    "externalIds",
+    "url",
+    "language",
+]
+
+_TRUNCATION_WARNING = (
+    "Semantic Scholar returned only {fetched} of {total} matching records; the "
+    "relevance search endpoint caps results at 1000 and no further pages are "
+    "available via this endpoint."
+)
+
+
+def _utc_now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _parse_offset(cursor: str) -> int:
+    if cursor == "*":
+        return 0
+    try:
+        offset = int(cursor)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            "semantic_scholar cursor must be an offset integer string or '*'"
+        ) from exc
+    if offset < 0:
+        raise ValueError("semantic_scholar cursor offset must not be negative")
+    return offset
+
 
 def _parse_date(date_str: Any) -> date | None:
     if isinstance(date_str, str):
@@ -45,6 +93,212 @@ class SemanticScholarProvider:
     """Map Semantic Scholar Graph API paper responses to canonical publications."""
 
     name = "semantic_scholar"
+
+    def __init__(
+        self,
+        *,
+        client: SemanticScholarClient | None = None,
+        retrieval_clock: Callable[[], datetime] = _utc_now,
+        paginate: bool = False,
+        max_results: int = 100,
+        filters: SemanticScholarSearchFilters | None = None,
+    ) -> None:
+        if max_results < 1:
+            raise ValueError("max_results must be at least 1")
+        self._client = client
+        self._retrieval_clock = retrieval_clock
+        self._paginate = paginate
+        self._max_results = max_results
+        self._filters = filters
+
+    async def search(
+        self,
+        *,
+        search_run: SearchRun,
+        search_query: SearchQuery,
+        per_page: int = 25,
+        cursor: str = "*",
+    ) -> list[Publication]:
+        """Fetch and map one page using explicit, auditable search context."""
+
+        output = await self.search_with_raw(
+            search_run=search_run,
+            search_query=search_query,
+            per_page=per_page,
+            cursor=cursor,
+        )
+        return output.publications
+
+    async def search_with_raw(
+        self,
+        *,
+        search_run: SearchRun,
+        search_query: SearchQuery,
+        per_page: int = 25,
+        cursor: str = "*",
+    ) -> ProviderSearchOutput:
+        """Fetch one page once, then expose its mapping and original payload."""
+
+        client = self._require_client()
+        self._validate_search_context(search_run, search_query)
+        if self._paginate:
+            return await self._search_paginated_with_raw(
+                client=client,
+                search_run=search_run,
+                search_query=search_query,
+                per_page=per_page,
+                cursor=cursor,
+            )
+
+        page = await client.search_papers_page(
+            search_run.rendered_query,
+            limit=per_page,
+            offset=_parse_offset(cursor),
+            fields=_FIELDS,
+        )
+        retrieved_at = self._retrieval_clock()
+        publications = [
+            self._map_paper_with_provenance(
+                paper,
+                search_run=search_run,
+                search_query=search_query,
+                retrieved_at=retrieved_at,
+            )
+            for paper in page.data
+        ]
+        next_cursor = (
+            str(page.next)
+            if page.data and page.next is not None and page.next != page.offset
+            else None
+        )
+        filter_warnings = self._filters.get_warnings() if self._filters else ()
+        is_lossless = self._filters.is_lossless if self._filters else True
+        warnings = self._truncation_warnings(
+            len(publications), page.total, next_cursor
+        )
+        return ProviderSearchOutput(
+            publications=publications,
+            raw_responses=[cast(JsonObject, page.payload)],
+            total_count=page.total,
+            next_cursor=next_cursor,
+            has_more=next_cursor is not None,
+            warnings=tuple([*filter_warnings, *warnings]),
+            is_lossless=is_lossless,
+        )
+
+    async def _search_paginated_with_raw(
+        self,
+        *,
+        client: SemanticScholarClient,
+        search_run: SearchRun,
+        search_query: SearchQuery,
+        per_page: int,
+        cursor: str,
+    ) -> ProviderSearchOutput:
+        publications: list[Publication] = []
+        raw_responses: list[JsonObject] = []
+        seen_offsets: set[int] = set()
+        total_count: int | None = None
+        current_offset = _parse_offset(cursor)
+        next_cursor: str | None = None
+
+        while len(publications) < self._max_results:
+            page = await client.search_papers_page(
+                search_run.rendered_query,
+                limit=min(per_page, self._max_results - len(publications)),
+                offset=current_offset,
+                fields=_FIELDS,
+            )
+            raw_responses.append(cast(JsonObject, page.payload))
+            page_total_count = page.total
+            if total_count is None:
+                total_count = page_total_count
+            elif page_total_count != total_count:
+                raise ValueError("Semantic Scholar total changed during pagination")
+
+            retrieved_at = self._retrieval_clock()
+            consumed = 0
+            for paper in page.data:
+                publications.append(
+                    self._map_paper_with_provenance(
+                        paper,
+                        search_run=search_run,
+                        search_query=search_query,
+                        retrieved_at=retrieved_at,
+                    )
+                )
+                consumed += 1
+                if len(publications) >= self._max_results:
+                    break
+
+            if len(publications) >= self._max_results:
+                next_cursor = str(current_offset + consumed)
+                break
+
+            if page.next is None or not page.data:
+                next_cursor = None
+                break
+            if page.next == current_offset or page.next in seen_offsets:
+                next_cursor = None
+                break
+
+            seen_offsets.add(current_offset)
+            current_offset = page.next
+            next_cursor = str(page.next)
+
+        filter_warnings = self._filters.get_warnings() if self._filters else ()
+        is_lossless = self._filters.is_lossless if self._filters else True
+        truncation_warnings = self._truncation_warnings(
+            len(publications), total_count, next_cursor
+        )
+        return ProviderSearchOutput(
+            publications=publications,
+            raw_responses=raw_responses,
+            total_count=total_count,
+            next_cursor=next_cursor,
+            has_more=next_cursor is not None,
+            warnings=tuple([*filter_warnings, *truncation_warnings]),
+            is_lossless=is_lossless,
+        )
+
+    def _truncation_warnings(
+        self,
+        fetched: int,
+        total_count: int | None,
+        next_cursor: str | None,
+    ) -> list[str]:
+        if (
+            next_cursor is None
+            and total_count is not None
+            and fetched < total_count
+        ):
+            return [
+                _TRUNCATION_WARNING.format(fetched=fetched, total=total_count)
+            ]
+        return []
+
+    async def iterate(
+        self,
+        *,
+        search_run: SearchRun,
+        search_query: SearchQuery,
+        per_page: int = 200,
+    ) -> AsyncIterator[Publication]:
+        """Yield mapped publications across all offset pages."""
+
+        client = self._require_client()
+        self._validate_search_context(search_run, search_query)
+        async for paper in client.iterate_papers(
+            search_run.rendered_query,
+            limit=per_page,
+            fields=_FIELDS,
+        ):
+            yield self._map_paper_with_provenance(
+                paper,
+                search_run=search_run,
+                search_query=search_query,
+                retrieved_at=self._retrieval_clock(),
+            )
 
     def map_paper(
         self,
@@ -233,3 +487,55 @@ class SemanticScholarProvider:
             urls=urls,
             provenance=provenance,
         )
+
+    def _map_paper_with_provenance(
+        self,
+        paper: dict[str, Any],
+        *,
+        search_run: SearchRun,
+        search_query: SearchQuery,
+        retrieved_at: datetime,
+    ) -> Publication:
+        publication = self.map_paper(
+            paper,
+            search_run=search_run,
+            search_query=search_query,
+            retrieved_at=retrieved_at,
+        )
+        doi = None
+        for identifier in publication.identifiers:
+            if identifier.type is IdentifierType.DOI:
+                doi = identifier.value
+                break
+        return publication.model_copy(
+            update={
+                "record_id": deterministic_search_record_id(
+                    provider=self.name,
+                    source_id=clean_string(paper.get("paperId")),
+                    doi=doi,
+                    title=publication.title,
+                    publication_year=publication.publication_year,
+                ),
+            }
+        )
+
+    def _require_client(self) -> SemanticScholarClient:
+        if self._client is None:
+            raise RuntimeError(
+                "SemanticScholarProvider requires a client for search operations"
+            )
+        return self._client
+
+    def _validate_search_context(
+        self,
+        search_run: SearchRun,
+        search_query: SearchQuery,
+    ) -> None:
+        if search_run.provider.casefold() != self.name:
+            raise ValueError("search_run provider must be semantic_scholar")
+        if search_run.query_id != search_query.query_id:
+            raise ValueError("search_run and search_query must have the same query_id")
+        if search_run.query_version != search_query.version:
+            raise ValueError(
+                "search_run query_version must match search_query version"
+            )
