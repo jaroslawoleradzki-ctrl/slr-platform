@@ -1,6 +1,6 @@
 # SLR Platform — Project Status
 
-_Last updated: 2026-08-20_
+_Last updated: 2026-08-21_
 
 ## Current status
 
@@ -14,7 +14,7 @@ development
 
 Current version:
 
-v0.5.4
+v0.5.5
 
 Current release status:
 
@@ -22,6 +22,8 @@ Phase 9 Data Extraction is formally completed and released through v0.4.9.
 Phase 10 Data Synthesis is complete in v0.5.0.
 Phase 11 — Integrated GUI MVP — v0.5.4 delivers authoritative backend PRISMA
 funnel metrics powering the live PRISMA 2020 flow diagram on the Exports page.
+v0.5.5 restores Semantic Scholar as a fully functional Live API Provider
+with rate-limited search, pagination, provenance, and PRISMA integration.
 
 Current development phase:
 

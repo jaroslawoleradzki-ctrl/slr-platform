@@ -11,6 +11,11 @@ from app.providers.crossref import CrossrefClient, CrossrefSearchFilters
 from app.providers.openalex import OpenAlexClient, OpenAlexSearchFilters
 from app.providers.search.crossref import CrossrefProvider
 from app.providers.search.openalex import OpenAlexProvider
+from app.providers.search.semantic_scholar import SemanticScholarProvider
+from app.providers.semantic_scholar import (
+    SemanticScholarClient,
+    SemanticScholarSearchFilters,
+)
 from app.repositories.project_publication_repository import default_project_publication_repository
 from app.services.live_search import LiveSearchService, build_search_query
 
@@ -21,7 +26,7 @@ def anyio_backend() -> str:
 
 
 def _sample_strategy(
-    *, providers: list[Literal["openalex", "crossref"]] | None = None
+    *, providers: list[Literal["openalex", "crossref", "semantic_scholar"]] | None = None
 ) -> SearchStrategyExecutionRequest:
     return SearchStrategyExecutionRequest(
         publication_year_from=2020,
@@ -204,3 +209,106 @@ async def test_live_search_service_executes_crossref_end_to_end() -> None:
     assert pub.publication_year == 2022
     assert pub.identifiers[0].value == "10.1000/lean-energy-1"
     assert pub.provenance[0].source == "crossref"
+
+
+def test_build_providers_configures_semantic_scholar_and_api_key() -> None:
+    strategy = _sample_strategy(providers=["semantic_scholar"])
+
+    with patch.dict("os.environ", {"SEMANTIC_SCHOLAR_API_KEY": "secret-key"}):
+        async_client = httpx.AsyncClient()
+        providers = LiveSearchService._build_providers(strategy, async_client)
+
+    assert len(providers) == 1
+    semantic_provider = providers[0]
+    assert isinstance(semantic_provider, SemanticScholarProvider)
+    assert semantic_provider._paginate is True
+
+    client = semantic_provider._client
+    assert isinstance(client, SemanticScholarClient)
+    assert client._api_key == "secret-key"
+    assert client._minimum_interval == 1 / 1.0
+
+    filters = semantic_provider._filters
+    assert isinstance(filters, SemanticScholarSearchFilters)
+    assert filters.publication_year_from == 2020
+    assert filters.publication_year_to == 2025
+    assert filters.languages == ("en", "pl")
+    assert filters.publication_types == ("article", "review")
+    assert filters.open_access is True
+    assert filters.is_lossless is False
+    assert len(filters.get_warnings()) == 4
+
+
+def test_build_providers_semantic_scholar_handles_missing_api_key() -> None:
+    strategy = _sample_strategy(providers=["semantic_scholar"])
+
+    with patch.dict("os.environ", {"SEMANTIC_SCHOLAR_API_KEY": ""}):
+        async_client = httpx.AsyncClient()
+        providers = LiveSearchService._build_providers(strategy, async_client)
+
+    assert len(providers) == 1
+    semantic_provider = providers[0]
+    assert isinstance(semantic_provider, SemanticScholarProvider)
+    assert semantic_provider._client._api_key is None
+
+
+@pytest.mark.anyio
+async def test_live_search_service_executes_semantic_scholar_end_to_end() -> None:
+    strategy = _sample_strategy(providers=["semantic_scholar"])
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.host == "api.semanticscholar.org"
+        assert request.url.path == "/graph/v1/paper/search"
+        assert "lean production" in request.url.params["query"]
+        return httpx.Response(
+            200,
+            json={
+                "total": 1,
+                "offset": 0,
+                "next": None,
+                "data": [
+                    {
+                        "paperId": "s1",
+                        "title": "Lean Energy Semantic Study",
+                        "year": 2023,
+                        "externalIds": {"DOI": "10.1000/lean-energy-ss"},
+                    }
+                ],
+            },
+            request=request,
+        )
+
+    repo = default_project_publication_repository()
+    service = LiveSearchService(repository=repo)
+
+    original_async_client = httpx.AsyncClient
+
+    def mock_async_client(**kwargs: Any) -> httpx.AsyncClient:
+        kwargs["transport"] = httpx.MockTransport(handler)
+        return original_async_client(**kwargs)
+
+    with patch("httpx.AsyncClient", side_effect=mock_async_client):
+        execution = await service.execute("lean_energy", strategy)
+
+    assert len(execution.provider_results) == 1
+    result = execution.provider_results[0]
+    assert result.search_run.provider == "semantic_scholar"
+    assert result.search_run.records_retrieved == 1
+    assert result.total_count == 1
+    assert result.next_cursor is None
+    assert result.has_more is False
+
+    warnings = result.search_run.warnings
+    assert any("year range filtering" in w for w in warnings)
+    assert any("language filtering" in w for w in warnings)
+    assert any("publication type filtering" in w for w in warnings)
+    assert any("open access filtering" in w for w in warnings)
+    assert result.search_run.is_lossless is False
+
+    assert len(execution.normalized_publications) == 1
+    pub = execution.normalized_publications[0]
+    assert pub.title == "Lean Energy Semantic Study"
+    assert pub.publication_year == 2023
+    assert pub.identifiers[0].value == "s1"
+    assert pub.provenance[0].source == "semantic_scholar"
+    assert pub.provenance[0].source_record_id == "s1"

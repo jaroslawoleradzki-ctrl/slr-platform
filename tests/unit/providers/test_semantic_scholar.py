@@ -230,7 +230,10 @@ async def test_iterate_papers_multiple_pages() -> None:
 
     transport = httpx.MockTransport(handler)
     async with httpx.AsyncClient(transport=transport) as http_client:
-        client = SemanticScholarClient(http_client=http_client)
+        client = SemanticScholarClient(
+            http_client=http_client,
+            requests_per_second=None,
+        )
         papers = []
         async for paper in client.iterate_papers("lean", limit=10):
             papers.append(paper)
@@ -286,7 +289,10 @@ async def test_iterate_papers_loop_protection() -> None:
 
     transport = httpx.MockTransport(handler)
     async with httpx.AsyncClient(transport=transport) as http_client:
-        client = SemanticScholarClient(http_client=http_client)
+        client = SemanticScholarClient(
+            http_client=http_client,
+            requests_per_second=None,
+        )
         with pytest.raises(RuntimeError, match="Pagination loop detected"):
             async for _ in client.iterate_papers("lean"):
                 pass
@@ -312,7 +318,11 @@ async def test_iterate_papers_http_error() -> None:
 
     transport = httpx.MockTransport(handler)
     async with httpx.AsyncClient(transport=transport) as http_client:
-        client = SemanticScholarClient(http_client=http_client)
+        client = SemanticScholarClient(
+            http_client=http_client,
+            requests_per_second=None,
+            retry_wait_multiplier=0,
+        )
         with pytest.raises(httpx.HTTPStatusError):
             async for _ in client.iterate_papers("lean"):
                 pass
@@ -394,3 +404,297 @@ async def test_iterate_papers_empty_data_with_invalid_next() -> None:
             papers.append(paper)
 
     assert len(papers) == 0
+
+
+class _FakeClock:
+    def __init__(self) -> None:
+        self.current_time = 0.0
+        self.sleep_calls: list[float] = []
+
+    def monotonic(self) -> float:
+        return self.current_time
+
+    async def sleep(self, seconds: float) -> None:
+        self.sleep_calls.append(seconds)
+        self.current_time += seconds
+
+
+@pytest.mark.anyio
+async def test_search_papers_page_success() -> None:
+    async def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.params["offset"] == "5"
+        return httpx.Response(
+            200,
+            json={
+                "total": 12,
+                "offset": 5,
+                "next": 10,
+                "data": [{"paperId": "1", "title": "Paper 1"}],
+            },
+            request=request,
+        )
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport) as http_client:
+        client = SemanticScholarClient(
+            http_client=http_client,
+            requests_per_second=None,
+        )
+        page = await client.search_papers_page("lean", limit=5, offset=5)
+
+    assert len(page.data) == 1
+    assert page.data[0]["paperId"] == "1"
+    assert page.total == 12
+    assert page.offset == 5
+    assert page.next == 10
+    assert page.payload["total"] == 12
+
+
+@pytest.mark.anyio
+async def test_search_papers_page_missing_metadata_defaults() -> None:
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"data": []}, request=request)
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport) as http_client:
+        client = SemanticScholarClient(
+            http_client=http_client,
+            requests_per_second=None,
+        )
+        page = await client.search_papers_page("lean")
+
+    assert page.data == []
+    assert page.total is None
+    assert page.offset == 0
+    assert page.next is None
+
+
+@pytest.mark.anyio
+async def test_search_papers_page_invalid_total() -> None:
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"total": "12", "data": []}, request=request)
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport) as http_client:
+        client = SemanticScholarClient(
+            http_client=http_client,
+            requests_per_second=None,
+        )
+        with pytest.raises(
+            ValueError, match="total must be a non-negative integer"
+        ):
+            await client.search_papers_page("lean")
+
+
+@pytest.mark.anyio
+async def test_search_papers_page_invalid_offset() -> None:
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"data": [], "offset": -1}, request=request)
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport) as http_client:
+        client = SemanticScholarClient(
+            http_client=http_client,
+            requests_per_second=None,
+        )
+        with pytest.raises(
+            ValueError, match="offset must be a non-negative integer"
+        ):
+            await client.search_papers_page("lean")
+
+
+@pytest.mark.anyio
+async def test_search_papers_page_invalid_next() -> None:
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"data": [], "next": "10"}, request=request)
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport) as http_client:
+        client = SemanticScholarClient(
+            http_client=http_client,
+            requests_per_second=None,
+        )
+        with pytest.raises(
+            ValueError, match="next must be a non-negative integer or null"
+        ):
+            await client.search_papers_page("lean")
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("status_code", [429, 500, 502, 503, 504])
+async def test_search_papers_retries_retryable_status_then_succeeds(
+    status_code: int,
+) -> None:
+    calls = 0
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return httpx.Response(status_code, text="temporary", request=request)
+        return httpx.Response(
+            200,
+            json={"data": [{"paperId": "1", "title": "Paper 1"}]},
+            request=request,
+        )
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport) as http_client:
+        client = SemanticScholarClient(
+            http_client=http_client,
+            retry_wait_multiplier=0,
+            requests_per_second=None,
+        )
+        papers = await client.search_papers("lean")
+
+    assert calls == 2
+    assert len(papers) == 1
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("status_code", [400, 403, 404, 422])
+async def test_search_papers_does_not_retry_non_retryable_status(
+    status_code: int,
+) -> None:
+    calls = 0
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        return httpx.Response(status_code, text="no", request=request)
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport) as http_client:
+        client = SemanticScholarClient(
+            http_client=http_client,
+            retry_wait_multiplier=0,
+            requests_per_second=None,
+        )
+        with pytest.raises(httpx.HTTPStatusError):
+            await client.search_papers("lean")
+
+    assert calls == 1
+
+
+@pytest.mark.anyio
+async def test_search_papers_retries_exhausted_raises_http_status_error() -> None:
+    calls = 0
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        return httpx.Response(500, text="boom", request=request)
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport) as http_client:
+        client = SemanticScholarClient(
+            http_client=http_client,
+            retry_attempts=3,
+            retry_wait_multiplier=0,
+            requests_per_second=None,
+        )
+        with pytest.raises(httpx.HTTPStatusError):
+            await client.search_papers("lean")
+
+    assert calls == 3
+
+
+@pytest.mark.anyio
+async def test_search_papers_honors_retry_after_header() -> None:
+    calls = 0
+    fake_clock = _FakeClock()
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return httpx.Response(
+                429,
+                headers={"retry-after": "2"},
+                text="slow down",
+                request=request,
+            )
+        return httpx.Response(
+            200,
+            json={"data": [{"paperId": "1", "title": "Paper 1"}]},
+            request=request,
+        )
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport) as http_client:
+        client = SemanticScholarClient(
+            http_client=http_client,
+            requests_per_second=None,
+            clock=fake_clock.monotonic,
+            sleep=fake_clock.sleep,
+        )
+        papers = await client.search_papers("lean")
+
+    assert calls == 2
+    assert fake_clock.sleep_calls == [pytest.approx(2.0)]
+    assert len(papers) == 1
+
+
+@pytest.mark.anyio
+async def test_search_papers_retries_transport_error() -> None:
+    calls = 0
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise httpx.ConnectError("connection refused", request=request)
+        return httpx.Response(
+            200,
+            json={"data": [{"paperId": "1", "title": "Paper 1"}]},
+            request=request,
+        )
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport) as http_client:
+        client = SemanticScholarClient(
+            http_client=http_client,
+            retry_wait_multiplier=0,
+            requests_per_second=None,
+        )
+        papers = await client.search_papers("lean")
+
+    assert calls == 2
+    assert len(papers) == 1
+
+
+@pytest.mark.anyio
+async def test_client_rate_limits_sequential_requests() -> None:
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"data": []}, request=request)
+
+    fake_clock = _FakeClock()
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport) as http_client:
+        client = SemanticScholarClient(
+            http_client=http_client,
+            requests_per_second=2.0,
+            clock=fake_clock.monotonic,
+            sleep=fake_clock.sleep,
+        )
+        await client.search_papers("lean")
+        await client.search_papers("lean")
+
+    assert sum(fake_clock.sleep_calls) == pytest.approx(0.5)
+
+
+def test_client_rejects_invalid_retry_configuration() -> None:
+    with httpx.Client() as http_client:
+        with pytest.raises(ValueError, match="retry_attempts must be at least 1"):
+            SemanticScholarClient(http_client=http_client, retry_attempts=0)  # type: ignore
+        with pytest.raises(TypeError, match="retry_attempts must be an integer"):
+            SemanticScholarClient(http_client=http_client, retry_attempts=True)  # type: ignore
+        with pytest.raises(
+            ValueError, match="retry_wait_multiplier must not be negative"
+        ):
+            SemanticScholarClient(http_client=http_client, retry_wait_multiplier=-1)
+        with pytest.raises(
+            ValueError,
+            match="requests_per_second must be a finite positive number or None",
+        ):
+            SemanticScholarClient(http_client=http_client, requests_per_second=0)

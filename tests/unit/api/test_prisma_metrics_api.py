@@ -124,6 +124,32 @@ def test_prisma_metrics_identified_counts_from_import_history(environment) -> No
     assert body["total_identified"] == 22
 
 
+def test_prisma_metrics_counts_semantic_scholar_provider_imports(environment) -> None:
+    client, _, history, *_ = environment
+    history.create(
+        make_import_history(
+            PROJECT_ID,
+            records_count=6,
+            source_type="provider",
+            provider="semantic_scholar",
+            status="success",
+        )
+    )
+    history.create(
+        make_import_history(
+            PROJECT_ID,
+            records_count=2,
+            source_type="provider",
+            provider="semantic_scholar",
+            status="warning",
+        )
+    )
+
+    body = client.get(f"/api/v1/projects/{PROJECT_ID}/prisma/metrics").json()
+    assert body["records_identified_providers"] == 8
+    assert body["total_identified"] == 8
+
+
 def test_prisma_metrics_normalization_and_dedup_without_duplicates(environment) -> None:
     client, publications, *_ = environment
     publications.add_publications(PROJECT_ID, [make_publication(1), make_publication(2), make_publication(3)])

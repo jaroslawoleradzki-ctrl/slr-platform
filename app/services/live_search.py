@@ -18,6 +18,11 @@ from app.providers.crossref import CrossrefClient, CrossrefSearchFilters
 from app.providers.openalex import OpenAlexClient, OpenAlexSearchFilters
 from app.providers.search.crossref import CrossrefProvider
 from app.providers.search.openalex import OpenAlexProvider
+from app.providers.search.semantic_scholar import SemanticScholarProvider
+from app.providers.semantic_scholar import (
+    SemanticScholarClient,
+    SemanticScholarSearchFilters,
+)
 from app.repositories.project_publication_repository import (
     ProjectPublicationRepository,
     default_project_publication_repository,
@@ -149,6 +154,27 @@ class LiveSearchService:
                         ),
                         paginate=True,
                         filters=CrossrefSearchFilters(
+                            publication_year_from=strategy.publication_year_from,
+                            publication_year_to=strategy.publication_year_to,
+                            languages=tuple(strategy.languages),
+                            publication_types=tuple(strategy.publication_types),
+                            open_access=strategy.open_access,
+                        ),
+                    )
+                )
+            elif name == "semantic_scholar":
+                semantic_scholar_api_key = (
+                    (os.getenv("SEMANTIC_SCHOLAR_API_KEY") or "").strip() or None
+                )
+                providers.append(
+                    SemanticScholarProvider(
+                        client=SemanticScholarClient(
+                            http_client=http_client,
+                            api_key=semantic_scholar_api_key,
+                            requests_per_second=1.0,
+                        ),
+                        paginate=True,
+                        filters=SemanticScholarSearchFilters(
                             publication_year_from=strategy.publication_year_from,
                             publication_year_to=strategy.publication_year_to,
                             languages=tuple(strategy.languages),

@@ -175,3 +175,31 @@ OpenAlex newest-first, bez fikcyjnej nazwy pliku dla providera. Crossref i
 Semantic Scholar pozostają neutralne (`Brak danych`/`Nie uruchamiano`), ponieważ
 nie mają podłączonego źródła historii Sources ani health-checku. Pełne
 provenance pozostaje przyszłym etapem.
+
+## Aktualizacja — Semantic Scholar podłączony do Live Search (v0.5.5)
+
+W ramach przyrostu v0.5.5 Semantic Scholar został przywrócony jako działający
+Live API Provider w warstwie Search Strategy:
+
+- `LiveSearchService._build_providers` buduje teraz `SemanticScholarProvider`
+  z `SemanticScholarClient` (opcjonalny klucz `SEMANTIC_SCHOLAR_API_KEY`,
+  wyłącznie backendowy), z paginacją offsetową i limitem 1 req/s;
+- klient ma odporne wykonanie: retry HTTP 429/500/502/503/504 z exponential
+  backoff, obsługę `Retry-After`, brak pętli bezwarunkowych i jawny timeout
+  współdzielonego `httpx.AsyncClient`;
+- `SemanticScholarProvider.search_with_raw` mapuje wyniki przez istniejący
+  pipeline normalizacji i deduplikacji, zachowuje provenance
+  (`source="semantic_scholar"`, `source_record_id=paperId`) i deterministyczne
+  `record_id`;
+- obcięcie wyników (limit 1000 rekordów endpointu relevance search) jest
+  raportowane przez `warnings`/`total_count`/`has_more` — brak cichego cięcia;
+- filtry strategii (rok/język/typ/open access), których endpoint nie stosuje,
+  generują jawne ostrzeżenia (no silent loss); ograniczenia wyników nadal
+  egzekwuje router po stronie klienta;
+- frontend umożliwia wybór Semantic Scholar w formularzu Search Strategy;
+- PRISMA zlicza importy Semantic Scholar przez istniejący wpis historii
+  `source_type="provider"` (agregacja jest agnostyczna względem providera).
+
+Wymagane komendy walidacji backendu i frontendu przechodzą bez regresji
+(pytest, ruff, mypy, frontend test/type-check/build). Wprowadzenie wymaga
+commita i wydania w przyszłości.

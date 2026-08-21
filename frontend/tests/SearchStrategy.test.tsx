@@ -313,16 +313,17 @@ describe('persistent Search Strategy GUI & Execution', () => {
     // 1. 404 -> infobar o braku strategii
     expect(await screen.findByText(/nie ma jeszcze zapisanej strategii/i)).toBeInTheDocument();
 
-    // 2. OpenAlex i Crossref nie są domyślnie zaznaczone, ale są możliwe do zaznaczenia; Semantic Scholar zablokowany
+    // 2. OpenAlex, Crossref i Semantic Scholar nie są domyślnie zaznaczone, ale są możliwe do zaznaczenia
     const openAlexCb = screen.getByRole('checkbox', { name: /OpenAlex/i });
     const crossrefCb = screen.getByRole('checkbox', { name: /Crossref/i });
     const semanticCb = screen.getByRole('checkbox', { name: /Semantic Scholar/i });
 
     expect(openAlexCb).not.toBeChecked();
     expect(crossrefCb).not.toBeChecked();
+    expect(semanticCb).not.toBeChecked();
     expect(openAlexCb).not.toBeDisabled();
     expect(crossrefCb).not.toBeDisabled();
-    expect(semanticCb).toBeDisabled();
+    expect(semanticCb).not.toBeDisabled();
 
     // Dodajmy grupę pojęć
     const groupInput = screen.getByRole('textbox', { name: 'Nazwa nowej grupy' });
