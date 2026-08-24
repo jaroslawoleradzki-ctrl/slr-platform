@@ -1050,7 +1050,7 @@ def test_map_work_full_correct_record() -> None:
 
     assert publication.publisher == "Springer"
     assert publication.document_type == DocumentType.JOURNAL_ARTICLE
-    assert publication.language == "en"
+    assert publication.language == "EN"
     assert publication.urls == ["https://doi.org/10.1000/xyz-123"]
     assert publication.abstract == "Abstract with italic text & entities."
     assert publication.provenance == []
@@ -1431,5 +1431,4 @@ async def test_retry_respects_http_date_retry_after_header() -> None:
 
     assert len(fake_time.sleep_calls) == 1
     assert 10.0 <= fake_time.sleep_calls[0] <= 14.0
-
 

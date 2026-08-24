@@ -66,11 +66,6 @@ class Publication(BaseModel):
             raise ValueError("text fields must not be blank")
         return stripped
 
-    @field_validator("language")
-    @classmethod
-    def normalize_language(cls, value: str | None) -> str | None:
-        return value.lower() if value is not None else None
-
     @field_validator("keywords")
     @classmethod
     def normalize_keywords(cls, values: list[str]) -> list[str]:

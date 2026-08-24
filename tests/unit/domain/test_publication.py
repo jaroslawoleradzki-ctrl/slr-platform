@@ -28,11 +28,16 @@ def test_publication_builds_canonical_record() -> None:
     )
 
     assert publication.title == "Lean manufacturing and energy efficiency"
-    assert publication.language == "en"
+    assert publication.language == "EN"
     assert publication.keywords == ["Lean", "energy efficiency"]
     assert publication.urls == ["https://example.org/article"]
     assert publication.authors[0].display_name == "Jane Doe"
     assert publication.provenance[0].source == "openalex"
+
+
+def test_publication_preserves_language_source_shape_until_stage_three() -> None:
+    assert Publication(title="Example", language="English").language == "English"
+    assert Publication(title="Example", language="ENG").language == "ENG"
 
 
 def test_publication_rejects_blank_title() -> None:

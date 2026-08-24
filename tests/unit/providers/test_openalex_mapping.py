@@ -128,7 +128,7 @@ def test_map_work_maps_representative_record_without_provenance() -> None:
         "8765-4321",
     ]
     assert publication.document_type is DocumentType.JOURNAL_ARTICLE
-    assert publication.language == "en"
+    assert publication.language == "EN"
     assert publication.urls == [
         "https://example.org/article",
         "https://example.org/article.pdf",
@@ -359,12 +359,12 @@ def test_optional_malformed_structures_do_not_reject_publication() -> None:
     assert publication.open_access is None
 
 
-def test_language_is_cleaned_and_canonical_model_applies_its_contract() -> None:
+def test_language_is_cleaned_and_preserves_source_case() -> None:
     publication = build_provider().map_work(
         {"title": "Language", "language": " EN "}
     )
 
-    assert publication.language == "en"
+    assert publication.language == "EN"
 
 
 def test_language_length_is_validated_by_canonical_model_not_mapper() -> None:

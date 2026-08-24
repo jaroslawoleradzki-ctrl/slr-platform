@@ -1,6 +1,6 @@
 [project]
 name = "slr-platform"
-version = "0.5.8"
+version = "0.6.0"
 description = "Modułowa aplikacja wspomagająca systematyczne przeglądy literatury."
 readme = "README.md"
 requires-python = ">=3.12"

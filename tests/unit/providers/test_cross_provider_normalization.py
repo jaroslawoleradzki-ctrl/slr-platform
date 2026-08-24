@@ -234,7 +234,7 @@ def test_urls_without_supported_scheme_delimiter_are_rejected(
 
 
 @pytest.mark.parametrize("language", [" EN ", "pl"])
-def test_language_is_trimmed_and_lowercased_by_canonical_model(
+def test_language_is_trimmed_and_preserves_case_in_canonical_model(
     language: str,
 ) -> None:
     publications = [
@@ -243,9 +243,7 @@ def test_language_is_trimmed_and_lowercased_by_canonical_model(
         _map_semantic_scholar(language=language),
     ]
 
-    assert {publication.language for publication in publications} == {
-        language.strip().lower()
-    }
+    assert {publication.language for publication in publications} == {language.strip()}
 
 
 @pytest.mark.parametrize("language", ["x", " "])

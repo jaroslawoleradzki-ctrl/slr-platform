@@ -9,6 +9,7 @@ from app.domain.identifiers import Identifier, IdentifierType
 from app.domain.publication import Publication
 from app.domain.venue import Venue
 from app.normalization.doi import normalize_doi
+from app.normalization.language import normalize_language
 from app.normalization.title import normalize_title
 
 _ValueT = TypeVar("_ValueT")
@@ -145,10 +146,13 @@ class PublicationMergePolicy:
 
         if first.schema_version != second.schema_version:
             raise PublicationMergeConflict("conflicting schema_version values")
+
+        first_lang = normalize_language(first.language)
+        second_lang = normalize_language(second.language)
         if (
-            first.language is not None
-            and second.language is not None
-            and first.language != second.language
+            first_lang is not None
+            and second_lang is not None
+            and first_lang != second_lang
         ):
             raise PublicationMergeConflict("conflicting language values")
         if (
@@ -185,7 +189,7 @@ class PublicationMergePolicy:
                 first.document_type,
                 second.document_type,
             ),
-            "language": _choose_optional(first.language, second.language),
+            "language": _choose_optional(first_lang, second_lang),
             "keywords": _unique_sorted([*first.keywords, *second.keywords]),
             "urls": _unique_sorted([*first.urls, *second.urls]),
             "open_access": _choose_optional(first.open_access, second.open_access),

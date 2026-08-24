@@ -3,6 +3,7 @@ from app.domain.identifiers import Identifier, IdentifierType
 from app.domain.publication import Publication
 from app.normalization.author import normalize_author
 from app.normalization.doi import normalize_doi
+from app.normalization.language import normalize_language
 from app.normalization.orcid import normalize_orcid
 from app.normalization.title import normalize_title
 
@@ -51,6 +52,7 @@ class PublicationNormalizer:
                     _normalize_identifier(identifier)
                     for identifier in value.identifiers
                 ],
+                "language": normalize_language(value.language),
             },
             deep=True,
         )

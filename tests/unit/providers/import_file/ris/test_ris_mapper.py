@@ -348,3 +348,44 @@ def test_map_ris_record_blank_source_raises_value_error() -> None:
 def test_map_ris_record_whitespace_only_source_raises_value_error() -> None:
     with pytest.raises(ValueError, match="source must be a non-blank string"):
         map_ris_record(_minimal(), source="   ")
+
+
+# ---------------------------------------------------------------------------
+# Language (LA tag)
+# ---------------------------------------------------------------------------
+
+
+def test_map_ris_record_language_from_la_tag() -> None:
+    """LA tag maps to Publication.language (raw, not canonicalized)."""
+    pub = map_ris_record(_minimal(LA=["eng"]), source="s")
+    assert pub.language == "eng"
+
+
+def test_map_ris_record_language_from_la_tag_case_preserved() -> None:
+    """Language value is passed through as-is; normalization happens later."""
+    pub = map_ris_record(_minimal(LA=["ENGLISH"]), source="s")
+    assert pub.language == "ENGLISH"
+
+
+def test_map_ris_record_language_absent_is_none() -> None:
+    """Missing LA tag results in None language."""
+    pub = map_ris_record(_minimal(), source="s")
+    assert pub.language is None
+
+
+def test_map_ris_record_language_blank_is_none() -> None:
+    """Blank LA tag results in None language."""
+    pub = map_ris_record(_minimal(LA=["  "]), source="s")
+    assert pub.language is None
+
+
+def test_map_ris_record_integration_with_normalization() -> None:
+    """RIS mapper output + normalization yields canonical ISO 639-1."""
+    from app.normalization import normalize_publication
+
+    record = _minimal(LA=["eng"])
+    pub = map_ris_record(record, source="s")
+    assert pub.language == "eng"
+
+    normalized = normalize_publication(pub)
+    assert normalized.language == "en"
