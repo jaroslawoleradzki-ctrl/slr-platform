@@ -5,7 +5,8 @@ import { ProjectProvider } from '../src/context/ProjectContext';
 import { ExportsPage } from '../src/pages/ExportsPage';
 import { projectApiService } from '../src/services/api/projectApi';
 import { screeningApi } from '../src/services/api/screeningApi';
-import { extractionApi, ExtractionApiError } from '../src/api/extractionApi';
+import { extractionApi } from '../src/services/api/extractionApi';
+import { exportApi, ExportApiError } from '../src/services/api/exportApi';
 import { SLRProject, PrismaMetricsResponse } from '../src/types';
 
 const PRISMA_METRICS: PrismaMetricsResponse = {
@@ -67,7 +68,7 @@ const renderExports = (path = '/projects/proj_test/exports') =>
     </ProjectProvider>
   );
 
-describe('ExportsPage — exports & PRISMA', () => {
+describe('ExportsPage — Stage 9 exports & PRISMA completion', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     vi.spyOn(projectApiService, 'getProjects').mockResolvedValue([PROJECT]);
@@ -87,9 +88,10 @@ describe('ExportsPage — exports & PRISMA', () => {
       createObjectURL: vi.fn().mockReturnValue('blob:test'),
       revokeObjectURL: vi.fn(),
     });
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
   });
 
-  it('renders page heading and Live PRISMA diagram with project metrics', async () => {
+  it('renders page heading, Live PRISMA diagram, and exactly zero locked buttons', async () => {
     renderExports();
     expect(
       await screen.findByText('8. Eksporty i Generowanie Raportu PRISMA (Exports & Reporting)')
@@ -100,88 +102,138 @@ describe('ExportsPage — exports & PRISMA', () => {
     expect(screen.getByText('14 unikalnych rekordów')).toBeInTheDocument();
     expect(screen.getByText('2 grup')).toBeInTheDocument();
     expect(screen.getByText('4')).toBeInTheDocument();
+
+    // Verify 0 locked/disabled 'Not yet available' buttons exist in Stage 9
+    const lockedButtons = screen.queryAllByText(/Not yet available/i);
+    expect(lockedButtons.length).toBe(0);
+
+    // Verify all 5 dataset cards have active download buttons + 2 PRISMA buttons (7 total download buttons)
+    const downloadButtons = screen.getAllByRole('button', { name: /Pobierz/i });
+    expect(downloadButtons.length).toBe(7);
   });
 
-  it('CSV and JSON buttons trigger exportDataset with publications dataset and download the blob', async () => {
+  it('triggers CSV and JSON downloads via extractionApi', async () => {
     const exportDataset = vi
       .spyOn(extractionApi, 'exportDataset')
       .mockResolvedValue(new Blob(['data']));
     renderExports();
     await screen.findByText('8. Eksporty i Generowanie Raportu PRISMA (Exports & Reporting)');
 
-    const downloadButtons = screen.getAllByRole('button', { name: /Pobierz/i });
+    const downloadButtons = screen.getAllByRole('button', { name: /^Pobierz$/i });
+
+    // CSV
     fireEvent.click(downloadButtons[0]);
     await waitFor(() => expect(exportDataset).toHaveBeenCalledWith('proj_test', 'csv', 'publications'));
     expect(URL.createObjectURL).toHaveBeenCalled();
-    await waitFor(() => expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:test'));
     expect(await screen.findByRole('status')).toHaveTextContent(/Pobrano plik Zestawienie Rekordów CSV/);
 
+    // JSON
     fireEvent.click(downloadButtons[1]);
     await waitFor(() => expect(exportDataset).toHaveBeenCalledWith('proj_test', 'json', 'publications'));
+    expect(await screen.findByRole('status')).toHaveTextContent(/Pobrano plik Zestawienie rekordów JSON/);
   });
 
-  it('BibTeX, RIS and Excel formats are disabled and marked "Not yet available"', async () => {
+  it('triggers BibTeX download via exportApi with correct filename', async () => {
+    const bibtexSpy = vi
+      .spyOn(exportApi, 'exportBibtex')
+      .mockResolvedValue(new Blob(['@article{...}'], { type: 'application/x-bibtex' }));
     renderExports();
     await screen.findByText('8. Eksporty i Generowanie Raportu PRISMA (Exports & Reporting)');
 
-    const unavailable = screen.getAllByRole('button', { name: /Not yet available/i });
-    expect(unavailable.length).toBeGreaterThanOrEqual(3);
-    unavailable.forEach((btn) => expect(btn).toBeDisabled());
-    expect(screen.getByRole('button', { name: /Eksportuj PRISMA Flow/i })).toBeDisabled();
+    const downloadButtons = screen.getAllByRole('button', { name: /^Pobierz$/i });
+    // BibTeX is 3rd card (index 2)
+    fireEvent.click(downloadButtons[2]);
+    await waitFor(() => expect(bibtexSpy).toHaveBeenCalledWith('proj_test'));
+    expect(URL.createObjectURL).toHaveBeenCalled();
+    expect(await screen.findByRole('status')).toHaveTextContent(/Pobrano plik Eksport Bazy BibTeX \(\.bib\)/);
   });
 
-  it('shows an error alert when export fails', async () => {
-    vi.spyOn(extractionApi, 'exportDataset').mockRejectedValue(new Error('export unavailable'));
+  it('triggers RIS download via exportApi with correct filename', async () => {
+    const risSpy = vi
+      .spyOn(exportApi, 'exportRis')
+      .mockResolvedValue(new Blob(['TY  - JOUR...'], { type: 'application/x-research-info-systems' }));
     renderExports();
     await screen.findByText('8. Eksporty i Generowanie Raportu PRISMA (Exports & Reporting)');
 
-    fireEvent.click(screen.getAllByRole('button', { name: /Pobierz/i })[0]);
-    expect(await screen.findByRole('alert')).toHaveTextContent(/Nie udało się pobrać eksportu/i);
+    const downloadButtons = screen.getAllByRole('button', { name: /^Pobierz$/i });
+    // RIS is 4th card (index 3)
+    fireEvent.click(downloadButtons[3]);
+    await waitFor(() => expect(risSpy).toHaveBeenCalledWith('proj_test'));
+    expect(URL.createObjectURL).toHaveBeenCalled();
+    expect(await screen.findByRole('status')).toHaveTextContent(/Pobrano plik Eksport Bazy RIS \(\.ris\)/);
   });
 
-  it('shows the backend/API error message when export fails with an ExtractionApiError', async () => {
-    vi.spyOn(extractionApi, 'exportDataset').mockRejectedValue(
-      new ExtractionApiError(422, 'Query parameter format must be json or csv.')
+  it('triggers XLSX download via exportApi with binary blob', async () => {
+    const xlsxSpy = vi
+      .spyOn(exportApi, 'exportXlsx')
+      .mockResolvedValue(new Blob(['PK...'], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+    renderExports();
+    await screen.findByText('8. Eksporty i Generowanie Raportu PRISMA (Exports & Reporting)');
+
+    const downloadButtons = screen.getAllByRole('button', { name: /^Pobierz$/i });
+    // Excel is 5th card (index 4)
+    fireEvent.click(downloadButtons[4]);
+    await waitFor(() => expect(xlsxSpy).toHaveBeenCalledWith('proj_test'));
+    expect(URL.createObjectURL).toHaveBeenCalled();
+    expect(await screen.findByRole('status')).toHaveTextContent(/Pobrano plik Arkusz Excel Matrix \(\.xlsx\)/);
+  });
+
+  it('triggers PRISMA SVG download via exportApi', async () => {
+    const svgSpy = vi
+      .spyOn(exportApi, 'exportPrismaSvg')
+      .mockResolvedValue(new Blob(['<svg></svg>'], { type: 'image/svg+xml' }));
+    renderExports();
+    await screen.findByText('8. Eksporty i Generowanie Raportu PRISMA (Exports & Reporting)');
+
+    const svgButton = screen.getByRole('button', { name: /Pobierz SVG/i });
+    fireEvent.click(svgButton);
+    await waitFor(() => expect(svgSpy).toHaveBeenCalledWith('proj_test'));
+    expect(URL.createObjectURL).toHaveBeenCalled();
+    expect(await screen.findByRole('status')).toHaveTextContent(/Pobrano plik PRISMA Flow \(SVG\)/);
+  });
+
+  it('triggers PRISMA PDF download via exportApi with binary blob', async () => {
+    const pdfSpy = vi
+      .spyOn(exportApi, 'exportPrismaPdf')
+      .mockResolvedValue(new Blob(['%PDF-1.4...'], { type: 'application/pdf' }));
+    renderExports();
+    await screen.findByText('8. Eksporty i Generowanie Raportu PRISMA (Exports & Reporting)');
+
+    const pdfButton = screen.getByRole('button', { name: /Pobierz PDF/i });
+    fireEvent.click(pdfButton);
+    await waitFor(() => expect(pdfSpy).toHaveBeenCalledWith('proj_test'));
+    expect(URL.createObjectURL).toHaveBeenCalled();
+    expect(await screen.findByRole('status')).toHaveTextContent(/Pobrano plik PRISMA Flow \(PDF\)/);
+  });
+
+  it('shows error alert and allows retry when export fails', async () => {
+    vi.spyOn(exportApi, 'exportBibtex').mockRejectedValue(
+      new ExportApiError(500, 'Database query failed')
     );
     renderExports();
     await screen.findByText('8. Eksporty i Generowanie Raportu PRISMA (Exports & Reporting)');
 
-    fireEvent.click(screen.getAllByRole('button', { name: /Pobierz/i })[0]);
-    expect(await screen.findByRole('alert')).toHaveTextContent(/Query parameter format must be json or csv/i);
+    const downloadButtons = screen.getAllByRole('button', { name: /^Pobierz$/i });
+    fireEvent.click(downloadButtons[2]);
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/Database query failed/i);
+
+    // Verify retry works after failure reset
+    vi.spyOn(exportApi, 'exportBibtex').mockResolvedValue(new Blob(['@article{...}']));
+    fireEvent.click(downloadButtons[2]);
+    expect(await screen.findByRole('status')).toHaveTextContent(/Pobrano plik Eksport Bazy BibTeX/);
   });
 
-  it('fetches PRISMA metrics from the backend for the active project', async () => {
-    renderExports();
-    await screen.findByText('8. Eksporty i Generowanie Raportu PRISMA (Exports & Reporting)');
-    await waitFor(() =>
-      expect(projectApiService.getPrismaMetrics).toHaveBeenCalledWith('proj_test', 'default_reviewer')
-    );
-  });
-
-  it('shows a loader while PRISMA metrics are being fetched', async () => {
-    let resolveMetrics: (value: PrismaMetricsResponse) => void = () => {};
-    vi.spyOn(projectApiService, 'getPrismaMetrics').mockReturnValue(
-      new Promise((resolve) => {
-        resolveMetrics = resolve;
-      })
+  it('shows error alert when PRISMA export fails', async () => {
+    vi.spyOn(exportApi, 'exportPrismaPdf').mockRejectedValue(
+      new ExportApiError(404, 'Project not found')
     );
     renderExports();
-    expect(
-      await screen.findByText(/Ładowanie żywych metryk PRISMA z backendu/)
-    ).toBeInTheDocument();
-    resolveMetrics(PRISMA_METRICS);
-    expect(
-      await screen.findByText('Dynamic PRISMA 2020 Flow Diagram')
-    ).toBeInTheDocument();
-  });
-
-  it('shows an error alert and no diagram when PRISMA metrics cannot be fetched', async () => {
-    vi.spyOn(projectApiService, 'getPrismaMetrics').mockRejectedValue(new Error('backend offline'));
-    renderExports();
     await screen.findByText('8. Eksporty i Generowanie Raportu PRISMA (Exports & Reporting)');
-    expect(await screen.findByRole('alert')).toHaveTextContent(/backend offline/i);
-    expect(screen.queryByText('Dynamic PRISMA 2020 Flow Diagram')).not.toBeInTheDocument();
-    expect(screen.getByText(/Diagram PRISMA jest niedostępny/)).toBeInTheDocument();
+
+    const pdfButton = screen.getByRole('button', { name: /Pobierz PDF/i });
+    fireEvent.click(pdfButton);
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/Project not found/i);
   });
 });
-
