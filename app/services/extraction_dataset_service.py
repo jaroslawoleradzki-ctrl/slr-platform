@@ -17,6 +17,7 @@ from app.domain.extraction import (
     ValueStatus,
 )
 from app.domain.identifiers import IdentifierType
+from app.domain.project import Project
 from app.repositories.extraction_repository import (
     SqliteExtractionRepository,
     default_extraction_repository,
@@ -28,6 +29,10 @@ from app.repositories.extraction_template_repository import (
 from app.repositories.project_publication_repository import (
     ProjectPublicationRepository,
     default_project_publication_repository,
+)
+from app.repositories.project_repository import (
+    ProjectRepository,
+    default_project_repository,
 )
 from app.services.export.cell_safety import sanitize_csv_cell
 from app.services.extraction_configuration_service import (
@@ -50,12 +55,20 @@ class ExtractionDatasetService:
         template_repo: SqliteExtractionTemplateRepository | None = None,
         extraction_repo: SqliteExtractionRepository | None = None,
         publication_repo: ProjectPublicationRepository | None = None,
+        project_repo: ProjectRepository | None = None,
     ) -> None:
         self._config_service = config_service or default_extraction_configuration_service()
         self._eligibility_service = eligibility_service or default_extraction_eligibility_service()
         self._template_repo = template_repo or default_extraction_template_repository()
         self._extraction_repo = extraction_repo or default_extraction_repository()
         self._publication_repo = publication_repo or default_project_publication_repository()
+        self._project_repo = project_repo or default_project_repository()
+
+    def get_project(self, project_id: str) -> Project | None:
+        try:
+            return self._project_repo.get(project_id)
+        except Exception:
+            return None
 
     def get_publication_read_models(
         self,
@@ -202,7 +215,7 @@ class ExtractionDatasetService:
                 "template_id", "template_version", "group_key", "group_item_id", "item_index",
                 "reviewer_id", "submitted_at",
             ] + _value_headers(fields)
-            writer.writerow(headers)
+            writer.writerow([sanitize_csv_cell(h) for h in headers])
             for relationship in relationship_models:
                 values = {value.field_key: value for value in relationship.relationship_values}
                 row = [
@@ -231,7 +244,7 @@ class ExtractionDatasetService:
             "canonical_doi", "canonical_journal", "template_id", "template_version", "completeness_status",
             "latest_revision_index", "latest_revision_id", "reviewer_id", "submitted_at",
         ] + _value_headers(fields)
-        writer.writerow(headers)
+        writer.writerow([sanitize_csv_cell(h) for h in headers])
         for publication in publication_models:
             values = {value.field_key: value for value in publication.publication_values}
             row = [

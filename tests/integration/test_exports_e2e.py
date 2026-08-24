@@ -1,21 +1,38 @@
-"""End-to-End integration test suite for Slice 6 Stage 9 Exports & PRISMA Flow.
+"""End-to-End integration test suite for Stage 9 Exports & PRISMA Flow (Slice 6).
 
-Exercises the complete lifecycle through the API layer:
-1. Full workflow: project creation -> sources import -> deduplication with merged duplicates
-   -> title/abstract & full-text screening -> extraction & QA -> export of all 7 artifacts.
-2. Structural guarantee: ZERO superseded records appear in any research export.
-3. Reviewer isolation: reviewer_a vs reviewer_b scoping across all reviewer-sensitive endpoints.
-4. Provenance headers: X-Project-Id, X-Protocol-Version, X-Application-Version, X-Generated-At.
-5. Formula injection protection: verified in exported CSV and XLSX files.
-6. Re-import round-trip: BibTeX and RIS outputs re-import cleanly.
-7. Empty project and partial-workflow robustness (valid empty artifacts, 0 crashes/500s).
-8. Read-only safety: exports execute without mutating SQLite state.
+Exercises the complete real application lifecycle:
+1. Full workflow:
+   - Project creation
+   - Publication import
+   - Duplicate group review and canonical merge
+   - Title & Abstract screening (with reviewer_a / reviewer_b divergence)
+   - Full-Text screening
+   - Quality Assessment configuration and execution
+   - Data Extraction template configuration and revision submission
+2. All 7 export artifacts exercised:
+   - BibTeX (.bib)
+   - RIS (.ris)
+   - XLSX research matrix workbook (.xlsx)
+   - CSV extraction dataset (.csv)
+   - JSON extraction dataset (.json)
+   - PRISMA 2020 SVG diagram (.svg)
+   - PRISMA 2020 PDF document (.pdf)
+3. Structural guarantees:
+   - ZERO superseded records in any export format
+   - Reviewer isolation (reviewer_a data vs reviewer_b data)
+   - Formula injection neutralization on both data cells and dynamic headers
+   - Provenance headers (X-Project-Id, X-Protocol-Version, X-Application-Version, X-Generated-At) on all 7 endpoints
+   - In-file D8 provenance comment in BibTeX and RIS matching the response header timestamp
+   - Re-import round-trip through production parsers
+   - Strictly read-only: persisted SQLite state is 100% identical before and after all export executions
 """
 
 from __future__ import annotations
 
 import io
+import sqlite3
 import xml.etree.ElementTree as ET
+from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
 
@@ -27,61 +44,131 @@ from app.api.main import app
 from app.api.routers.exports import get_export_dataset_service
 from app.api.routers.extraction import _get_dataset_service
 from app.domain.author import Author
+from app.domain.duplicate_review import DuplicateDecision, DuplicateGroupReviewDecision
+from app.domain.extraction import (
+    ExtractedValueState,
+    ExtractionCompletenessStatus,
+    ExtractionFieldDefinition,
+    ExtractionRecord,
+    ExtractionRevision,
+    ExtractionTemplate,
+    ExtractionTemplateVersion,
+    FieldDataType,
+    ProjectExtractionConfiguration,
+    ValueOrigin,
+    ValueStatus,
+)
 from app.domain.identifiers import Identifier, IdentifierType
 from app.domain.project import Project
 from app.domain.publication import DocumentType, Publication
+from app.domain.quality_assessment import (
+    ProjectQualityAssessmentConfiguration,
+    QualityAssessment,
+    QualityAssessmentResponse,
+    QualityAssessmentResponseValue,
+    QualityAssessmentTemplate,
+    QualityAssessmentTemplateCriterion,
+    QualityAssessmentTool,
+)
+from app.domain.screening import (
+    CriterionAssessment,
+    CriterionAssessmentValue,
+    ScreeningCriterionStage,
+    ScreeningCriterionType,
+    ScreeningDecision,
+    ScreeningOutcome,
+    ScreeningStage,
+)
 from app.domain.venue import Venue
 from app.providers.import_file.bibtex.mapper import map_bibtex_record
 from app.providers.import_file.bibtex.parser import parse_bibtex
 from app.providers.import_file.ris.mapper import map_ris_record
 from app.providers.import_file.ris.parser import parse_ris
+from app.repositories.duplicate_merge_repository import SqliteDuplicateMergeRepository
+from app.repositories.duplicate_review_decision_repository import SqliteDuplicateReviewDecisionRepository
+from app.repositories.extraction_repository import SqliteExtractionRepository
+from app.repositories.extraction_template_repository import SqliteExtractionTemplateRepository
 from app.repositories.project_publication_repository import SqliteProjectPublicationRepository
 from app.repositories.project_repository import SqliteProjectRepository
+from app.repositories.screening_decision_repository import SqliteScreeningDecisionRepository
+from app.repositories.sqlite_quality_assessment_repository import (
+    SqliteProjectQualityAssessmentConfigurationRepository,
+    SqliteQualityAssessmentCatalogRepository,
+    SqliteQualityAssessmentRepository,
+)
 from app.services.export_dataset_service import ExportDatasetService
-from app.services.extraction_dataset_service import ExtractionDatasetService
+
+
+def _snapshot_database(db_path: Path) -> dict[str, list[tuple]]:
+    """Capture all tables and rows in the SQLite database for read-only mutation verification."""
+    snapshot: dict[str, list[tuple]] = {}
+    with sqlite3.connect(db_path) as conn:
+        cursor = conn.cursor()
+        tables = [
+            row[0]
+            for row in cursor.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name"
+            ).fetchall()
+        ]
+        for table in tables:
+            rows = cursor.execute(f"SELECT * FROM {table} ORDER BY rowid").fetchall()
+            snapshot[table] = rows
+    return snapshot
 
 
 @pytest.fixture
-def test_setup(tmp_path: Path):
-    """Set up database, repositories, services and client with dependency overrides."""
-    db_path = tmp_path / "slr_e2e_test.db"
+def workflow_setup(tmp_path: Path):
+    """Execute complete SLR application lifecycle and inject services."""
+    db_path = tmp_path / "slr_e2e_workflow.db"
 
+    # 1. Repositories
     project_repo = SqliteProjectRepository(db_path)
     pub_repo = SqliteProjectPublicationRepository(db_path)
+    decision_repo = SqliteDuplicateReviewDecisionRepository(db_path)
+    merge_repo = SqliteDuplicateMergeRepository(db_path)
+    screening_repo = SqliteScreeningDecisionRepository(db_path)
+    qa_catalog_repo = SqliteQualityAssessmentCatalogRepository(db_path)
+    qa_config_repo = SqliteProjectQualityAssessmentConfigurationRepository(db_path)
+    qa_repo = SqliteQualityAssessmentRepository(db_path)
+    extraction_template_repo = SqliteExtractionTemplateRepository(db_path)
+    extraction_repo = SqliteExtractionRepository(db_path)
 
-    project_id = "proj_e2e_001"
+    # 2. Project creation
+    project_id = "proj_e2e_full"
     project = Project(
         project_id=project_id,
-        title="E2E Research Study on Energy Efficiency",
-        description="Comprehensive SLR testing all 7 export formats",
+        title="Comprehensive E2E Lean Energy Study",
+        description="End-to-end integration test across all 7 research export formats",
         protocol_version="0.6.0",
     )
     project_repo.create(project)
 
+    # 3. Seed publications
     pub1_id = uuid4()
     pub2_id = uuid4()
     pub3_id = uuid4()
 
     pub1 = Publication(
         record_id=pub1_id,
-        title="=cmd|' /C calc'!A0 Lean energy management in automotive manufacturing",
+        title="=HYPERLINK(\"http://evil.com\") Lean energy management in automotive manufacturing",
         authors=[Author(display_name="Kowalski, Jan", family_name="Kowalski", given_name="Jan")],
         publication_year=2023,
         document_type=DocumentType.JOURNAL_ARTICLE,
         identifiers=[Identifier(type=IdentifierType.DOI, value="10.1016/j.lean.2023.01")],
         venue=Venue(name="Journal of Cleaner Production"),
-        abstract="Investigating lean and green practices in automotive manufacturing plants.",
+        abstract="Investigating lean energy methods in automotive plants.",
     )
     pub2 = Publication(
         record_id=pub2_id,
-        title="Lean energy management in automotive manufacturing (Duplicate)",
+        title="Lean energy management in automotive manufacturing (Duplicate Record)",
         authors=[Author(display_name="Kowalski, J.", family_name="Kowalski", given_name="J.")],
         publication_year=2023,
         document_type=DocumentType.JOURNAL_ARTICLE,
+        identifiers=[Identifier(type=IdentifierType.DOI, value="10.1016/j.lean.2023.01")],
     )
     pub3 = Publication(
         record_id=pub3_id,
-        title="Zażółć gęślą jaźń: Przegląd systematyczny efektywności energetycznej",
+        title="Zażółć gęślą jaźń: Przegląd efektywności energetycznej",
         authors=[
             Author(display_name="Nowak, Anna", family_name="Nowak", given_name="Anna"),
             Author(display_name="Smith, John", family_name="Smith", given_name="John"),
@@ -94,47 +181,424 @@ def test_setup(tmp_path: Path):
     )
 
     pub_repo.add_publications(project_id, [pub1, pub2, pub3])
+
+    # 4. Execute Duplicate Review & Merge Lifecycle
+    from app.domain.deduplication import DuplicateGroupMergeRecord
+    from app.services.duplicate_group_builder import DuplicateGroupBuilder
+
+    builder = DuplicateGroupBuilder()
+    dup_groups = builder.build([pub1, pub2, pub3])
+    for group in dup_groups:
+        decision_repo.save_decision(
+            project_id,
+            str(group.group_id),
+            DuplicateGroupReviewDecision(decision=DuplicateDecision.APPROVE, rationale="Merged duplicate"),
+        )
+        merge_repo.save_merge(
+            DuplicateGroupMergeRecord(
+                project_id=project_id,
+                group_id=str(group.group_id),
+                canonical_record_id=pub1_id,
+                merged_publication_ids=(pub1_id, pub2_id),
+                pre_merge_snapshots=(pub1, pub2),
+            )
+        )
     pub_repo.mark_superseded(project_id, [pub2_id], pub1_id)
 
+    # 5. Screening Decisions:
+    # Reviewer A: INCLUDE pub1 and pub3 (both TA and FT)
+    # Reviewer B: INCLUDE pub1, EXCLUDE pub3 (at TA)
+    cid_ta = uuid4()
+    crit_ta = CriterionAssessment(
+        criterion_id=cid_ta,
+        criterion_name="Topic Relevance",
+        criterion_type=ScreeningCriterionType.INCLUSION,
+        criterion_stage=ScreeningCriterionStage.TITLE_ABSTRACT,
+        criterion_is_required=True,
+        assessment_value=CriterionAssessmentValue.MET,
+    )
+    cid_ft = uuid4()
+    crit_ft = CriterionAssessment(
+        criterion_id=cid_ft,
+        criterion_name="Full Text Quality",
+        criterion_type=ScreeningCriterionType.INCLUSION,
+        criterion_stage=ScreeningCriterionStage.FULL_TEXT,
+        criterion_is_required=True,
+        assessment_value=CriterionAssessmentValue.MET,
+    )
+
+    # Reviewer A decisions
+    screening_repo.save(
+        ScreeningDecision(
+            project_id=project_id,
+            publication_id=pub1_id,
+            stage=ScreeningStage.TITLE_ABSTRACT,
+            outcome=ScreeningOutcome.INCLUDE,
+            reviewer_id="reviewer_a",
+            criterion_assessments=[crit_ta],
+        )
+    )
+    screening_repo.save(
+        ScreeningDecision(
+            project_id=project_id,
+            publication_id=pub3_id,
+            stage=ScreeningStage.TITLE_ABSTRACT,
+            outcome=ScreeningOutcome.INCLUDE,
+            reviewer_id="reviewer_a",
+            criterion_assessments=[crit_ta],
+        )
+    )
+    screening_repo.save(
+        ScreeningDecision(
+            project_id=project_id,
+            publication_id=pub1_id,
+            stage=ScreeningStage.FULL_TEXT,
+            outcome=ScreeningOutcome.INCLUDE,
+            reviewer_id="reviewer_a",
+            criterion_assessments=[crit_ft],
+        )
+    )
+    screening_repo.save(
+        ScreeningDecision(
+            project_id=project_id,
+            publication_id=pub3_id,
+            stage=ScreeningStage.FULL_TEXT,
+            outcome=ScreeningOutcome.INCLUDE,
+            reviewer_id="reviewer_a",
+            criterion_assessments=[crit_ft],
+        )
+    )
+
+    # Reviewer B decisions (pub1 included, pub3 excluded)
+    screening_repo.save(
+        ScreeningDecision(
+            project_id=project_id,
+            publication_id=pub1_id,
+            stage=ScreeningStage.TITLE_ABSTRACT,
+            outcome=ScreeningOutcome.INCLUDE,
+            reviewer_id="reviewer_b",
+            criterion_assessments=[crit_ta],
+        )
+    )
+    screening_repo.save(
+        ScreeningDecision(
+            project_id=project_id,
+            publication_id=pub3_id,
+            stage=ScreeningStage.TITLE_ABSTRACT,
+            outcome=ScreeningOutcome.EXCLUDE,
+            reviewer_id="reviewer_b",
+            rationale="Out of scope",
+            criterion_assessments=[],
+        )
+    )
+    screening_repo.save(
+        ScreeningDecision(
+            project_id=project_id,
+            publication_id=pub1_id,
+            stage=ScreeningStage.FULL_TEXT,
+            outcome=ScreeningOutcome.INCLUDE,
+            reviewer_id="reviewer_b",
+            criterion_assessments=[crit_ft],
+        )
+    )
+
+    # 6. Quality Assessment Configuration & Execution
+    tool_id = "casp_tool"
+    qa_catalog_repo.create_tool(
+        QualityAssessmentTool(
+            tool_id=tool_id,
+            name="CASP Quality Assessment",
+            description="CASP tool for SLR quality appraisal",
+        )
+    )
+    t_version_id = uuid4()
+    crit_qa_id = uuid4()
+    qa_catalog_repo.create_template_version(
+        QualityAssessmentTemplate(
+            template_id=t_version_id,
+            tool_id=tool_id,
+            template_key="casp_v1",
+            version=1,
+            name="CASP v1",
+            description="Version 1",
+            criteria=[
+                QualityAssessmentTemplateCriterion(
+                    criterion_id=crit_qa_id,
+                    template_id=t_version_id,
+                    display_order=1,
+                    question="=HYPERLINK(\"http://evil.com\",\"Did study address a clearly focused issue?\")",
+                    guidance="Clarity of research aims",
+                    is_required=True,
+                )
+            ],
+        )
+    )
+    qa_config_repo.save_configuration(
+        ProjectQualityAssessmentConfiguration(
+            project_id=project_id,
+            tool_id=tool_id,
+            template_id=t_version_id,
+        )
+    )
+
+    # Reviewer A QA assessments
+    aid_a1 = uuid4()
+    qa_repo.save_assessment(
+        QualityAssessment(
+            assessment_id=aid_a1,
+            project_id=project_id,
+            publication_id=pub1_id,
+            reviewer_id="reviewer_a",
+            template_id=t_version_id,
+            responses=[
+                QualityAssessmentResponse(
+                    assessment_id=aid_a1,
+                    criterion_id=crit_qa_id,
+                    question_snapshot="Did study address a clearly focused issue?",
+                    response_value=QualityAssessmentResponseValue.YES,
+                )
+            ],
+        )
+    )
+    aid_a2 = uuid4()
+    qa_repo.save_assessment(
+        QualityAssessment(
+            assessment_id=aid_a2,
+            project_id=project_id,
+            publication_id=pub3_id,
+            reviewer_id="reviewer_a",
+            template_id=t_version_id,
+            responses=[
+                QualityAssessmentResponse(
+                    assessment_id=aid_a2,
+                    criterion_id=crit_qa_id,
+                    question_snapshot="Did study address a clearly focused issue?",
+                    response_value=QualityAssessmentResponseValue.YES,
+                )
+            ],
+        )
+    )
+
+    # Reviewer B QA assessment (pub1 only)
+    aid_b1 = uuid4()
+    qa_repo.save_assessment(
+        QualityAssessment(
+            assessment_id=aid_b1,
+            project_id=project_id,
+            publication_id=pub1_id,
+            reviewer_id="reviewer_b",
+            template_id=t_version_id,
+            responses=[
+                QualityAssessmentResponse(
+                    assessment_id=aid_b1,
+                    criterion_id=crit_qa_id,
+                    question_snapshot="Did study address a clearly focused issue?",
+                    response_value=QualityAssessmentResponseValue.NO,
+                    justification="Study methodology lacked focus.",
+                )
+            ],
+        )
+    )
+
+    # 7. Data Extraction Template Configuration & Revisions
+    ext_template_id = "lean_extraction_tmpl"
+    ext_version = "1.0.0"
+    extraction_template_repo.register_template(
+        ExtractionTemplate(template_id=ext_template_id, name="Lean Extraction Template")
+    )
+    extraction_template_repo.register_version(
+        ExtractionTemplateVersion(
+            template_id=ext_template_id,
+            version=ext_version,
+            name="Lean Energy Extraction Template",
+            publication_fields=[
+                ExtractionFieldDefinition(
+                    field_key="=HYPERLINK(\"http://evil.com\",\"lean_tool\")",
+                    name="Lean Tool Category",
+                    data_type=FieldDataType.TEXT,
+                    description="Category of lean methodology applied",
+                ),
+                ExtractionFieldDefinition(
+                    field_key="energy_savings_pct",
+                    name="Energy Savings Percentage",
+                    data_type=FieldDataType.TEXT,
+                    description="Reported energy consumption reduction percentage",
+                ),
+            ],
+            repeating_groups=[],
+        )
+    )
+    extraction_repo.set_project_configuration(
+        ProjectExtractionConfiguration(
+            project_id=project_id,
+            template_id=ext_template_id,
+            template_version=ext_version,
+        )
+    )
+
+    rec_1 = ExtractionRecord(
+        record_id=uuid4(),
+        project_id=project_id,
+        publication_id=pub1_id,
+        template_id=ext_template_id,
+        template_version=ext_version,
+        current_status=ExtractionCompletenessStatus.COMPLETE,
+    )
+    extraction_repo.create_record(rec_1)
+
+    rec_3 = ExtractionRecord(
+        record_id=uuid4(),
+        project_id=project_id,
+        publication_id=pub3_id,
+        template_id=ext_template_id,
+        template_version=ext_version,
+        current_status=ExtractionCompletenessStatus.COMPLETE,
+    )
+    extraction_repo.create_record(rec_3)
+
+    # Reviewer A extraction submissions
+    extraction_repo.append_revision(
+        ExtractionRevision(
+            revision_id=uuid4(),
+            record_id=rec_1.record_id,
+            project_id=project_id,
+            publication_id=pub1_id,
+            reviewer_id="reviewer_a",
+            revision_index=1,
+            completeness_status=ExtractionCompletenessStatus.COMPLETE,
+            created_at=datetime.now(timezone.utc),
+            publication_values=[
+                ExtractedValueState(
+                    field_key="=HYPERLINK(\"http://evil.com\",\"lean_tool\")",
+                    status=ValueStatus.PRESENT,
+                    origin=ValueOrigin.REVIEWER_CODED,
+                    reviewer_note="Reviewer note",
+                    text_value="5S and VSM",
+                ),
+                ExtractedValueState(
+                    field_key="energy_savings_pct",
+                    status=ValueStatus.PRESENT,
+                    origin=ValueOrigin.REVIEWER_CODED,
+                    reviewer_note="Reviewer note",
+                    text_value="14.5%",
+                ),
+            ],
+            group_items=[],
+        )
+    )
+    extraction_repo.append_revision(
+        ExtractionRevision(
+            revision_id=uuid4(),
+            record_id=rec_3.record_id,
+            project_id=project_id,
+            publication_id=pub3_id,
+            reviewer_id="reviewer_a",
+            revision_index=1,
+            completeness_status=ExtractionCompletenessStatus.COMPLETE,
+            created_at=datetime.now(timezone.utc),
+            publication_values=[
+                ExtractedValueState(
+                    field_key="=HYPERLINK(\"http://evil.com\",\"lean_tool\")",
+                    status=ValueStatus.PRESENT,
+                    origin=ValueOrigin.REVIEWER_CODED,
+                    reviewer_note="Reviewer note",
+                    text_value="Kaizen and TPM",
+                ),
+                ExtractedValueState(
+                    field_key="energy_savings_pct",
+                    status=ValueStatus.PRESENT,
+                    origin=ValueOrigin.REVIEWER_CODED,
+                    reviewer_note="Reviewer note",
+                    text_value="8.2%",
+                ),
+            ],
+            group_items=[],
+        )
+    )
+
+    # Reviewer B extraction submission (pub1 only, revision_index=2 on rec_1)
+    extraction_repo.append_revision(
+        ExtractionRevision(
+            revision_id=uuid4(),
+            record_id=rec_1.record_id,
+            project_id=project_id,
+            publication_id=pub1_id,
+            reviewer_id="reviewer_b",
+            revision_index=2,
+            completeness_status=ExtractionCompletenessStatus.COMPLETE,
+            created_at=datetime.now(timezone.utc),
+            publication_values=[
+                ExtractedValueState(
+                    field_key="=HYPERLINK(\"http://evil.com\",\"lean_tool\")",
+                    status=ValueStatus.PRESENT,
+                    origin=ValueOrigin.REVIEWER_CODED,
+                    reviewer_note="Reviewer note",
+                    text_value="Kanban",
+                ),
+                ExtractedValueState(
+                    field_key="energy_savings_pct",
+                    status=ValueStatus.PRESENT,
+                    origin=ValueOrigin.REVIEWER_CODED,
+                    reviewer_note="Reviewer note",
+                    text_value="5.0%",
+                ),
+            ],
+            group_items=[],
+        )
+    )
+
+    # 8. Wire Services and Dependency Overrides
+    from app.services.export_dataset_service import _build_extraction_service_for_database
+
+    extraction_dataset_service = _build_extraction_service_for_database(pub_repo, db_path)
     export_service = ExportDatasetService(
         publication_repository=pub_repo,
         project_repository=project_repo,
-    )
-    extraction_service = ExtractionDatasetService(
-        publication_repo=pub_repo,
+        extraction_service=extraction_dataset_service,
+        qa_catalog_repository=qa_catalog_repo,
+        qa_configuration_repository=qa_config_repo,
+        qa_repository=qa_repo,
+        extraction_template_repository=extraction_template_repo,
     )
 
     app.dependency_overrides[get_export_dataset_service] = lambda: export_service
-    app.dependency_overrides[_get_dataset_service] = lambda: extraction_service
+    app.dependency_overrides[_get_dataset_service] = lambda: extraction_dataset_service
 
     client = TestClient(app)
     try:
-        yield client, project_id, pub_repo, export_service, project_repo
+        yield client, project_id, db_path, pub_repo, project_repo
     finally:
         app.dependency_overrides.pop(get_export_dataset_service, None)
         app.dependency_overrides.pop(_get_dataset_service, None)
 
 
 class TestExportsEndToEnd:
-    """End-to-end API test suite covering all 7 export formats and hardening gates."""
+    """Comprehensive Stage 9 E2E test suite covering all 7 export formats."""
 
-    def test_all_seven_export_endpoints_200_and_provenance_headers(self, test_setup):
-        test_client, project_id, _, _, _ = test_setup
+    def test_full_workflow_all_seven_exports_and_provenance_and_readonly(self, workflow_setup):
+        test_client, project_id, db_path, _, _ = workflow_setup
 
-        endpoints = [
+        # Step A: Capture persisted SQLite database state BEFORE export execution
+        pre_export_snapshot = _snapshot_database(db_path)
+
+        # Step B: Exercise all 7 export endpoints as Reviewer A
+        endpoints_reviewer_a = [
             (f"/api/v1/projects/{project_id}/exports/bibtex", "application/x-bibtex", ".bib"),
             (f"/api/v1/projects/{project_id}/exports/ris", "application/x-research-info-systems", ".ris"),
-            (f"/api/v1/projects/{project_id}/exports/xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", ".xlsx"),
-            (f"/api/v1/projects/{project_id}/prisma/flow.svg", "image/svg+xml", ".svg"),
-            (f"/api/v1/projects/{project_id}/prisma/flow.pdf", "application/pdf", ".pdf"),
+            (f"/api/v1/projects/{project_id}/exports/xlsx?reviewer_id=reviewer_a", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", ".xlsx"),
+            (f"/api/v1/projects/{project_id}/extraction/export?format=csv&dataset=publications&reviewer_id=reviewer_a", "text/csv", ".csv"),
+            (f"/api/v1/projects/{project_id}/extraction/export?format=json&dataset=publications&reviewer_id=reviewer_a", "application/json", None),
+            (f"/api/v1/projects/{project_id}/prisma/flow.svg?reviewer_id=reviewer_a", "image/svg+xml", ".svg"),
+            (f"/api/v1/projects/{project_id}/prisma/flow.pdf?reviewer_id=reviewer_a", "application/pdf", ".pdf"),
         ]
 
-        for url, expected_media, ext in endpoints:
+        responses: dict[str, any] = {}
+        for url, expected_media, ext in endpoints_reviewer_a:
             res = test_client.get(url)
             assert res.status_code == 200, f"Failed GET {url}: {res.text}"
             assert expected_media in res.headers.get("content-type", ""), f"Mismatch content-type for {url}"
 
-            # Provenance headers assertion (§16)
+            # Provenance headers assertion (§16 contract on all 7 formats)
             assert res.headers.get("X-Project-Id") == project_id
             assert res.headers.get("X-Application-Version") == "0.6.0"
             assert "X-Generated-At" in res.headers
@@ -145,93 +609,114 @@ class TestExportsEndToEnd:
                 assert f"filename=\"{project_id}_" in disposition
                 assert disposition.endswith(f"{ext}\"")
 
-    def test_superseded_records_strictly_excluded_from_all_exports(self, test_setup):
-        test_client, project_id, _, _, _ = test_setup
+            responses[url] = res
 
-        # 1. BibTeX
-        bib_res = test_client.get(f"/api/v1/projects/{project_id}/exports/bibtex")
-        assert bib_res.status_code == 200
-        bib_text = bib_res.text
-        assert "Duplicate" not in bib_text
-        assert "Kowalski, Jan" in bib_text
-        assert "Nowak, Anna" in bib_text
+        # Step C: Assert D8 in-file provenance on BibTeX and RIS
+        bib_res = responses[f"/api/v1/projects/{project_id}/exports/bibtex"]
+        ris_res = responses[f"/api/v1/projects/{project_id}/exports/ris"]
 
-        # 2. RIS
-        ris_res = test_client.get(f"/api/v1/projects/{project_id}/exports/ris")
-        assert ris_res.status_code == 200
-        ris_text = ris_res.text
-        assert "Duplicate" not in ris_text
-        assert "Kowalski, Jan" in ris_text
+        bib_ts = bib_res.headers["X-Generated-At"]
+        ris_ts = ris_res.headers["X-Generated-At"]
 
-        # 3. XLSX
-        xlsx_res = test_client.get(f"/api/v1/projects/{project_id}/exports/xlsx")
-        assert xlsx_res.status_code == 200
-        wb = openpyxl.load_workbook(io.BytesIO(xlsx_res.content))
-        pub_sheet = wb["Publications"]
-        titles = [row[2] for row in pub_sheet.iter_rows(min_row=2, values_only=True) if row[2]]
-        assert not any("Duplicate" in t for t in titles)
-        assert len(titles) == 2  # Exactly 2 active publications
+        assert f"%% Generated by SLR Platform 0.6.0 for project {project_id} at {bib_ts}" in bib_res.text
+        assert f"%% Generated by SLR Platform 0.6.0 for project {project_id} at {ris_ts}" in ris_res.text
 
-    def test_formula_injection_guard_in_exported_artifacts(self, test_setup):
-        test_client, project_id, _, _, _ = test_setup
-
-        # In XLSX
-        xlsx_res = test_client.get(f"/api/v1/projects/{project_id}/exports/xlsx")
-        wb = openpyxl.load_workbook(io.BytesIO(xlsx_res.content))
-        pub_sheet = wb["Publications"]
-        for row in pub_sheet.iter_rows(min_row=2, values_only=True):
-            title_cell = str(row[2] or "")
-            if "=cmd" in title_cell:
-                assert title_cell.startswith("'="), "Formula was not neutralized with leading apostrophe"
-
-    def test_round_trip_reimport_bibtex_and_ris(self, test_setup):
-        test_client, project_id, _, _, _ = test_setup
-
-        # BibTeX round-trip
-        bib_res = test_client.get(f"/api/v1/projects/{project_id}/exports/bibtex")
+        # Re-import round-trip
         parsed_bib = parse_bibtex(bib_res.text)
         assert len(parsed_bib) == 2
         mapped_bib = [map_bibtex_record(e, source="bib_test") for e in parsed_bib]
         assert len(mapped_bib) == 2
 
-        # RIS round-trip
-        ris_res = test_client.get(f"/api/v1/projects/{project_id}/exports/ris")
         parsed_ris = parse_ris(ris_res.text)
         assert len(parsed_ris) == 2
         mapped_ris = [map_ris_record(r, source="ris_test") for r in parsed_ris]
         assert len(mapped_ris) == 2
 
-    def test_prisma_svg_and_pdf_well_formed_and_selectable(self, test_setup):
-        test_client, project_id, _, _, _ = test_setup
+        # Step D: Assert ZERO superseded duplicate records in any export
+        assert "Duplicate Record" not in bib_res.text
+        assert "Duplicate Record" not in ris_res.text
 
-        # SVG well-formedness
-        svg_res = test_client.get(f"/api/v1/projects/{project_id}/prisma/flow.svg")
-        assert svg_res.status_code == 200
-        root = ET.fromstring(svg_res.text)
-        assert root.tag.endswith("svg")
-        assert "PRISMA 2020 Flow Diagram" in svg_res.text
+        xlsx_res = responses[f"/api/v1/projects/{project_id}/exports/xlsx?reviewer_id=reviewer_a"]
+        wb = openpyxl.load_workbook(io.BytesIO(xlsx_res.content))
+        pub_sheet = wb["Publications"]
+        titles = [row[2] for row in pub_sheet.iter_rows(min_row=2, values_only=True) if row[2]]
+        assert len(titles) == 2
+        assert not any("Duplicate Record" in t for t in titles)
 
-        # PDF binary integrity
-        pdf_res = test_client.get(f"/api/v1/projects/{project_id}/prisma/flow.pdf")
-        assert pdf_res.status_code == 200
-        assert pdf_res.content.startswith(b"%PDF-")
-        assert len(pdf_res.content) > 1000
+        # Step E: Assert Formula Injection Neutralization in CSV & XLSX (data cells & dynamic headers)
+        csv_res = responses[f"/api/v1/projects/{project_id}/extraction/export?format=csv&dataset=publications&reviewer_id=reviewer_a"]
+        csv_lines = csv_res.text.splitlines()
+        csv_header = csv_lines[0]
+        assert "'=HYPERLINK" in csv_header, f"Dynamic header formula was not neutralized: {csv_header}"
 
-    def test_empty_project_returns_valid_empty_artifacts(self, test_setup):
+        # XLSX formula protection on cells and headers
+        for sheet_name in wb.sheetnames:
+            sheet = wb[sheet_name]
+            for row in sheet.iter_rows():
+                for cell in row:
+                    assert cell.data_type != "f", f"Found formula cell in sheet {sheet_name}: {cell.value}"
+                    if cell.value and str(cell.value).startswith(("=HYPERLINK", "+SUM", "-SUM", "@SUM")):
+                        assert False, f"Unescaped formula cell found in {sheet_name}: {cell.value}"
+
+        pub_title_cell = next(row[2] for row in pub_sheet.iter_rows(min_row=2, values_only=True) if "evil.com" in str(row[2]))
+        assert str(pub_title_cell).startswith("'="), f"Title cell was not prefixed with ': {pub_title_cell}"
+
+        ext_sheet = wb["Data Extraction"]
+        ext_header_cells = [str(cell.value) for cell in ext_sheet[1]]
+        assert any(h.startswith("'=HYPERLINK") for h in ext_header_cells), f"Extraction header was not prefixed with ': {ext_header_cells}"
+
+        # Step F: Assert Reviewer Isolation (Reviewer A vs Reviewer B)
+        # Reviewer A has 2 completed extraction records (pub1, pub3)
+        json_res_a = responses[f"/api/v1/projects/{project_id}/extraction/export?format=json&dataset=publications&reviewer_id=reviewer_a"]
+        records_a = json_res_a.json()
+        assert len(records_a) == 2
+        assert {r["canonical_title"] for r in records_a} == {
+            "=HYPERLINK(\"http://evil.com\") Lean energy management in automotive manufacturing",
+            "Zażółć gęślą jaźń: Przegląd efektywności energetycznej",
+        }
+
+        # Reviewer B has only 1 completed extraction record (pub1)
+        json_res_b = test_client.get(
+            f"/api/v1/projects/{project_id}/extraction/export?format=json&dataset=publications&reviewer_id=reviewer_b"
+        )
+        assert json_res_b.status_code == 200
+        records_b = json_res_b.json()
+        assert len(records_b) == 1
+        assert records_b[0]["canonical_title"] == "=HYPERLINK(\"http://evil.com\") Lean energy management in automotive manufacturing"
+        assert records_b[0]["reviewer_id"] == "reviewer_b"
+
+        # PRISMA SVG and PDF for Reviewer A vs Reviewer B
+        svg_res_a = responses[f"/api/v1/projects/{project_id}/prisma/flow.svg?reviewer_id=reviewer_a"]
+        svg_res_b = test_client.get(f"/api/v1/projects/{project_id}/prisma/flow.svg?reviewer_id=reviewer_b")
+        assert svg_res_a.status_code == 200
+        assert svg_res_b.status_code == 200
+
+        pdf_res_a = responses[f"/api/v1/projects/{project_id}/prisma/flow.pdf?reviewer_id=reviewer_a"]
+        pdf_res_b = test_client.get(f"/api/v1/projects/{project_id}/prisma/flow.pdf?reviewer_id=reviewer_b")
+        assert pdf_res_a.status_code == 200
+        assert pdf_res_b.status_code == 200
+        assert pdf_res_a.content.startswith(b"%PDF-")
+        assert pdf_res_b.content.startswith(b"%PDF-")
+
+        # Step G: Assert STRICTLY READ-ONLY PERSISTENCE GUARANTEE
+        post_export_snapshot = _snapshot_database(db_path)
+        assert pre_export_snapshot == post_export_snapshot, "Database was mutated by export operations!"
+
+    def test_empty_project_returns_valid_empty_artifacts(self, workflow_setup):
         """Ensure empty project produces clean valid artifacts, never 500."""
-        test_client, _, pub_repo, export_service, project_repo = test_setup
+        test_client, _, _, _, project_repo = workflow_setup
         empty_id = "proj_empty_002"
         project_repo.create(Project(project_id=empty_id, title="Empty Project", protocol_version="0.6.0"))
 
-        # BibTeX -> 200 empty
+        # BibTeX -> 200 with D8 comment
         res = test_client.get(f"/api/v1/projects/{empty_id}/exports/bibtex")
         assert res.status_code == 200
-        assert res.text == ""
+        assert "%% Generated by SLR Platform 0.6.0" in res.text
 
-        # RIS -> 200 empty
+        # RIS -> 200 with D8 comment
         res = test_client.get(f"/api/v1/projects/{empty_id}/exports/ris")
         assert res.status_code == 200
-        assert res.text == ""
+        assert "%% Generated by SLR Platform 0.6.0" in res.text
 
         # XLSX -> 200 valid workbook with headers
         res = test_client.get(f"/api/v1/projects/{empty_id}/exports/xlsx")
@@ -248,8 +733,8 @@ class TestExportsEndToEnd:
         assert pdf_res.status_code == 200
         assert pdf_res.content.startswith(b"%PDF-")
 
-    def test_unknown_project_returns_404(self, test_setup):
-        test_client, _, _, _, _ = test_setup
+    def test_unknown_project_returns_404(self, workflow_setup):
+        test_client, _, _, _, _ = workflow_setup
         for path in ["exports/bibtex", "exports/ris", "exports/xlsx", "prisma/flow.svg", "prisma/flow.pdf"]:
             res = test_client.get(f"/api/v1/projects/non_existent_project_123/{path}")
             assert res.status_code == 404, f"Expected 404 for {path}, got {res.status_code}"

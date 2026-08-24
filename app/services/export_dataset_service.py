@@ -212,6 +212,7 @@ def _build_extraction_service_for_database(publication_repo, database_path: Path
         template_repo=template_repo,
         extraction_repo=extraction_repo,
         publication_repo=publication_repo,
+        project_repo=project_repo,
     )
 
 

@@ -3,7 +3,7 @@
 from datetime import datetime, timezone
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Query, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 
 from app.api.dto.extraction import (
     ExtractedGroupItemStateDTO,
@@ -508,6 +508,7 @@ def export_extraction_dataset(
     dataset: str = Query(default="publications", description="Dataset grain: 'publications' or 'relationships'"),
     reviewer_id: str = Query(default="", description="Optional reviewer ID filter"),
     include_all: bool = Query(default=False, description="Set True to include all records regardless of completeness"),
+    service: ExtractionDatasetService = Depends(_get_dataset_service),
 ):
     """Exports structured extraction dataset as JSON or CSV based on latest revisions."""
     if format not in ("json", "csv"):
@@ -522,10 +523,16 @@ def export_extraction_dataset(
             detail="Query parameter 'dataset' must be either 'publications' or 'relationships'.",
         )
 
-    service = _get_dataset_service()
+    if not isinstance(service, ExtractionDatasetService):
+        service = _get_dataset_service()
+
     status_filter = None if include_all else ExtractionCompletenessStatus.COMPLETE
 
     try:
+        get_project_fn = getattr(service, "get_project", None)
+        project = get_project_fn(project_id) if callable(get_project_fn) else None
+        protocol_version = str(project.protocol_version) if project and getattr(project, "protocol_version", None) else None
+
         if format == "csv":
             csv_content = service.export_csv(
                 project_id, dataset=dataset, reviewer_id=reviewer_id, status_filter=status_filter
@@ -537,6 +544,8 @@ def export_extraction_dataset(
                 "X-Application-Version": get_app_version(),
                 "X-Generated-At": datetime.now(timezone.utc).isoformat(),
             }
+            if protocol_version:
+                headers["X-Protocol-Version"] = protocol_version
             return Response(
                 content=csv_content,
                 media_type="text/csv",
@@ -550,6 +559,8 @@ def export_extraction_dataset(
                 response.headers["X-Project-Id"] = project_id
                 response.headers["X-Application-Version"] = get_app_version()
                 response.headers["X-Generated-At"] = datetime.now(timezone.utc).isoformat()
+                if protocol_version:
+                    response.headers["X-Protocol-Version"] = protocol_version
             return json_data
     except (ExtractionConfigurationNotFoundError, ProjectNotFoundError) as exc:
         raise HTTPException(

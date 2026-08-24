@@ -69,8 +69,9 @@ ALL_SHEET_NAMES = (
 
 
 def _write_header(sheet: Worksheet, headers: list[str]) -> None:
-    sheet.append(headers)
-    for column_index in range(1, len(headers) + 1):
+    safe_headers = [excel_safe_cell(h) if isinstance(h, str) else h for h in headers]
+    sheet.append(safe_headers)
+    for column_index in range(1, len(safe_headers) + 1):
         sheet.cell(row=1, column=column_index).font = _HEADER_FONT
 
 

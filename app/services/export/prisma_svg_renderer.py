@@ -37,13 +37,46 @@ _CONTROL_CHARACTERS = frozenset(
 )
 
 
+def _measure_svg_text_width(text: str, font_size: float) -> float:
+    """Conservative estimation of sans-serif (DejaVu Sans / Arial) text width in SVG."""
+    total = 0.0
+    for char in text:
+        if char in "WM_@%&ÆŒ":
+            total += 0.95
+        elif char in "mw":
+            total += 0.85
+        elif "A" <= char <= "Z" or char in "ØÐÞ":
+            if char in "IJL":
+                total += 0.35
+            else:
+                total += 0.72
+        elif char in "ijlftr!|:;.,'()[]{}":
+            total += 0.32
+        elif "0" <= char <= "9" or char in "+-=$#/?":
+            total += 0.58
+        elif "a" <= char <= "z":
+            total += 0.54
+        else:
+            total += 0.60
+    return total * font_size
+
+
+def _fit_text_svg(text: str, max_width: float, font_size: float) -> str:
+    """Fit text within max_width using deterministic width-aware truncation."""
+    if _measure_svg_text_width(text, font_size) <= max_width:
+        return text
+    ellipsis = "…"
+    while text and _measure_svg_text_width(text + ellipsis, font_size) > max_width:
+        text = text[:-1]
+    return text + ellipsis if text else ""
+
+
 def render_prisma_svg(model: PrismaFlowModel) -> str:
     """Render a PRISMA 2020 flow model into a standalone, deterministic SVG string."""
     contents = extract_node_contents(model)
 
-    raw_title = "".join(c for c in model.metadata.project_title if c not in _CONTROL_CHARACTERS)
-    display_title = raw_title[:100] + ("…" if len(raw_title) > 100 else "")
-    raw_protocol = "".join(c for c in (model.metadata.protocol_version or "") if c not in _CONTROL_CHARACTERS)
+    raw_title = "".join(c for c in model.metadata.project_title if c not in _CONTROL_CHARACTERS).strip()
+    raw_protocol = "".join(c for c in (model.metadata.protocol_version or "") if c not in _CONTROL_CHARACTERS).strip()
 
     lines: list[str] = [
         '<?xml version="1.0" encoding="UTF-8"?>',
@@ -65,11 +98,17 @@ def render_prisma_svg(model: PrismaFlowModel) -> str:
         f'  <rect width="{int(CANVAS_WIDTH)}" height="{int(CANVAS_HEIGHT)}" fill="{COLOR_BG}" />',
         '',
         '  <!-- Header -->',
-        f'  <text x="20" y="30" class="title-text">PRISMA 2020 Flow Diagram — {escape(display_title)}</text>',
+        '  <text x="20" y="26" class="title-text">PRISMA 2020 Flow Diagram</text>',
     ]
 
     if raw_protocol:
-        lines.append(f'  <text x="{int(CANVAS_WIDTH) - 20}" y="30" text-anchor="end" class="meta-text">Protocol: {escape(raw_protocol)}</text>')
+        proto_text = f"Protocol: {raw_protocol}"
+        fitted_proto = _fit_text_svg(proto_text, 550.0, 11.0)
+        lines.append(f'  <text x="{int(CANVAS_WIDTH) - 20}" y="26" text-anchor="end" class="meta-text">{escape(fitted_proto)}</text>')
+
+    if raw_title:
+        fitted_title = _fit_text_svg(raw_title, 820.0, 11.0)
+        lines.append(f'  <text x="20" y="44" class="meta-text">{escape(fitted_title)}</text>')
 
     lines.append('')
     lines.append('  <!-- Stage Bands -->')

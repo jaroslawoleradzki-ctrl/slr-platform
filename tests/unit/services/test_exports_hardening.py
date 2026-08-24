@@ -1,12 +1,12 @@
 """Unit test suite for Slice 6 export hardening, security guards, and edge cases.
 
 Verifies:
-- Formula injection guards in CSV and XLSX
+- Formula injection guards in CSV and XLSX (both data cells and dynamic headers)
 - Control character stripping across all export serializers
-- Truncation and clamping of overlong text
+- Width-aware metadata fitting and clamping in PRISMA SVG and PDF
 - Unicode and Polish character preservation
-- Malformed and XML-special metadata handling in SVG and PDF
-- Semantic and byte-level determinism
+- In-file D8 provenance comments in BibTeX and RIS
+- Determinism and re-importability
 """
 
 from __future__ import annotations
@@ -15,9 +15,14 @@ import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 from uuid import uuid4
 
+import openpyxl
 import pytest
 
 from app.domain.author import Author
+from app.domain.extraction import (
+    ExtractionFieldDefinition,
+    FieldDataType,
+)
 from app.domain.identifiers import Identifier, IdentifierType
 from app.domain.prisma_flow import (
     PrismaFlowEdge,
@@ -30,8 +35,12 @@ from app.domain.venue import Venue
 from app.services.export.bibtex_writer import escape_bibtex_value, render_bibtex
 from app.services.export.cell_safety import excel_safe_cell, sanitize_csv_cell
 from app.services.export.prisma_pdf_renderer import render_prisma_pdf
-from app.services.export.prisma_svg_renderer import render_prisma_svg
+from app.services.export.prisma_svg_renderer import _measure_svg_text_width, render_prisma_svg
 from app.services.export.ris_writer import render_ris, sanitize_ris_value
+from app.services.export.xlsx_workbook import (
+    _write_header,
+)
+from app.services.extraction_dataset_service import _value_headers
 
 
 def _make_publication(
@@ -73,6 +82,41 @@ class TestCellSafetyAndFormulaGuard:
         sanitized = excel_safe_cell(malicious)
         assert sanitized.startswith("'")
         assert sanitized == f"'{prefix}SUM(A1:A10)"
+
+    def test_csv_dynamic_headers_formula_protection(self):
+        """Dynamic extraction field keys starting with formula chars are neutralized in CSV headers."""
+        fields = [
+            ExtractionFieldDefinition(
+                field_key='=HYPERLINK("http://evil.com","ClickMe")',
+                name="Malicious Field",
+                data_type=FieldDataType.TEXT,
+                description="test",
+            )
+        ]
+        headers = ["project_id", "publication_id"] + _value_headers(fields)
+        safe_headers = [sanitize_csv_cell(h) for h in headers]
+
+        # Must start with apostrophe neutralization
+        assert any(h.startswith("'=HYPERLINK") for h in safe_headers)
+
+    def test_xlsx_dynamic_headers_formula_protection(self):
+        """Dynamic QA criteria questions and extraction headers are text, not formulas (data_type != 'f')."""
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "QA"
+
+        # Direct header starting with formula prefix
+        malicious_headers = ["=HYPERLINK(\"http://evil.com\", \"Malicious QA Question\")", "+SUM(A1:A10)", "normal_col"]
+        _write_header(ws, malicious_headers)
+
+        # First row is headers
+        header_cells = [cell for cell in ws[1]]
+        for cell in header_cells:
+            assert cell.data_type != "f", f"Header cell {cell.value} was classified as formula"
+            if str(cell.value).startswith(("=HYPERLINK", "+SUM")):
+                assert False, f"Formula header was not neutralized with ': {cell.value}"
+            if "HYPERLINK" in str(cell.value) or "SUM" in str(cell.value):
+                assert str(cell.value).startswith("'"), f"Header was not prefixed with ': {cell.value}"
 
     def test_control_character_stripping_csv(self):
         dirty = "Title\x00with\x08null\x1band\x1fcontrols"
@@ -192,24 +236,41 @@ class TestPrismaDiagramHardening:
         model = self._build_test_flow_model(project_title=malicious_title)
         svg = render_prisma_svg(model)
 
-        # Must parse cleanly as XML without syntax errors
         root = ET.fromstring(svg)
         assert root.tag.endswith("svg")
         assert "<script>" not in svg
         assert "&lt;script&gt;" in svg
 
-    def test_svg_long_title_clamping_and_control_chars(self):
-        overlong_title = "Huge Title " * 50 + "\x00\x08\x1f"
-        model = self._build_test_flow_model(project_title=overlong_title)
+    def test_svg_width_aware_fitting_with_wide_glyphs(self):
+        """Overlong wide-glyph title is fitted to max 820px with ellipsis marker."""
+        wide_title = "W" * 150
+        wide_protocol = "W" * 80
+        model = self._build_test_flow_model(project_title=wide_title, protocol_version=wide_protocol)
         svg = render_prisma_svg(model)
 
-        assert "\x00" not in svg
-        assert "\x08" not in svg
-        assert "\x1f" not in svg
+        # SVG must parse cleanly
         root = ET.fromstring(svg)
         assert root is not None
+        assert "…" in svg
 
-    def test_pdf_rendering_with_polish_diacritics_and_long_title(self):
+        # Check line widths in SVG
+        for elem in root.findall(".//{http://www.w3.org/2000/svg}text"):
+            text_content = elem.text or ""
+            if "WW" in text_content:
+                width = _measure_svg_text_width(text_content, 11.0)
+                assert width <= 820.0, f"Rendered text line exceeded allocated width: {width}"
+
+    def test_pdf_rendering_with_wide_glyphs_and_long_protocol(self):
+        """PDF renders wide glyphs with exact DejaVu metrics without overflow."""
+        wide_title = "W" * 150
+        wide_protocol = "W" * 80
+        model = self._build_test_flow_model(project_title=wide_title, protocol_version=wide_protocol)
+        pdf_bytes = render_prisma_pdf(model)
+
+        assert pdf_bytes.startswith(b"%PDF-")
+        assert len(pdf_bytes) > 1000
+
+    def test_pdf_rendering_with_polish_diacritics(self):
         long_polish_title = "Zażółć gęślą jaźń: Bardzo długi tytuł badania przeglądowego " * 10
         model = self._build_test_flow_model(project_title=long_polish_title)
         pdf_bytes = render_prisma_pdf(model)

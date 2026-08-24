@@ -81,22 +81,37 @@ def _hex_to_rgb(hex_color: str) -> tuple[int, int, int]:
     return 0, 0, 0
 
 
-def render_prisma_pdf(model: PrismaFlowModel) -> bytes:
-    """Render a presentation-neutral PrismaFlowModel into standalone PDF bytes.
+def _fit_text_pdf(
+    pdf: FPDF,
+    text: str,
+    max_width: float,
+    font_family: str = "DejaVuSans",
+    font_style: str = "",
+    font_size: float = 9.0,
+) -> str:
+    """Fit text within max_width points using exact DejaVuSans font metrics."""
+    pdf.set_font(font_family, font_style, font_size)
+    if pdf.get_string_width(text) <= max_width:
+        return text
+    ellipsis = "…"
+    while text and pdf.get_string_width(text + ellipsis) > max_width:
+        text = text[:-1]
+    return text + ellipsis if text else ""
 
-    All counts and stage structures are taken directly from the supplied model.
-    No repository queries or arithmetic re-derivations occur in this renderer.
-    """
+
+def render_prisma_pdf(model: PrismaFlowModel) -> bytes:
+    """Render a presentation-neutral PRISMA flow model to PDF bytes."""
     regular_font, bold_font = _get_font_paths()
     contents = extract_node_contents(model)
 
-    pdf = FPDF(orientation="P", unit="pt", format=(CANVAS_WIDTH, CANVAS_HEIGHT))
+    pdf = FPDF(unit="pt", format=(CANVAS_WIDTH, CANVAS_HEIGHT))
+    pdf.set_margins(0, 0, 0)
     pdf.set_auto_page_break(False)
 
-    # Deterministic creation timestamp from flow model metadata
+    # Set deterministic CreationDate
     if model.metadata.generated_at:
         try:
-            gen_dt = datetime.fromisoformat(model.metadata.generated_at)
+            gen_dt = datetime.fromisoformat(model.metadata.generated_at.replace("Z", "+00:00"))
             pdf.set_creation_date(gen_dt)
         except Exception:
             pdf.set_creation_date(datetime(2026, 1, 1, 0, 0, 0, tzinfo=timezone.utc))
@@ -110,25 +125,27 @@ def render_prisma_pdf(model: PrismaFlowModel) -> bytes:
     pdf.add_font("DejaVuSans", "B", str(bold_font))
 
     # 1. Header
+    # Line 1: Title (left) & Protocol (right)
     pdf.set_text_color(*_hex_to_rgb(COLOR_TEXT_PRIMARY))
     pdf.set_font("DejaVuSans", "B", 14)
-    pdf.text(20.0, 32.0, "PRISMA 2020 Flow Diagram")
+    pdf.text(20.0, 26.0, "PRISMA 2020 Flow Diagram")
 
-    # Optional project title & protocol subtitle
-    subtitle_parts: list[str] = []
-    if model.metadata.project_title:
-        raw_title = "".join(c for c in model.metadata.project_title if c not in _CONTROL_CHARACTERS)
-        clamped_title = raw_title[:100] + ("…" if len(raw_title) > 100 else "")
-        subtitle_parts.append(clamped_title)
-    if model.metadata.protocol_version:
-        raw_proto = "".join(c for c in model.metadata.protocol_version if c not in _CONTROL_CHARACTERS)
-        subtitle_parts.append(f"({raw_proto})")
-
-    if subtitle_parts:
-        subtitle = " — ".join(subtitle_parts)
+    raw_protocol = "".join(c for c in (model.metadata.protocol_version or "") if c not in _CONTROL_CHARACTERS).strip()
+    if raw_protocol:
+        proto_str = f"Protocol: {raw_protocol}"
+        fitted_proto = _fit_text_pdf(pdf, proto_str, 550.0, "DejaVuSans", "", 9.0)
+        pdf.set_font("DejaVuSans", "", 9.0)
         pdf.set_text_color(*_hex_to_rgb(COLOR_TEXT_MUTED))
-        pdf.set_font("DejaVuSans", "", 8.5)
-        pdf.text(20.0, 46.0, subtitle)
+        proto_w = pdf.get_string_width(fitted_proto)
+        pdf.text(840.0 - proto_w, 26.0, fitted_proto)
+
+    # Line 2: Project title (full 820pt width)
+    raw_title = "".join(c for c in model.metadata.project_title if c not in _CONTROL_CHARACTERS).strip()
+    if raw_title:
+        fitted_title = _fit_text_pdf(pdf, raw_title, 820.0, "DejaVuSans", "", 9.0)
+        pdf.set_font("DejaVuSans", "", 9.0)
+        pdf.set_text_color(*_hex_to_rgb(COLOR_TEXT_MUTED))
+        pdf.text(20.0, 42.0, fitted_title)
 
     # 2. Stage Bands (left vertical bands)
     for band in STAGE_BANDS:

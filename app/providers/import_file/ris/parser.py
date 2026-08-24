@@ -41,8 +41,8 @@ def parse_ris(content: str) -> list[dict[str, list[str]]]:
 
     for line_num, raw_line in enumerate(content.splitlines(), 1):
         line = raw_line.strip()
-        if not line:
-            # Blank lines are ignored everywhere
+        if not line or line.startswith(("%", "#", "//")):
+            # Blank lines and comment lines are ignored everywhere
             continue
 
         m = _TAG_LINE.match(raw_line)
