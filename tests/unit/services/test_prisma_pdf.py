@@ -256,3 +256,58 @@ class TestPrismaPdfPartialWorkflowIntegration:
         assert "Full-Text reports assessed (n = 3)" in text
         assert "Full-Text excluded (n = 1)" in text
         assert "Studies included in synthesis (n = 2)" in text
+
+
+class TestPrismaFontAssetAndLicenseCompliance:
+    """Compliance tests for P1-S4-2: Font asset tracking and complete official licensing."""
+
+    def test_bundled_font_binaries_exist_and_are_non_empty(self) -> None:
+        repo_root = Path(__file__).resolve().parents[3]
+        regular = repo_root / "assets" / "fonts" / "DejaVuSans.ttf"
+        bold = repo_root / "assets" / "fonts" / "DejaVuSans-Bold.ttf"
+
+        assert regular.is_file(), f"Expected font file missing: {regular}"
+        assert bold.is_file(), f"Expected font file missing: {bold}"
+        assert regular.stat().st_size > 500_000, f"Font file abnormally small: {regular}"
+        assert bold.stat().st_size > 500_000, f"Font file abnormally small: {bold}"
+
+    def test_license_contains_bitstream_vera_and_tavmjong_bah_arev_notices(self) -> None:
+        repo_root = Path(__file__).resolve().parents[3]
+        license_file = repo_root / "assets" / "fonts" / "LICENSE.txt"
+
+        assert license_file.is_file(), f"Expected license file missing: {license_file}"
+        license_text = license_file.read_text(encoding="utf-8")
+
+        # 1. Bitstream Vera copyright notice and terms
+        assert "Bitstream Vera Fonts Copyright" in license_text
+        assert "Copyright (c) 2003 by Bitstream, Inc." in license_text
+        assert "Bitstream Vera is" in license_text
+
+        # 2. Tavmjong Bah / Arev Fonts copyright notice and terms
+        assert "Arev Fonts Copyright" in license_text
+        assert "Copyright (c) 2006 by Tavmjong Bah" in license_text
+        assert "Tavmjong Bah" in license_text
+
+        # 3. DejaVu public domain declaration
+        assert "DejaVu changes are in public domain" in license_text
+
+    def test_dockerfile_copies_fonts_into_production_runtime_stage(self) -> None:
+        repo_root = Path(__file__).resolve().parents[3]
+        dockerfile = repo_root / "docker" / "Dockerfile"
+        content = dockerfile.read_text(encoding="utf-8")
+
+        assert "COPY assets/fonts ./assets/fonts" in content or "COPY assets ./assets" in content
+
+
+class TestFontResolutionWithoutSystemFonts:
+    """Regression tests for P1-S4-1: Proof font resolution works without system fonts."""
+
+    def test_get_font_paths_resolves_bundled_in_repo_assets(self) -> None:
+        from app.services.export.prisma_pdf_renderer import _get_font_paths
+
+        regular, bold = _get_font_paths()
+        assert regular.name == "DejaVuSans.ttf"
+        assert bold.name == "DejaVuSans-Bold.ttf"
+        assert regular.is_file()
+        assert bold.is_file()
+        assert "assets/fonts" in str(regular) or str(regular).startswith("/app")

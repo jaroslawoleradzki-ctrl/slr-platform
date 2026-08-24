@@ -48,6 +48,10 @@ def _get_font_paths() -> tuple[Path, Path]:
     repo_assets = Path(__file__).resolve().parents[3] / "assets" / "fonts"
     candidates.append(repo_assets)
 
+    # Current working directory / container WORKDIR: ./assets/fonts and /app/assets/fonts
+    candidates.append(Path.cwd() / "assets" / "fonts")
+    candidates.append(Path("/app/assets/fonts"))
+
     # Standard Linux system fallback
     candidates.append(Path("/usr/share/fonts/truetype/dejavu"))
 
