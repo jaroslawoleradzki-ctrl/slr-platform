@@ -218,8 +218,10 @@ export const extractionApi = {
     projectId: string,
     format: 'json' | 'csv',
     dataset: 'publications' | 'relationships',
+    reviewerId?: string,
   ): Promise<Blob> {
-    const query = `?format=${format}&dataset=${dataset}`;
+    const reviewerParam = reviewerId ? `&reviewer_id=${encodeURIComponent(reviewerId)}` : '';
+    const query = `?format=${format}&dataset=${dataset}${reviewerParam}`;
     const res = await fetch(`${EXTRACTION_API_BASE_URL}/${projectId}/extraction/export${query}`);
     if (!res.ok) {
       const errData = await res.json().catch(() => ({ detail: res.statusText }));

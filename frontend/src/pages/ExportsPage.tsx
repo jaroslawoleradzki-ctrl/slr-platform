@@ -5,6 +5,7 @@ import { ErrorAlert } from '../components/common/ErrorAlert';
 import { LivePrismaFlowChart } from '../components/workflow/LivePrismaFlowChart';
 import { extractionApi, ExtractionApiError } from '../services/api/extractionApi';
 import { exportApi, ExportApiError } from '../services/api/exportApi';
+import { useReviewerIdentity } from '../hooks/useReviewerIdentity';
 import { triggerBlobDownload } from '../utils/downloadHelper';
 import { FileCheck2, Download, FileSpreadsheet, Code2, Share2, Layers, Loader2, FileCode2 } from 'lucide-react';
 
@@ -18,6 +19,7 @@ interface ExportFormat {
 
 export const ExportsPage: React.FC = () => {
   const { activeProject, prismaMetricsLoading, prismaMetricsError } = useProject();
+  const { reviewerId } = useReviewerIdentity();
   const [exportingId, setExportingId] = useState<string | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
   const [exportSuccess, setExportSuccess] = useState<string | null>(null);
@@ -40,14 +42,15 @@ export const ExportsPage: React.FC = () => {
     try {
       let blob: Blob;
       let filename: string;
+      const activeReviewer = reviewerId || undefined;
 
       switch (format.id) {
         case 'csv':
-          blob = await extractionApi.exportDataset(activeProject.id, 'csv', 'publications');
+          blob = await extractionApi.exportDataset(activeProject.id, 'csv', 'publications', activeReviewer);
           filename = `${activeProject.id}_publications.csv`;
           break;
         case 'json':
-          blob = await extractionApi.exportDataset(activeProject.id, 'json', 'publications');
+          blob = await extractionApi.exportDataset(activeProject.id, 'json', 'publications', activeReviewer);
           filename = `${activeProject.id}_publications.json`;
           break;
         case 'bib':
@@ -59,7 +62,7 @@ export const ExportsPage: React.FC = () => {
           filename = `${activeProject.id}_publications.ris`;
           break;
         case 'excel':
-          blob = await exportApi.exportXlsx(activeProject.id);
+          blob = await exportApi.exportXlsx(activeProject.id, activeReviewer);
           filename = `${activeProject.id}_publications.xlsx`;
           break;
         default:
@@ -90,12 +93,13 @@ export const ExportsPage: React.FC = () => {
     try {
       let blob: Blob;
       let filename: string;
+      const activeReviewer = reviewerId || undefined;
 
       if (format === 'svg') {
-        blob = await exportApi.exportPrismaSvg(activeProject.id);
+        blob = await exportApi.exportPrismaSvg(activeProject.id, activeReviewer);
         filename = `${activeProject.id}_prisma_flow.svg`;
       } else {
-        blob = await exportApi.exportPrismaPdf(activeProject.id);
+        blob = await exportApi.exportPrismaPdf(activeProject.id, activeReviewer);
         filename = `${activeProject.id}_prisma_flow.pdf`;
       }
 

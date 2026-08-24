@@ -568,9 +568,9 @@ describe('Data Extraction Workspace GUI (Phase 9.5 & 9.6)', () => {
     fireEvent.click(await screen.findByRole('button', { name: /CSV relacji/i }));
 
     await waitFor(() => expect(exportDataset).toHaveBeenCalledTimes(3));
-    expect(exportDataset).toHaveBeenNthCalledWith(1, 'proj_test', 'json', 'publications');
-    expect(exportDataset).toHaveBeenNthCalledWith(2, 'proj_test', 'csv', 'publications');
-    expect(exportDataset).toHaveBeenNthCalledWith(3, 'proj_test', 'csv', 'relationships');
+    expect(exportDataset).toHaveBeenNthCalledWith(1, 'proj_test', 'json', 'publications', 'rev_1');
+    expect(exportDataset).toHaveBeenNthCalledWith(2, 'proj_test', 'csv', 'publications', 'rev_1');
+    expect(exportDataset).toHaveBeenNthCalledWith(3, 'proj_test', 'csv', 'relationships', 'rev_1');
   });
 
   it('K. Export failure is visible to the user', async () => {

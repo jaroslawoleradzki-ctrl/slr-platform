@@ -411,7 +411,7 @@ export const DataExtractionPage: React.FC = () => {
     setIsExporting(true);
     setExportError(null);
     try {
-      const blob = await extractionApi.exportDataset(projectId, format, dataset);
+      const blob = await extractionApi.exportDataset(projectId, format, dataset, reviewerId || undefined);
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;

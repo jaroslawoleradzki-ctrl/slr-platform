@@ -7,6 +7,7 @@ import { projectApiService } from '../src/services/api/projectApi';
 import { screeningApi } from '../src/services/api/screeningApi';
 import { extractionApi } from '../src/services/api/extractionApi';
 import { exportApi, ExportApiError } from '../src/services/api/exportApi';
+import { REVIEWER_IDENTITY_STORAGE_KEY } from '../src/hooks/useReviewerIdentity';
 import { SLRProject, PrismaMetricsResponse } from '../src/types';
 
 const PRISMA_METRICS: PrismaMetricsResponse = {
@@ -71,6 +72,7 @@ const renderExports = (path = '/projects/proj_test/exports') =>
 describe('ExportsPage — Stage 9 exports & PRISMA completion', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    localStorage.clear();
     vi.spyOn(projectApiService, 'getProjects').mockResolvedValue([PROJECT]);
     vi.spyOn(projectApiService, 'getPrismaMetrics').mockResolvedValue(PRISMA_METRICS);
     vi.spyOn(screeningApi, 'getOverview').mockResolvedValue({
@@ -112,7 +114,7 @@ describe('ExportsPage — Stage 9 exports & PRISMA completion', () => {
     expect(downloadButtons.length).toBe(7);
   });
 
-  it('triggers CSV and JSON downloads via extractionApi', async () => {
+  it('triggers CSV and JSON downloads via extractionApi with default reviewer when none is explicitly set', async () => {
     const exportDataset = vi
       .spyOn(extractionApi, 'exportDataset')
       .mockResolvedValue(new Blob(['data']));
@@ -123,14 +125,98 @@ describe('ExportsPage — Stage 9 exports & PRISMA completion', () => {
 
     // CSV
     fireEvent.click(downloadButtons[0]);
-    await waitFor(() => expect(exportDataset).toHaveBeenCalledWith('proj_test', 'csv', 'publications'));
+    await waitFor(() => expect(exportDataset).toHaveBeenCalledWith('proj_test', 'csv', 'publications', undefined));
     expect(URL.createObjectURL).toHaveBeenCalled();
     expect(await screen.findByRole('status')).toHaveTextContent(/Pobrano plik Zestawienie Rekordów CSV/);
 
     // JSON
     fireEvent.click(downloadButtons[1]);
-    await waitFor(() => expect(exportDataset).toHaveBeenCalledWith('proj_test', 'json', 'publications'));
+    await waitFor(() => expect(exportDataset).toHaveBeenCalledWith('proj_test', 'json', 'publications', undefined));
     expect(await screen.findByRole('status')).toHaveTextContent(/Pobrano plik Zestawienie rekordów JSON/);
+  });
+
+  it('propagates active reviewer_a to CSV, JSON, XLSX, SVG, and PDF exports while keeping BibTeX/RIS publication-level', async () => {
+    localStorage.setItem(REVIEWER_IDENTITY_STORAGE_KEY, 'reviewer_a');
+
+    const exportDataset = vi.spyOn(extractionApi, 'exportDataset').mockResolvedValue(new Blob(['data']));
+    const bibtexSpy = vi.spyOn(exportApi, 'exportBibtex').mockResolvedValue(new Blob(['@article{...}']));
+    const risSpy = vi.spyOn(exportApi, 'exportRis').mockResolvedValue(new Blob(['TY  - ...']));
+    const xlsxSpy = vi.spyOn(exportApi, 'exportXlsx').mockResolvedValue(new Blob(['PK...']));
+    const svgSpy = vi.spyOn(exportApi, 'exportPrismaSvg').mockResolvedValue(new Blob(['<svg></svg>']));
+    const pdfSpy = vi.spyOn(exportApi, 'exportPrismaPdf').mockResolvedValue(new Blob(['%PDF-1.4...']));
+
+    renderExports();
+    await screen.findByText('8. Eksporty i Generowanie Raportu PRISMA (Exports & Reporting)');
+
+    const downloadButtons = screen.getAllByRole('button', { name: /^Pobierz$/i });
+    const svgBtn = screen.getByRole('button', { name: /Pobierz SVG/i });
+    const pdfBtn = screen.getByRole('button', { name: /Pobierz PDF/i });
+
+    // 1. CSV -> reviewer_a
+    fireEvent.click(downloadButtons[0]);
+    await waitFor(() => expect(exportDataset).toHaveBeenCalledWith('proj_test', 'csv', 'publications', 'reviewer_a'));
+
+    // 2. JSON -> reviewer_a
+    fireEvent.click(downloadButtons[1]);
+    await waitFor(() => expect(exportDataset).toHaveBeenCalledWith('proj_test', 'json', 'publications', 'reviewer_a'));
+
+    // 3. BibTeX -> no reviewer (canonical publication level)
+    fireEvent.click(downloadButtons[2]);
+    await waitFor(() => expect(bibtexSpy).toHaveBeenCalledWith('proj_test'));
+
+    // 4. RIS -> no reviewer (canonical publication level)
+    fireEvent.click(downloadButtons[3]);
+    await waitFor(() => expect(risSpy).toHaveBeenCalledWith('proj_test'));
+
+    // 5. XLSX -> reviewer_a
+    fireEvent.click(downloadButtons[4]);
+    await waitFor(() => expect(xlsxSpy).toHaveBeenCalledWith('proj_test', 'reviewer_a'));
+
+    // 6. SVG -> reviewer_a
+    fireEvent.click(svgBtn);
+    await waitFor(() => expect(svgSpy).toHaveBeenCalledWith('proj_test', 'reviewer_a'));
+
+    // 7. PDF -> reviewer_a
+    fireEvent.click(pdfBtn);
+    await waitFor(() => expect(pdfSpy).toHaveBeenCalledWith('proj_test', 'reviewer_a'));
+  });
+
+  it('maintains reviewer_b isolation and never falls back to reviewer_a or default_reviewer', async () => {
+    localStorage.setItem(REVIEWER_IDENTITY_STORAGE_KEY, 'reviewer_b');
+
+    const exportDataset = vi.spyOn(extractionApi, 'exportDataset').mockResolvedValue(new Blob(['data']));
+    const xlsxSpy = vi.spyOn(exportApi, 'exportXlsx').mockResolvedValue(new Blob(['PK...']));
+    const svgSpy = vi.spyOn(exportApi, 'exportPrismaSvg').mockResolvedValue(new Blob(['<svg></svg>']));
+    const pdfSpy = vi.spyOn(exportApi, 'exportPrismaPdf').mockResolvedValue(new Blob(['%PDF-1.4...']));
+
+    renderExports();
+    await screen.findByText('8. Eksporty i Generowanie Raportu PRISMA (Exports & Reporting)');
+
+    const downloadButtons = screen.getAllByRole('button', { name: /^Pobierz$/i });
+    const svgBtn = screen.getByRole('button', { name: /Pobierz SVG/i });
+    const pdfBtn = screen.getByRole('button', { name: /Pobierz PDF/i });
+
+    // CSV
+    fireEvent.click(downloadButtons[0]);
+    await waitFor(() => expect(exportDataset).toHaveBeenCalledWith('proj_test', 'csv', 'publications', 'reviewer_b'));
+    expect(exportDataset).not.toHaveBeenCalledWith('proj_test', 'csv', 'publications', 'reviewer_a');
+    expect(exportDataset).not.toHaveBeenCalledWith('proj_test', 'csv', 'publications', 'default_reviewer');
+
+    // XLSX
+    fireEvent.click(downloadButtons[4]);
+    await waitFor(() => expect(xlsxSpy).toHaveBeenCalledWith('proj_test', 'reviewer_b'));
+    expect(xlsxSpy).not.toHaveBeenCalledWith('proj_test', 'reviewer_a');
+    expect(xlsxSpy).not.toHaveBeenCalledWith('proj_test', 'default_reviewer');
+
+    // SVG
+    fireEvent.click(svgBtn);
+    await waitFor(() => expect(svgSpy).toHaveBeenCalledWith('proj_test', 'reviewer_b'));
+    expect(svgSpy).not.toHaveBeenCalledWith('proj_test', 'reviewer_a');
+
+    // PDF
+    fireEvent.click(pdfBtn);
+    await waitFor(() => expect(pdfSpy).toHaveBeenCalledWith('proj_test', 'reviewer_b'));
+    expect(pdfSpy).not.toHaveBeenCalledWith('proj_test', 'reviewer_a');
   });
 
   it('triggers BibTeX download via exportApi with correct filename', async () => {
@@ -173,7 +259,7 @@ describe('ExportsPage — Stage 9 exports & PRISMA completion', () => {
     const downloadButtons = screen.getAllByRole('button', { name: /^Pobierz$/i });
     // Excel is 5th card (index 4)
     fireEvent.click(downloadButtons[4]);
-    await waitFor(() => expect(xlsxSpy).toHaveBeenCalledWith('proj_test'));
+    await waitFor(() => expect(xlsxSpy).toHaveBeenCalledWith('proj_test', undefined));
     expect(URL.createObjectURL).toHaveBeenCalled();
     expect(await screen.findByRole('status')).toHaveTextContent(/Pobrano plik Arkusz Excel Matrix \(\.xlsx\)/);
   });
@@ -187,7 +273,7 @@ describe('ExportsPage — Stage 9 exports & PRISMA completion', () => {
 
     const svgButton = screen.getByRole('button', { name: /Pobierz SVG/i });
     fireEvent.click(svgButton);
-    await waitFor(() => expect(svgSpy).toHaveBeenCalledWith('proj_test'));
+    await waitFor(() => expect(svgSpy).toHaveBeenCalledWith('proj_test', undefined));
     expect(URL.createObjectURL).toHaveBeenCalled();
     expect(await screen.findByRole('status')).toHaveTextContent(/Pobrano plik PRISMA Flow \(SVG\)/);
   });
@@ -201,7 +287,7 @@ describe('ExportsPage — Stage 9 exports & PRISMA completion', () => {
 
     const pdfButton = screen.getByRole('button', { name: /Pobierz PDF/i });
     fireEvent.click(pdfButton);
-    await waitFor(() => expect(pdfSpy).toHaveBeenCalledWith('proj_test'));
+    await waitFor(() => expect(pdfSpy).toHaveBeenCalledWith('proj_test', undefined));
     expect(URL.createObjectURL).toHaveBeenCalled();
     expect(await screen.findByRole('status')).toHaveTextContent(/Pobrano plik PRISMA Flow \(PDF\)/);
   });
