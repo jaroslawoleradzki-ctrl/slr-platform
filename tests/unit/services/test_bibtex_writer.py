@@ -6,6 +6,7 @@ from app.domain.author import Author
 from app.domain.identifiers import Identifier, IdentifierType
 from app.domain.publication import DocumentType, Publication
 from app.domain.venue import Venue
+from app.providers.import_file.bibtex.mapper import map_bibtex_record
 from app.providers.import_file.bibtex.parser import parse_bibtex
 from app.services.export.bibtex_writer import (
     assign_citation_keys,
@@ -13,6 +14,11 @@ from app.services.export.bibtex_writer import (
     escape_bibtex_value,
     render_bibtex,
 )
+
+
+def _roundtrip_authors(parsed_entry) -> list[Author]:
+    """Re-import one parsed BibTeX entry through the production mapper."""
+    return map_bibtex_record(parsed_entry, source="test").authors
 
 
 def make_rich_publication(
@@ -169,6 +175,95 @@ class TestEntryRendering:
     def test_rendering_is_deterministic(self) -> None:
         publications = [make_rich_publication(UUID(int=index)) for index in range(1, 4)]
         assert render_bibtex(publications) == render_bibtex([p for p in publications])
+
+
+class TestCorporateAuthors:
+    """P1-1: unstructured/corporate authors must survive round-trip as one entity."""
+
+    def make_corporate(self, record_id: UUID, name: str) -> Publication:
+        return Publication(record_id=record_id, title="Corporate study", authors=[Author(display_name=name)])
+
+    def test_one_corporate_author_is_brace_protected(self) -> None:
+        rendered = render_bibtex([self.make_corporate(UUID(int=1), "World Health Organization")])
+        assert "author = {{World Health Organization}}" in rendered
+
+    def test_corporate_author_reimports_as_single_author_not_split(self) -> None:
+        publication = self.make_corporate(UUID(int=1), "World Health Organization")
+
+        parsed = parse_bibtex(render_bibtex([publication]))
+
+        assert len(parsed[0]["fields"]["author"].split(" and ")) == 1
+
+    def test_corporate_name_containing_and_stays_one_author_on_roundtrip(self) -> None:
+        publication = self.make_corporate(UUID(int=1), "Food and Agriculture Organization")
+
+        parsed = parse_bibtex(render_bibtex([publication]))
+
+        authors = _roundtrip_authors(parsed[0])
+        assert len(authors) == 1
+        assert authors[0].display_name == "Food and Agriculture Organization"
+
+    def test_multiple_corporate_authors_remain_distinct_entities(self) -> None:
+        publication = Publication(
+            record_id=UUID(int=1),
+            title="Multi org study",
+            authors=[
+                Author(display_name="World Health Organization"),
+                Author(display_name="European Commission"),
+                Author(display_name="International Energy Agency"),
+            ],
+        )
+
+        parsed = parse_bibtex(render_bibtex([publication]))
+
+        authors = _roundtrip_authors(parsed[0])
+        assert [author.display_name for author in authors] == [
+            "World Health Organization",
+            "European Commission",
+            "International Energy Agency",
+        ]
+
+    def test_mixed_personal_and_corporate_authors_round_trip(self) -> None:
+        publication = Publication(
+            record_id=UUID(int=1),
+            title="Mixed authorship study",
+            authors=[
+                Author(display_name="Doe, John", family_name="Doe", given_name="John"),
+                Author(display_name="International Energy Agency"),
+                Author(display_name="Smith, Jane", family_name="Smith", given_name="Jane"),
+            ],
+        )
+
+        parsed = parse_bibtex(render_bibtex([publication]))
+
+        authors = _roundtrip_authors(parsed[0])
+        assert len(authors) == 3
+        assert (authors[0].family_name, authors[0].given_name) == ("Doe", "John")
+        assert authors[1] == Author(display_name="International Energy Agency")
+        assert (authors[2].family_name, authors[2].given_name) == ("Smith", "Jane")
+
+    def test_personal_author_formatting_unchanged_by_corporate_protection(self) -> None:
+        publication = Publication(
+            record_id=UUID(int=1),
+            title="Personal only",
+            authors=[Author(display_name="Smith, Jane", family_name="Smith", given_name="Jane")],
+        )
+        rendered = render_bibtex([publication])
+        assert "author = {Smith, Jane}" in rendered
+
+    def test_corporate_protection_keeps_output_deterministic(self) -> None:
+        publications = [
+            Publication(record_id=UUID(int=index), title=f"Study {index}", authors=[Author(display_name="IEA")])
+            for index in range(1, 4)
+        ]
+        assert render_bibtex(publications) == render_bibtex([p for p in publications])
+
+    def test_unicode_corporate_author_round_trips_verbatim(self) -> None:
+        publication = self.make_corporate(UUID(int=1), "Polskie Towarzystwo Energetyki Słonecznej")
+
+        parsed = parse_bibtex(render_bibtex([publication]))
+
+        assert parsed[0]["fields"]["author"] == "{Polskie Towarzystwo Energetyki Słonecznej}"
 
 
 class TestRoundTripThroughImporterParser:

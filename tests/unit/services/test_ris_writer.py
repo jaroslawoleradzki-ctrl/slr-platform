@@ -7,7 +7,7 @@ from app.domain.identifiers import Identifier, IdentifierType
 from app.domain.publication import DocumentType, Publication
 from app.domain.venue import Venue
 from app.providers.import_file.ris.parser import parse_ris
-from app.services.export.ris_writer import render_ris, render_ris_record
+from app.services.export.ris_writer import render_ris, render_ris_record, sanitize_ris_value
 
 
 def make_rich_publication(
@@ -138,6 +138,118 @@ class TestDocumentRendering:
 
     def test_empty_collection_renders_empty_artifact(self) -> None:
         assert render_ris([]) == ""
+
+
+class TestCrLfInjection:
+    """P1-2: embedded CR/LF in metadata must never alter RIS record structure."""
+
+    ADVERSARIAL = "Normal title\nER  - \nTY  - JOUR"
+
+    def test_line_breaks_become_single_spaces_in_title(self) -> None:
+        publication = make_rich_publication(UUID(int=1), title="Line one\r\nLine two")
+        lines = render_ris_record(publication)
+        assert "TI  - Line one Line two" in lines
+
+    def test_lone_cr_and_lf_are_both_normalized(self) -> None:
+        assert sanitize_ris_value("a\rb") == "a b"
+        assert sanitize_ris_value("a\nb") == "a b"
+        assert sanitize_ris_value("a\r\nb") == "a b"
+
+    def test_no_embedded_crlf_reaches_any_tag_line(self) -> None:
+        publication = Publication(
+            record_id=UUID(int=1),
+            title="Title\nwith break",
+            abstract="Abstract\r\nwith break",
+            venue=Venue(name="Journal\r\nof Testing"),
+            urls=["https://example.test/\nredirect"],
+            authors=[Author(display_name="Smith,\nJohn", family_name="Smith", given_name="John")],
+            keywords=["kw\r\none", "kw two"],
+            language="en\r",
+            publication_year=2024,
+        )
+        rendered = render_ris([publication])
+        body_lines = rendered.split("\r\n")
+
+        # Every emitted line is either a structural tag or a single-line value.
+        for line in body_lines[:-1]:
+            assert "\n" not in line and "\r" not in line
+
+        assert "TI  - Title with break" in body_lines
+        assert "AB  - Abstract with break" in body_lines
+        assert "JO  - Journal of Testing" in body_lines
+        assert "UR  - https://example.test/ redirect" in body_lines
+        assert "AU  - Smith, John" in body_lines
+        assert "KW  - kw one" in body_lines
+        assert "LA  - en " in body_lines or "LA  - en" in body_lines
+
+    def test_adversarial_tag_injection_creates_exactly_one_record(self) -> None:
+        publication = make_rich_publication(UUID(int=1), title=self.ADVERSARIAL)
+
+        rendered = render_ris([publication])
+        body_lines = rendered.split("\r\n")
+
+        # Tag occurrences may survive as inert text INSIDE a value line, but
+        # structurally there is exactly one TY line and one ER line.
+        assert sum(1 for line in body_lines if line.startswith("TY  - ")) == 1
+        assert sum(1 for line in body_lines if line.startswith("ER")) == 1
+
+        records = parse_ris(rendered)
+        assert len(records) == 1
+        assert records[0]["TI"] == ["Normal title ER  -  TY  - JOUR"]
+
+    def test_adversarial_injection_via_url_is_neutralized(self) -> None:
+        publication = make_rich_publication(
+            UUID(int=1), url="https://example.test/x\nER  - \nTY  - JOUR"
+        )
+
+        records = parse_ris(render_ris([publication]))
+
+        assert len(records) == 1
+        assert records[0]["UR"] == ["https://example.test/x ER  -  TY  - JOUR"]
+
+    def test_adversarial_injection_via_abstract_keyword_language(self) -> None:
+        publication = make_rich_publication(
+            UUID(int=1),
+            abstract="\nER  - \nTY  - JOUR",
+            keywords=["tag\r\nER  - "],
+            language="\nTY  - BOOK",
+        )
+
+        records = parse_ris(render_ris([publication]))
+
+        assert len(records) == 1
+        # Parser strips leading/trailing whitespace of tag values; the injected
+        # tags survive only as inert inline text within a single record.
+        assert records[0]["AB"] == ["ER  -  TY  - JOUR"]
+        assert records[0]["KW"] == ["tag ER  -"]
+        assert records[0]["LA"] == ["TY  - BOOK"]
+
+    def test_sanitization_preserves_unicode_content(self) -> None:
+        publication = make_rich_publication(
+            UUID(int=1), title="Efektywność\nenergetyczna — wpływ ł"
+        )
+        records = parse_ris(render_ris([publication]))
+        assert records[0]["TI"] == ["Efektywność energetyczna — wpływ ł"]
+
+    def test_field_order_and_repeated_tags_unchanged_after_sanitization(self) -> None:
+        publication = Publication(
+            record_id=UUID(int=1),
+            title="T\nT",
+            authors=[
+                Author(display_name="A, B", family_name="A", given_name="B"),
+                Author(display_name="C, D", family_name="C", given_name="D"),
+            ],
+            publication_year=2024,
+            keywords=["k1", "k2"],
+        )
+        tags = [line.split("  - ")[0] for line in render_ris_record(publication)]
+        assert tags == ["TY", "TI", "AU", "AU", "PY", "KW", "KW", "ER"]
+
+    def test_rendering_remains_deterministic_with_hostile_metadata(self) -> None:
+        publications = [
+            make_rich_publication(UUID(int=index), title=f"Hostile\n{index}\r\nER  - ") for index in range(1, 4)
+        ]
+        assert render_ris(publications) == render_ris([p for p in publications])
 
 
 class TestRoundTripThroughImporterParser:

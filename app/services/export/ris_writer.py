@@ -14,6 +14,8 @@ Tag mapping mirrors the import direction in
 
 from __future__ import annotations
 
+import re
+
 from app.domain.author import Author
 from app.domain.identifiers import IdentifierType
 from app.domain.publication import DocumentType, Publication
@@ -33,17 +35,29 @@ _DOCUMENT_TYPE_TO_RIS: dict[DocumentType, str] = {
 
 _DEFAULT_RIS_TYPE = "JOUR"
 
-# Control characters stripped from every emitted value (plan §17).
+# Control characters stripped from every emitted value (plan §17). CR and LF
+# are handled separately by the line-break normalization below.
 _CONTROL_CHARACTERS = frozenset(
     "\x00\x01\x02\x03\x04\x05\x06\x07\x08\x0b\x0c\x0e\x0f"
     "\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1a\x1b\x1c\x1d\x1e\x1f\x7f"
 )
 
+_LINE_BREAKS = re.compile(r"\r\n|\r|\n")
+
 _NEWLINE = "\r\n"
 
 
-def _clean(value: str) -> str:
-    return "".join(character for character in value if character not in _CONTROL_CHARACTERS)
+def sanitize_ris_value(value: str) -> str:
+    """Central safety boundary for every serialized RIS field value.
+
+    RIS is line-oriented, so embedded CR/LF in metadata could otherwise inject
+    tags, ``ER`` terminators, or whole fake records into an export. Each line
+    break is replaced with a single space (preserving the text content) and
+    remaining control characters are stripped, guaranteeing that no sanitized
+    value can alter RIS record structure.
+    """
+    normalized = _LINE_BREAKS.sub(" ", value)
+    return "".join(character for character in normalized if character not in _CONTROL_CHARACTERS)
 
 
 def _ris_type(publication: Publication) -> str:
@@ -68,28 +82,32 @@ def _doi(publication: Publication) -> str | None:
 
 
 def render_ris_record(publication: Publication) -> list[str]:
-    """Return the ordered RIS tag lines for a single publication (no newlines)."""
+    """Return the ordered RIS tag lines for a single publication (no newlines).
+
+    Every metadata value passes through :func:`sanitize_ris_value`; only the
+    exporter itself may emit structural tags and the ``ER`` terminator.
+    """
     lines = [f"TY  - {_ris_type(publication)}"]
-    lines.append(f"TI  - {_clean(publication.title)}")
+    lines.append(f"TI  - {sanitize_ris_value(publication.title)}")
     for author in publication.authors:
-        lines.append(f"AU  - {_clean(_format_author(author))}")
+        lines.append(f"AU  - {sanitize_ris_value(_format_author(author))}")
     if publication.publication_year is not None:
         lines.append(f"PY  - {publication.publication_year}")
     if publication.venue is not None:
-        venue_line = f"JO  - {_clean(publication.venue.name)}"
+        venue_line = f"JO  - {sanitize_ris_value(publication.venue.name)}"
         lines.append(venue_line)
         lines.append(venue_line.replace("JO  - ", "T2  - ", 1))
     doi = _doi(publication)
     if doi:
-        lines.append(f"DO  - {doi}")
+        lines.append(f"DO  - {sanitize_ris_value(doi)}")
     if publication.urls:
-        lines.append(f"UR  - {publication.urls[0]}")
+        lines.append(f"UR  - {sanitize_ris_value(publication.urls[0])}")
     if publication.abstract:
-        lines.append(f"AB  - {_clean(publication.abstract)}")
+        lines.append(f"AB  - {sanitize_ris_value(publication.abstract)}")
     for keyword in publication.keywords:
-        lines.append(f"KW  - {_clean(keyword)}")
+        lines.append(f"KW  - {sanitize_ris_value(keyword)}")
     if publication.language:
-        lines.append(f"LA  - {publication.language}")
+        lines.append(f"LA  - {sanitize_ris_value(publication.language)}")
     lines.append("ER  - ")
     return lines
 

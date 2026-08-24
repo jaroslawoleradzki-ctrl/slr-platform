@@ -53,6 +53,9 @@ _FIELD_ORDER = (
     "language",
 )
 
+# Fields whose values are fully composed (escaped) inside _field_values.
+_PRE_ESCAPED_FIELDS = frozenset({"author"})
+
 
 def escape_bibtex_value(value: str) -> str:
     """Escape *value* for safe inclusion inside a braced BibTeX field value."""
@@ -124,6 +127,31 @@ def _format_author(author: Author) -> str:
     return author.display_name
 
 
+def _is_unstructured_author(author: Author) -> bool:
+    """True for corporate / display-only authors lacking structured name parts."""
+    return not author.family_name and not author.given_name
+
+
+def _render_author_field(authors: list[Author]) -> str:
+    """Compose the escaped ``author`` field value.
+
+    Structured personal authors are emitted exactly as before. Unstructured /
+    corporate authors (display name only) are wrapped in one extra brace group
+    — the standard BibTeX protection — applied AFTER escaping so the importer's
+    outer-brace path receives a single clean ``{Name}`` token and restores the
+    organization verbatim as ONE display-only author instead of mis-parsing it
+    into personal given/family names or splitting on an embedded " and ".
+    """
+    rendered: list[str] = []
+    for author in authors:
+        escaped = escape_bibtex_value(_format_author(author))
+        if _is_unstructured_author(author):
+            rendered.append("{" + escaped + "}")
+        else:
+            rendered.append(escaped)
+    return " and ".join(rendered)
+
+
 def _entry_type(publication: Publication) -> str:
     if publication.document_type is None:
         return _FALLBACK_ENTRY_TYPE
@@ -141,7 +169,7 @@ def _field_values(publication: Publication) -> dict[str, str]:
     values: dict[str, str] = {"title": publication.title}
 
     if publication.authors:
-        values["author"] = " and ".join(_format_author(author) for author in publication.authors)
+        values["author"] = _render_author_field(publication.authors)
     if publication.publication_year is not None:
         values["year"] = str(publication.publication_year)
 
@@ -172,8 +200,13 @@ def _render_entry(entry_type: str, citation_key: str, values: dict[str, str]) ->
     lines = [f"@{entry_type}{{{citation_key},"]
     ordered_fields = [field for field in _FIELD_ORDER if field in values]
     for position, field in enumerate(ordered_fields):
+        # The author field composes its own escaped segments (including the
+        # corporate-author protection braces), so it must not be re-escaped.
+        content = (
+            values[field] if field in _PRE_ESCAPED_FIELDS else escape_bibtex_value(values[field])
+        )
         terminator = "," if position < len(ordered_fields) - 1 else ""
-        lines.append(f"  {field} = {{{escape_bibtex_value(values[field])}}}{terminator}")
+        lines.append(f"  {field} = {{{content}}}{terminator}")
     lines.append("}")
     return "\n".join(lines)
 
