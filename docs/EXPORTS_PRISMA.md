@@ -79,17 +79,18 @@ The `GET /api/v1/projects/{id}/prisma/flow` model carries a `metadata` payload c
 
 1. **Formula Injection Neutralization**:
    - CSV and XLSX cell and dynamic header writers prepend a `'` prefix to any string starting with `=`, `+`, `-`, `@`, `\t`, or `\r`.
-2. **Control Character Stripping**:
-   - Unprintable characters (`\x00-\x08\x0B\x0C\x0E-\x1F\x7F`) are stripped across all serializers.
+2. **Format-Specific Control Character Handling**:
+   - Unprintable ASCII control characters (`\x00-\x08\x0B\x0C\x0E-\x1F\x7F`) are stripped in CSV, XLSX, BibTeX, RIS, SVG, and PDF serializers.
+   - JSON extraction datasets provide standard JSON UTF-8 serialization.
 3. **Width-Aware PRISMA Metadata Fitting**:
-   - SVG and PDF renderers dynamically measure string widths against printable margins (820pt/px usable width).
-   - Dedicated non-overlapping regions for title and protocol metadata with deterministic ellipsis (`…`) truncation when bounds are exceeded.
+   - SVG and PDF renderers measure exact font metrics using the bundled DejaVu Sans Unicode font against printable margins (820pt usable width).
+   - Dedicated non-overlapping regions for title (<= 820pt at x=20, staying within the 860px viewport) and protocol metadata (<= 550pt at y=26) with deterministic ellipsis (`…`) truncation when bounds are exceeded.
 4. **Overlong Text Handling**:
    - XLSX cells exceeding 32,767 characters are safely truncated with `…[truncated]`.
 5. **Input-Safe Filenames**:
    - Attachment filenames are strictly constructed from `project_id` and static format literals (e.g. `{project_id}_publications.xlsx`), preventing header injection.
 6. **Unicode & Polish Diacritics**:
-   - Full UTF-8 support preserved across all formats with bundled DejaVu Sans fonts for PDF rendering.
+   - Full UTF-8 support preserved across all formats with bundled DejaVu Sans fonts for PDF and SVG rendering.
 7. **Mutation Safety**:
    - All export endpoints are GET-only and invoke read-only repository methods, leaving SQLite state unmutated.
 

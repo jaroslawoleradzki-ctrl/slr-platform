@@ -35,7 +35,7 @@ from app.domain.venue import Venue
 from app.services.export.bibtex_writer import escape_bibtex_value, render_bibtex
 from app.services.export.cell_safety import excel_safe_cell, sanitize_csv_cell
 from app.services.export.prisma_pdf_renderer import render_prisma_pdf
-from app.services.export.prisma_svg_renderer import _measure_svg_text_width, render_prisma_svg
+from app.services.export.prisma_svg_renderer import render_prisma_svg
 from app.services.export.ris_writer import render_ris, sanitize_ris_value
 from app.services.export.xlsx_workbook import (
     _write_header,
@@ -242,23 +242,41 @@ class TestPrismaDiagramHardening:
         assert "&lt;script&gt;" in svg
 
     def test_svg_width_aware_fitting_with_wide_glyphs(self):
-        """Overlong wide-glyph title is fitted to max 820px with ellipsis marker."""
+        """Overlong wide-glyph title is fitted to max 820px and protocol to max 550px with independent oracle."""
+        from fpdf import FPDF
+
+        from app.services.export.prisma_pdf_renderer import _get_font_paths
+
         wide_title = "W" * 150
-        wide_protocol = "W" * 80
+        wide_protocol = "W" * 150
         model = self._build_test_flow_model(project_title=wide_title, protocol_version=wide_protocol)
         svg = render_prisma_svg(model)
 
-        # SVG must parse cleanly
+        # SVG must parse cleanly as valid XML
         root = ET.fromstring(svg)
         assert root is not None
         assert "…" in svg
 
-        # Check line widths in SVG
+        # Independent measurement oracle using bundled DejaVu Sans metrics directly
+        oracle_pdf = FPDF(unit="pt")
+        reg, bold = _get_font_paths()
+        oracle_pdf.add_font("DejaVuSans", "", reg)
+        oracle_pdf.set_font("DejaVuSans", "", 11)
+
         for elem in root.findall(".//{http://www.w3.org/2000/svg}text"):
             text_content = elem.text or ""
-            if "WW" in text_content:
-                width = _measure_svg_text_width(text_content, 11.0)
-                assert width <= 820.0, f"Rendered text line exceeded allocated width: {width}"
+            x = float(elem.attrib.get("x", "0"))
+            y = float(elem.attrib.get("y", "0"))
+            anchor = elem.attrib.get("text-anchor", "start")
+            measured_width = oracle_pdf.get_string_width(text_content)
+
+            if y == 44.0:  # Project title line
+                assert measured_width <= 820.0, f"Title width exceeded 820pt: {measured_width}"
+                assert x + measured_width <= 860.0, f"Title exceeded 860px viewport: {x + measured_width}"
+                assert "…" in text_content
+            elif y == 26.0 and anchor == "end":  # Protocol line
+                assert measured_width <= 550.0, f"Protocol width exceeded 550pt: {measured_width}"
+                assert "…" in text_content
 
     def test_pdf_rendering_with_wide_glyphs_and_long_protocol(self):
         """PDF renders wide glyphs with exact DejaVu metrics without overflow."""

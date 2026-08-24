@@ -11,7 +11,10 @@ Guarantees:
 
 from __future__ import annotations
 
+from functools import lru_cache
 from xml.sax.saxutils import escape
+
+from fpdf import FPDF
 
 from app.domain.prisma_flow import PrismaFlowModel
 from app.services.export.layout import (
@@ -30,6 +33,7 @@ from app.services.export.layout import (
     STAGE_BANDS,
     extract_node_contents,
 )
+from app.services.export.prisma_pdf_renderer import _get_font_paths
 
 _CONTROL_CHARACTERS = frozenset(
     "\x00\x01\x02\x03\x04\x05\x06\x07\x08\x0b\x0c\x0e\x0f"
@@ -37,32 +41,34 @@ _CONTROL_CHARACTERS = frozenset(
 )
 
 
+@lru_cache(maxsize=1)
+def _get_svg_font_measurer() -> FPDF:
+    """Instantiate a cached FPDF instance with bundled DejaVu Sans for width measurement."""
+    pdf = FPDF(unit="pt")
+    regular, bold = _get_font_paths()
+    pdf.add_font("DejaVuSans", "", regular)
+    pdf.add_font("DejaVuSans", "B", bold)
+    pdf.set_font("DejaVuSans", "", 11)
+    return pdf
+
+
 def _measure_svg_text_width(text: str, font_size: float) -> float:
-    """Conservative estimation of sans-serif (DejaVu Sans / Arial) text width in SVG."""
-    total = 0.0
-    for char in text:
-        if char in "WM_@%&ÆŒ":
-            total += 0.95
-        elif char in "mw":
-            total += 0.85
-        elif "A" <= char <= "Z" or char in "ØÐÞ":
-            if char in "IJL":
-                total += 0.35
-            else:
-                total += 0.72
-        elif char in "ijlftr!|:;.,'()[]{}":
-            total += 0.32
-        elif "0" <= char <= "9" or char in "+-=$#/?":
-            total += 0.58
-        elif "a" <= char <= "z":
-            total += 0.54
-        else:
-            total += 0.60
-    return total * font_size
+    """Measure exact text width in points using the bundled DejaVu Sans Unicode font."""
+    if not text:
+        return 0.0
+    try:
+        pdf = _get_svg_font_measurer()
+        pdf.set_font_size(font_size)
+        return float(pdf.get_string_width(text))
+    except Exception:
+        # Fallback conservative width bound (1.05 * font_size per glyph)
+        return len(text) * font_size * 1.05
 
 
 def _fit_text_svg(text: str, max_width: float, font_size: float) -> str:
     """Fit text within max_width using deterministic width-aware truncation."""
+    if not text:
+        return ""
     if _measure_svg_text_width(text, font_size) <= max_width:
         return text
     ellipsis = "…"
@@ -86,12 +92,12 @@ def render_prisma_svg(model: PrismaFlowModel) -> str:
         f'      <polygon points="0 0, 8 3, 0 6" fill="{COLOR_ARROW}" />',
         '    </marker>',
         '    <style>',
-        '      .title-text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "DejaVu Sans", Arial, sans-serif; font-size: 15px; font-weight: 600; fill: ' + COLOR_TEXT_PRIMARY + '; }',
-        '      .meta-text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "DejaVu Sans", Arial, sans-serif; font-size: 11px; fill: ' + COLOR_TEXT_MUTED + '; }',
-        '      .stage-text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "DejaVu Sans", Arial, sans-serif; font-size: 13px; font-weight: 700; text-anchor: middle; letter-spacing: 0.5px; }',
-        '      .box-title { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "DejaVu Sans", Arial, sans-serif; font-size: 11.5px; font-weight: 600; fill: ' + COLOR_TEXT_PRIMARY + '; }',
-        '      .box-line { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "DejaVu Sans", Arial, sans-serif; font-size: 11px; fill: ' + COLOR_TEXT_SECONDARY + '; }',
-        '      .box-subline { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "DejaVu Sans", Arial, sans-serif; font-size: 10px; fill: ' + COLOR_TEXT_MUTED + '; }',
+        '      .title-text { font-family: "DejaVu Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; font-size: 15px; font-weight: 600; fill: ' + COLOR_TEXT_PRIMARY + '; }',
+        '      .meta-text { font-family: "DejaVu Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; font-size: 11px; fill: ' + COLOR_TEXT_MUTED + '; }',
+        '      .stage-text { font-family: "DejaVu Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; font-size: 13px; font-weight: 700; text-anchor: middle; letter-spacing: 0.5px; }',
+        '      .box-title { font-family: "DejaVu Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; font-size: 11.5px; font-weight: 600; fill: ' + COLOR_TEXT_PRIMARY + '; }',
+        '      .box-line { font-family: "DejaVu Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; font-size: 11px; fill: ' + COLOR_TEXT_SECONDARY + '; }',
+        '      .box-subline { font-family: "DejaVu Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; font-size: 10px; fill: ' + COLOR_TEXT_MUTED + '; }',
         '    </style>',
         '  </defs>',
         '  <!-- Background -->',

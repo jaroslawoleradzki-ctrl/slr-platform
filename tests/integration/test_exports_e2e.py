@@ -44,7 +44,6 @@ from app.api.main import app
 from app.api.routers.exports import get_export_dataset_service
 from app.api.routers.extraction import _get_dataset_service
 from app.domain.author import Author
-from app.domain.duplicate_review import DuplicateDecision, DuplicateGroupReviewDecision
 from app.domain.extraction import (
     ExtractedValueState,
     ExtractionCompletenessStatus,
@@ -148,6 +147,8 @@ def workflow_setup(tmp_path: Path):
     pub2_id = uuid4()
     pub3_id = uuid4()
 
+    from app.domain.provenance import ProvenanceEntry
+
     pub1 = Publication(
         record_id=pub1_id,
         title="=HYPERLINK(\"http://evil.com\") Lean energy management in automotive manufacturing",
@@ -157,6 +158,7 @@ def workflow_setup(tmp_path: Path):
         identifiers=[Identifier(type=IdentifierType.DOI, value="10.1016/j.lean.2023.01")],
         venue=Venue(name="Journal of Cleaner Production"),
         abstract="Investigating lean energy methods in automotive plants.",
+        provenance=[ProvenanceEntry(source="bibtex", source_record_id=str(pub1_id))],
     )
     pub2 = Publication(
         record_id=pub2_id,
@@ -165,6 +167,7 @@ def workflow_setup(tmp_path: Path):
         publication_year=2023,
         document_type=DocumentType.JOURNAL_ARTICLE,
         identifiers=[Identifier(type=IdentifierType.DOI, value="10.1016/j.lean.2023.01")],
+        provenance=[ProvenanceEntry(source="bibtex", source_record_id=str(pub2_id))],
     )
     pub3 = Publication(
         record_id=pub3_id,
@@ -178,32 +181,56 @@ def workflow_setup(tmp_path: Path):
         identifiers=[Identifier(type=IdentifierType.DOI, value="10.1000/polish.unicode.2024")],
         venue=Venue(name="Przegląd Elektrotechniczny"),
         abstract="Analiza metod optymalizacji zużycia energii w przemyśle maszynowym.",
+        provenance=[ProvenanceEntry(source="bibtex", source_record_id=str(pub3_id))],
     )
 
-    pub_repo.add_publications(project_id, [pub1, pub2, pub3])
+    # 3. Seed publications via production ProjectImportService
+    from app.api.dto.deduplication import DuplicateDecisionType
+    from app.repositories.import_history_repository import SqliteImportHistoryRepository
+    from app.repositories.normalization_execution_repository import SqliteNormalizationExecutionRepository
+    from app.repositories.transaction_manager import SqliteTransactionManager
+    from app.services.project_duplicate_service import ProjectDuplicateService
+    from app.services.project_import_service import ProjectImportService
 
-    # 4. Execute Duplicate Review & Merge Lifecycle
-    from app.domain.deduplication import DuplicateGroupMergeRecord
-    from app.services.duplicate_group_builder import DuplicateGroupBuilder
+    tx_manager = SqliteTransactionManager(db_path)
+    import_service = ProjectImportService(
+        publication_repository=pub_repo,
+        import_history_repository=SqliteImportHistoryRepository(db_path),
+        normalization_repository=SqliteNormalizationExecutionRepository(db_path),
+        transaction_manager=tx_manager,
+    )
+    import_res, _ = import_service.import_bibliographic_publications(
+        project_id=project_id,
+        filename="lean_manufacturing_studies.bib",
+        file_format="bibtex",
+        publications=[pub1, pub2, pub3],
+    )
+    assert import_res.imported_count == 3
 
-    builder = DuplicateGroupBuilder()
-    dup_groups = builder.build([pub1, pub2, pub3])
-    for group in dup_groups:
-        decision_repo.save_decision(
-            project_id,
-            str(group.group_id),
-            DuplicateGroupReviewDecision(decision=DuplicateDecision.APPROVE, rationale="Merged duplicate"),
-        )
-        merge_repo.save_merge(
-            DuplicateGroupMergeRecord(
-                project_id=project_id,
-                group_id=str(group.group_id),
-                canonical_record_id=pub1_id,
-                merged_publication_ids=(pub1_id, pub2_id),
-                pre_merge_snapshots=(pub1, pub2),
-            )
-        )
-    pub_repo.mark_superseded(project_id, [pub2_id], pub1_id)
+    # 4. Execute Duplicate Review & Canonical Merge via production ProjectDuplicateService
+    dup_service = ProjectDuplicateService(
+        repository=pub_repo,
+        decision_repository=decision_repo,
+        merge_repository=merge_repo,
+        transaction_manager=tx_manager,
+    )
+    dup_list = dup_service.get_candidate_duplicate_groups(project_id)
+    assert dup_list.total_groups_count == 1
+    target_group = dup_list.groups[0]
+
+    # Record review decision through production service
+    dup_service.record_decision(
+        project_id=project_id,
+        group_id=target_group.group_id,
+        decision=DuplicateDecisionType.APPROVE,
+        rationale="Authoritative DOI match and manual verification",
+    )
+
+    # Execute canonical merge through production service
+    from app.api.dto.deduplication import DuplicateGroupStatus
+
+    merge_res = dup_service.merge_group(project_id=project_id, group_id=target_group.group_id)
+    assert merge_res.status == DuplicateGroupStatus.MERGED
 
     # 5. Screening Decisions:
     # Reviewer A: INCLUDE pub1 and pub3 (both TA and FT)
@@ -738,3 +765,55 @@ class TestExportsEndToEnd:
         for path in ["exports/bibtex", "exports/ris", "exports/xlsx", "prisma/flow.svg", "prisma/flow.pdf"]:
             res = test_client.get(f"/api/v1/projects/non_existent_project_123/{path}")
             assert res.status_code == 404, f"Expected 404 for {path}, got {res.status_code}"
+
+    def test_frontend_to_backend_stage_9_contract_alignment(self, workflow_setup):
+        """Contract-check that the exact HTTP requests constructed by the frontend API map to live backend routes."""
+        test_client, _, _, _, _ = workflow_setup
+        project_id = "proj_e2e_full"
+        reviewer_id = "reviewer_a"
+
+        # 1. exportApi.exportBibtex -> GET /api/v1/projects/{projectId}/exports/bibtex
+        bib_res = test_client.get(f"/api/v1/projects/{project_id}/exports/bibtex")
+        assert bib_res.status_code == 200
+        assert "application/x-bibtex" in bib_res.headers.get("content-type", "")
+        assert bib_res.headers.get("x-project-id") == project_id
+
+        # 2. exportApi.exportRis -> GET /api/v1/projects/{projectId}/exports/ris
+        ris_res = test_client.get(f"/api/v1/projects/{project_id}/exports/ris")
+        assert ris_res.status_code == 200
+        assert "application/x-research-info-systems" in ris_res.headers.get("content-type", "")
+        assert ris_res.headers.get("x-project-id") == project_id
+
+        # 3. exportApi.exportXlsx -> GET /api/v1/projects/{projectId}/exports/xlsx?reviewer_id=...
+        xlsx_res = test_client.get(f"/api/v1/projects/{project_id}/exports/xlsx?reviewer_id={reviewer_id}")
+        assert xlsx_res.status_code == 200
+        assert "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" in xlsx_res.headers.get("content-type", "")
+        assert xlsx_res.headers.get("x-project-id") == project_id
+
+        # 4. exportApi.exportPrismaSvg -> GET /api/v1/projects/{projectId}/prisma/flow.svg?reviewer_id=...
+        svg_res = test_client.get(f"/api/v1/projects/{project_id}/prisma/flow.svg?reviewer_id={reviewer_id}")
+        assert svg_res.status_code == 200
+        assert "image/svg+xml" in svg_res.headers.get("content-type", "")
+        assert svg_res.headers.get("x-project-id") == project_id
+
+        # 5. exportApi.exportPrismaPdf -> GET /api/v1/projects/{projectId}/prisma/flow.pdf?reviewer_id=...
+        pdf_res = test_client.get(f"/api/v1/projects/{project_id}/prisma/flow.pdf?reviewer_id={reviewer_id}")
+        assert pdf_res.status_code == 200
+        assert "application/pdf" in pdf_res.headers.get("content-type", "")
+        assert pdf_res.headers.get("x-project-id") == project_id
+
+        # 6. extractionApi.exportDataset(csv) -> GET /api/v1/projects/{projectId}/extraction/export?format=csv&dataset=publications&reviewer_id=...
+        csv_res = test_client.get(
+            f"/api/v1/projects/{project_id}/extraction/export?format=csv&dataset=publications&reviewer_id={reviewer_id}"
+        )
+        assert csv_res.status_code == 200
+        assert "text/csv" in csv_res.headers.get("content-type", "")
+        assert csv_res.headers.get("x-project-id") == project_id
+
+        # 7. extractionApi.exportDataset(json) -> GET /api/v1/projects/{projectId}/extraction/export?format=json&dataset=publications&reviewer_id=...
+        json_res = test_client.get(
+            f"/api/v1/projects/{project_id}/extraction/export?format=json&dataset=publications&reviewer_id={reviewer_id}"
+        )
+        assert json_res.status_code == 200
+        assert "application/json" in json_res.headers.get("content-type", "")
+        assert json_res.headers.get("x-project-id") == project_id
