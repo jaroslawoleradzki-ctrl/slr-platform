@@ -29,6 +29,7 @@ from app.repositories.project_publication_repository import (
     ProjectPublicationRepository,
     default_project_publication_repository,
 )
+from app.services.export.cell_safety import sanitize_csv_cell
 from app.services.extraction_configuration_service import (
     ExtractionConfigurationService,
     default_extraction_configuration_service,
@@ -204,13 +205,21 @@ class ExtractionDatasetService:
             writer.writerow(headers)
             for relationship in relationship_models:
                 values = {value.field_key: value for value in relationship.relationship_values}
-                writer.writerow([
-                    relationship.project_id, str(relationship.publication_id), relationship.canonical_title,
-                    _csv_scalar(relationship.canonical_publication_year), relationship.template_id,
-                    relationship.template_version, relationship.group_key, str(relationship.group_item_id),
-                    relationship.item_index, relationship.reviewer_id, relationship.submitted_at.isoformat(),
+                row = [
+                    relationship.project_id,
+                    str(relationship.publication_id),
+                    relationship.canonical_title,
+                    _csv_scalar(relationship.canonical_publication_year),
+                    relationship.template_id,
+                    relationship.template_version,
+                    relationship.group_key,
+                    str(relationship.group_item_id),
+                    relationship.item_index,
+                    relationship.reviewer_id,
+                    relationship.submitted_at.isoformat(),
                     *[cell for field in fields for cell in _serialize_csv_field(values.get(field.field_key), field.data_type)],
-                ])
+                ]
+                writer.writerow([sanitize_csv_cell(c) for c in row])
             return buffer.getvalue()
 
         publication_models = self.get_publication_read_models(
@@ -225,15 +234,24 @@ class ExtractionDatasetService:
         writer.writerow(headers)
         for publication in publication_models:
             values = {value.field_key: value for value in publication.publication_values}
-            writer.writerow([
-                publication.project_id, str(publication.publication_id), publication.canonical_title,
-                "; ".join(publication.canonical_authors), _csv_scalar(publication.canonical_publication_year),
-                publication.canonical_doi or "", publication.canonical_journal or "", publication.template_id,
-                publication.template_version, publication.completeness_status.value,
-                publication.latest_revision_index, str(publication.latest_revision_id), publication.reviewer_id,
+            row = [
+                publication.project_id,
+                str(publication.publication_id),
+                publication.canonical_title,
+                "; ".join(publication.canonical_authors),
+                _csv_scalar(publication.canonical_publication_year),
+                publication.canonical_doi or "",
+                publication.canonical_journal or "",
+                publication.template_id,
+                publication.template_version,
+                publication.completeness_status.value,
+                publication.latest_revision_index,
+                str(publication.latest_revision_id),
+                publication.reviewer_id,
                 publication.submitted_at.isoformat(),
                 *[cell for field in fields for cell in _serialize_csv_field(values.get(field.field_key), field.data_type)],
-            ])
+            ]
+            writer.writerow([sanitize_csv_cell(c) for c in row])
         return buffer.getvalue()
 
     def _configuration(self, project_id: str):

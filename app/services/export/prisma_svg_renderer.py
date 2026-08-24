@@ -31,10 +31,19 @@ from app.services.export.layout import (
     extract_node_contents,
 )
 
+_CONTROL_CHARACTERS = frozenset(
+    "\x00\x01\x02\x03\x04\x05\x06\x07\x08\x0b\x0c\x0e\x0f"
+    "\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1a\x1b\x1c\x1d\x1e\x1f\x7f"
+)
+
 
 def render_prisma_svg(model: PrismaFlowModel) -> str:
     """Render a PRISMA 2020 flow model into a standalone, deterministic SVG string."""
     contents = extract_node_contents(model)
+
+    raw_title = "".join(c for c in model.metadata.project_title if c not in _CONTROL_CHARACTERS)
+    display_title = raw_title[:100] + ("…" if len(raw_title) > 100 else "")
+    raw_protocol = "".join(c for c in (model.metadata.protocol_version or "") if c not in _CONTROL_CHARACTERS)
 
     lines: list[str] = [
         '<?xml version="1.0" encoding="UTF-8"?>',
@@ -56,11 +65,11 @@ def render_prisma_svg(model: PrismaFlowModel) -> str:
         f'  <rect width="{int(CANVAS_WIDTH)}" height="{int(CANVAS_HEIGHT)}" fill="{COLOR_BG}" />',
         '',
         '  <!-- Header -->',
-        f'  <text x="20" y="30" class="title-text">PRISMA 2020 Flow Diagram — {escape(model.metadata.project_title)}</text>',
+        f'  <text x="20" y="30" class="title-text">PRISMA 2020 Flow Diagram — {escape(display_title)}</text>',
     ]
 
-    if model.metadata.protocol_version:
-        lines.append(f'  <text x="{int(CANVAS_WIDTH) - 20}" y="30" text-anchor="end" class="meta-text">Protocol: {escape(model.metadata.protocol_version)}</text>')
+    if raw_protocol:
+        lines.append(f'  <text x="{int(CANVAS_WIDTH) - 20}" y="30" text-anchor="end" class="meta-text">Protocol: {escape(raw_protocol)}</text>')
 
     lines.append('')
     lines.append('  <!-- Stage Bands -->')

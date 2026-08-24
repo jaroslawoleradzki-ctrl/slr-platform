@@ -36,6 +36,12 @@ if TYPE_CHECKING:
     from app.domain.prisma_flow import PrismaFlowModel
 
 
+_CONTROL_CHARACTERS = frozenset(
+    "\x00\x01\x02\x03\x04\x05\x06\x07\x08\x0b\x0c\x0e\x0f"
+    "\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1a\x1b\x1c\x1d\x1e\x1f\x7f"
+)
+
+
 def _get_font_paths() -> tuple[Path, Path]:
     """Resolve paths to bundled regular and bold DejaVuSans TTF fonts."""
     candidates: list[Path] = []
@@ -111,9 +117,12 @@ def render_prisma_pdf(model: PrismaFlowModel) -> bytes:
     # Optional project title & protocol subtitle
     subtitle_parts: list[str] = []
     if model.metadata.project_title:
-        subtitle_parts.append(model.metadata.project_title)
+        raw_title = "".join(c for c in model.metadata.project_title if c not in _CONTROL_CHARACTERS)
+        clamped_title = raw_title[:100] + ("…" if len(raw_title) > 100 else "")
+        subtitle_parts.append(clamped_title)
     if model.metadata.protocol_version:
-        subtitle_parts.append(f"({model.metadata.protocol_version})")
+        raw_proto = "".join(c for c in model.metadata.protocol_version if c not in _CONTROL_CHARACTERS)
+        subtitle_parts.append(f"({raw_proto})")
 
     if subtitle_parts:
         subtitle = " — ".join(subtitle_parts)

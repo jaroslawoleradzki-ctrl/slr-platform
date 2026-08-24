@@ -10,8 +10,11 @@ Filenames derive from ``project_id`` plus fixed literals only; no user-supplied
 text reaches headers (plan §17).
 """
 
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 
+from app.core.version import get_app_version
 from app.domain.prisma_flow import PrismaFlowModel
 from app.repositories.project_publication_repository import ProjectNotFoundError
 from app.repositories.project_repository import (
@@ -38,11 +41,28 @@ def get_export_dataset_service() -> ExportDatasetService:
     return default_export_dataset_service()
 
 
-def _attachment_response(content: str | bytes, media_type: str, filename: str) -> Response:
+def _attachment_response(
+    content: str | bytes,
+    media_type: str,
+    filename: str,
+    project_id: str | None = None,
+    service: ExportDatasetService | None = None,
+) -> Response:
+    headers = {
+        "Content-Disposition": f'attachment; filename="{filename}"',
+        "X-Application-Version": get_app_version(),
+        "X-Generated-At": datetime.now(timezone.utc).isoformat(),
+    }
+    if project_id:
+        headers["X-Project-Id"] = project_id
+        if service is not None:
+            project = service.get_project(project_id)
+            if project is not None and getattr(project, "protocol_version", None):
+                headers["X-Protocol-Version"] = str(project.protocol_version)
     return Response(
         content=content,
         media_type=media_type,
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        headers=headers,
     )
 
 
@@ -67,6 +87,8 @@ def export_bibtex(
         render_bibtex(publications),
         BIBTEX_MEDIA_TYPE,
         f"{project_id}_publications.bib",
+        project_id=project_id,
+        service=service,
     )
 
 
@@ -91,6 +113,8 @@ def export_ris(
         render_ris(publications),
         RIS_MEDIA_TYPE,
         f"{project_id}_publications.ris",
+        project_id=project_id,
+        service=service,
     )
 
 
@@ -119,6 +143,8 @@ def export_xlsx(
         payload,
         XLSX_MEDIA_TYPE,
         f"{project_id}_publications.xlsx",
+        project_id=project_id,
+        service=service,
     )
 
 
@@ -134,13 +160,21 @@ def export_xlsx(
 )
 def get_prisma_flow(
     project_id: str,
+    response: Response = Response(),
     reviewer_id: str = Query(default="default_reviewer"),
     service: ExportDatasetService = Depends(get_export_dataset_service),
 ) -> PrismaFlowModel:
     try:
-        return service.get_prisma_flow_model(project_id, reviewer_id=reviewer_id)
+        model = service.get_prisma_flow_model(project_id, reviewer_id=reviewer_id)
     except (ProjectNotFoundError, ProjectRepoNotFoundError) as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    if response is not None:
+        response.headers["X-Project-Id"] = project_id
+        response.headers["X-Application-Version"] = get_app_version()
+        response.headers["X-Generated-At"] = datetime.now(timezone.utc).isoformat()
+        if model.metadata.protocol_version:
+            response.headers["X-Protocol-Version"] = str(model.metadata.protocol_version)
+    return model
 
 
 @router.get(
@@ -170,6 +204,8 @@ def export_prisma_svg(
         svg_content,
         SVG_MEDIA_TYPE,
         f"{project_id}_prisma_flow.svg",
+        project_id=project_id,
+        service=service,
     )
 
 
@@ -200,4 +236,6 @@ def export_prisma_pdf(
         pdf_bytes,
         PDF_MEDIA_TYPE,
         f"{project_id}_prisma_flow.pdf",
+        project_id=project_id,
+        service=service,
     )

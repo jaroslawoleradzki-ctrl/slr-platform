@@ -319,6 +319,10 @@ class ExportDatasetService:
     # Slice 1 foundation
     # ------------------------------------------------------------------
 
+    def get_project(self, project_id: str):
+        """Return the Project domain entity for project_id, or None if not found."""
+        return self._project_repository.get(project_id)
+
     def get_bibliographic_records(self, project_id: str) -> list[Publication]:
         """Return active canonical records ordered by collection position.
 

@@ -12,6 +12,8 @@ Guarantees for every string cell written to a workbook:
 
 from __future__ import annotations
 
+from typing import Any
+
 _MAX_XLSX_CELL_LENGTH = 32767
 _TRUNCATION_MARKER = "…[truncated]"
 
@@ -34,4 +36,15 @@ def excel_safe_cell(value: str | None) -> str:
     if len(cleaned) > _MAX_XLSX_CELL_LENGTH:
         keep = _MAX_XLSX_CELL_LENGTH - len(_TRUNCATION_MARKER)
         cleaned = cleaned[:keep] + _TRUNCATION_MARKER
+    return cleaned
+
+
+def sanitize_csv_cell(value: Any) -> str:
+    """Return *value* as a formula-safe string for CSV cells."""
+    if value is None:
+        return ""
+    val_str = str(value)
+    cleaned = "".join(character for character in val_str if character not in _CONTROL_CHARACTERS)
+    if cleaned.startswith(_FORMULA_TRIGGER_PREFIXES):
+        cleaned = "'" + cleaned
     return cleaned
