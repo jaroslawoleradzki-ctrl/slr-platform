@@ -12,7 +12,11 @@ text reaches headers (plan §17).
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 
+from app.domain.prisma_flow import PrismaFlowModel
 from app.repositories.project_publication_repository import ProjectNotFoundError
+from app.repositories.project_repository import (
+    ProjectNotFoundError as ProjectRepoNotFoundError,
+)
 from app.services.export.bibtex_writer import render_bibtex
 from app.services.export.ris_writer import render_ris
 from app.services.export.xlsx_workbook import build_research_matrix_workbook
@@ -26,6 +30,7 @@ router = APIRouter(prefix="/projects", tags=["exports"])
 BIBTEX_MEDIA_TYPE = "application/x-bibtex"
 RIS_MEDIA_TYPE = "application/x-research-info-systems"
 XLSX_MEDIA_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+SVG_MEDIA_TYPE = "image/svg+xml"
 
 
 def get_export_dataset_service() -> ExportDatasetService:
@@ -107,10 +112,61 @@ def export_xlsx(
 ) -> Response:
     try:
         payload = build_research_matrix_workbook(service, project_id, reviewer_id=reviewer_id)
-    except ProjectNotFoundError as exc:
+    except (ProjectNotFoundError, ProjectRepoNotFoundError) as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     return _attachment_response(
         payload,
         XLSX_MEDIA_TYPE,
         f"{project_id}_publications.xlsx",
+    )
+
+
+@router.get(
+    "/{project_id}/prisma/flow",
+    response_model=PrismaFlowModel,
+    summary="Get presentation-neutral PRISMA 2020 flow model",
+    description=(
+        "Returns the presentation-neutral PRISMA 2020 flow model containing "
+        "stage nodes, flow edges, audit metadata, and presentation-derived exclusions "
+        "(duplicates removed, stage exclusions). Read-only: project state is not modified."
+    ),
+)
+def get_prisma_flow(
+    project_id: str,
+    reviewer_id: str = Query(default="default_reviewer"),
+    service: ExportDatasetService = Depends(get_export_dataset_service),
+) -> PrismaFlowModel:
+    try:
+        return service.get_prisma_flow_model(project_id, reviewer_id=reviewer_id)
+    except (ProjectNotFoundError, ProjectRepoNotFoundError) as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+
+@router.get(
+    "/{project_id}/prisma/flow.svg",
+    summary="Export PRISMA 2020 flow diagram as standalone SVG",
+    description=(
+        "Returns a standalone, printable PRISMA 2020 SVG flow diagram rendered from "
+        "the presentation-neutral flow model using authoritative metrics. "
+        "Deterministic: repeated calls for identical project state yield byte-identical SVG. "
+        "Read-only: project state is not modified."
+    ),
+)
+@router.get(
+    "/{project_id}/exports/prisma/flow.svg",
+    include_in_schema=False,
+)
+def export_prisma_svg(
+    project_id: str,
+    reviewer_id: str = Query(default="default_reviewer"),
+    service: ExportDatasetService = Depends(get_export_dataset_service),
+) -> Response:
+    try:
+        svg_content = service.get_prisma_svg(project_id, reviewer_id=reviewer_id)
+    except (ProjectNotFoundError, ProjectRepoNotFoundError) as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    return _attachment_response(
+        svg_content,
+        SVG_MEDIA_TYPE,
+        f"{project_id}_prisma_flow.svg",
     )

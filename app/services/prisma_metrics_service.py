@@ -54,10 +54,11 @@ class PrismaMetrics:
     - records_screened_full_text: records with a completed Full-Text screening
       decision (project outcome in multi-reviewer mode, latest reviewer decision
       otherwise).
-    - studies_included_synthesis: records with a final INCLUDE outcome at the
-      Full-Text stage, i.e. the publications eligible for Quality Assessment,
-      extraction, and synthesis. This is the closest authoritative persisted state
-      for final synthesis inclusion.
+    - studies_included_synthesis: records with a final Full-Text INCLUDE outcome
+      on active canonical publications (in multi-reviewer mode, unanimous AGREEMENT
+      or RESOLVED conflict verdict; in single-reviewer mode, the reviewer's latest
+      decision). This represents the final Full-Text INCLUDE population entering
+      Quality Assessment, extraction, and synthesis.
     """
 
     project_id: str

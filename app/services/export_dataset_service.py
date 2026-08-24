@@ -22,6 +22,7 @@ from app.domain.extraction import (
     ExtractionTemplateVersion,
     PublicationExtractionReadModel,
 )
+from app.domain.prisma_flow import PrismaFlowModel
 from app.domain.publication import Publication
 from app.domain.quality_assessment import (
     QualityAssessment,
@@ -41,7 +42,11 @@ from app.repositories.project_publication_repository import (
     ProjectPublicationRepository,
     default_project_publication_repository,
 )
-from app.repositories.project_repository import SqliteProjectRepository
+from app.repositories.project_repository import (
+    ProjectRepository,
+    SqliteProjectRepository,
+    default_project_repository,
+)
 from app.repositories.screening_reporting_repository import (
     ScreeningReportingRepository,
     default_screening_reporting_repository,
@@ -58,6 +63,8 @@ from app.repositories.synthesis_matrix_repository import (
     SqliteSynthesisMatrixRepository,
     default_synthesis_matrix_repository,
 )
+from app.services.export.prisma_flow_builder import build_flow_model
+from app.services.export.prisma_svg_renderer import render_prisma_svg
 from app.services.extraction_configuration_service import (
     ExtractionConfigurationService,
     default_extraction_configuration_service,
@@ -222,9 +229,17 @@ class ExportDatasetService:
         qa_catalog_repository=None,
         qa_repository=None,
         synthesis_matrix_repository=None,
+        project_repository: ProjectRepository | None = None,
     ) -> None:
         self._publication_repository = publication_repository or default_project_publication_repository()
         database_path = getattr(self._publication_repository, "database_path", None)
+
+        if project_repository is not None:
+            self._project_repository = project_repository
+        elif database_path is not None:
+            self._project_repository = SqliteProjectRepository(Path(database_path))
+        else:
+            self._project_repository = default_project_repository()
 
         if screening_reporting_repository is not None:
             self._screening_reporting = screening_reporting_repository
@@ -463,6 +478,31 @@ class ExportDatasetService:
             if relation.approval_state is ClassificationApprovalState.APPROVED
             and relation.publication_id in active_ids
         ]
+
+    # ------------------------------------------------------------------
+    # Slice 3 PRISMA 2020 Flow Model & SVG
+    # ------------------------------------------------------------------
+
+    def get_prisma_flow_model(
+        self,
+        project_id: str,
+        reviewer_id: str = "default_reviewer",
+        *,
+        generated_at: datetime | None = None,
+    ) -> PrismaFlowModel:
+        """Presentation-neutral PRISMA 2020 flow model for a project."""
+        project = self._project_repository.get(project_id)
+        metrics = self.get_prisma_metrics(project_id, reviewer_id=reviewer_id)
+        return build_flow_model(metrics, project=project, generated_at=generated_at)
+
+    def get_prisma_svg(
+        self,
+        project_id: str,
+        reviewer_id: str = "default_reviewer",
+    ) -> str:
+        """Printable, deterministic PRISMA 2020 SVG diagram for a project."""
+        model = self.get_prisma_flow_model(project_id, reviewer_id=reviewer_id)
+        return render_prisma_svg(model)
 
 
 def default_export_dataset_service() -> ExportDatasetService:

@@ -283,3 +283,83 @@ class TestRoundTripThroughImporterParsers:
         assert body.count("ER  - \r\n") == 2
         years = sorted(record["PY"][0] for record in parsed)
         assert years == ["2023", "2024"]
+
+
+class TestPrismaFlowEndpoint:
+    def test_returns_200_and_flow_model_json(self, environment) -> None:
+        client, publications = environment
+        publications.add_publications(PROJECT_ID, [make_publication(1), make_publication(2)])
+
+        response = client.get(f"/api/v1/projects/{PROJECT_ID}/prisma/flow")
+        assert response.status_code == 200
+        assert response.headers["content-type"].startswith("application/json")
+
+        data = response.json()
+        assert data["project_id"] == PROJECT_ID
+        assert data["metadata"]["project_title"] == "Exports Project"
+        assert len(data["nodes"]) == 9
+        assert len(data["edges"]) == 8
+        assert "duplicates_removed" in data["removed"]
+
+    def test_unknown_project_returns_404(self, environment) -> None:
+        client, _ = environment
+        response = client.get("/api/v1/projects/unknown_id/prisma/flow")
+        assert response.status_code == 404
+
+    def test_empty_project_returns_zero_counts_flow_model(self, environment) -> None:
+        client, _ = environment
+        response = client.get(f"/api/v1/projects/{PROJECT_ID}/prisma/flow")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["metadata"]["counts_echo"]["total_identified"] == 0
+
+
+class TestPrismaSvgEndpoint:
+    def test_returns_attachment_with_svg_media_type(self, environment) -> None:
+        client, publications = environment
+        publications.add_publications(PROJECT_ID, [make_publication(1)])
+
+        response = client.get(f"/api/v1/projects/{PROJECT_ID}/prisma/flow.svg")
+        assert response.status_code == 200
+        assert response.headers["content-type"].startswith("image/svg+xml")
+        assert response.headers["content-disposition"] == f'attachment; filename="{PROJECT_ID}_prisma_flow.svg"'
+        assert "<svg" in response.text
+        assert "</svg>" in response.text
+
+    def test_unknown_project_returns_404(self, environment) -> None:
+        client, _ = environment
+        response = client.get("/api/v1/projects/unknown_id/prisma/flow.svg")
+        assert response.status_code == 404
+
+    def test_empty_project_yields_valid_standalone_svg(self, environment) -> None:
+        import xml.etree.ElementTree as ET
+
+        client, _ = environment
+        response = client.get(f"/api/v1/projects/{PROJECT_ID}/prisma/flow.svg")
+        assert response.status_code == 200
+        root = ET.fromstring(response.text)
+        assert root.tag.endswith("svg")
+
+    def test_two_calls_are_byte_identical(self, environment) -> None:
+        client, publications = environment
+        publications.add_publications(PROJECT_ID, [make_publication(1), make_publication(2)])
+
+        first = client.get(f"/api/v1/projects/{PROJECT_ID}/prisma/flow.svg").content
+        second = client.get(f"/api/v1/projects/{PROJECT_ID}/prisma/flow.svg").content
+        assert first == second
+
+    def test_export_does_not_mutate_project_state(self, environment) -> None:
+        client, publications = environment
+        publications.add_publications(PROJECT_ID, [make_publication(1), make_publication(2)])
+        total_before = publications.count_by_project(PROJECT_ID)
+
+        client.get(f"/api/v1/projects/{PROJECT_ID}/prisma/flow.svg")
+        assert publications.count_by_project(PROJECT_ID) == total_before
+
+    def test_supports_exports_url_alias(self, environment) -> None:
+        client, publications = environment
+        publications.add_publications(PROJECT_ID, [make_publication(1)])
+
+        direct = client.get(f"/api/v1/projects/{PROJECT_ID}/prisma/flow.svg").content
+        alias = client.get(f"/api/v1/projects/{PROJECT_ID}/exports/prisma/flow.svg").content
+        assert direct == alias
