@@ -14,7 +14,7 @@ development
 
 Current version:
 
-v0.5.7
+v0.5.8
 
 Current release status:
 
@@ -30,6 +30,7 @@ through normalization/deduplication, and PRISMA manual source breakdown.
 v0.5.7 implements canonical duplicate merge (separating reviewer decisions from
 technical merge lifecycle, sqlite-based atomic merges, supersession tracking,
 downstream active-only filtering, and integrity audit support).
+v0.5.8 cleans up deprecated FastAPI/Starlette HTTP 422 status constants.
 
 Current development phase:
 

@@ -146,7 +146,7 @@ def configure_project_quality_assessment(
         ValueError,
     ) as exc:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=str(exc),
         ) from exc
 
@@ -198,7 +198,7 @@ def list_quality_assessment_eligible_records(
     if filter_status is not None and status_filter is not None:
         if filter_status != status_filter:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail=f"Conflicting query parameters provided: status='{filter_status.value}' and status_filter='{status_filter.value}'",
             )
         effective_filter = filter_status
@@ -253,7 +253,7 @@ def get_quality_assessment_record_detail(
         ) from exc
     except NoQualityAssessmentConfigurationError as exc:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=str(exc),
         ) from exc
 
@@ -299,7 +299,7 @@ def save_quality_assessment(
         ValueError,
     ) as exc:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=str(exc),
         ) from exc
 

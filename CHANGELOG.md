@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.5.8] — 2026-08-24
+
+### Fixed
+
+- **HTTP 422 Deprecation Cleanup**:
+  - Replaced deprecated `HTTP_422_UNPROCESSABLE_ENTITY` constant with `HTTP_422_UNPROCESSABLE_CONTENT` across all API router modules.
+  - Preserved numeric HTTP 422 status behavior and all existing API contracts.
+  - Reduced backend test validation warnings from 12 to 1.
+  - Deferred Starlette TestClient/httpx2 migration to a dedicated dependency-maintenance release.
+
 ## [0.5.7] — 2026-08-24
 
 ### Added

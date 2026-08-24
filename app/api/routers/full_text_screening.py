@@ -41,7 +41,7 @@ def _workflow_error(exc: Exception) -> HTTPException:
             detail="Publication is not currently eligible for Full Text screening.",
         )
     if isinstance(exc, ValueError):
-        return HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
+        return HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc))
     return HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Unable to process the Full Text screening workflow.")
 
 
