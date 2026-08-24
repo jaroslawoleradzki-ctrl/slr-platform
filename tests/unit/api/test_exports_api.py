@@ -297,8 +297,8 @@ class TestPrismaFlowEndpoint:
         data = response.json()
         assert data["project_id"] == PROJECT_ID
         assert data["metadata"]["project_title"] == "Exports Project"
-        assert len(data["nodes"]) == 9
-        assert len(data["edges"]) == 8
+        assert len(data["nodes"]) == 7
+        assert len(data["edges"]) == 6
         assert "duplicates_removed" in data["removed"]
 
     def test_unknown_project_returns_404(self, environment) -> None:

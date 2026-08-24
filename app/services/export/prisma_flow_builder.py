@@ -38,8 +38,8 @@ def build_flow_model(
 
     # Presentation-level derived figures (plan §12, §13, D7)
     duplicates_removed = max(0, metrics.records_before_dedup - metrics.records_after_technical_merger)
-    excluded_title_abstract = max(0, metrics.records_screened_title_abstract - metrics.records_screened_full_text)
-    excluded_full_text = max(0, metrics.records_screened_full_text - metrics.studies_included_synthesis)
+    excluded_title_abstract = metrics.records_excluded_title_abstract
+    excluded_full_text = metrics.records_excluded_full_text
 
     removed = {
         "duplicates_removed": duplicates_removed,
@@ -55,6 +55,7 @@ def build_flow_model(
     if metrics.duplicate_groups_pending_review > 0:
         annotations_removed["pending_review"] = str(metrics.duplicate_groups_pending_review)
 
+    # Main funnel nodes always render (with count 0 when partially completed or empty)
     nodes: list[PrismaFlowNode] = [
         PrismaFlowNode(
             node_id="identification.databases",
@@ -70,13 +71,6 @@ def build_flow_model(
             annotations=annotations_other,
         ),
         PrismaFlowNode(
-            node_id="identification.records_removed",
-            stage="identification",
-            label_key="prisma.identification.records_removed",
-            values={"duplicates_removed": duplicates_removed},
-            annotations=annotations_removed,
-        ),
-        PrismaFlowNode(
             node_id="identification.after_deduplication",
             stage="identification",
             label_key="prisma.identification.after_deduplication",
@@ -89,22 +83,10 @@ def build_flow_model(
             values={"count": metrics.records_screened_title_abstract},
         ),
         PrismaFlowNode(
-            node_id="screening.excluded_title_abstract",
-            stage="screening_tasft",
-            label_key="prisma.screening.excluded_title_abstract",
-            values={"count": excluded_title_abstract},
-        ),
-        PrismaFlowNode(
             node_id="screening.full_text",
             stage="screening_tasft",
             label_key="prisma.screening.full_text",
             values={"count": metrics.records_screened_full_text},
-        ),
-        PrismaFlowNode(
-            node_id="screening.excluded_full_text",
-            stage="screening_tasft",
-            label_key="prisma.screening.excluded_full_text",
-            values={"count": excluded_full_text},
         ),
         PrismaFlowNode(
             node_id="included.synthesis",
@@ -117,13 +99,51 @@ def build_flow_model(
     edges: list[PrismaFlowEdge] = [
         PrismaFlowEdge(from_node="identification.databases", to_node="identification.after_deduplication"),
         PrismaFlowEdge(from_node="identification.other_methods", to_node="identification.after_deduplication"),
-        PrismaFlowEdge(from_node="identification.after_deduplication", to_node="identification.records_removed"),
         PrismaFlowEdge(from_node="identification.after_deduplication", to_node="screening.title_abstract"),
-        PrismaFlowEdge(from_node="screening.title_abstract", to_node="screening.excluded_title_abstract"),
         PrismaFlowEdge(from_node="screening.title_abstract", to_node="screening.full_text"),
-        PrismaFlowEdge(from_node="screening.full_text", to_node="screening.excluded_full_text"),
         PrismaFlowEdge(from_node="screening.full_text", to_node="included.synthesis"),
     ]
+
+    # Side-box exclusions render only when their denominator > 0 (plan §13)
+    if metrics.records_before_dedup > 0:
+        nodes.append(
+            PrismaFlowNode(
+                node_id="identification.records_removed",
+                stage="identification",
+                label_key="prisma.identification.records_removed",
+                values={"duplicates_removed": duplicates_removed},
+                annotations=annotations_removed,
+            )
+        )
+        edges.append(
+            PrismaFlowEdge(from_node="identification.after_deduplication", to_node="identification.records_removed")
+        )
+
+    if metrics.records_screened_title_abstract > 0:
+        nodes.append(
+            PrismaFlowNode(
+                node_id="screening.excluded_title_abstract",
+                stage="screening_tasft",
+                label_key="prisma.screening.excluded_title_abstract",
+                values={"count": excluded_title_abstract},
+            )
+        )
+        edges.append(
+            PrismaFlowEdge(from_node="screening.title_abstract", to_node="screening.excluded_title_abstract")
+        )
+
+    if metrics.records_screened_full_text > 0:
+        nodes.append(
+            PrismaFlowNode(
+                node_id="screening.excluded_full_text",
+                stage="screening_tasft",
+                label_key="prisma.screening.excluded_full_text",
+                values={"count": excluded_full_text},
+            )
+        )
+        edges.append(
+            PrismaFlowEdge(from_node="screening.full_text", to_node="screening.excluded_full_text")
+        )
 
     counts_echo: dict[str, int] = {
         "records_identified_providers": metrics.records_identified_providers,
@@ -136,6 +156,8 @@ def build_flow_model(
         "records_screened_title_abstract": metrics.records_screened_title_abstract,
         "records_screened_full_text": metrics.records_screened_full_text,
         "studies_included_synthesis": metrics.studies_included_synthesis,
+        "records_excluded_title_abstract": metrics.records_excluded_title_abstract,
+        "records_excluded_full_text": metrics.records_excluded_full_text,
     }
 
     metadata = PrismaFlowMetadata(

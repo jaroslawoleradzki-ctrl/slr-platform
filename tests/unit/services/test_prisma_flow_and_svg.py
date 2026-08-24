@@ -38,7 +38,9 @@ def _sample_metrics(
     working: int = 200,
     after_dedup: int = 180,
     screened_ta: int = 180,
+    excluded_ta: int = 60,
     screened_ft: int = 120,
+    excluded_ft: int = 75,
     included: int = 45,
     pending_groups: int = 2,
     manual_breakdown: dict[str, int] | None = None,
@@ -53,7 +55,9 @@ def _sample_metrics(
         records_after_technical_merger=after_dedup,
         duplicate_groups_pending_review=pending_groups,
         records_screened_title_abstract=screened_ta,
+        records_excluded_title_abstract=excluded_ta,
         records_screened_full_text=screened_ft,
+        records_excluded_full_text=excluded_ft,
         studies_included_synthesis=included,
         manual_source_breakdown=manual_breakdown or {"pubmed_export": 30, "scopus_export": 20},
     )
@@ -76,19 +80,21 @@ class TestPrismaFlowBuilder:
         assert node_map["screening.full_text"].values["count"] == 120
         assert node_map["included.synthesis"].values["count"] == 45
 
-    def test_flow_model_derives_correct_exclusions_and_side_boxes(self) -> None:
+    def test_flow_model_uses_authoritative_screening_exclusions(self) -> None:
         metrics = _sample_metrics(
             working=200,
             after_dedup=180,
             screened_ta=180,
+            excluded_ta=60,
             screened_ft=120,
+            excluded_ft=75,
             included=45,
         )
         model = build_flow_model(metrics)
 
         assert model.removed["duplicates_removed"] == 20  # 200 - 180
-        assert model.removed["excluded_title_abstract"] == 60  # 180 - 120
-        assert model.removed["excluded_full_text"] == 75  # 120 - 45
+        assert model.removed["excluded_title_abstract"] == 60  # authoritative from metrics
+        assert model.removed["excluded_full_text"] == 75  # authoritative from metrics
 
         node_map = {n.node_id: n for n in model.nodes}
         assert node_map["identification.records_removed"].values["duplicates_removed"] == 20
@@ -103,7 +109,9 @@ class TestPrismaFlowBuilder:
             working=0,
             after_dedup=0,
             screened_ta=0,
+            excluded_ta=0,
             screened_ft=0,
+            excluded_ft=0,
             included=0,
             pending_groups=0,
             manual_breakdown={},
@@ -114,6 +122,9 @@ class TestPrismaFlowBuilder:
         assert model.removed["excluded_title_abstract"] == 0
         assert model.removed["excluded_full_text"] == 0
 
+        # In an empty project, 6 main funnel nodes are present, side boxes are omitted per plan §13
+        assert len(model.nodes) == 6
+        assert len(model.edges) == 5
         for node in model.nodes:
             for val in node.values.values():
                 assert val == 0
@@ -129,6 +140,60 @@ class TestPrismaFlowBuilder:
         assert model.metadata.generated_at == now.isoformat()
         assert model.metadata.counts_echo["studies_included_synthesis"] == 45
         assert model.metadata.counts_echo["total_identified"] == 200
+        assert model.metadata.counts_echo["records_excluded_title_abstract"] == 60
+        assert model.metadata.counts_echo["records_excluded_full_text"] == 75
+
+
+class TestSideBoxConditionalRendering:
+    """Tests for zero-valued side exclusion box omission rule (plan §13, line 370)."""
+
+    def test_side_boxes_omitted_when_denominators_zero(self) -> None:
+        metrics = _sample_metrics(
+            providers=0,
+            imports=0,
+            working=0,
+            after_dedup=0,
+            screened_ta=0,
+            excluded_ta=0,
+            screened_ft=0,
+            excluded_ft=0,
+            included=0,
+            pending_groups=0,
+            manual_breakdown={},
+        )
+        model = build_flow_model(metrics)
+        svg_text = render_prisma_svg(model)
+
+        # Main stage nodes render with 0
+        assert "Active canonical records (n = 0)" in svg_text
+        assert "Title &amp; Abstract screened (n = 0)" in svg_text
+        assert "Full-Text reports assessed (n = 0)" in svg_text
+        assert "Studies included in synthesis (n = 0)" in svg_text
+
+        # Side boxes must NOT render when their denominator is 0
+        assert "Technical duplicates merged" not in svg_text
+        assert "Title &amp; Abstract excluded" not in svg_text
+        assert "Full-Text excluded" not in svg_text
+
+    def test_ta_side_box_rendered_when_ta_screened_positive(self) -> None:
+        metrics = _sample_metrics(
+            working=10,
+            after_dedup=10,
+            screened_ta=10,
+            excluded_ta=2,
+            screened_ft=0,
+            excluded_ft=0,
+            included=0,
+        )
+        model = build_flow_model(metrics)
+        svg_text = render_prisma_svg(model)
+
+        # Dedup side box and T&A excluded side box render
+        assert "Technical duplicates merged (n = 0)" in svg_text
+        assert "Title &amp; Abstract excluded (n = 2)" in svg_text
+
+        # Full-Text side box is omitted because screened_ft == 0
+        assert "Full-Text excluded" not in svg_text
 
 
 class TestPrismaSvgRenderer:
@@ -377,3 +442,348 @@ class TestD4PrismaInclusionDefinition:
 
         metrics = service.get_prisma_metrics(PROJECT_ID, reviewer_id="rev_1")
         assert metrics.studies_included_synthesis == 1
+
+
+class TestPartialWorkflowPersistedSemantics:
+    """Regression tests for partial-workflow PRISMA exclusion semantics using persisted state."""
+
+    def test_case_a_title_abstract_partially_completed(self, tmp_path: Path) -> None:
+        """Case A: Title & Abstract partially completed. Pending T&A records are NOT counted as excluded."""
+        db_path = tmp_path / "case_a.db"
+        proj_repo = SqliteProjectRepository(db_path)
+        proj_repo.create(Project(project_id=PROJECT_ID, title="Case A"))
+
+        pub_repo = SqliteProjectPublicationRepository(db_path)
+        pubs = [make_publication(i, title=f"Paper {i}") for i in range(1, 11)]
+        pub_repo.add_publications(PROJECT_ID, pubs)
+
+        dec_repo = SqliteScreeningDecisionRepository(db_path)
+        # 6 evaluated: 4 INCLUDE, 2 EXCLUDE; 4 pending
+        for i in range(4):
+            dec_repo.save(
+                ScreeningDecision(
+                    project_id=PROJECT_ID,
+                    publication_id=pubs[i].record_id,
+                    stage=ScreeningStage.TITLE_ABSTRACT,
+                    outcome=ScreeningOutcome.INCLUDE,
+                    reviewer_id="rev_1",
+                )
+            )
+        for i in range(4, 6):
+            dec_repo.save(
+                ScreeningDecision(
+                    project_id=PROJECT_ID,
+                    publication_id=pubs[i].record_id,
+                    stage=ScreeningStage.TITLE_ABSTRACT,
+                    outcome=ScreeningOutcome.EXCLUDE,
+                    reviewer_id="rev_1",
+                )
+            )
+
+        service = ExportDatasetService(
+            publication_repository=pub_repo,
+            screening_reporting_repository=ScreeningReportingRepository(db_path),
+        )
+
+        metrics = service.get_prisma_metrics(PROJECT_ID, reviewer_id="rev_1")
+        assert metrics.records_screened_title_abstract == 6
+        assert metrics.records_excluded_title_abstract == 2
+        assert metrics.records_screened_full_text == 0
+        assert metrics.records_excluded_full_text == 0
+
+        flow_model = service.get_prisma_flow_model(PROJECT_ID, reviewer_id="rev_1")
+        assert flow_model.removed["excluded_title_abstract"] == 2
+        assert flow_model.removed["excluded_full_text"] == 0
+
+    def test_case_b_ta_complete_full_text_not_started(self, tmp_path: Path) -> None:
+        """Case B: T&A complete, Full-Text not started. T&A exclusion remains true EXCLUDE population."""
+        db_path = tmp_path / "case_b.db"
+        proj_repo = SqliteProjectRepository(db_path)
+        proj_repo.create(Project(project_id=PROJECT_ID, title="Case B"))
+
+        pub_repo = SqliteProjectPublicationRepository(db_path)
+        pubs = [make_publication(i, title=f"Paper {i}") for i in range(1, 11)]
+        pub_repo.add_publications(PROJECT_ID, pubs)
+
+        dec_repo = SqliteScreeningDecisionRepository(db_path)
+        # 10 evaluated: 7 INCLUDE, 3 EXCLUDE; 0 FT decisions
+        for i in range(7):
+            dec_repo.save(
+                ScreeningDecision(
+                    project_id=PROJECT_ID,
+                    publication_id=pubs[i].record_id,
+                    stage=ScreeningStage.TITLE_ABSTRACT,
+                    outcome=ScreeningOutcome.INCLUDE,
+                    reviewer_id="rev_1",
+                )
+            )
+        for i in range(7, 10):
+            dec_repo.save(
+                ScreeningDecision(
+                    project_id=PROJECT_ID,
+                    publication_id=pubs[i].record_id,
+                    stage=ScreeningStage.TITLE_ABSTRACT,
+                    outcome=ScreeningOutcome.EXCLUDE,
+                    reviewer_id="rev_1",
+                )
+            )
+
+        service = ExportDatasetService(
+            publication_repository=pub_repo,
+            screening_reporting_repository=ScreeningReportingRepository(db_path),
+        )
+
+        metrics = service.get_prisma_metrics(PROJECT_ID, reviewer_id="rev_1")
+        assert metrics.records_screened_title_abstract == 10
+        assert metrics.records_excluded_title_abstract == 3
+        assert metrics.records_screened_full_text == 0
+        assert metrics.records_excluded_full_text == 0
+
+        flow_model = service.get_prisma_flow_model(PROJECT_ID, reviewer_id="rev_1")
+        assert flow_model.removed["excluded_title_abstract"] == 3
+        assert flow_model.removed["excluded_full_text"] == 0
+
+        svg_text = service.get_prisma_svg(PROJECT_ID, reviewer_id="rev_1")
+        assert "Title &amp; Abstract excluded (n = 3)" in svg_text
+        # Full-Text excluded side box must be omitted because screened_ft == 0
+        assert "Full-Text excluded" not in svg_text
+
+    def test_case_c_full_text_partially_completed(self, tmp_path: Path) -> None:
+        """Case C: Full-Text partially completed (e.g. 100 T&A evaluated: 80 INCLUDE, 20 EXCLUDE; 15 FT screened: 10 INCLUDE, 5 EXCLUDE).
+
+        Verify: T&A excluded is 20 (NOT 85), FT excluded is 5 (NOT 70), pending FT records not classified as excluded.
+        """
+        db_path = tmp_path / "case_c.db"
+        proj_repo = SqliteProjectRepository(db_path)
+        proj_repo.create(Project(project_id=PROJECT_ID, title="Case C"))
+
+        pub_repo = SqliteProjectPublicationRepository(db_path)
+        pubs = [make_publication(i, title=f"Paper {i}") for i in range(1, 101)]
+        pub_repo.add_publications(PROJECT_ID, pubs)
+
+        dec_repo = SqliteScreeningDecisionRepository(db_path)
+        # 80 T&A INCLUDE (pubs[0..79]), 20 T&A EXCLUDE (pubs[80..99])
+        for i in range(80):
+            dec_repo.save(
+                ScreeningDecision(
+                    project_id=PROJECT_ID,
+                    publication_id=pubs[i].record_id,
+                    stage=ScreeningStage.TITLE_ABSTRACT,
+                    outcome=ScreeningOutcome.INCLUDE,
+                    reviewer_id="rev_1",
+                )
+            )
+        for i in range(80, 100):
+            dec_repo.save(
+                ScreeningDecision(
+                    project_id=PROJECT_ID,
+                    publication_id=pubs[i].record_id,
+                    stage=ScreeningStage.TITLE_ABSTRACT,
+                    outcome=ScreeningOutcome.EXCLUDE,
+                    reviewer_id="rev_1",
+                )
+            )
+
+        # 15 FT evaluated: 10 INCLUDE (pubs[0..9]), 5 EXCLUDE (pubs[10..14]); 65 FT pending
+        for i in range(10):
+            dec_repo.save(
+                ScreeningDecision(
+                    project_id=PROJECT_ID,
+                    publication_id=pubs[i].record_id,
+                    stage=ScreeningStage.FULL_TEXT,
+                    outcome=ScreeningOutcome.INCLUDE,
+                    reviewer_id="rev_1",
+                )
+            )
+        for i in range(10, 15):
+            dec_repo.save(
+                ScreeningDecision(
+                    project_id=PROJECT_ID,
+                    publication_id=pubs[i].record_id,
+                    stage=ScreeningStage.FULL_TEXT,
+                    outcome=ScreeningOutcome.EXCLUDE,
+                    reviewer_id="rev_1",
+                )
+            )
+
+        service = ExportDatasetService(
+            publication_repository=pub_repo,
+            screening_reporting_repository=ScreeningReportingRepository(db_path),
+        )
+
+        metrics = service.get_prisma_metrics(PROJECT_ID, reviewer_id="rev_1")
+        assert metrics.records_screened_title_abstract == 100
+        assert metrics.records_excluded_title_abstract == 20  # Crucial: 20, NOT 85!
+        assert metrics.records_screened_full_text == 15
+        assert metrics.records_excluded_full_text == 5  # Crucial: 5, NOT 70!
+        assert metrics.studies_included_synthesis == 10
+
+        flow_model = service.get_prisma_flow_model(PROJECT_ID, reviewer_id="rev_1")
+        assert flow_model.removed["excluded_title_abstract"] == 20
+        assert flow_model.removed["excluded_full_text"] == 5
+
+        svg_text = service.get_prisma_svg(PROJECT_ID, reviewer_id="rev_1")
+        assert "Title &amp; Abstract excluded (n = 20)" in svg_text
+        assert "Full-Text excluded (n = 5)" in svg_text
+
+    def test_case_d_full_text_partially_completed_with_both_outcomes(self, tmp_path: Path) -> None:
+        """Case D: Full-Text partially completed with both INCLUDE and EXCLUDE decisions."""
+        db_path = tmp_path / "case_d.db"
+        proj_repo = SqliteProjectRepository(db_path)
+        proj_repo.create(Project(project_id=PROJECT_ID, title="Case D"))
+
+        pub_repo = SqliteProjectPublicationRepository(db_path)
+        pubs = [make_publication(i, title=f"Paper {i}") for i in range(1, 6)]
+        pub_repo.add_publications(PROJECT_ID, pubs)
+
+        dec_repo = SqliteScreeningDecisionRepository(db_path)
+        for pub in pubs:
+            dec_repo.save(
+                ScreeningDecision(
+                    project_id=PROJECT_ID,
+                    publication_id=pub.record_id,
+                    stage=ScreeningStage.TITLE_ABSTRACT,
+                    outcome=ScreeningOutcome.INCLUDE,
+                    reviewer_id="rev_1",
+                )
+            )
+
+        # 3 FT decisions: 2 INCLUDE, 1 EXCLUDE; 2 FT pending
+        dec_repo.save(
+            ScreeningDecision(
+                project_id=PROJECT_ID,
+                publication_id=pubs[0].record_id,
+                stage=ScreeningStage.FULL_TEXT,
+                outcome=ScreeningOutcome.INCLUDE,
+                reviewer_id="rev_1",
+            )
+        )
+        dec_repo.save(
+            ScreeningDecision(
+                project_id=PROJECT_ID,
+                publication_id=pubs[1].record_id,
+                stage=ScreeningStage.FULL_TEXT,
+                outcome=ScreeningOutcome.INCLUDE,
+                reviewer_id="rev_1",
+            )
+        )
+        dec_repo.save(
+            ScreeningDecision(
+                project_id=PROJECT_ID,
+                publication_id=pubs[2].record_id,
+                stage=ScreeningStage.FULL_TEXT,
+                outcome=ScreeningOutcome.EXCLUDE,
+                reviewer_id="rev_1",
+            )
+        )
+
+        service = ExportDatasetService(
+            publication_repository=pub_repo,
+            screening_reporting_repository=ScreeningReportingRepository(db_path),
+        )
+
+        metrics = service.get_prisma_metrics(PROJECT_ID, reviewer_id="rev_1")
+        assert metrics.records_screened_full_text == 3
+        assert metrics.records_excluded_full_text == 1
+        assert metrics.studies_included_synthesis == 2
+
+    def test_case_e_completed_workflow(self, tmp_path: Path) -> None:
+        """Case E: Completed workflow. All exclusion counts and stages partition cleanly."""
+        db_path = tmp_path / "case_e.db"
+        proj_repo = SqliteProjectRepository(db_path)
+        proj_repo.create(Project(project_id=PROJECT_ID, title="Case E"))
+
+        pub_repo = SqliteProjectPublicationRepository(db_path)
+        pubs = [make_publication(i, title=f"Paper {i}") for i in range(1, 11)]
+        pub_repo.add_publications(PROJECT_ID, pubs)
+
+        dec_repo = SqliteScreeningDecisionRepository(db_path)
+        # 6 INCLUDE at T&A, 4 EXCLUDE at T&A
+        for i in range(6):
+            dec_repo.save(
+                ScreeningDecision(
+                    project_id=PROJECT_ID,
+                    publication_id=pubs[i].record_id,
+                    stage=ScreeningStage.TITLE_ABSTRACT,
+                    outcome=ScreeningOutcome.INCLUDE,
+                    reviewer_id="rev_1",
+                )
+            )
+        for i in range(6, 10):
+            dec_repo.save(
+                ScreeningDecision(
+                    project_id=PROJECT_ID,
+                    publication_id=pubs[i].record_id,
+                    stage=ScreeningStage.TITLE_ABSTRACT,
+                    outcome=ScreeningOutcome.EXCLUDE,
+                    reviewer_id="rev_1",
+                )
+            )
+
+        # All 6 eligible screened at FT: 4 INCLUDE, 2 EXCLUDE
+        for i in range(4):
+            dec_repo.save(
+                ScreeningDecision(
+                    project_id=PROJECT_ID,
+                    publication_id=pubs[i].record_id,
+                    stage=ScreeningStage.FULL_TEXT,
+                    outcome=ScreeningOutcome.INCLUDE,
+                    reviewer_id="rev_1",
+                )
+            )
+        for i in range(4, 6):
+            dec_repo.save(
+                ScreeningDecision(
+                    project_id=PROJECT_ID,
+                    publication_id=pubs[i].record_id,
+                    stage=ScreeningStage.FULL_TEXT,
+                    outcome=ScreeningOutcome.EXCLUDE,
+                    reviewer_id="rev_1",
+                )
+            )
+
+        service = ExportDatasetService(
+            publication_repository=pub_repo,
+            screening_reporting_repository=ScreeningReportingRepository(db_path),
+        )
+
+        metrics = service.get_prisma_metrics(PROJECT_ID, reviewer_id="rev_1")
+        assert metrics.records_screened_title_abstract == 10
+        assert metrics.records_excluded_title_abstract == 4
+        assert metrics.records_screened_full_text == 6
+        assert metrics.records_excluded_full_text == 2
+        assert metrics.studies_included_synthesis == 4
+
+        flow_model = service.get_prisma_flow_model(PROJECT_ID, reviewer_id="rev_1")
+        assert len(flow_model.nodes) == 9
+        assert len(flow_model.edges) == 8
+        assert flow_model.removed["excluded_title_abstract"] == 4
+        assert flow_model.removed["excluded_full_text"] == 2
+
+    def test_case_f_empty_project(self, tmp_path: Path) -> None:
+        """Case F: Empty project. Zero/empty behavior remains correct."""
+        db_path = tmp_path / "case_f.db"
+        proj_repo = SqliteProjectRepository(db_path)
+        proj_repo.create(Project(project_id=PROJECT_ID, title="Case F"))
+
+        pub_repo = SqliteProjectPublicationRepository(db_path)
+        service = ExportDatasetService(
+            publication_repository=pub_repo,
+            screening_reporting_repository=ScreeningReportingRepository(db_path),
+        )
+
+        metrics = service.get_prisma_metrics(PROJECT_ID)
+        assert metrics.total_identified == 0
+        assert metrics.records_screened_title_abstract == 0
+        assert metrics.records_excluded_title_abstract == 0
+        assert metrics.records_screened_full_text == 0
+        assert metrics.records_excluded_full_text == 0
+        assert metrics.studies_included_synthesis == 0
+
+        flow_model = service.get_prisma_flow_model(PROJECT_ID)
+        assert len(flow_model.nodes) == 6
+        assert len(flow_model.edges) == 5
+
+        svg_text = service.get_prisma_svg(PROJECT_ID)
+        assert "<svg" in svg_text
+        assert "</svg>" in svg_text

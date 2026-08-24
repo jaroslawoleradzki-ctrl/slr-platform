@@ -51,9 +51,17 @@ class PrismaMetrics:
     - records_screened_title_abstract: records with a final Title & Abstract
       screening decision (project outcome in multi-reviewer mode, latest reviewer
       decision otherwise).
+    - records_excluded_title_abstract: records with a final EXCLUDE outcome at the
+      Title & Abstract stage on active canonical publications (in multi-reviewer
+      mode, unanimous AGREEMENT or RESOLVED conflict verdict; in single-reviewer mode,
+      the reviewer's latest decision).
     - records_screened_full_text: records with a completed Full-Text screening
       decision (project outcome in multi-reviewer mode, latest reviewer decision
       otherwise).
+    - records_excluded_full_text: records with a final EXCLUDE outcome at the
+      Full-Text stage on active canonical publications (in multi-reviewer mode,
+      unanimous AGREEMENT or RESOLVED conflict verdict; in single-reviewer mode,
+      the reviewer's latest decision).
     - studies_included_synthesis: records with a final Full-Text INCLUDE outcome
       on active canonical publications (in multi-reviewer mode, unanimous AGREEMENT
       or RESOLVED conflict verdict; in single-reviewer mode, the reviewer's latest
@@ -73,6 +81,8 @@ class PrismaMetrics:
     records_screened_full_text: int
     studies_included_synthesis: int
     manual_source_breakdown: dict[str, int]
+    records_excluded_title_abstract: int = 0
+    records_excluded_full_text: int = 0
 
 
 class PrismaMetricsService:
@@ -124,6 +134,9 @@ class PrismaMetricsService:
         )
 
         workflow = self._workflow_status.get_status(project_id, reviewer_id=reviewer_id)
+        ta_excluded, ft_excluded = self._workflow_status.get_excluded_counts(
+            project_id, reviewer_id=reviewer_id
+        )
 
         return PrismaMetrics(
             project_id=project_id,
@@ -138,6 +151,8 @@ class PrismaMetricsService:
             records_screened_full_text=workflow.full_text_screening.evaluated_count,
             studies_included_synthesis=workflow.quality_assessment.eligible_count,
             manual_source_breakdown=manual_breakdown,
+            records_excluded_title_abstract=ta_excluded,
+            records_excluded_full_text=ft_excluded,
         )
 
     def to_response(self, metrics: PrismaMetrics) -> PrismaMetricsResponse:
@@ -154,6 +169,8 @@ class PrismaMetricsService:
             records_screened_full_text=metrics.records_screened_full_text,
             studies_included_synthesis=metrics.studies_included_synthesis,
             manual_source_breakdown=metrics.manual_source_breakdown,
+            records_excluded_title_abstract=metrics.records_excluded_title_abstract,
+            records_excluded_full_text=metrics.records_excluded_full_text,
         )
 
 

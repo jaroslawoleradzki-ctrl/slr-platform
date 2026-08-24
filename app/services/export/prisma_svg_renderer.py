@@ -78,10 +78,11 @@ def render_prisma_svg(model: PrismaFlowModel) -> str:
     lines.append('')
     lines.append('  <!-- Flow Arrows -->')
     for arrow in ARROWS:
-        lines.append(
-            f'  <line x1="{arrow.from_x}" y1="{arrow.from_y}" x2="{arrow.to_x}" y2="{arrow.to_y}" '
-            f'stroke="{COLOR_ARROW}" stroke-width="1.5" marker-end="url(#arrowhead)" />'
-        )
+        if arrow.from_node in contents and arrow.to_node in contents:
+            lines.append(
+                f'  <line x1="{arrow.from_x}" y1="{arrow.from_y}" x2="{arrow.to_x}" y2="{arrow.to_y}" '
+                f'stroke="{COLOR_ARROW}" stroke-width="1.5" marker-end="url(#arrowhead)" />'
+            )
 
     lines.append('')
     lines.append('  <!-- Flow Boxes -->')

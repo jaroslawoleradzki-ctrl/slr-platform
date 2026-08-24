@@ -71,6 +71,8 @@ class NodeBoxContent:
 
 @dataclass(frozen=True, slots=True)
 class ArrowConnector:
+    from_node: str
+    to_node: str
     from_x: float
     from_y: float
     to_x: float
@@ -186,21 +188,77 @@ NODE_LAYOUTS: dict[str, NodeBoxLayout] = {
 
 ARROWS: tuple[ArrowConnector, ...] = (
     # Identification: Databases -> After Deduplication
-    ArrowConnector(from_x=315.0, from_y=160.0, to_x=315.0, to_y=200.0),
+    ArrowConnector(
+        from_node="identification.databases",
+        to_node="identification.after_deduplication",
+        from_x=315.0,
+        from_y=160.0,
+        to_x=315.0,
+        to_y=200.0,
+    ),
     # Identification: Other Methods -> After Deduplication (horizontal entry from right)
-    ArrowConnector(from_x=670.0, from_y=160.0, to_x=480.0, to_y=230.0),
+    ArrowConnector(
+        from_node="identification.other_methods",
+        to_node="identification.after_deduplication",
+        from_x=670.0,
+        from_y=160.0,
+        to_x=480.0,
+        to_y=230.0,
+    ),
     # Identification: After Deduplication -> Records Removed (side box)
-    ArrowConnector(from_x=480.0, from_y=245.0, to_x=500.0, to_y=245.0),
+    ArrowConnector(
+        from_node="identification.after_deduplication",
+        to_node="identification.records_removed",
+        from_x=480.0,
+        from_y=245.0,
+        to_x=500.0,
+        to_y=245.0,
+    ),
     # Identification -> Screening: After Deduplication -> Title & Abstract Screening
-    ArrowConnector(from_x=315.0, from_y=290.0, to_x=315.0, to_y=360.0),
+    ArrowConnector(
+        from_node="identification.after_deduplication",
+        to_node="screening.title_abstract",
+        from_x=315.0,
+        from_y=290.0,
+        to_x=315.0,
+        to_y=360.0,
+    ),
     # Screening: Title & Abstract -> Excluded Title & Abstract (side box)
-    ArrowConnector(from_x=480.0, from_y=405.0, to_x=500.0, to_y=405.0),
+    ArrowConnector(
+        from_node="screening.title_abstract",
+        to_node="screening.excluded_title_abstract",
+        from_x=480.0,
+        from_y=405.0,
+        to_x=500.0,
+        to_y=405.0,
+    ),
     # Screening: Title & Abstract -> Full-Text Screening
-    ArrowConnector(from_x=315.0, from_y=450.0, to_x=315.0, to_y=520.0),
+    ArrowConnector(
+        from_node="screening.title_abstract",
+        to_node="screening.full_text",
+        from_x=315.0,
+        from_y=450.0,
+        to_x=315.0,
+        to_y=520.0,
+    ),
     # Screening: Full-Text -> Excluded Full-Text (side box)
-    ArrowConnector(from_x=480.0, from_y=565.0, to_x=500.0, to_y=565.0),
+    ArrowConnector(
+        from_node="screening.full_text",
+        to_node="screening.excluded_full_text",
+        from_x=480.0,
+        from_y=565.0,
+        to_x=500.0,
+        to_y=565.0,
+    ),
     # Screening -> Included: Full-Text -> Included in Synthesis
-    ArrowConnector(from_x=315.0, from_y=610.0, to_x=315.0, to_y=800.0),
+    ArrowConnector(
+        from_node="screening.full_text",
+        to_node="included.synthesis",
+        from_x=315.0,
+        from_y=610.0,
+        to_x=315.0,
+        to_y=800.0,
+    ),
 )
 
 
@@ -210,92 +268,103 @@ def extract_node_contents(model: PrismaFlowModel) -> dict[str, NodeBoxContent]:
     result: dict[str, NodeBoxContent] = {}
 
     # 1. Databases
-    db_node = node_map.get("identification.databases")
-    db_count = db_node.values.get("count", 0) if db_node else 0
-    result["identification.databases"] = NodeBoxContent(
-        node_id="identification.databases",
-        title="Records identified from databases & registers",
-        lines=(f"Database records (n = {db_count})",),
-    )
+    if "identification.databases" in node_map:
+        db_node = node_map["identification.databases"]
+        db_count = db_node.values.get("count", 0)
+        result["identification.databases"] = NodeBoxContent(
+            node_id="identification.databases",
+            title="Records identified from databases & registers",
+            lines=(f"Database records (n = {db_count})",),
+        )
 
     # 2. Other methods
-    other_node = node_map.get("identification.other_methods")
-    other_count = other_node.values.get("count", 0) if other_node else 0
-    other_lines: list[str] = [f"Manual file imports (n = {other_count})"]
-    if other_node and other_node.annotations:
-        for k, v in sorted(other_node.annotations.items()):
-            other_lines.append(f"  • {k}: {v}")
-    result["identification.other_methods"] = NodeBoxContent(
-        node_id="identification.other_methods",
-        title="Records identified from other methods",
-        lines=tuple(other_lines),
-    )
+    if "identification.other_methods" in node_map:
+        other_node = node_map["identification.other_methods"]
+        other_count = other_node.values.get("count", 0)
+        other_lines: list[str] = [f"Manual file imports (n = {other_count})"]
+        if other_node.annotations:
+            for k, v in sorted(other_node.annotations.items()):
+                other_lines.append(f"  • {k}: {v}")
+        result["identification.other_methods"] = NodeBoxContent(
+            node_id="identification.other_methods",
+            title="Records identified from other methods",
+            lines=tuple(other_lines),
+        )
 
     # 3. After deduplication
-    after_node = node_map.get("identification.after_deduplication")
-    after_count = after_node.values.get("count", 0) if after_node else 0
-    result["identification.after_deduplication"] = NodeBoxContent(
-        node_id="identification.after_deduplication",
-        title="Records after duplicate removal",
-        lines=(f"Active canonical records (n = {after_count})",),
-    )
+    if "identification.after_deduplication" in node_map:
+        after_node = node_map["identification.after_deduplication"]
+        after_count = after_node.values.get("count", 0)
+        result["identification.after_deduplication"] = NodeBoxContent(
+            node_id="identification.after_deduplication",
+            title="Records after duplicate removal",
+            lines=(f"Active canonical records (n = {after_count})",),
+        )
 
-    # 4. Records removed
-    removed_node = node_map.get("identification.records_removed")
-    dup_removed = model.removed.get("duplicates_removed", 0)
-    removed_lines: list[str] = [f"Technical duplicates merged (n = {dup_removed})"]
-    if removed_node and "pending_review" in removed_node.annotations:
-        removed_lines.append(f"Candidate groups pending review: {removed_node.annotations['pending_review']}")
-    result["identification.records_removed"] = NodeBoxContent(
-        node_id="identification.records_removed",
-        title="Duplicates removed",
-        lines=tuple(removed_lines),
-        is_side_box=True,
-    )
+    # 4. Records removed (side box)
+    if "identification.records_removed" in node_map:
+        removed_node = node_map["identification.records_removed"]
+        dup_removed = removed_node.values.get("duplicates_removed", model.removed.get("duplicates_removed", 0))
+        removed_lines: list[str] = [f"Technical duplicates merged (n = {dup_removed})"]
+        if "pending_review" in removed_node.annotations:
+            removed_lines.append(f"Candidate groups pending review: {removed_node.annotations['pending_review']}")
+        result["identification.records_removed"] = NodeBoxContent(
+            node_id="identification.records_removed",
+            title="Duplicates removed",
+            lines=tuple(removed_lines),
+            is_side_box=True,
+        )
 
     # 5. Title & Abstract screened
-    ta_node = node_map.get("screening.title_abstract")
-    ta_count = ta_node.values.get("count", 0) if ta_node else 0
-    result["screening.title_abstract"] = NodeBoxContent(
-        node_id="screening.title_abstract",
-        title="Records screened",
-        lines=(f"Title & Abstract screened (n = {ta_count})",),
-    )
+    if "screening.title_abstract" in node_map:
+        ta_node = node_map["screening.title_abstract"]
+        ta_count = ta_node.values.get("count", 0)
+        result["screening.title_abstract"] = NodeBoxContent(
+            node_id="screening.title_abstract",
+            title="Records screened",
+            lines=(f"Title & Abstract screened (n = {ta_count})",),
+        )
 
-    # 6. Excluded Title & Abstract
-    ex_ta_count = model.removed.get("excluded_title_abstract", 0)
-    result["screening.excluded_title_abstract"] = NodeBoxContent(
-        node_id="screening.excluded_title_abstract",
-        title="Records excluded",
-        lines=(f"Title & Abstract excluded (n = {ex_ta_count})",),
-        is_side_box=True,
-    )
+    # 6. Excluded Title & Abstract (side box)
+    if "screening.excluded_title_abstract" in node_map:
+        ex_ta_node = node_map["screening.excluded_title_abstract"]
+        ex_ta_count = ex_ta_node.values.get("count", model.removed.get("excluded_title_abstract", 0))
+        result["screening.excluded_title_abstract"] = NodeBoxContent(
+            node_id="screening.excluded_title_abstract",
+            title="Records excluded",
+            lines=(f"Title & Abstract excluded (n = {ex_ta_count})",),
+            is_side_box=True,
+        )
 
     # 7. Full-Text screened
-    ft_node = node_map.get("screening.full_text")
-    ft_count = ft_node.values.get("count", 0) if ft_node else 0
-    result["screening.full_text"] = NodeBoxContent(
-        node_id="screening.full_text",
-        title="Reports sought for retrieval & assessed",
-        lines=(f"Full-Text reports assessed (n = {ft_count})",),
-    )
+    if "screening.full_text" in node_map:
+        ft_node = node_map["screening.full_text"]
+        ft_count = ft_node.values.get("count", 0)
+        result["screening.full_text"] = NodeBoxContent(
+            node_id="screening.full_text",
+            title="Reports sought for retrieval & assessed",
+            lines=(f"Full-Text reports assessed (n = {ft_count})",),
+        )
 
-    # 8. Excluded Full-Text
-    ex_ft_count = model.removed.get("excluded_full_text", 0)
-    result["screening.excluded_full_text"] = NodeBoxContent(
-        node_id="screening.excluded_full_text",
-        title="Reports excluded",
-        lines=(f"Full-Text excluded (n = {ex_ft_count})",),
-        is_side_box=True,
-    )
+    # 8. Excluded Full-Text (side box)
+    if "screening.excluded_full_text" in node_map:
+        ex_ft_node = node_map["screening.excluded_full_text"]
+        ex_ft_count = ex_ft_node.values.get("count", model.removed.get("excluded_full_text", 0))
+        result["screening.excluded_full_text"] = NodeBoxContent(
+            node_id="screening.excluded_full_text",
+            title="Reports excluded",
+            lines=(f"Full-Text excluded (n = {ex_ft_count})",),
+            is_side_box=True,
+        )
 
     # 9. Included in synthesis (D4 verified: final Full-Text INCLUDE population)
-    inc_node = node_map.get("included.synthesis")
-    inc_count = inc_node.values.get("count", 0) if inc_node else 0
-    result["included.synthesis"] = NodeBoxContent(
-        node_id="included.synthesis",
-        title="Studies included in review",
-        lines=(f"Studies included in synthesis (n = {inc_count})",),
-    )
+    if "included.synthesis" in node_map:
+        inc_node = node_map["included.synthesis"]
+        inc_count = inc_node.values.get("count", 0)
+        result["included.synthesis"] = NodeBoxContent(
+            node_id="included.synthesis",
+            title="Studies included in review",
+            lines=(f"Studies included in synthesis (n = {inc_count})",),
+        )
 
     return result
