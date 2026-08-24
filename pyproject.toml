@@ -12,6 +12,7 @@ dependencies = [
   "httpx>=0.28,<1.0",
   "tenacity>=9.1,<10.0",
   "python-multipart>=0.0.20,<1.0",
+  "openpyxl>=3.1,<4.0",
 ]
 
 [project.optional-dependencies]
@@ -37,3 +38,10 @@ line-length = 120
 [tool.ruff.lint]
 select = ["E", "F", "W", "I"]
 ignore = ["E501", "W291"]
+
+[tool.mypy]
+ignore_missing_imports = false
+
+[[tool.mypy.overrides]]
+module = "openpyxl.*"
+ignore_missing_imports = true

@@ -10,11 +10,12 @@ Filenames derive from ``project_id`` plus fixed literals only; no user-supplied
 text reaches headers (plan §17).
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 
 from app.repositories.project_publication_repository import ProjectNotFoundError
 from app.services.export.bibtex_writer import render_bibtex
 from app.services.export.ris_writer import render_ris
+from app.services.export.xlsx_workbook import build_research_matrix_workbook
 from app.services.export_dataset_service import (
     ExportDatasetService,
     default_export_dataset_service,
@@ -24,13 +25,14 @@ router = APIRouter(prefix="/projects", tags=["exports"])
 
 BIBTEX_MEDIA_TYPE = "application/x-bibtex"
 RIS_MEDIA_TYPE = "application/x-research-info-systems"
+XLSX_MEDIA_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 
 def get_export_dataset_service() -> ExportDatasetService:
     return default_export_dataset_service()
 
 
-def _attachment_response(content: str, media_type: str, filename: str) -> Response:
+def _attachment_response(content: str | bytes, media_type: str, filename: str) -> Response:
     return Response(
         content=content,
         media_type=media_type,
@@ -83,4 +85,32 @@ def export_ris(
         render_ris(publications),
         RIS_MEDIA_TYPE,
         f"{project_id}_publications.ris",
+    )
+
+
+@router.get(
+    "/{project_id}/exports/xlsx",
+    summary="Export the research matrix workbook (.xlsx)",
+    description=(
+        "Returns a multi-sheet XLSX research matrix assembled from persisted "
+        "project state: active canonical publications, latest screening "
+        "decisions, quality-assessment profiles, the COMPLETE extraction "
+        "dataset, approved synthesis relations, and an authoritative PRISMA "
+        "summary. Stages without persisted rows are emitted as header-only "
+        "sheets. Read-only: the project state is not modified."
+    ),
+)
+def export_xlsx(
+    project_id: str,
+    reviewer_id: str = Query(default="default_reviewer"),
+    service: ExportDatasetService = Depends(get_export_dataset_service),
+) -> Response:
+    try:
+        payload = build_research_matrix_workbook(service, project_id, reviewer_id=reviewer_id)
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    return _attachment_response(
+        payload,
+        XLSX_MEDIA_TYPE,
+        f"{project_id}_publications.xlsx",
     )
