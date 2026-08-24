@@ -118,7 +118,7 @@ def replace_screening_reviewers(
             for item in service.roster(project_id, stage, payload.reviewer_ids)
         ]
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
 
 
 @router.get("/{project_id}/screening/conflicts", response_model=ScreeningConflictPageResponse)
@@ -367,7 +367,7 @@ def _workflow_error(exc: Exception) -> HTTPException:
             detail="Publication is not in the canonical screening input set.",
         )
     if isinstance(exc, ValueError):
-        return HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
+        return HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc))
     return HTTPException(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         detail="Unable to process the title and abstract screening workflow.",
@@ -493,7 +493,7 @@ def create_screening_criterion(
         return ScreeningCriterionResponse.from_domain(saved)
     except ValueError as exc:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=str(exc),
         ) from exc
     except Exception as exc:
@@ -591,7 +591,7 @@ def update_screening_criterion(
         ) from exc
     except ValueError as exc:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=str(exc),
         ) from exc
     except Exception as exc:
@@ -674,7 +674,7 @@ def record_screening_decision(
         return ScreeningDecisionResponse.from_domain(saved)
     except ValueError as exc:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=str(exc),
         ) from exc
     except Exception as exc:

@@ -667,7 +667,7 @@ def create_mechanism_category(projectId: str, req: CreateCategoryRequestDTO):
     except MechanismCategoryConflictError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(e)) from e
 
 
 @router.put("/mechanisms/categories/{categoryId}", response_model=CategoryDTO)
@@ -686,7 +686,7 @@ def update_mechanism_category(projectId: str, categoryId: str, req: UpdateCatego
     except (ProjectNotFoundError, MechanismCategoryNotFoundError) as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(e)) from e
 
 
 @router.delete("/mechanisms/categories/{categoryId}", status_code=status.HTTP_204_NO_CONTENT)

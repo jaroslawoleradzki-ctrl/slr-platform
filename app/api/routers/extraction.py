@@ -152,7 +152,7 @@ def set_project_extraction_configuration(
     except ExtractionConfigurationLockedError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
 
     return ProjectExtractionConfigurationResponseDTO(
         project_id=config.project_id,
@@ -283,7 +283,7 @@ def submit_extraction_revision(
         InvalidRevisionError,
         ValueError,
     ) as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
 
     return _revision_to_dto(revision)
 
@@ -509,13 +509,13 @@ def export_extraction_dataset(
     """Exports structured extraction dataset as JSON or CSV based on latest revisions."""
     if format not in ("json", "csv"):
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="Query parameter 'format' must be either 'json' or 'csv'.",
         )
 
     if dataset not in ("publications", "relationships"):
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="Query parameter 'dataset' must be either 'publications' or 'relationships'.",
         )
 
