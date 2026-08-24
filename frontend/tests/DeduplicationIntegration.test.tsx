@@ -67,34 +67,80 @@ describe('Deduplication Page Full Integration Workflow & Regression Suite', () =
         },
       ],
     };
+    const mergedGroupListResponse: ApiDuplicateGroupListResponse = {
+      ...groupListResponse,
+      groups: [{ ...groupListResponse.groups[0], status: 'MERGED' }],
+    };
 
     // 1. Mock API calls. Keep the request pending so the loading state is observable.
     let resolveDuplicateGroups: (response: ApiDuplicateGroupListResponse) => void = () => {};
     const duplicateGroupsPromise = new Promise<ApiDuplicateGroupListResponse>((resolve) => {
       resolveDuplicateGroups = resolve;
     });
-    vi.spyOn(projectApiService, 'getDuplicateGroups').mockReturnValue(duplicateGroupsPromise);
+    vi.spyOn(projectApiService, 'getDuplicateGroups')
+      .mockReturnValueOnce(duplicateGroupsPromise)
+      .mockResolvedValue(mergedGroupListResponse);
     vi.spyOn(projectApiService, 'getDuplicateGroupDecision').mockResolvedValue({
       project_id: 'lean_energy',
       group_id: 'grp-flow-999',
       decision: 'PENDING',
       rationale: null,
     });
+    vi.spyOn(projectApiService, 'getWorkflowStatus').mockResolvedValue({
+      project_id: 'lean_energy',
+      title_abstract_screening: { status: 'not_started', evaluated_count: 0, total_count: 0, conflict_count: 0, resolved_count: 0 },
+      full_text_screening: { status: 'waiting_for_title_abstract', eligible_count: 0, evaluated_count: 0, conflict_count: 0, resolved_count: 0 },
+      quality_assessment: { status: 'waiting_for_full_text', eligible_count: 0 },
+    });
+    vi.spyOn(projectApiService, 'getPrismaMetrics').mockResolvedValue({
+      project_id: 'lean_energy',
+      records_identified_providers: 0,
+      records_identified_imports: 0,
+      total_identified: 0,
+      records_after_normalization: 0,
+      records_before_dedup: 0,
+      records_after_technical_merger: 0,
+      duplicate_groups_pending_review: 0,
+      records_screened_title_abstract: 0,
+      records_screened_full_text: 0,
+      studies_included_synthesis: 0,
+      manual_source_breakdown: {},
+    });
+    vi.spyOn(projectApiService, 'getBibliographicImports').mockResolvedValue([]);
+    vi.spyOn(projectApiService, 'getNormalization').mockResolvedValue(null);
+    vi.spyOn(projectApiService, 'getSearchStrategy').mockResolvedValue(null);
 
     const postDecisionSpy = vi
       .spyOn(projectApiService, 'postDuplicateGroupDecision')
-      .mockResolvedValueOnce({
-        project_id: 'lean_energy',
-        group_id: 'grp-flow-999',
-        decision: 'APPROVE',
-        rationale: 'Zatwierdzono na podstawie zgodności abstraktów',
+      .mockImplementationOnce(async () => {
+        await new Promise(r => setTimeout(r, 10));
+        return {
+          project_id: 'lean_energy',
+          group_id: 'grp-flow-999',
+          decision: 'APPROVE',
+          rationale: 'Zatwierdzono na podstawie zgodności abstraktów',
+        };
       })
-      .mockResolvedValueOnce({
+      .mockImplementationOnce(async () => {
+        await new Promise(r => setTimeout(r, 10));
+        return {
+          project_id: 'lean_energy',
+          group_id: 'grp-flow-999',
+          decision: 'REJECT',
+          rationale: 'Zmieniono decyzję po dodatkowej weryfikacji autorów',
+        };
+      });
+    const mergeSpy = vi.spyOn(projectApiService, 'mergeDuplicateGroup').mockImplementation(async () => {
+      await new Promise(r => setTimeout(r, 10));
+      return {
         project_id: 'lean_energy',
         group_id: 'grp-flow-999',
-        decision: 'REJECT',
-        rationale: 'Zmieniono decyzję po dodatkowej weryfikacji autorów',
-      });
+        status: 'MERGED',
+        canonical_record_id: 'rec-a',
+        merged_publication_ids: ['rec-a', 'rec-b'],
+        merged_at: '2026-08-21T10:00:00Z',
+      };
+    });
 
     // 2. Render Page
     render(
@@ -141,22 +187,12 @@ describe('Deduplication Page Full Integration Workflow & Regression Suite', () =
       'APPROVE',
       'Zatwierdzono na podstawie zgodności abstraktów'
     );
-    expect(await screen.findByText(/Decyzja Zapisana!/i)).toBeInTheDocument();
-    expect(screen.getByText(/Approved/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Merged/i)).toBeInTheDocument();
+    expect(mergeSpy).toHaveBeenCalledWith('lean_energy', 'grp-flow-999');
 
-    // 7. Change rationale and reject
-    fireEvent.change(rationaleInput, { target: { value: 'Zmieniono decyzję po dodatkowej weryfikacji autorów' } });
-    const rejectBtn = screen.getByRole('button', { name: /Odrzuć/i });
-    fireEvent.click(rejectBtn);
-
-    expect(postDecisionSpy).toHaveBeenNthCalledWith(
-      2,
-      'lean_energy',
-      'grp-flow-999',
-      'REJECT',
-      'Zmieniono decyzję po dodatkowej weryfikacji autorów'
-    );
-    expect(await screen.findByText(/Rejected/i)).toBeInTheDocument();
+    // After auto-merge, group is MERGED and decision cannot be changed (new one-click UX)
+    expect(screen.queryByRole('button', { name: /Odrzuć/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Zatwierdź/i })).not.toBeInTheDocument();
   });
 
   it('handles network failure during initial fetch and successful recovery via retry button', async () => {

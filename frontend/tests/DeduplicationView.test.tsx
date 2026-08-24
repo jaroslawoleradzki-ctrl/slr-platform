@@ -289,8 +289,8 @@ describe('DeduplicationPage Phase 6.5 — Duplicate Comparison & Review UI', () 
     expect(screen.queryByText(/Porównanie Publikacji Obok Siebie/i)).not.toBeInTheDocument();
   });
 
-  it('handles approve decision recording with rationale input', async () => {
-    const mockResponse: ApiDuplicateGroupListResponse = {
+  it('handles approve decision recording with rationale input and auto-merge', async () => {
+    const initialMockResponse: ApiDuplicateGroupListResponse = {
       project_id: 'lean_energy',
       total_groups_count: 1,
       groups: [
@@ -307,19 +307,75 @@ describe('DeduplicationPage Phase 6.5 — Duplicate Comparison & Review UI', () 
         },
       ],
     };
+    const mergedMockResponse: ApiDuplicateGroupListResponse = {
+      project_id: 'lean_energy',
+      total_groups_count: 1,
+      groups: [
+        {
+          group_id: 'grp-test-303',
+          reason: 'Zgodność identyfikatorów',
+          records_count: 2,
+          status: 'MERGED',
+          shared_identifiers: [{ identifier_type: 'doi', value: '10.1000/test' }],
+          records: [
+            { id: 'r1', title: 'Test Paper A', authors: 'A', year: 2020, source: 'Crossref' },
+            { id: 'r2', title: 'Test Paper B', authors: 'B', year: 2020, source: 'OpenAlex' },
+          ],
+        },
+      ],
+    };
 
-    vi.spyOn(projectApiService, 'getDuplicateGroups').mockResolvedValue(mockResponse);
+    vi.spyOn(projectApiService, 'getDuplicateGroups')
+      .mockResolvedValueOnce(initialMockResponse)
+      .mockResolvedValue(mergedMockResponse);
     vi.spyOn(projectApiService, 'getDuplicateGroupDecision').mockResolvedValue({
       project_id: 'lean_energy',
       group_id: 'grp-test-303',
       decision: 'PENDING',
       rationale: null,
     });
-    const postSpy = vi.spyOn(projectApiService, 'postDuplicateGroupDecision').mockResolvedValue({
+    vi.spyOn(projectApiService, 'getWorkflowStatus').mockResolvedValue({
       project_id: 'lean_energy',
-      group_id: 'grp-test-303',
-      decision: 'APPROVE',
-      rationale: 'Zweryfikowano zgodność po analizie abstraktów',
+      title_abstract_screening: { status: 'not_started', evaluated_count: 0, total_count: 0, conflict_count: 0, resolved_count: 0 },
+      full_text_screening: { status: 'waiting_for_title_abstract', eligible_count: 0, evaluated_count: 0, conflict_count: 0, resolved_count: 0 },
+      quality_assessment: { status: 'waiting_for_full_text', eligible_count: 0 },
+    });
+    vi.spyOn(projectApiService, 'getPrismaMetrics').mockResolvedValue({
+      project_id: 'lean_energy',
+      records_identified_providers: 0,
+      records_identified_imports: 0,
+      total_identified: 0,
+      records_after_normalization: 0,
+      records_before_dedup: 0,
+      records_after_technical_merger: 0,
+      duplicate_groups_pending_review: 0,
+      records_screened_title_abstract: 0,
+      records_screened_full_text: 0,
+      studies_included_synthesis: 0,
+      manual_source_breakdown: {},
+    });
+    vi.spyOn(projectApiService, 'getBibliographicImports').mockResolvedValue([]);
+    vi.spyOn(projectApiService, 'getNormalization').mockResolvedValue(null);
+    vi.spyOn(projectApiService, 'getSearchStrategy').mockResolvedValue(null);
+    const postSpy = vi.spyOn(projectApiService, 'postDuplicateGroupDecision').mockImplementation(async () => {
+      await new Promise(r => setTimeout(r, 50));
+      return {
+        project_id: 'lean_energy',
+        group_id: 'grp-test-303',
+        decision: 'APPROVE',
+        rationale: 'Zweryfikowano zgodność po analizie abstraktów',
+      };
+    });
+    const mergeSpy = vi.spyOn(projectApiService, 'mergeDuplicateGroup').mockImplementation(async () => {
+      await new Promise(r => setTimeout(r, 50));
+      return {
+        project_id: 'lean_energy',
+        group_id: 'grp-test-303',
+        status: 'MERGED',
+        canonical_record_id: 'r1',
+        merged_publication_ids: ['r1', 'r2'],
+        merged_at: '2026-08-21T10:00:00Z',
+      };
     });
 
     render(
@@ -344,8 +400,10 @@ describe('DeduplicationPage Phase 6.5 — Duplicate Comparison & Review UI', () 
       'APPROVE',
       'Zweryfikowano zgodność po analizie abstraktów'
     );
-    expect(await screen.findByText(/Decyzja Zapisana!/i)).toBeInTheDocument();
-    expect(await screen.findByText(/Approved/i)).toBeInTheDocument();
+    // During auto-merge, "Zapisywanie w API..." is shown (saving=true)
+    expect(await screen.findByText(/Zapisywanie w API/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Merged/i)).toBeInTheDocument();
+    expect(mergeSpy).toHaveBeenCalledWith('lean_energy', 'grp-test-303');
   });
 
   it('handles reject click, error state, and retry action with rationale', async () => {
@@ -400,7 +458,7 @@ describe('DeduplicationPage Phase 6.5 — Duplicate Comparison & Review UI', () 
     const rejectBtn = screen.getByRole('button', { name: /Odrzuć/i });
     fireEvent.click(rejectBtn);
 
-    expect(await screen.findByText(/Błąd zapisu: Błąd połączenia z serwerem/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Błąd: Błąd połączenia z serwerem/i)).toBeInTheDocument();
 
     const retryBtn = screen.getByRole('button', { name: /Ponów/i });
     fireEvent.click(retryBtn);
@@ -419,16 +477,106 @@ describe('canonical duplicate merge action', () => {
     ],
   };
 
-  it('keeps approval separate and explicitly posts a bodyless merge request', async () => {
-    const merge = vi.spyOn(projectApiService, 'mergeDuplicateGroup').mockResolvedValue({
-      project_id: 'lean_energy', group_id: 'merge-group', status: 'MERGED', canonical_record_id: 'a',
-      merged_publication_ids: ['a', 'b'], merged_at: '2026-08-21T10:00:00Z',
-    });
+  it('shows Retry merge button for APPROVED group loaded from backend (no normal Approve/Reject)', async () => {
     render(<DuplicateGroupCardPreview group={approvedGroup} index={0} projectId="lean_energy" />);
     expect(screen.getByText('Approved')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Merge duplicates' }));
+    expect(screen.queryByRole('button', { name: /Merge duplicates/i })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Ponów próbę scalania/i })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Zatwierdź/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Odrzuć/i })).not.toBeInTheDocument();
+  });
+
+  it('shows retry merge button when auto-merge fails after approve', async () => {
+    const pendingGroup: ApiDuplicateGroupListResponse['groups'][number] = {
+      group_id: 'merge-group-2', reason: 'DOI', records_count: 2, status: 'PENDING', rationale: '',
+      shared_identifiers: [], records: [
+        { id: 'a', title: 'A', authors: 'A', year: 2024, source: 'one' },
+        { id: 'b', title: 'B', authors: 'B', year: 2024, source: 'two' },
+      ],
+    };
+
+    const postSpy = vi.spyOn(projectApiService, 'postDuplicateGroupDecision').mockImplementation(async () => {
+      await new Promise(r => setTimeout(r, 50));
+      return {
+        project_id: 'lean_energy', group_id: 'merge-group-2', decision: 'APPROVE', rationale: '',
+      };
+    });
+    const mergeSpy = vi.spyOn(projectApiService, 'mergeDuplicateGroup')
+      .mockImplementationOnce(async () => {
+        await new Promise(r => setTimeout(r, 50));
+        throw new Error('Merge failed');
+      })
+      .mockImplementationOnce(async () => {
+        await new Promise(r => setTimeout(r, 50));
+        return {
+          project_id: 'lean_energy', group_id: 'merge-group-2', status: 'MERGED', canonical_record_id: 'a',
+          merged_publication_ids: ['a', 'b'], merged_at: '2026-08-21T10:00:00Z',
+        };
+      });
+
+    render(<DuplicateGroupCardPreview group={pendingGroup} index={0} projectId="lean_energy" />);
+    expect(screen.getByText('Pending Review')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /Zatwierdź/i }));
+
+    expect(postSpy).toHaveBeenCalledWith('lean_energy', 'merge-group-2', 'APPROVE', '');
+    // During auto-merge attempt, "Zapisywanie w API..." is shown
+    expect(await screen.findByText(/Zapisywanie w API/i)).toBeInTheDocument();
+    // After merge fails, error and retry button appear
+    expect(await screen.findByText(/Błąd: Merge failed/i)).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: /Ponów próbę scalania/i })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /Ponów próbę scalania/i }));
     expect(await screen.findByText('Merged')).toBeInTheDocument();
-    expect(merge).toHaveBeenCalledWith('lean_energy', 'merge-group');
+    expect(mergeSpy).toHaveBeenCalledTimes(2);
     expect(screen.getByText(/Canonical publication: a/i)).toBeInTheDocument();
+  });
+
+  it('retry merge for APPROVED group from backend calls only merge, not approve', async () => {
+    const postSpy = vi.spyOn(projectApiService, 'postDuplicateGroupDecision');
+    const mergeSpy = vi.spyOn(projectApiService, 'mergeDuplicateGroup').mockImplementation(async () => {
+      await new Promise(r => setTimeout(r, 50));
+      return {
+        project_id: 'lean_energy', group_id: 'merge-group', status: 'MERGED', canonical_record_id: 'a',
+        merged_publication_ids: ['a', 'b'], merged_at: '2026-08-21T10:00:00Z',
+      };
+    });
+
+    render(<DuplicateGroupCardPreview group={approvedGroup} index={0} projectId="lean_energy" />);
+    expect(screen.getByRole('button', { name: /Ponów próbę scalania/i })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /Ponów próbę scalania/i }));
+
+    expect(await screen.findByText('Merged')).toBeInTheDocument();
+    expect(mergeSpy).toHaveBeenCalledWith('lean_energy', 'merge-group');
+    expect(postSpy).not.toHaveBeenCalled();
+  });
+
+  it('failed retry merge for APPROVED group from backend keeps APPROVED with retry available', async () => {
+    const mergeSpy = vi.spyOn(projectApiService, 'mergeDuplicateGroup')
+      .mockImplementationOnce(async () => {
+        await new Promise(r => setTimeout(r, 50));
+        throw new Error('Merge failed again');
+      })
+      .mockImplementationOnce(async () => {
+        await new Promise(r => setTimeout(r, 50));
+        return {
+          project_id: 'lean_energy', group_id: 'merge-group', status: 'MERGED', canonical_record_id: 'a',
+          merged_publication_ids: ['a', 'b'], merged_at: '2026-08-21T10:00:00Z',
+        };
+      });
+
+    render(<DuplicateGroupCardPreview group={approvedGroup} index={0} projectId="lean_energy" />);
+    expect(screen.getByRole('button', { name: /Ponów próbę scalania/i })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /Ponów próbę scalania/i }));
+
+    expect(await screen.findByText(/Błąd: Merge failed again/i)).toBeInTheDocument();
+    expect(screen.getByText('Approved')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Ponów próbę scalania/i })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /Ponów próbę scalania/i }));
+    expect(await screen.findByText('Merged')).toBeInTheDocument();
+    expect(mergeSpy).toHaveBeenCalledTimes(2);
   });
 });

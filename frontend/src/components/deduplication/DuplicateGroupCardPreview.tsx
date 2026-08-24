@@ -160,11 +160,15 @@ export const DuplicateGroupCardPreview: React.FC<DuplicateGroupCardPreviewProps>
   const [saving, setSaving] = useState<boolean>(false);
   const [saved, setSaved] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [autoMergeFailed, setAutoMergeFailed] = useState<boolean>(initialLifecycleStatus === 'APPROVED');
 
   useEffect(() => {
-    setRationale(('rationale' in group && group.rationale) ? group.rationale : '');
-    setLifecycleStatus(('status' in group && group.status) ? group.status : 'PENDING');
+    const status = ('status' in group && group.status) ? group.status : 'PENDING';
+    const rationale = ('rationale' in group && group.rationale) ? group.rationale : '';
+    setRationale(rationale);
+    setLifecycleStatus(status);
     setMergeResult(null);
+    setAutoMergeFailed(status === 'APPROVED');
   }, [group]);
 
   const normalizedSharedIdents = sharedIdentifiers.map((ident) =>
@@ -188,6 +192,7 @@ export const DuplicateGroupCardPreview: React.FC<DuplicateGroupCardPreviewProps>
     setSaving(true);
     setError(null);
     setSaved(false);
+    setAutoMergeFailed(false);
     try {
       const res = await projectApiService.postDuplicateGroupDecision(
         projectId,
@@ -202,6 +207,19 @@ export const DuplicateGroupCardPreview: React.FC<DuplicateGroupCardPreviewProps>
       if (onDecisionUpdated) {
         onDecisionUpdated(groupId, status, res.rationale);
       }
+
+      if (decision === 'APPROVE') {
+        try {
+          const mergeResult = await projectApiService.mergeDuplicateGroup(projectId, groupId);
+          setMergeResult(mergeResult);
+          setLifecycleStatus('MERGED');
+          onMerged?.(groupId, mergeResult);
+        } catch (mergeErr: unknown) {
+          setAutoMergeFailed(true);
+          setError(mergeErr instanceof Error ? mergeErr.message : 'Błąd podczas automatycznego scalania duplikatów.');
+        }
+      }
+
       setTimeout(() => setSaved(false), 2500);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Błąd podczas zapisywania decyzji.';
@@ -211,16 +229,18 @@ export const DuplicateGroupCardPreview: React.FC<DuplicateGroupCardPreviewProps>
     }
   };
 
-  const handleMerge = async () => {
+  const handleRetryMerge = async () => {
     setSaving(true);
     setError(null);
+    setAutoMergeFailed(false);
     try {
       const result = await projectApiService.mergeDuplicateGroup(projectId, groupId);
       setMergeResult(result);
       setLifecycleStatus('MERGED');
       onMerged?.(groupId, result);
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Błąd podczas scalania duplikatów.');
+      setAutoMergeFailed(true);
+      setError(err instanceof Error ? err.message : 'Błąd podczas ponownej próby scalania duplikatów.');
     } finally {
       setSaving(false);
     }
@@ -626,10 +646,10 @@ export const DuplicateGroupCardPreview: React.FC<DuplicateGroupCardPreviewProps>
                     }}
                   >
                     <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} />
-                    <span>Zapisywanie w API...</span>
+                    <span>{(autoMergeFailed || (lifecycleStatus === 'APPROVED' && !mergeResult)) ? 'Scalanie duplikatów...' : 'Zapisywanie w API...'}</span>
                   </span>
                 )}
-                {saved && !saving && (
+                {saved && !saving && !autoMergeFailed && !(lifecycleStatus === 'APPROVED' && !mergeResult) && (
                   <span style={{ fontSize: '0.8rem', color: 'var(--status-success-text)', fontWeight: 700 }}>
                     Decyzja Zapisana!
                   </span>
@@ -637,70 +657,94 @@ export const DuplicateGroupCardPreview: React.FC<DuplicateGroupCardPreviewProps>
               </div>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                {lifecycleStatus !== 'MERGED' && <button
-                  onClick={() => handleDecision('APPROVE')}
-                  disabled={saving}
-                  aria-label="Zatwierdź tę grupę jako potwierdzony duplikat"
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    padding: '8px 16px',
-                    borderRadius: 'var(--radius-md)',
-                    backgroundColor:
-                      decisionStatus === 'APPROVE'
-                        ? 'var(--status-success-bg)'
-                        : 'var(--bg-surface)',
-                    color:
-                      decisionStatus === 'APPROVE'
-                        ? 'var(--status-success-text)'
-                        : 'var(--text-primary)',
-                    border:
-                      decisionStatus === 'APPROVE'
-                        ? '2px solid var(--status-success-border)'
-                        : '1px solid var(--border-strong)',
-                    fontSize: '0.85rem',
-                    fontWeight: decisionStatus === 'APPROVE' ? 700 : 600,
-                    cursor: saving ? 'wait' : 'pointer',
-                  }}
-                >
-                  <Check size={16} />
-                  <span>Approve (Duplikat)</span>
-                </button>}
+                {lifecycleStatus === 'PENDING' && (
+                  <>
+                    <button
+                      onClick={() => handleDecision('APPROVE')}
+                      disabled={saving}
+                      aria-label="Zatwierdź tę grupę jako potwierdzony duplikat"
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        padding: '8px 16px',
+                        borderRadius: 'var(--radius-md)',
+                        backgroundColor:
+                          decisionStatus === 'APPROVE'
+                            ? 'var(--status-success-bg)'
+                            : 'var(--bg-surface)',
+                        color:
+                          decisionStatus === 'APPROVE'
+                            ? 'var(--status-success-text)'
+                            : 'var(--text-primary)',
+                        border:
+                          decisionStatus === 'APPROVE'
+                            ? '2px solid var(--status-success-border)'
+                            : '1px solid var(--border-strong)',
+                        fontSize: '0.85rem',
+                        fontWeight: decisionStatus === 'APPROVE' ? 700 : 600,
+                        cursor: saving ? 'wait' : 'pointer',
+                      }}
+                    >
+                      <Check size={16} />
+                      <span>Approve (Duplikat)</span>
+                    </button>
 
-                {lifecycleStatus !== 'MERGED' && <button
-                  onClick={() => handleDecision('REJECT')}
-                  disabled={saving}
-                  aria-label="Odrzuć tę grupę jako niebędącą duplikatem"
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    padding: '8px 16px',
-                    borderRadius: 'var(--radius-md)',
-                    backgroundColor:
-                      decisionStatus === 'REJECT'
-                        ? 'var(--bg-surface-elevated)'
-                        : 'var(--bg-surface)',
-                    color:
-                      decisionStatus === 'REJECT'
-                        ? 'var(--text-primary)'
-                        : 'var(--text-secondary)',
-                    border:
-                      decisionStatus === 'REJECT'
-                        ? '2px solid var(--border-strong)'
-                        : '1px solid var(--border-subtle)',
-                    fontSize: '0.85rem',
-                    fontWeight: decisionStatus === 'REJECT' ? 700 : 500,
-                    cursor: saving ? 'wait' : 'pointer',
-                  }}
-                >
-                  <X size={16} />
-                  <span>Reject (Odrzuć)</span>
-                </button>}
-                {lifecycleStatus === 'APPROVED' && (
-                  <button type="button" onClick={() => void handleMerge()} disabled={saving} aria-label="Merge duplicates">
-                    Merge duplicates
+                    <button
+                      onClick={() => handleDecision('REJECT')}
+                      disabled={saving}
+                      aria-label="Odrzuć tę grupę jako niebędącą duplikatem"
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        padding: '8px 16px',
+                        borderRadius: 'var(--radius-md)',
+                        backgroundColor:
+                          decisionStatus === 'REJECT'
+                            ? 'var(--bg-surface-elevated)'
+                            : 'var(--bg-surface)',
+                        color:
+                          decisionStatus === 'REJECT'
+                            ? 'var(--text-primary)'
+                            : 'var(--text-secondary)',
+                        border:
+                          decisionStatus === 'REJECT'
+                            ? '2px solid var(--border-strong)'
+                            : '1px solid var(--border-subtle)',
+                        fontSize: '0.85rem',
+                        fontWeight: decisionStatus === 'REJECT' ? 700 : 500,
+                        cursor: saving ? 'wait' : 'pointer',
+                      }}
+                    >
+                      <X size={16} />
+                      <span>Reject (Odrzuć)</span>
+                    </button>
+                  </>
+                )}
+
+                {(lifecycleStatus === 'APPROVED' && !mergeResult) && (
+                  <button
+                    type="button"
+                    onClick={() => void handleRetryMerge()}
+                    disabled={saving}
+                    aria-label="Ponów próbę scalania duplikatów"
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      padding: '8px 16px',
+                      borderRadius: 'var(--radius-md)',
+                      backgroundColor: 'var(--status-warning-bg)',
+                      color: 'var(--status-warning-text)',
+                      border: '1px solid var(--status-warning-border)',
+                      fontSize: '0.85rem',
+                      fontWeight: 600,
+                      cursor: saving ? 'wait' : 'pointer',
+                    }}
+                  >
+                    <RefreshCw size={16} />
+                    <span>Ponów scalanie</span>
                   </button>
                 )}
               </div>
@@ -726,25 +770,27 @@ export const DuplicateGroupCardPreview: React.FC<DuplicateGroupCardPreviewProps>
                   marginTop: '4px',
                 }}
               >
-                <span>Błąd zapisu: {error}</span>
-                <button
-                  onClick={() => handleDecision(decisionStatus === 'REJECT' ? 'REJECT' : 'APPROVE')}
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '4px',
-                    fontSize: '0.75rem',
-                    color: 'var(--status-error-text)',
-                    fontWeight: 700,
-                    background: 'none',
-                    border: 'none',
-                    cursor: 'pointer',
-                    textDecoration: 'underline',
-                  }}
-                >
-                  <RefreshCw size={12} />
-                  <span>Ponów Próbę (Retry)</span>
-                </button>
+                <span>Błąd: {error}</span>
+                {(lifecycleStatus === 'PENDING' || lifecycleStatus === 'REJECTED') && (
+                  <button
+                    onClick={() => handleDecision(decisionStatus === 'REJECT' ? 'REJECT' : 'APPROVE')}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      fontSize: '0.75rem',
+                      color: 'var(--status-error-text)',
+                      fontWeight: 700,
+                      background: 'none',
+                      border: 'none',
+                      cursor: 'pointer',
+                      textDecoration: 'underline',
+                    }}
+                  >
+                    <RefreshCw size={12} />
+                    <span>Ponów Próbę (Retry)</span>
+                  </button>
+                )}
               </div>
             )}
           </div>
