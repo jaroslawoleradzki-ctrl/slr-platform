@@ -31,6 +31,7 @@ BIBTEX_MEDIA_TYPE = "application/x-bibtex"
 RIS_MEDIA_TYPE = "application/x-research-info-systems"
 XLSX_MEDIA_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 SVG_MEDIA_TYPE = "image/svg+xml"
+PDF_MEDIA_TYPE = "application/pdf"
 
 
 def get_export_dataset_service() -> ExportDatasetService:
@@ -169,4 +170,34 @@ def export_prisma_svg(
         svg_content,
         SVG_MEDIA_TYPE,
         f"{project_id}_prisma_flow.svg",
+    )
+
+
+@router.get(
+    "/{project_id}/prisma/flow.pdf",
+    summary="Export PRISMA 2020 flow diagram as standalone PDF",
+    description=(
+        "Returns a standalone, printable PRISMA 2020 PDF flow diagram rendered from "
+        "the presentation-neutral flow model using authoritative metrics and embedded "
+        "Unicode fonts for selectable multilingual text. "
+        "Read-only: project state is not modified."
+    ),
+)
+@router.get(
+    "/{project_id}/exports/prisma/flow.pdf",
+    include_in_schema=False,
+)
+def export_prisma_pdf(
+    project_id: str,
+    reviewer_id: str = Query(default="default_reviewer"),
+    service: ExportDatasetService = Depends(get_export_dataset_service),
+) -> Response:
+    try:
+        pdf_bytes = service.get_prisma_pdf(project_id, reviewer_id=reviewer_id)
+    except (ProjectNotFoundError, ProjectRepoNotFoundError) as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    return _attachment_response(
+        pdf_bytes,
+        PDF_MEDIA_TYPE,
+        f"{project_id}_prisma_flow.pdf",
     )

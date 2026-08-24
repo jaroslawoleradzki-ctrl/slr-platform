@@ -1,7 +1,7 @@
-"""API tests for research export endpoints (v0.6.1 Slice 1: BibTeX + RIS)."""
-
+import io
 from pathlib import Path
 
+import pypdf
 import pytest
 from fastapi.testclient import TestClient
 
@@ -363,3 +363,62 @@ class TestPrismaSvgEndpoint:
         direct = client.get(f"/api/v1/projects/{PROJECT_ID}/prisma/flow.svg").content
         alias = client.get(f"/api/v1/projects/{PROJECT_ID}/exports/prisma/flow.svg").content
         assert direct == alias
+
+
+class TestPrismaPdfEndpoint:
+    def test_returns_attachment_with_pdf_media_type(self, environment) -> None:
+        client, publications = environment
+        publications.add_publications(PROJECT_ID, [make_publication(1)])
+
+        response = client.get(f"/api/v1/projects/{PROJECT_ID}/prisma/flow.pdf")
+        assert response.status_code == 200
+        assert response.headers["content-type"].startswith("application/pdf")
+        assert response.headers["content-disposition"] == f'attachment; filename="{PROJECT_ID}_prisma_flow.pdf"'
+        assert response.content.startswith(b"%PDF-")
+
+    def test_unknown_project_returns_404(self, environment) -> None:
+        client, _ = environment
+        response = client.get("/api/v1/projects/unknown_id/prisma/flow.pdf")
+        assert response.status_code == 404
+
+    def test_empty_project_yields_valid_standalone_pdf(self, environment) -> None:
+        client, _ = environment
+        response = client.get(f"/api/v1/projects/{PROJECT_ID}/prisma/flow.pdf")
+        assert response.status_code == 200
+        assert response.content.startswith(b"%PDF-")
+
+        reader = pypdf.PdfReader(io.BytesIO(response.content))
+        assert len(reader.pages) == 1
+        text = reader.pages[0].extract_text()
+        assert "PRISMA 2020 Flow Diagram" in text
+        assert "Active canonical records (n = 0)" in text
+
+    def test_repeated_calls_are_semantically_identical(self, environment) -> None:
+        client, publications = environment
+        publications.add_publications(PROJECT_ID, [make_publication(1), make_publication(2)])
+
+        first = client.get(f"/api/v1/projects/{PROJECT_ID}/prisma/flow.pdf").content
+        second = client.get(f"/api/v1/projects/{PROJECT_ID}/prisma/flow.pdf").content
+
+        reader1 = pypdf.PdfReader(io.BytesIO(first))
+        reader2 = pypdf.PdfReader(io.BytesIO(second))
+        assert len(reader1.pages) == len(reader2.pages) == 1
+        assert reader1.pages[0].extract_text() == reader2.pages[0].extract_text()
+
+    def test_export_does_not_mutate_project_state(self, environment) -> None:
+        client, publications = environment
+        publications.add_publications(PROJECT_ID, [make_publication(1), make_publication(2)])
+        total_before = publications.count_by_project(PROJECT_ID)
+
+        client.get(f"/api/v1/projects/{PROJECT_ID}/prisma/flow.pdf")
+        assert publications.count_by_project(PROJECT_ID) == total_before
+
+    def test_supports_exports_url_alias(self, environment) -> None:
+        client, publications = environment
+        publications.add_publications(PROJECT_ID, [make_publication(1)])
+
+        direct = client.get(f"/api/v1/projects/{PROJECT_ID}/prisma/flow.pdf").content
+        alias = client.get(f"/api/v1/projects/{PROJECT_ID}/exports/prisma/flow.pdf").content
+        assert direct.startswith(b"%PDF-")
+        assert alias.startswith(b"%PDF-")
+        assert len(direct) == len(alias)

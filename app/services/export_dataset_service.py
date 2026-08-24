@@ -64,6 +64,7 @@ from app.repositories.synthesis_matrix_repository import (
     default_synthesis_matrix_repository,
 )
 from app.services.export.prisma_flow_builder import build_flow_model
+from app.services.export.prisma_pdf_renderer import render_prisma_pdf
 from app.services.export.prisma_svg_renderer import render_prisma_svg
 from app.services.extraction_configuration_service import (
     ExtractionConfigurationService,
@@ -503,6 +504,15 @@ class ExportDatasetService:
         """Printable, deterministic PRISMA 2020 SVG diagram for a project."""
         model = self.get_prisma_flow_model(project_id, reviewer_id=reviewer_id)
         return render_prisma_svg(model)
+
+    def get_prisma_pdf(
+        self,
+        project_id: str,
+        reviewer_id: str = "default_reviewer",
+    ) -> bytes:
+        """Printable PRISMA 2020 PDF document for a project."""
+        model = self.get_prisma_flow_model(project_id, reviewer_id=reviewer_id)
+        return render_prisma_pdf(model)
 
 
 def default_export_dataset_service() -> ExportDatasetService:
