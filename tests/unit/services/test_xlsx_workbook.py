@@ -412,3 +412,503 @@ class TestWorkbookAssemblyIntegration:
 
         assert repo.count_by_project(PROJECT_ID) == total_before
         assert repo.count_active_by_project(PROJECT_ID) == active_before
+
+    def test_p1_1_persisted_positions_non_sequential_and_missing(self, tmp_path: Path) -> None:
+        """P1-1: Persisted positions 3, 8, 21 must be preserved; missing position stays blank."""
+        import sqlite3
+
+        from app.repositories.project_publication_repository import DemoProjectPublicationRepository
+
+        db_path = tmp_path / "positions.db"
+        repo = SqliteProjectPublicationRepository(db_path)
+        pub_a = make_publication(1, title="Pub A")
+        pub_b = make_publication(2, title="Pub B")
+        pub_c = make_publication(3, title="Pub C")
+
+        repo.add_publications(PROJECT_ID, [pub_a, pub_b, pub_c])
+
+        # Manually set non-sequential positions 3, 8, 21
+        with sqlite3.connect(str(db_path)) as conn:
+            conn.execute(
+                "UPDATE project_publications SET position = 3 WHERE record_id = ?",
+                (str(pub_a.record_id),),
+            )
+            conn.execute(
+                "UPDATE project_publications SET position = 8 WHERE record_id = ?",
+                (str(pub_b.record_id),),
+            )
+            conn.execute(
+                "UPDATE project_publications SET position = 21 WHERE record_id = ?",
+                (str(pub_c.record_id),),
+            )
+            conn.commit()
+
+        service = ExportDatasetService(publication_repository=repo)
+        payload = render_research_matrix_workbook(collect_research_matrix_inputs(service, PROJECT_ID))
+
+        rows = sheet_values(payload, SHEET_PUBLICATIONS)
+        data_rows = rows[1:]
+
+        # Position column is index 1
+        positions_by_id = {row[0]: row[1] for row in data_rows}
+        assert positions_by_id[str(pub_a.record_id)] == 3
+        assert positions_by_id[str(pub_b.record_id)] == 8
+        assert positions_by_id[str(pub_c.record_id)] == 21
+
+        # Verify it did NOT manufacture ordinal 1, 2, 3
+        assert [row[1] for row in data_rows] == [3, 8, 21]
+
+        # Test missing position: demo adapter returns None for positions
+        demo_repo = DemoProjectPublicationRepository()
+        demo_service = ExportDatasetService(publication_repository=demo_repo)
+        demo_entries = demo_service.get_bibliographic_entries("lean_energy")
+        assert len(demo_entries) > 0
+        assert all(entry.position is None for entry in demo_entries)
+
+        demo_payload = render_research_matrix_workbook(collect_research_matrix_inputs(demo_service, "lean_energy"))
+        demo_rows = sheet_values(demo_payload, SHEET_PUBLICATIONS)
+        assert all(row[1] is None for row in demo_rows[1:])
+
+    def test_p1_2_prisma_persistence_context_parity(self, tmp_path: Path) -> None:
+        """P1-2: Export facade PRISMA metrics match the authoritative PRISMA service exactly."""
+        from app.domain.project import Project
+        from app.repositories.conflict_resolution_repository import SqliteConflictResolutionRepository
+        from app.repositories.duplicate_review_decision_repository import SqliteDuplicateReviewDecisionRepository
+        from app.repositories.import_history_repository import SqliteImportHistoryRepository
+        from app.repositories.project_repository import SqliteProjectRepository
+        from app.repositories.screening_decision_repository import SqliteScreeningDecisionRepository
+        from app.repositories.screening_reporting_repository import ScreeningReportingRepository
+        from app.repositories.screening_reviewer_assignment_repository import (
+            SqliteScreeningReviewerAssignmentRepository,
+        )
+        from app.services.duplicate_group_builder import DuplicateGroupBuilder
+        from app.services.multi_reviewer_screening_service import MultiReviewerScreeningService
+        from app.services.prisma_metrics_service import PrismaMetricsService
+        from app.services.project_workflow_status_service import ProjectWorkflowStatusService
+        from app.services.screening_eligibility_adapter import ScreeningEligibilityAdapter
+        from app.services.screening_input_service import ScreeningInputService
+        from tests.fixtures.factories import make_import_history
+
+        db_path = tmp_path / "prisma_parity.db"
+        project_repo = SqliteProjectRepository(db_path)
+        project_repo.create(Project(project_id=PROJECT_ID, title="PRISMA Parity"))
+
+        publications = SqliteProjectPublicationRepository(db_path)
+        history = SqliteImportHistoryRepository(db_path)
+        duplicate_decisions = SqliteDuplicateReviewDecisionRepository(db_path)
+        screening_decisions = SqliteScreeningDecisionRepository(db_path)
+        assignments = SqliteScreeningReviewerAssignmentRepository(db_path)
+        resolutions = SqliteConflictResolutionRepository(db_path)
+        reporting = ScreeningReportingRepository(db_path)
+
+        # Seed import history
+        history.create(make_import_history(PROJECT_ID, records_count=10, source_type="provider", status="success"))
+        history.create(make_import_history(PROJECT_ID, records_count=5, source_type="file", status="success"))
+
+        # Seed publications with duplicates
+        pubs = [
+            make_publication(1, doi="10.1000/dup"),
+            make_publication(2, doi="10.1000/dup"),
+            make_publication(3, doi="10.1000/uniq"),
+        ]
+        publications.add_publications(PROJECT_ID, pubs)
+        publications.mark_superseded(PROJECT_ID, [pubs[1].record_id], pubs[0].record_id)
+
+        # Seed screening decisions
+        screening_decisions.save(
+            ScreeningDecision(
+                project_id=PROJECT_ID,
+                publication_id=pubs[0].record_id,
+                stage=ScreeningStage.TITLE_ABSTRACT,
+                outcome=ScreeningOutcome.INCLUDE,
+                reviewer_id="alice",
+            )
+        )
+        screening_decisions.save(
+            ScreeningDecision(
+                project_id=PROJECT_ID,
+                publication_id=pubs[0].record_id,
+                stage=ScreeningStage.FULL_TEXT,
+                outcome=ScreeningOutcome.INCLUDE,
+                reviewer_id="alice",
+            )
+        )
+
+        # Direct authoritative PRISMA path
+        input_service = ScreeningInputService(publications, duplicate_decisions)
+        multi_service = MultiReviewerScreeningService(
+            assignments=assignments,
+            reporting=reporting,
+            input_service=input_service,
+            resolutions=resolutions,
+        )
+        adapter = ScreeningEligibilityAdapter(
+            input_service=input_service,
+            assignments_repo=assignments,
+            decisions_repo=screening_decisions,
+            multi_reviewer_service=multi_service,
+        )
+        workflow_status = ProjectWorkflowStatusService(
+            publication_repository=publications,
+            decision_repository=screening_decisions,
+            assignment_repository=assignments,
+            resolution_repository=resolutions,
+            reporting_repository=reporting,
+            input_service=input_service,
+            multi_reviewer_service=multi_service,
+            eligibility_adapter=adapter,
+        )
+        authoritative_prisma = PrismaMetricsService(
+            publication_repository=publications,
+            import_history_repository=history,
+            decision_repository=duplicate_decisions,
+            workflow_status_service=workflow_status,
+            builder=DuplicateGroupBuilder(),
+        )
+        direct_metrics = authoritative_prisma.get_metrics(PROJECT_ID, reviewer_id="alice")
+
+        # Slice 2 ExportDatasetService facade path
+        export_service = ExportDatasetService(publication_repository=publications)
+        facade_metrics = export_service.get_prisma_metrics(PROJECT_ID, reviewer_id="alice")
+
+        # Verify exact field-by-field parity
+        metric_fields = (
+            "records_identified_providers",
+            "records_identified_imports",
+            "total_identified",
+            "records_after_normalization",
+            "records_before_dedup",
+            "records_after_technical_merger",
+            "duplicate_groups_pending_review",
+            "records_screened_title_abstract",
+            "records_screened_full_text",
+            "studies_included_synthesis",
+            "manual_source_breakdown",
+        )
+        for field in metric_fields:
+            assert getattr(facade_metrics, field) == getattr(direct_metrics, field), f"Divergence in {field}"
+
+        # Verify workbook PRISMA summary sheet matches direct metrics
+        payload = render_research_matrix_workbook(collect_research_matrix_inputs(export_service, PROJECT_ID, reviewer_id="alice"))
+        summary_rows = sheet_values(payload, SHEET_PRISMA_SUMMARY)
+        summary_dict = dict(zip(summary_rows[0], summary_rows[1]))
+        assert summary_dict["records_identified_providers"] == direct_metrics.records_identified_providers
+        assert summary_dict["records_after_technical_merger"] == direct_metrics.records_after_technical_merger
+        assert summary_dict["studies_included_synthesis"] == direct_metrics.studies_included_synthesis
+
+    def test_p1_3_reviewer_id_preserved_and_isolated_end_to_end(self, tmp_path: Path) -> None:
+        """P1-3: Reviewer A and Reviewer B data remain isolated in extraction and workbook exports."""
+        from app.domain.extraction import (
+            ExtractedValueState,
+            ExtractionCompletenessStatus,
+            ExtractionFieldDefinition,
+            ExtractionRecord,
+            ExtractionRevision,
+            ExtractionTemplate,
+            ExtractionTemplateVersion,
+            FieldDataType,
+            ProjectExtractionConfiguration,
+            ValueOrigin,
+            ValueStatus,
+        )
+        from app.domain.project import Project
+        from app.repositories.extraction_repository import SqliteExtractionRepository
+        from app.repositories.extraction_template_repository import (
+            SqliteExtractionTemplateRepository,
+        )
+        from app.repositories.project_repository import SqliteProjectRepository
+        from app.repositories.screening_decision_repository import SqliteScreeningDecisionRepository
+
+        db_path = tmp_path / "reviewer_isolation.db"
+        project_repo = SqliteProjectRepository(db_path)
+        project_repo.create(Project(project_id=PROJECT_ID, title="Reviewer Isolation"))
+
+        pub_repo = SqliteProjectPublicationRepository(db_path)
+        pub1 = make_publication(1, title="Study 1")
+        pub_repo.add_publications(PROJECT_ID, [pub1])
+
+        # Seed full text screening decision for reviewer_a and reviewer_b
+        screening_repo = SqliteScreeningDecisionRepository(db_path)
+        screening_repo.save(
+            ScreeningDecision(
+                project_id=PROJECT_ID,
+                publication_id=pub1.record_id,
+                stage=ScreeningStage.FULL_TEXT,
+                outcome=ScreeningOutcome.INCLUDE,
+                reviewer_id="reviewer_a",
+            )
+        )
+        screening_repo.save(
+            ScreeningDecision(
+                project_id=PROJECT_ID,
+                publication_id=pub1.record_id,
+                stage=ScreeningStage.FULL_TEXT,
+                outcome=ScreeningOutcome.INCLUDE,
+                reviewer_id="reviewer_b",
+            )
+        )
+
+        # Extraction template and config
+        tmpl_repo = SqliteExtractionTemplateRepository(db_path)
+        tmpl_repo.register_template(ExtractionTemplate(template_id="tpl_rev", name="Tpl"))
+        field_def = ExtractionFieldDefinition(field_key="sample_size", name="Sample", data_type=FieldDataType.INTEGER)
+        tmpl_repo.register_version(
+            ExtractionTemplateVersion(
+                template_id="tpl_rev",
+                version="1.0.0",
+                name="Tpl",
+                is_published=True,
+                is_active=True,
+                publication_fields=[field_def],
+            )
+        )
+        extract_repo = SqliteExtractionRepository(db_path)
+        extract_repo.set_project_configuration(
+            ProjectExtractionConfiguration(
+                project_id=PROJECT_ID,
+                template_id="tpl_rev",
+                template_version="1.0.0",
+            )
+        )
+
+        # Save extraction revisions for reviewer_a and reviewer_b
+        rec = extract_repo.create_record(
+            ExtractionRecord(
+                project_id=PROJECT_ID,
+                publication_id=pub1.record_id,
+                template_id="tpl_rev",
+                template_version="1.0.0",
+            )
+        )
+        extract_repo.append_revision(
+            ExtractionRevision(
+                record_id=rec.record_id,
+                project_id=PROJECT_ID,
+                publication_id=pub1.record_id,
+                revision_index=1,
+                reviewer_id="reviewer_a",
+                completeness_status=ExtractionCompletenessStatus.COMPLETE,
+                publication_values=[
+                    ExtractedValueState(
+                        field_key="sample_size",
+                        status=ValueStatus.PRESENT,
+                        int_value=100,
+                        origin=ValueOrigin.REPORTED,
+                        source_page="42",
+                    )
+                ],
+            )
+        )
+        extract_repo.append_revision(
+            ExtractionRevision(
+                record_id=rec.record_id,
+                project_id=PROJECT_ID,
+                publication_id=pub1.record_id,
+                revision_index=2,
+                reviewer_id="reviewer_b",
+                completeness_status=ExtractionCompletenessStatus.COMPLETE,
+                publication_values=[
+                    ExtractedValueState(
+                        field_key="sample_size",
+                        status=ValueStatus.PRESENT,
+                        int_value=999,
+                        origin=ValueOrigin.REPORTED,
+                        source_page="42",
+                    )
+                ],
+            )
+        )
+
+        service = ExportDatasetService(publication_repository=pub_repo)
+
+        # Test Extraction read models isolation
+        models_a = service.get_extraction_read_models(PROJECT_ID, reviewer_id="reviewer_a")
+        models_b = service.get_extraction_read_models(PROJECT_ID, reviewer_id="reviewer_b")
+
+        assert len(models_a) == 1
+        assert models_a[0].reviewer_id == "reviewer_a"
+        assert models_a[0].publication_values[0].int_value == 100
+
+        assert len(models_b) == 1
+        assert models_b[0].reviewer_id == "reviewer_b"
+        assert models_b[0].publication_values[0].int_value == 999
+
+        # Test Workbook Data Extraction sheet isolation
+        payload_a = render_research_matrix_workbook(
+            collect_research_matrix_inputs(service, PROJECT_ID, reviewer_id="reviewer_a")
+        )
+        payload_b = render_research_matrix_workbook(
+            collect_research_matrix_inputs(service, PROJECT_ID, reviewer_id="reviewer_b")
+        )
+
+        rows_a = sheet_values(payload_a, SHEET_DATA_EXTRACTION)
+        rows_b = sheet_values(payload_b, SHEET_DATA_EXTRACTION)
+
+        # Reviewer column is index 12 in Data Extraction sheet
+        assert rows_a[1][12] == "reviewer_a"
+        assert rows_b[1][12] == "reviewer_b"
+
+    def test_p1_4_qa_template_version_consistency(self, tmp_path: Path) -> None:
+        """P1-4: QA response data is paired with metadata from its EXACT template version."""
+        from app.domain.project import Project
+        from app.domain.quality_assessment import (
+            ProjectQualityAssessmentConfiguration,
+            QualityAssessment,
+            QualityAssessmentResponse,
+            QualityAssessmentResponseValue,
+            QualityAssessmentTemplate,
+            QualityAssessmentTemplateCriterion,
+            QualityAssessmentTool,
+        )
+        from app.repositories.project_repository import SqliteProjectRepository
+        from app.repositories.sqlite_quality_assessment_repository import (
+            SqliteProjectQualityAssessmentConfigurationRepository,
+            SqliteQualityAssessmentCatalogRepository,
+            SqliteQualityAssessmentRepository,
+        )
+
+        db_path = tmp_path / "qa_versions.db"
+        project_repo = SqliteProjectRepository(db_path)
+        project_repo.create(Project(project_id=PROJECT_ID, title="QA Versions"))
+
+        pub_repo = SqliteProjectPublicationRepository(db_path)
+        pub1 = make_publication(1, title="Paper 1")
+        pub2 = make_publication(2, title="Paper 2")
+        pub_repo.add_publications(PROJECT_ID, [pub1, pub2])
+
+        catalog_repo = SqliteQualityAssessmentCatalogRepository(db_path)
+        tool = catalog_repo.create_tool(QualityAssessmentTool(tool_id="casp_tool", name="CASP"))
+
+        # Template v1: Question A
+        t1_id = uuid4()
+        crit_a_id = uuid4()
+        catalog_repo.create_template_version(
+            QualityAssessmentTemplate(
+                template_id=t1_id,
+                tool_id=tool.tool_id,
+                template_key="casp",
+                name="CASP Form",
+                version=1,
+                criteria=[
+                    QualityAssessmentTemplateCriterion(
+                        criterion_id=crit_a_id,
+                        template_id=t1_id,
+                        display_order=1,
+                        question="Question A",
+                    )
+                ],
+            )
+        )
+
+        # Template v2: Question B
+        t2_id = uuid4()
+        crit_b_id = uuid4()
+        catalog_repo.create_template_version(
+            QualityAssessmentTemplate(
+                template_id=t2_id,
+                tool_id=tool.tool_id,
+                template_key="casp",
+                name="CASP Form",
+                version=2,
+                criteria=[
+                    QualityAssessmentTemplateCriterion(
+                        criterion_id=crit_b_id,
+                        template_id=t2_id,
+                        display_order=1,
+                        question="Question B",
+                    )
+                ],
+            )
+        )
+
+        # Project configuration is currently set to v2!
+        qa_config_repo = SqliteProjectQualityAssessmentConfigurationRepository(db_path)
+        qa_config_repo.save_configuration(
+            ProjectQualityAssessmentConfiguration(
+                project_id=PROJECT_ID,
+                tool_id=tool.tool_id,
+                template_id=t2_id,
+            )
+        )
+
+        # Assessment 1 was completed against historical Template v1
+        qa_repo = SqliteQualityAssessmentRepository(db_path)
+        aid_1 = uuid4()
+        qa_repo.save_assessment(
+            QualityAssessment(
+                assessment_id=aid_1,
+                project_id=PROJECT_ID,
+                publication_id=pub1.record_id,
+                reviewer_id="reviewer_1",
+                template_id=t1_id,
+                responses=[
+                    QualityAssessmentResponse(
+                        assessment_id=aid_1,
+                        criterion_id=crit_a_id,
+                        question_snapshot="Question A",
+                        response_value=QualityAssessmentResponseValue.YES,
+                    )
+                ],
+            )
+        )
+
+        # Assessment 2 was completed against newer Template v2
+        aid_2 = uuid4()
+        qa_repo.save_assessment(
+            QualityAssessment(
+                assessment_id=aid_2,
+                project_id=PROJECT_ID,
+                publication_id=pub2.record_id,
+                reviewer_id="reviewer_2",
+                template_id=t2_id,
+                responses=[
+                    QualityAssessmentResponse(
+                        assessment_id=aid_2,
+                        criterion_id=crit_b_id,
+                        question_snapshot="Question B",
+                        response_value=QualityAssessmentResponseValue.NO,
+                        justification="Lacks justification",
+                    )
+                ],
+            )
+        )
+
+        service = ExportDatasetService(publication_repository=pub_repo)
+        qa_data = service.get_quality_assessment_sheet_data(PROJECT_ID)
+        assert qa_data is not None
+
+        # Verify criteria contains both Question B (from v2 config) and Question A (from v1 historical)
+        question_names = [c.question for c in qa_data.criteria]
+        assert "Question A" in question_names
+        assert "Question B" in question_names
+
+        # Check rows
+        row_map = {row.publication_id: row for row in qa_data.rows}
+        assert row_map[pub1.record_id].template_version == 1
+        assert row_map[pub1.record_id].template_id == str(t1_id)
+        assert row_map[pub1.record_id].responses_by_criterion[crit_a_id].response_value == QualityAssessmentResponseValue.YES
+
+        assert row_map[pub2.record_id].template_version == 2
+        assert row_map[pub2.record_id].template_id == str(t2_id)
+        assert row_map[pub2.record_id].responses_by_criterion[crit_b_id].response_value == QualityAssessmentResponseValue.NO
+
+        # Render workbook and verify sheet values
+        payload = render_research_matrix_workbook(collect_research_matrix_inputs(service, PROJECT_ID, reviewer_id=""))
+        rows = sheet_values(payload, SHEET_QUALITY_ASSESSMENT)
+
+        headers = rows[0]
+        q_a_col = headers.index("C1 Question A")
+        q_b_col = headers.index("C1 Question B")
+
+        pub1_row = next(r for r in rows[1:] if r[0] == str(pub1.record_id))
+        pub2_row = next(r for r in rows[1:] if r[0] == str(pub2.record_id))
+
+        # pub1: v1 / Question A response YES / Question B is None
+        assert pub1_row[3] == 1  # template_version
+        assert pub1_row[q_a_col] == "YES"
+        assert pub1_row[q_b_col] is None
+
+        # pub2: v2 / Question B response NO / Question A is None
+        assert pub2_row[3] == 2  # template_version
+        assert pub2_row[q_b_col] == "NO"
+        assert pub2_row[q_a_col] is None

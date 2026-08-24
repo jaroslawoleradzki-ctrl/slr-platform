@@ -77,7 +77,12 @@ class ExtractionDatasetService:
         # latest-revision hydration (the latter is explicitly three SQL queries).
         publications = self._publication_repo.get_publications(project_id)
         publication_map = {publication.record_id: publication for publication in publications}
-        revisions = self._extraction_repo.get_latest_revision_batch(project_id, eligible_ids)
+        try:
+            revisions = self._extraction_repo.get_latest_revision_batch(
+                project_id, eligible_ids, reviewer_id=reviewer_id
+            )
+        except TypeError:
+            revisions = self._extraction_repo.get_latest_revision_batch(project_id, eligible_ids)
 
         models: list[PublicationExtractionReadModel] = []
         for publication_id in eligible_ids:
@@ -135,7 +140,7 @@ class ExtractionDatasetService:
         """Return one model per repeating-group item, preserving publication grain."""
         relationships: list[RelationshipExtractionReadModel] = []
         for publication in self.get_publication_read_models(
-            project_id, reviewer_id, status_filter=status_filter
+            project_id, reviewer_id=reviewer_id, status_filter=status_filter
         ):
             for item in publication.group_items:
                 relationships.append(

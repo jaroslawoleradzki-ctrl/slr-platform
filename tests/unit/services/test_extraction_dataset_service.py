@@ -128,7 +128,7 @@ class FakeDataset:
         return SimpleNamespace(get_publications=get_publications)
 
     def extraction_repo(self):
-        def get_latest_revision_batch(project_id: str, publication_ids: list[UUID]):
+        def get_latest_revision_batch(project_id: str, publication_ids: list[UUID], reviewer_id: str = ""):
             self.revision_calls += 1
             return {publication_id: self.revisions.get(publication_id) for publication_id in publication_ids}
 

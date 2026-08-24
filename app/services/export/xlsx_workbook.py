@@ -291,7 +291,12 @@ def build_prisma_summary_sheet(sheet: Worksheet, metrics: PrismaMetrics) -> None
 # ---------------------------------------------------------------------------
 
 
-def collect_research_matrix_inputs(service: ExportDatasetService, project_id: str, *, reviewer_id: str = "default_reviewer"):
+def collect_research_matrix_inputs(
+    service: ExportDatasetService,
+    project_id: str,
+    *,
+    reviewer_id: str = "default_reviewer",
+):
     """Gather all persisted datasets for the workbook via the facade.
 
     The initial bibliographic read raises ``ProjectNotFoundError`` for unknown
@@ -302,10 +307,10 @@ def collect_research_matrix_inputs(service: ExportDatasetService, project_id: st
 
     entries = service.get_bibliographic_entries(project_id)
     screening_decisions = service.get_screening_decisions(project_id, reviewer_id)
-    qa_data = service.get_quality_assessment_sheet_data(project_id)
+    qa_data = service.get_quality_assessment_sheet_data(project_id, reviewer_id=reviewer_id)
     extraction_template = service.get_extraction_template(project_id)
     try:
-        extraction_models = service.get_extraction_read_models(project_id)
+        extraction_models = service.get_extraction_read_models(project_id, reviewer_id=reviewer_id)
     except ExtractionConfigurationNotFoundError:
         extraction_models = []
     synthesis_relations = service.get_approved_synthesis_relations(project_id)

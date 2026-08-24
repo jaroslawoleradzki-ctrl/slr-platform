@@ -50,7 +50,7 @@ class ProjectPublicationRepository(Protocol):
         self, project_id: str, *, connection: sqlite3.Connection | None = None
     ) -> list[Publication]: ...
     def get_active_publications(self, project_id: str) -> list[Publication]: ...
-    def get_active_publications_with_position(self, project_id: str) -> list[tuple[int, Publication]]: ...
+    def get_active_publications_with_position(self, project_id: str) -> list[tuple[int | None, Publication]]: ...
     def count_active_by_project(self, project_id: str) -> int: ...
     def update_publication(
         self, project_id: str, publication: Publication, *, connection: sqlite3.Connection | None = None
@@ -188,9 +188,9 @@ class DemoProjectPublicationRepository:
     get_active_publications = get_publications
     count_active_by_project = count_by_project
 
-    def get_active_publications_with_position(self, project_id: str) -> list[tuple[int, Publication]]:
-        """Demo adapter: ordinal positions mirror in-memory order."""
-        return [(index + 1, publication) for index, publication in enumerate(self.get_publications(project_id))]
+    def get_active_publications_with_position(self, project_id: str) -> list[tuple[int | None, Publication]]:
+        """Demo adapter: returns publications without fabricating synthetic positions."""
+        return [(None, publication) for publication in self.get_publications(project_id)]
 
     def update_publication(self, project_id: str, publication: Publication, **_: object) -> None:
         records = self._projects_data[project_id]
@@ -309,21 +309,22 @@ class SqliteProjectPublicationRepository:
 
     def get_active_publications_with_position(
         self, project_id: str, *, connection: sqlite3.Connection | None = None
-    ) -> list[tuple[int, Publication]]:
+    ) -> list[tuple[int | None, Publication]]:
         """Active canonical records paired with their persisted collection positions.
 
         Ordering and filtering are identical to :meth:`get_active_publications`;
-        the paired integer is the durable ``position`` column value.
+        the paired integer is the durable ``position`` column value (or None).
         """
         self._ensure_project(project_id, connection=connection)
 
-        def query(conn: sqlite3.Connection) -> list[tuple[int, Publication]]:
+        def query(conn: sqlite3.Connection) -> list[tuple[int | None, Publication]]:
             rows = conn.execute(
                 "SELECT position, document FROM project_publications WHERE project_id = ? AND superseded_by IS NULL ORDER BY position ASC, rowid ASC",
                 (project_id,),
             ).fetchall()
             return [
-                (int(row[0]), Publication.model_validate(json.loads(row[1]))) for row in rows
+                (int(row[0]) if row[0] is not None else None, Publication.model_validate(json.loads(row[1])))
+                for row in rows
             ]
 
         return query(connection) if connection is not None else self._with_connection(query)

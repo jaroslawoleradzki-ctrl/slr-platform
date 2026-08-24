@@ -236,6 +236,16 @@ class TestXlsxEndpoint:
         assert publications.count_by_project(PROJECT_ID) == total_before
         assert publications.count_active_by_project(PROJECT_ID) == active_before
 
+    def test_export_xlsx_accepts_reviewer_id_query_parameter(self, environment) -> None:
+        client, publications = environment
+        publications.add_publications(PROJECT_ID, [make_publication(1)])
+
+        response = client.get(f"/api/v1/projects/{PROJECT_ID}/exports/xlsx", params={"reviewer_id": "custom_reviewer"})
+        assert response.status_code == 200
+        assert response.headers["content-type"].startswith(
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+
 
 class TestRoundTripThroughImporterParsers:
     def test_bibtex_export_reimports_with_counts_and_metadata(self, environment) -> None:
