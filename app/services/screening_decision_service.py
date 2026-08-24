@@ -102,7 +102,11 @@ class ScreeningDecisionService:
 
         # 1. Verify publication existence in project
         try:
-            publications = self.publication_repo.get_publications(stripped_project_id)
+            publications = (
+                self.publication_repo.get_active_publications(stripped_project_id)
+                if hasattr(self.publication_repo, "get_active_publications")
+                else self.publication_repo.get_publications(stripped_project_id)
+            )
         except Exception:
             publications = []
 

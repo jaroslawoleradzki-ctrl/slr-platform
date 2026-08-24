@@ -213,7 +213,7 @@ def test_criteria_scope_and_required_validation_delegation(tmp_path) -> None:
     assert saved.stage.value == "title_abstract"
 
 
-def test_approved_duplicate_accepts_only_canonical_and_does_not_mutate_collection(tmp_path) -> None:
+def test_approved_but_unmerged_duplicate_blocks_screening_without_mutation(tmp_path) -> None:
     publications = [_publication(2, "10.1/x"), _publication(1, "10.1/x")]
     service, pubs, _, _, reviews, _ = _environment(tmp_path, publications)
     group = DuplicateGroupBuilder().build(publications)[0]
@@ -221,12 +221,11 @@ def test_approved_duplicate_accepts_only_canonical_and_does_not_mutate_collectio
         "lean_energy", str(group.group_id), DuplicateGroupReviewDecision(decision=DuplicateDecision.APPROVE)
     )
     before = pubs.get_publications("lean_energy")
-    with pytest.raises(ScreeningPublicationNotEligibleError):
+    with pytest.raises(ScreeningWorkflowNotReadyError) as noncanonical:
         service.record_decision("lean_energy", publications[0].record_id, "alice", ScreeningOutcome.INCLUDE, None, [])
-    decision = service.record_decision(
-        "lean_energy", publications[1].record_id, "alice", ScreeningOutcome.INCLUDE, None, []
-    )
-    assert decision.publication_id == min(item.record_id for item in publications)
+    assert noncanonical.value.readiness_status is ScreeningInputReadinessStatus.UNMERGED_DUPLICATES
+    with pytest.raises(ScreeningWorkflowNotReadyError):
+        service.record_decision("lean_energy", publications[1].record_id, "alice", ScreeningOutcome.INCLUDE, None, [])
     assert pubs.get_publications("lean_energy") == before
 
 

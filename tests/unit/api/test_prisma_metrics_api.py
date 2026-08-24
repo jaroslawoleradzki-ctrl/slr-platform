@@ -172,7 +172,7 @@ def test_prisma_metrics_technical_merger_and_pending_group(environment) -> None:
     body = client.get(f"/api/v1/projects/{PROJECT_ID}/prisma/metrics").json()
     assert body["records_after_normalization"] == 3
     assert body["records_before_dedup"] == 3
-    assert body["records_after_technical_merger"] == 2
+    assert body["records_after_technical_merger"] == 3
     assert body["duplicate_groups_pending_review"] == 1
 
 
@@ -187,7 +187,7 @@ def test_prisma_metrics_resolved_group_no_longer_pending(environment) -> None:
 
     body = client.get(f"/api/v1/projects/{PROJECT_ID}/prisma/metrics").json()
     assert body["duplicate_groups_pending_review"] == 0
-    assert body["records_after_technical_merger"] == 1
+    assert body["records_after_technical_merger"] == 2
 
 
 def test_prisma_metrics_partial_and_full_screening(environment) -> None:

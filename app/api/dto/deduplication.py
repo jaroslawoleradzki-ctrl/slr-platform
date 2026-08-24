@@ -18,6 +18,13 @@ class DuplicateDecisionStatus(str, Enum):
     REJECT = "REJECT"
 
 
+class DuplicateGroupStatus(str, Enum):
+    PENDING = "PENDING"
+    APPROVED = "APPROVED"
+    REJECTED = "REJECTED"
+    MERGED = "MERGED"
+
+
 class SharedIdentifierResponse(BaseModel):
     """Structured shared canonical identifier across candidate group members."""
 
@@ -62,8 +69,11 @@ class DuplicateGroupResponse(BaseModel):
     group_id: str
     reason: str
     records_count: int
-    status: DuplicateDecisionStatus = DuplicateDecisionStatus.PENDING
+    status: DuplicateGroupStatus = DuplicateGroupStatus.PENDING
     rationale: str | None = None
+    canonical_record_id: str | None = None
+    merged_publication_ids: list[str] | None = None
+    merged_at: str | None = None
     shared_identifiers: list[SharedIdentifierResponse] = Field(default_factory=list)
     records: list[DuplicateRecordPreviewResponse]
 
@@ -96,3 +106,13 @@ class DuplicateGroupDecisionResponse(BaseModel):
     group_id: str
     decision: DuplicateDecisionStatus
     rationale: str | None = None
+
+
+class DuplicateGroupMergeResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    project_id: str
+    group_id: str
+    status: DuplicateGroupStatus = DuplicateGroupStatus.MERGED
+    canonical_record_id: str
+    merged_publication_ids: list[str]
+    merged_at: str

@@ -18,7 +18,9 @@ from app.domain.synthesis import (
 if TYPE_CHECKING:
     from app.domain.extraction import ExtractionRevision
     from app.repositories.extraction_repository import SqliteExtractionRepository
+    from app.repositories.project_publication_repository import ProjectPublicationRepository
     from app.repositories.quality_assessment_repository import QualityAssessmentRepository
+from app.services.active_publication_filter import active_publication_ids
 
 
 class SynthesisExtractionAdapter:
@@ -28,21 +30,33 @@ class SynthesisExtractionAdapter:
         self,
         extraction_repo: SqliteExtractionRepository,
         qa_repo: QualityAssessmentRepository | None = None,
+        publication_repo: ProjectPublicationRepository | None = None,
     ) -> None:
         self._extraction_repo = extraction_repo
         self._qa_repo = qa_repo
+        self._publication_repo = publication_repo
+
+    def _is_active(self, project_id: str, publication_id: UUID) -> bool:
+        if self._publication_repo is None:
+            return True
+        active_ids = active_publication_ids(self._publication_repo, project_id)
+        return active_ids is None or publication_id in active_ids
 
     def get_latest_complete_revision(
         self, project_id: str, publication_id: UUID
     ) -> ExtractionRevision | None:
         """Resolves the latest COMPLETE extraction revision for a publication."""
+        if not self._is_active(project_id, publication_id):
+            return None
         return self._extraction_repo.get_latest_complete_revision(project_id, publication_id)
 
     def get_latest_complete_revision_batch(
         self, project_id: str, publication_ids: list[UUID]
     ) -> dict[UUID, ExtractionRevision | None]:
         """Resolves latest COMPLETE extraction revisions across multiple publications."""
-        return self._extraction_repo.get_latest_complete_revision_batch(project_id, publication_ids)
+        active_ids = active_publication_ids(self._publication_repo, project_id) if self._publication_repo else None
+        eligible_ids = publication_ids if active_ids is None else [publication_id for publication_id in publication_ids if publication_id in active_ids]
+        return self._extraction_repo.get_latest_complete_revision_batch(project_id, eligible_ids)
 
     def resolve_relation_traceability(
         self,
@@ -55,6 +69,8 @@ class SynthesisExtractionAdapter:
 
         Enforces project scoping, completeness status on latest resolution, and durable identity validation.
         """
+        if not self._is_active(project_id, publication_id):
+            raise ValueError(f"Publication '{publication_id}' is superseded and cannot enter synthesis")
         if revision_id is not None:
             # Check history to find the specific revision
             history = self._extraction_repo.list_revision_history(project_id, publication_id)
@@ -95,6 +111,8 @@ class SynthesisExtractionAdapter:
         revision_id: UUID | None = None,
     ) -> ExtractionEvidenceReference:
         """Resolves publication-level extracted value evidence reference."""
+        if not self._is_active(project_id, publication_id):
+            raise ValueError(f"Publication '{publication_id}' is superseded and cannot enter synthesis")
         if revision_id is not None:
             history = self._extraction_repo.list_revision_history(project_id, publication_id)
             target_rev = next((r for r in history if r.revision_id == revision_id), None)
@@ -136,7 +154,7 @@ class SynthesisExtractionAdapter:
         reviewer_id: str = "",
     ) -> QAProfileSummary | None:
         """Retrieves and aggregates Phase 8 QA assessment for a publication into a synthesis profile summary."""
-        if self._qa_repo is None:
+        if self._qa_repo is None or not self._is_active(project_id, publication_id):
             return None
 
         assessment = self._qa_repo.get_latest_assessment(project_id, publication_id, reviewer_id=reviewer_id)

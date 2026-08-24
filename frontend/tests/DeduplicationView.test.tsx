@@ -3,6 +3,7 @@ import { render, screen, fireEvent, act } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { ProjectProvider } from '../src/context/ProjectContext';
 import { DeduplicationPage } from '../src/pages/DeduplicationPage';
+import { DuplicateGroupCardPreview } from '../src/components/deduplication/DuplicateGroupCardPreview';
 import { projectApiService } from '../src/services/api/projectApi';
 import { ApiDuplicateGroupListResponse } from '../src/types';
 
@@ -156,7 +157,7 @@ describe('DeduplicationPage Phase 6.5 — Duplicate Comparison & Review UI', () 
         group_id: 'grp-rerun-1',
         reason: 'Zgodność DOI',
         records_count: 2,
-        status: 'APPROVE',
+        status: 'APPROVED',
         rationale: 'Existing decision',
         shared_identifiers: [{ identifier_type: 'doi', value: '10.1000/rerun' }],
         records: [
@@ -406,5 +407,28 @@ describe('DeduplicationPage Phase 6.5 — Duplicate Comparison & Review UI', () 
 
     expect(await screen.findByText(/Rejected/i)).toBeInTheDocument();
     expect(postSpy).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('canonical duplicate merge action', () => {
+  const approvedGroup: ApiDuplicateGroupListResponse['groups'][number] = {
+    group_id: 'merge-group', reason: 'DOI', records_count: 2, status: 'APPROVED', rationale: 'same study',
+    shared_identifiers: [], records: [
+      { id: 'a', title: 'A', authors: 'A', year: 2024, source: 'one' },
+      { id: 'b', title: 'B', authors: 'B', year: 2024, source: 'two' },
+    ],
+  };
+
+  it('keeps approval separate and explicitly posts a bodyless merge request', async () => {
+    const merge = vi.spyOn(projectApiService, 'mergeDuplicateGroup').mockResolvedValue({
+      project_id: 'lean_energy', group_id: 'merge-group', status: 'MERGED', canonical_record_id: 'a',
+      merged_publication_ids: ['a', 'b'], merged_at: '2026-08-21T10:00:00Z',
+    });
+    render(<DuplicateGroupCardPreview group={approvedGroup} index={0} projectId="lean_energy" />);
+    expect(screen.getByText('Approved')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Merge duplicates' }));
+    expect(await screen.findByText('Merged')).toBeInTheDocument();
+    expect(merge).toHaveBeenCalledWith('lean_energy', 'merge-group');
+    expect(screen.getByText(/Canonical publication: a/i)).toBeInTheDocument();
   });
 });

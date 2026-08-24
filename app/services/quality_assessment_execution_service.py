@@ -206,7 +206,15 @@ class DefaultQualityAssessmentExecutionService:
                 else:
                     eligible_pub_ids.discard(d.publication_id)
 
-        return sorted(list(eligible_pub_ids), key=lambda u: str(u))
+        active_ids = {
+            publication.record_id
+            for publication in (
+                self._publication_repo.get_active_publications(project_id)
+                if hasattr(self._publication_repo, "get_active_publications")
+                else self._publication_repo.get_publications(project_id)
+            )
+        }
+        return sorted(eligible_pub_ids & active_ids, key=lambda u: str(u))
 
     def check_readiness(self, project_id: str, reviewer_id: str) -> QualityAssessmentReadinessStatus:
         _ = self._project_repo.get(project_id)
@@ -270,7 +278,11 @@ class DefaultQualityAssessmentExecutionService:
         _ = self._project_repo.get(project_id)
         eligible_ids = self._get_eligible_publication_ids(project_id, reviewer_id)
 
-        all_publications = self._publication_repo.get_publications(project_id)
+        all_publications = (
+            self._publication_repo.get_active_publications(project_id)
+            if hasattr(self._publication_repo, "get_active_publications")
+            else self._publication_repo.get_publications(project_id)
+        )
         pub_map = {p.record_id: p for p in all_publications}
 
         records: list[EligiblePublicationRecord] = []
@@ -324,7 +336,11 @@ class DefaultQualityAssessmentExecutionService:
         if template is None:
             raise RuntimeError(f"Configured template '{config.template_id}' not found in catalog.")
 
-        all_publications = self._publication_repo.get_publications(project_id)
+        all_publications = (
+            self._publication_repo.get_active_publications(project_id)
+            if hasattr(self._publication_repo, "get_active_publications")
+            else self._publication_repo.get_publications(project_id)
+        )
         pub_map = {p.record_id: p for p in all_publications}
         if publication_id not in pub_map:
             raise PublicationNotFoundError(publication_id, project_id)

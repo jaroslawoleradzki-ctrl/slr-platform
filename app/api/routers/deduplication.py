@@ -4,6 +4,7 @@ from app.api.dto.deduplication import (
     DuplicateGroupDecisionRequest,
     DuplicateGroupDecisionResponse,
     DuplicateGroupListResponse,
+    DuplicateGroupMergeResponse,
 )
 from app.repositories.duplicate_review_decision_repository import GroupNotFoundError
 from app.repositories.project_publication_repository import ProjectNotFoundError
@@ -89,6 +90,45 @@ def record_duplicate_group_decision(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error recording decision: {str(exc)}",
+        ) from exc
+
+
+@router.post(
+    "/{project_id}/duplicate-groups/{group_id}/merge",
+    response_model=DuplicateGroupMergeResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Execute a canonical technical merge for an approved duplicate group",
+    description=(
+        "Persists a canonical record in an existing member row and supersedes the other source rows. "
+        "Requires an APPROVE reviewer decision."
+    ),
+)
+def merge_duplicate_group(
+    project_id: str,
+    group_id: str,
+    service: ProjectDuplicateService = Depends(get_duplicate_service),
+) -> DuplicateGroupMergeResponse:
+    try:
+        return service.merge_group(project_id=project_id, group_id=group_id)
+    except ProjectNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Project '{project_id}' not found.",
+        ) from exc
+    except GroupNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Duplicate group '{group_id}' not found in project '{project_id}'.",
+        ) from exc
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error merging group: {str(exc)}",
         ) from exc
 
 

@@ -33,7 +33,7 @@ def test_duplicate_groups_endpoint_full_contract_schema() -> None:
         assert isinstance(group.reason, str) and len(group.reason) > 0
         assert group.records_count == len(group.records)
         assert group.records_count >= 2
-        assert group.status.value in {"PENDING", "APPROVE", "REJECT"}
+        assert group.status.value in {"PENDING", "APPROVED", "REJECTED", "MERGED"}
 
         # Shared identifiers contract
         for ident in group.shared_identifiers:

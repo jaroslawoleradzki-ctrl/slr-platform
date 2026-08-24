@@ -147,6 +147,7 @@ class SynthesisSnapshotService:
         self._adapter = adapter or SynthesisExtractionAdapter(
             extraction_repo=self._extraction_repo,
             qa_repo=self._qa_repo,
+            publication_repo=self._publication_repo,
         )
 
     def _ensure_project_exists(self, project_id: str) -> None:
@@ -165,11 +166,22 @@ class SynthesisSnapshotService:
         The repository persists this content as JSON; the snapshot never holds a
         live reference to any mutable synthesis table.
         """
-        relations: list[AnalyticalRelation] = self._matrix_repo.list_analytical_relations(project_id)
-        pathways: list[MechanismPathway] = self._mechanism_repo.list_pathways(project_id)
+        active_publication_ids = set(self._publication_ids(project_id))
+        relations: list[AnalyticalRelation] = [
+            relation
+            for relation in self._matrix_repo.list_analytical_relations(project_id)
+            if relation.publication_id in active_publication_ids
+        ]
+        pathways: list[MechanismPathway] = [
+            pathway
+            for pathway in self._mechanism_repo.list_pathways(project_id)
+            if pathway.publication_id in active_publication_ids
+        ]
 
         context_assignments: list[ContextAssignment] = []
         for row in self._context_repo.list_links(project_id):
+            if UUID(str(row["publication_id"])) not in active_publication_ids:
+                continue
             context_assignments.append(
                 ContextAssignment(
                     assignment_id=row["link_id"],
@@ -225,6 +237,10 @@ class SynthesisSnapshotService:
             if profile is not None:
                 qa_profiles.append(profile)
 
+        gap_links = [
+            link for link in gap_links if link.publication_id in active_publication_ids
+        ]
+
         return SynthesisSnapshotContent(
             project_id=project_id,
             relations=relations,
@@ -277,7 +293,11 @@ class SynthesisSnapshotService:
 
     def _publication_ids(self, project_id: str) -> list[UUID]:
         try:
-            publications = self._publication_repo.get_publications(project_id)
+            publications = (
+                self._publication_repo.get_active_publications(project_id)
+                if hasattr(self._publication_repo, "get_active_publications")
+                else self._publication_repo.get_publications(project_id)
+            )
         except Exception:
             return []
         return [

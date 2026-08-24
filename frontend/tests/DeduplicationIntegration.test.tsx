@@ -339,7 +339,7 @@ describe('Deduplication Page Full Integration Workflow & Regression Suite', () =
           group_id: 'grp-no-n1-2',
           reason: 'Zgodność PMID',
           records_count: 2,
-          status: 'APPROVE',
+          status: 'APPROVED',
           rationale: 'Pre-approved rationale',
           shared_identifiers: [{ identifier_type: 'pmid', value: '7788' }],
           records: [

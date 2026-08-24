@@ -1,4 +1,3 @@
-from copy import deepcopy
 from uuid import UUID
 
 from app.domain.duplicate_review import DuplicateDecision, DuplicateGroupReviewDecision
@@ -53,18 +52,12 @@ def test_pending_blocks_the_entire_input_set() -> None:
     assert result.readiness_status is ScreeningInputReadinessStatus.UNRESOLVED_DUPLICATES
 
 
-def test_approve_merges_once_with_stable_id_metadata_and_provenance() -> None:
+def test_approved_group_blocks_until_persisted_merge() -> None:
     publications = [_pub(2, "10.1/x", abstract="short"), _pub(1, "10.1/x", abstract="long abstract")]
-    before = deepcopy(publications)
-    service, repo = _service(publications, [DuplicateDecision.APPROVE])
+    service, _ = _service(publications, [DuplicateDecision.APPROVE])
     first = service.get_input_set("a")
-    second = service.get_input_set("a")
-    assert first == second
-    assert first.canonical_records_count == 1
-    assert first.publications[0].record_id == publications[1].record_id
-    assert first.publications[0].abstract == "long abstract"
-    assert len(first.publications[0].provenance) == 2
-    assert repo.projects["a"] == before
+    assert not first.ready
+    assert first.readiness_status is ScreeningInputReadinessStatus.UNMERGED_DUPLICATES
 
 
 def test_reject_keeps_all_records_separate() -> None:
@@ -72,13 +65,10 @@ def test_reject_keeps_all_records_separate() -> None:
     assert len(service.get_input_set("a").publications) == 2
 
 
-def test_multiple_approved_groups_and_standalone_emit_each_work_once() -> None:
+def test_multiple_approved_groups_block_without_in_memory_merge() -> None:
     publications = [_pub(5), _pub(4, "10.1/y"), _pub(3, "10.1/y"), _pub(2, "10.1/x"), _pub(1, "10.1/x")]
     service, _ = _service(publications, [DuplicateDecision.APPROVE, DuplicateDecision.APPROVE])
-    result = service.get_input_set("a")
-    ids = [publication.record_id for publication in result.publications]
-    assert len(ids) == len(set(ids)) == 3
-    assert ids == sorted(ids)
+    assert not service.get_input_set("a").ready
 
 
 def test_project_isolation() -> None:
@@ -87,7 +77,7 @@ def test_project_isolation() -> None:
     assert service.get_input_set("a").publications != service.get_input_set("b").publications
 
 
-def test_merge_conflict_has_typed_readiness_reason() -> None:
+def test_no_merge_conflict_path_is_executed_in_memory() -> None:
     first = _pub(1, "10.1/first").model_copy(
         update={
             "identifiers": [
@@ -109,5 +99,5 @@ def test_merge_conflict_has_typed_readiness_reason() -> None:
     result = service.get_input_set("a")
 
     assert not result.ready
-    assert result.unresolved_groups_count == 0
-    assert result.readiness_status is ScreeningInputReadinessStatus.MERGE_CONFLICT
+    assert result.unresolved_groups_count == 1
+    assert result.readiness_status is ScreeningInputReadinessStatus.UNMERGED_DUPLICATES

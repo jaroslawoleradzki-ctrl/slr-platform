@@ -2,6 +2,7 @@ import {
   SLRProject,
   ApiDuplicateGroupListResponse,
   ApiDuplicateGroupDecisionResponse,
+  ApiDuplicateGroupMergeResponse,
   DuplicateDecisionType,
   EditableSearchStrategy,
   SearchExecutionResult,
@@ -85,6 +86,7 @@ export interface ProjectApiService {
     projectId: string,
     groupId: string
   ): Promise<ApiDuplicateGroupDecisionResponse>;
+  mergeDuplicateGroup(projectId: string, groupId: string): Promise<ApiDuplicateGroupMergeResponse>;
   executeSearchStrategy(
     projectId: string,
     strategy: EditableSearchStrategy,
@@ -673,6 +675,17 @@ class MixedProjectApiService implements ProjectApiService {
 
     const data: ApiDuplicateGroupDecisionResponse = await response.json();
     return data;
+  }
+
+  async mergeDuplicateGroup(projectId: string, groupId: string): Promise<ApiDuplicateGroupMergeResponse> {
+    const response = await fetch(
+      `${API_BASE_URL}/projects/${projectId}/duplicate-groups/${groupId}/merge`,
+      { method: 'POST', headers: { Accept: 'application/json' } },
+    );
+    if (!response.ok) {
+      throw new Error(await formatFastApiError(response, 'scalić duplikaty'));
+    }
+    return response.json() as Promise<ApiDuplicateGroupMergeResponse>;
   }
 
   async getWorkflowStatus(

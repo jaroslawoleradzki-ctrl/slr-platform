@@ -20,6 +20,10 @@ from app.repositories.extraction_repository import (
     SqliteExtractionRepository,
     default_extraction_repository,
 )
+from app.repositories.project_publication_repository import (
+    SqliteProjectPublicationRepository,
+    default_project_publication_repository,
+)
 from app.repositories.project_repository import (
     ProjectNotFoundError,
     SqliteProjectRepository,
@@ -37,6 +41,7 @@ from app.repositories.synthesis_mechanism_repository import (
     SqliteSynthesisMechanismRepository,
     default_synthesis_mechanism_repository,
 )
+from app.services.active_publication_filter import active_publication_ids
 
 CANONICAL_CONTEXT_FIELD_KEYS: set[str] = {"moderating_conditions"}
 
@@ -82,6 +87,7 @@ class SynthesisContextService:
         matrix_repo: SqliteSynthesisMatrixRepository | None = None,
         mechanism_repo: SqliteSynthesisMechanismRepository | None = None,
         project_repo: SqliteProjectRepository | None = None,
+        publication_repo: SqliteProjectPublicationRepository | None = None,
         adapter: SynthesisExtractionAdapter | None = None,
     ) -> None:
         self._context_repo = context_repo or default_synthesis_context_repository()
@@ -89,8 +95,10 @@ class SynthesisContextService:
         self._matrix_repo = matrix_repo or default_synthesis_matrix_repository()
         self._mechanism_repo = mechanism_repo or default_synthesis_mechanism_repository()
         self._project_repo = project_repo or default_project_repository()
+        self._publication_repo = publication_repo or default_project_publication_repository()
         self._adapter = adapter or SynthesisExtractionAdapter(
             extraction_repo=self._extraction_repo,
+            publication_repo=self._publication_repo,
         )
 
     # -----------------------------------------------------------------
@@ -337,7 +345,12 @@ class SynthesisContextService:
         existing_by_rel = {link["analytical_relation_id"]: link for link in existing_links}
         existing_by_group = {link["group_item_id"]: link for link in existing_links}
 
-        relations = self._matrix_repo.list_analytical_relations(project_id)
+        active_ids = active_publication_ids(self._publication_repo, project_id)
+        relations = [
+            relation
+            for relation in self._matrix_repo.list_analytical_relations(project_id)
+            if active_ids is None or relation.publication_id in active_ids
+        ]
         synced_link_ids: set[str] = set()
 
         for rel in relations:
@@ -472,6 +485,7 @@ class SynthesisContextService:
                 updated_at=_as_datetime(link.get("updated_at")) or datetime.now(timezone.utc),
             )
             for link in current_links
+            if active_ids is None or UUID(link["publication_id"]) in active_ids
         ]
 
         categories = self.list_context_categories(project_id)
@@ -496,7 +510,12 @@ class SynthesisContextService:
     def get_context_synthesis_summary(self, project_id: str) -> ContextSynthesisSummaryDTO:
         _ensure_project_isolation(project_id, project_id)
 
-        links = self._context_repo.list_links(project_id)
+        active_ids = active_publication_ids(self._publication_repo, project_id)
+        links = [
+            link
+            for link in self._context_repo.list_links(project_id)
+            if active_ids is None or UUID(link["publication_id"]) in active_ids
+        ]
 
         total_relations = len({link["analytical_relation_id"] for link in links})
         categorized_relations = len({

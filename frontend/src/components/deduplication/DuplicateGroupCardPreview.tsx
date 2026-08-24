@@ -21,7 +21,8 @@ import {
   ApiDuplicateGroup,
   DuplicateGroupPreview,
   DuplicateDecisionType,
-  DuplicateDecisionStatus,
+  DuplicateGroupStatus,
+  ApiDuplicateGroupMergeResponse,
   ApiDuplicateRecordPreview,
 } from '../../types';
 import { Card } from '../common/Card';
@@ -31,7 +32,8 @@ interface DuplicateGroupCardPreviewProps {
   group: ApiDuplicateGroup | DuplicateGroupPreview;
   index: number;
   projectId?: string;
-  onDecisionUpdated?: (groupId: string, decision: DuplicateDecisionStatus, rationale?: string | null) => void;
+  onDecisionUpdated?: (groupId: string, status: DuplicateGroupStatus, rationale?: string | null) => void;
+  onMerged?: (groupId: string, result: ApiDuplicateGroupMergeResponse) => void;
 }
 
 type ComparisonFieldState = 'MATCH' | 'DIFFERENT' | 'PARTIAL' | 'UNAVAILABLE';
@@ -142,14 +144,17 @@ export const DuplicateGroupCardPreview: React.FC<DuplicateGroupCardPreviewProps>
   index,
   projectId = '',
   onDecisionUpdated,
+  onMerged,
 }) => {
   const groupId = 'group_id' in group ? group.group_id : group.groupId;
   const reason = group.reason;
   const sharedIdentifiers = 'shared_identifiers' in group ? group.shared_identifiers : [];
-  const initialStatus: DuplicateDecisionStatus = ('status' in group && group.status) ? group.status : 'PENDING';
+  const initialLifecycleStatus: DuplicateGroupStatus = ('status' in group && group.status) ? group.status : 'PENDING';
   const initialRationale: string = ('rationale' in group && group.rationale) ? group.rationale : '';
 
-  const decisionStatus = initialStatus;
+  const [lifecycleStatus, setLifecycleStatus] = useState<DuplicateGroupStatus>(initialLifecycleStatus);
+  const decisionStatus = lifecycleStatus === 'APPROVED' ? 'APPROVE' : lifecycleStatus === 'REJECTED' ? 'REJECT' : 'PENDING';
+  const [mergeResult, setMergeResult] = useState<ApiDuplicateGroupMergeResponse | null>(null);
   const [rationale, setRationale] = useState<string>(initialRationale);
   const [isExpanded, setIsExpanded] = useState<boolean>(true);
   const [saving, setSaving] = useState<boolean>(false);
@@ -158,6 +163,8 @@ export const DuplicateGroupCardPreview: React.FC<DuplicateGroupCardPreviewProps>
 
   useEffect(() => {
     setRationale(('rationale' in group && group.rationale) ? group.rationale : '');
+    setLifecycleStatus(('status' in group && group.status) ? group.status : 'PENDING');
+    setMergeResult(null);
   }, [group]);
 
   const normalizedSharedIdents = sharedIdentifiers.map((ident) =>
@@ -190,13 +197,30 @@ export const DuplicateGroupCardPreview: React.FC<DuplicateGroupCardPreviewProps>
       );
       setRationale(res.rationale || '');
       setSaved(true);
+      const status: DuplicateGroupStatus = res.decision === 'APPROVE' ? 'APPROVED' : 'REJECTED';
+      setLifecycleStatus(status);
       if (onDecisionUpdated) {
-        onDecisionUpdated(groupId, res.decision, res.rationale);
+        onDecisionUpdated(groupId, status, res.rationale);
       }
       setTimeout(() => setSaved(false), 2500);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Błąd podczas zapisywania decyzji.';
       setError(msg);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleMerge = async () => {
+    setSaving(true);
+    setError(null);
+    try {
+      const result = await projectApiService.mergeDuplicateGroup(projectId, groupId);
+      setMergeResult(result);
+      setLifecycleStatus('MERGED');
+      onMerged?.(groupId, result);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Błąd podczas scalania duplikatów.');
     } finally {
       setSaving(false);
     }
@@ -229,7 +253,9 @@ export const DuplicateGroupCardPreview: React.FC<DuplicateGroupCardPreviewProps>
             {groupId}
           </code>
 
-          {decisionStatus === 'APPROVE' ? (
+          {lifecycleStatus === 'MERGED' ? (
+            <span><Check size={12} /> Merged</span>
+          ) : decisionStatus === 'APPROVE' ? (
             <span
               style={{
                 fontSize: '0.75rem',
@@ -611,7 +637,7 @@ export const DuplicateGroupCardPreview: React.FC<DuplicateGroupCardPreviewProps>
               </div>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <button
+                {lifecycleStatus !== 'MERGED' && <button
                   onClick={() => handleDecision('APPROVE')}
                   disabled={saving}
                   aria-label="Zatwierdź tę grupę jako potwierdzony duplikat"
@@ -640,9 +666,9 @@ export const DuplicateGroupCardPreview: React.FC<DuplicateGroupCardPreviewProps>
                 >
                   <Check size={16} />
                   <span>Approve (Duplikat)</span>
-                </button>
+                </button>}
 
-                <button
+                {lifecycleStatus !== 'MERGED' && <button
                   onClick={() => handleDecision('REJECT')}
                   disabled={saving}
                   aria-label="Odrzuć tę grupę jako niebędącą duplikatem"
@@ -671,9 +697,19 @@ export const DuplicateGroupCardPreview: React.FC<DuplicateGroupCardPreviewProps>
                 >
                   <X size={16} />
                   <span>Reject (Odrzuć)</span>
-                </button>
+                </button>}
+                {lifecycleStatus === 'APPROVED' && (
+                  <button type="button" onClick={() => void handleMerge()} disabled={saving} aria-label="Merge duplicates">
+                    Merge duplicates
+                  </button>
+                )}
               </div>
             </div>
+            {lifecycleStatus === 'MERGED' && mergeResult && (
+              <p role="status">
+                Canonical publication: {mergeResult.canonical_record_id}. Merged {mergeResult.merged_publication_ids.length} source records at {new Date(mergeResult.merged_at).toLocaleString()}.
+              </p>
+            )}
 
             {error && (
               <div

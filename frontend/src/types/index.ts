@@ -326,6 +326,7 @@ export interface ApiSharedIdentifier {
 
 export type DuplicateDecisionType = 'APPROVE' | 'REJECT';
 export type DuplicateDecisionStatus = 'PENDING' | 'APPROVE' | 'REJECT';
+export type DuplicateGroupStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'MERGED';
 
 export interface ApiDuplicateGroupDecisionResponse {
   project_id: string;
@@ -334,12 +335,24 @@ export interface ApiDuplicateGroupDecisionResponse {
   rationale?: string | null;
 }
 
+export interface ApiDuplicateGroupMergeResponse {
+  project_id: string;
+  group_id: string;
+  status: 'MERGED';
+  canonical_record_id: string;
+  merged_publication_ids: string[];
+  merged_at: string;
+}
+
 export interface ApiDuplicateGroup {
   group_id: string;
   reason: string;
   records_count: number;
-  status: DuplicateDecisionStatus;
+  status: DuplicateGroupStatus;
   rationale?: string | null;
+  canonical_record_id?: string | null;
+  merged_publication_ids?: string[] | null;
+  merged_at?: string | null;
   shared_identifiers: ApiSharedIdentifier[];
   records: ApiDuplicateRecordPreview[];
 }
