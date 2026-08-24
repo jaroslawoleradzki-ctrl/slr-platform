@@ -279,3 +279,43 @@ def test_map_bibtex_record_missing_title_raises_value_error() -> None:
 def test_map_bibtex_record_blank_source_raises_value_error() -> None:
     with pytest.raises(ValueError, match="source must be a non-blank string"):
         map_bibtex_record(_record(), source=" ")
+
+
+# ---------------------------------------------------------------------------
+# Language field
+# ---------------------------------------------------------------------------
+
+
+def test_map_bibtex_record_language_from_field() -> None:
+    """BibTeX language field maps to Publication.language (raw, not canonicalized)."""
+    pub = map_bibtex_record(_record(language="eng"), source="s")
+    assert pub.language == "eng"
+
+
+def test_map_bibtex_record_language_case_preserved() -> None:
+    """Language value is passed through as-is; normalization happens later."""
+    pub = map_bibtex_record(_record(language="English"), source="s")
+    assert pub.language == "English"
+
+
+def test_map_bibtex_record_language_absent_is_none() -> None:
+    """Missing language field results in None language."""
+    pub = map_bibtex_record(_record(), source="s")
+    assert pub.language is None
+
+
+def test_map_bibtex_record_language_blank_is_none() -> None:
+    """Blank language field results in None language."""
+    pub = map_bibtex_record(_record(language="  "), source="s")
+    assert pub.language is None
+
+
+def test_map_bibtex_record_integration_with_normalization() -> None:
+    """BibTeX mapper output + normalization yields canonical ISO 639-1."""
+    from app.normalization import normalize_publication
+
+    pub = map_bibtex_record(_record(language="English"), source="s")
+    assert pub.language == "English"
+
+    normalized = normalize_publication(pub)
+    assert normalized.language == "en"

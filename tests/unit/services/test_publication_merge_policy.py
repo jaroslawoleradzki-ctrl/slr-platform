@@ -344,12 +344,86 @@ def test_different_schema_versions_are_an_explicit_conflict(
         PublicationMergePolicy().merge(first, second)
 
 
-def test_language_is_not_selected_by_text_length() -> None:
+def test_language_conflict_is_detected_after_normalization() -> None:
+    """Genuine language conflicts (different languages) are detected after normalization."""
     first = _publication(language="en")
-    second = _publication(record_id=_LATE_ID, language="eng")
+    second = _publication(record_id=_LATE_ID, language="pl")
 
     with pytest.raises(PublicationMergeConflict, match="language"):
         PublicationMergePolicy().merge(first, second)
+
+
+def test_language_same_after_normalization_merges_successfully() -> None:
+    """Same language in different forms (en, eng, English) merge successfully."""
+    first = _publication(language="en")
+    second = _publication(record_id=_LATE_ID, language="eng")
+
+    result = PublicationMergePolicy().merge(first, second)
+    assert result.language == "en"
+
+    # Test other equivalent forms
+    first = _publication(language="English")
+    second = _publication(record_id=_LATE_ID, language="en")
+    result = PublicationMergePolicy().merge(first, second)
+    assert result.language == "en"
+
+    first = _publication(language="deu")
+    second = _publication(record_id=_LATE_ID, language="ger")
+    result = PublicationMergePolicy().merge(first, second)
+    assert result.language == "de"
+
+
+def test_language_none_and_value_merges_to_value() -> None:
+    """None + known language merges to the known language."""
+    first = _publication(language="en")
+    second = _publication(record_id=_LATE_ID, language=None)
+
+    result = PublicationMergePolicy().merge(first, second)
+    assert result.language == "en"
+
+    # Commutative
+    result = PublicationMergePolicy().merge(second, first)
+    assert result.language == "en"
+
+
+def test_language_unknown_and_known_merges_to_known() -> None:
+    """Unknown/unmappable + known language merges to known (unknown becomes None)."""
+    first = _publication(language="xxx")  # unknown -> None after normalization
+    second = _publication(record_id=_LATE_ID, language="en")
+
+    result = PublicationMergePolicy().merge(first, second)
+    assert result.language == "en"
+
+
+def test_language_both_unknown_merges_to_none() -> None:
+    """Two unknown languages merge to None (no conflict)."""
+    first = _publication(language="xxx")
+    second = _publication(record_id=_LATE_ID, language="yyy")
+
+    result = PublicationMergePolicy().merge(first, second)
+    assert result.language is None
+
+
+def test_end_to_end_language_normalization_and_merge() -> None:
+    """End-to-end: Stage 3 normalization + canonical merge = no false conflict."""
+    from app.normalization import normalize_publication
+
+    # Record A: language = "en" (already canonical)
+    # Record B: language = "eng" (will be normalized to "en")
+    record_a = _publication(record_id=_EARLY_ID, language="en", title="Study A")
+    record_b = _publication(record_id=_LATE_ID, language="eng", title="Study B")
+
+    # Stage 3 normalization
+    norm_a = normalize_publication(record_a)
+    norm_b = normalize_publication(record_b)
+
+    assert norm_a.language == "en"
+    assert norm_b.language == "en"
+
+    # Canonical merge should succeed with no language conflict
+    merged = PublicationMergePolicy().merge(norm_a, norm_b)
+    assert merged.language == "en"
+    assert merged.record_id == _EARLY_ID
 
 
 def test_later_full_publication_date_wins_explicitly() -> None:

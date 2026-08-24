@@ -155,3 +155,49 @@ def test_normalization_is_deterministic() -> None:
     publication = _publication()
 
     assert normalize_publication(publication) == normalize_publication(publication)
+
+
+def test_normalizes_language_to_iso_639_1() -> None:
+    """Language field is canonicalized to ISO 639-1 lowercase."""
+    for lang_in, lang_out in [
+        ("eng", "en"),
+        ("English", "en"),
+        ("EN", "en"),
+        ("en", "en"),
+        ("deu", "de"),
+        ("ger", "de"),
+        ("German", "de"),
+        ("fra", "fr"),
+        ("French", "fr"),
+        ("pol", "pl"),
+        ("Polish", "pl"),
+    ]:
+        pub = _publication()
+        pub = pub.model_copy(update={"language": lang_in})
+        result = normalize_publication(pub)
+        assert result.language == lang_out, f"Failed for {lang_in!r}: got {result.language!r}"
+
+
+def test_normalizes_language_none_remains_none() -> None:
+    """None language remains None after normalization."""
+    pub = _publication()
+    pub = pub.model_copy(update={"language": None})
+    result = normalize_publication(pub)
+    assert result.language is None
+
+
+def test_normalizes_unknown_language_to_none() -> None:
+    """Unknown/unmappable language returns None."""
+    pub = _publication()
+    pub = pub.model_copy(update={"language": "xxx"})
+    result = normalize_publication(pub)
+    assert result.language is None
+
+
+def test_language_normalization_is_idempotent() -> None:
+    """Language normalization is idempotent through the publication normalizer."""
+    pub = _publication()
+    pub = pub.model_copy(update={"language": "eng"})
+    once = normalize_publication(pub)
+    twice = normalize_publication(once)
+    assert once.language == twice.language == "en"

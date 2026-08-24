@@ -148,6 +148,9 @@ def map_bibtex_record(
     citation_key = record["citation_key"].strip()
     source_record_id = normalized_doi or citation_key or title
 
+    # Map BibTeX language field
+    language = _non_blank(fields, "language")
+
     return Publication(
         title=title,
         abstract=_non_blank(fields, "abstract"),
@@ -167,4 +170,5 @@ def map_bibtex_record(
                 transformation="bibtex_to_publication",
             )
         ],
+        language=language,
     )

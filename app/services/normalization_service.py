@@ -30,11 +30,12 @@ class NormalizationExecution:
         return self.completed_at
 
 
-def _changed(before: Publication, after: Publication) -> tuple[int, int, int, int]:
+def _changed(before: Publication, after: Publication) -> tuple[int, int, int, int, int]:
     doi_changes = 0
     orcid_changes = 0
     author_changes = 0
     title_changes = int(before.title_normalized != after.title_normalized)
+    language_changes = int(before.language != after.language)
 
     before_dois = [i.value for i in before.identifiers if i.type is IdentifierType.DOI]
     after_dois = [i.value for i in after.identifiers if i.type is IdentifierType.DOI]
@@ -50,7 +51,7 @@ def _changed(before: Publication, after: Publication) -> tuple[int, int, int, in
         after_orcid = [i.value for i in after_author.identifiers if i.type is IdentifierType.ORCID]
         orcid_changes += sum(left != right for left, right in zip(before_orcid, after_orcid))
         orcid_changes += abs(len(before_orcid) - len(after_orcid))
-    return doi_changes, author_changes, orcid_changes, title_changes
+    return doi_changes, author_changes, orcid_changes, title_changes, language_changes
 
 
 def normalize_project(
@@ -62,7 +63,7 @@ def normalize_project(
     normalized = [normalize_publication(publication) for publication in publications]
     repository.replace_publications(project_id, normalized)
 
-    counts = [0, 0, 0, 0]
+    counts = [0, 0, 0, 0, 0]
     for before, after in zip(publications, normalized):
         changes = _changed(before, after)
         counts = [left + right for left, right in zip(counts, changes)]
@@ -72,6 +73,7 @@ def normalize_project(
         ("authors normalized", counts[1]),
         ("ORCID normalized", counts[2]),
         ("title canonicalized", counts[3]),
+        ("language canonicalized", counts[4]),
     )
     processed = len(publications)
     audit_trail = (

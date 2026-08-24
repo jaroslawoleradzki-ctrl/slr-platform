@@ -137,7 +137,10 @@ def map_ris_record(
         if normalized_doi:
             identifiers.append(Identifier(type=IdentifierType.DOI, value=normalized_doi))
 
-    # 7. Provenance
+    # 7. Language (LA tag) — passed through to normalization stage
+    language = _first_non_blank(record, "LA")
+
+    # 8. Provenance
     #    source_record_id: use the normalized DOI when available; fall back to
     #    the record title, which is always present (required above).
     source_record_id = normalized_doi if normalized_doi else title
@@ -158,4 +161,5 @@ def map_ris_record(
         document_type=doc_type,
         identifiers=identifiers,
         provenance=provenance,
+        language=language,
     )

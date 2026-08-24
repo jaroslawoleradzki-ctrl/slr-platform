@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.6.0] — 2026-08-24
+
+### Added
+
+- **Publication Language Normalization**:
+  - Added Stage 3 publication language canonicalization to lowercase ISO 639-1.
+  - Added ISO 639-2/B and ISO 639-2/T alias handling.
+  - Added RIS `LA` and BibTeX `language` metadata import while preserving source language representation until Stage 3.
+  - Added defensive canonical-merge language normalization to prevent format-only conflicts such as `en` versus `eng`.
+  - Preserved the existing database schema; no migration is required.
+  - Introduced no external language-normalization dependency.
+
+### Deferred
+
+- Field-level raw-language transformation provenance.
+- Complex multi-language strings.
+- Exhaustive natural-language-name aliases.
+
 ## [0.5.8] — 2026-08-24
 
 ### Fixed
