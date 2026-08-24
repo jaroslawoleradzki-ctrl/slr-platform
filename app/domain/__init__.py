@@ -3,6 +3,7 @@ from app.domain.deduplication import (
     DuplicateDecision,
     DuplicateDecisionType,
     DuplicateGroup,
+    DuplicateGroupMergeRecord,
     DuplicateGroupStatus,
     InvalidDuplicateGroupTransition,
 )
@@ -74,6 +75,7 @@ __all__ = [
     "DuplicateDecision",
     "DuplicateDecisionType",
     "DuplicateGroup",
+    "DuplicateGroupMergeRecord",
     "DuplicateGroupStatus",
     "ExtractedGroupItemState",
     "ExtractedValueState",

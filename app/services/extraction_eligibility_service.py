@@ -108,6 +108,17 @@ class ExtractionEligibilityService:
                 reason_details="Project has no active data extraction configuration.",
             )
 
+        # Direct callers must observe the same active-record boundary as batch
+        # extraction.  A superseded source can never be independently eligible.
+        input_set = self._input_service.get_input_set(project_id)
+        if publication_id not in {publication.record_id for publication in input_set.publications}:
+            return ExtractionEligibilityResult(
+                publication_id=publication_id,
+                status=ExtractionEligibilityStatus.BLOCKED_SCREENING_INCOMPLETE,
+                is_eligible=False,
+                reason_details="Publication is not an active canonical record for this project.",
+            )
+
         # 2. Screening Gate (Full-Text Stage)
         stage = ScreeningStage.FULL_TEXT
         has_roster = self._has_active_roster(project_id, stage)

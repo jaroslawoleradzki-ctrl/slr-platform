@@ -67,7 +67,7 @@ def test_full_duplicate_review_lifecycle_workflow() -> None:
     matching_group = next(g for g in after_groups if g["group_id"] == group_id)
     after_record_ids = [r["id"] for r in matching_group["records"]]
 
-    assert matching_group["status"] == "REJECT"
+    assert matching_group["status"] == "REJECTED"
     assert matching_group["records_count"] == initial_records_count
     assert after_record_ids == initial_record_ids
 

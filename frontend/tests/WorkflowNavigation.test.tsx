@@ -82,7 +82,7 @@ describe('v0.2.2 — WorkflowNavigationStatus Unit & Integration Tests', () => {
           group_id: `g-${i}`,
           reason: 'DOI match',
           records_count: 2,
-          status: 'APPROVE' as const,
+          status: 'APPROVED' as const,
           shared_identifiers: [],
           records: [],
         })),
@@ -90,7 +90,7 @@ describe('v0.2.2 — WorkflowNavigationStatus Unit & Integration Tests', () => {
           group_id: 'g-34',
           reason: 'DOI match',
           records_count: 2,
-          status: 'REJECT' as const,
+          status: 'REJECTED' as const,
           shared_identifiers: [],
           records: [],
         },
@@ -115,7 +115,7 @@ describe('v0.2.2 — WorkflowNavigationStatus Unit & Integration Tests', () => {
           group_id: `g-${i}`,
           reason: 'DOI match',
           records_count: 2,
-          status: 'APPROVE' as const,
+          status: 'APPROVED' as const,
           shared_identifiers: [],
           records: [],
         })),
@@ -161,7 +161,7 @@ describe('v0.2.2 — WorkflowNavigationStatus Unit & Integration Tests', () => {
       return (
         <button
           type="button"
-          onClick={() => updateGroupDecision('g-last', 'APPROVE', 'Auto test approval')}
+          onClick={() => updateGroupDecision('g-last', 'APPROVED', 'Auto test approval')}
         >
           Approve Group
         </button>

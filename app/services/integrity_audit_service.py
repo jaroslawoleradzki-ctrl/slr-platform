@@ -1,10 +1,17 @@
 from __future__ import annotations
 
+from uuid import UUID
+
 from app.domain.integrity_audit import (
     IntegrityAuditReport,
     IntegrityAuditStatus,
     IntegrityCheckLevel,
     IntegrityCheckResult,
+)
+from app.repositories.duplicate_merge_repository import (
+    DuplicateMergeRepository,
+    InMemoryDuplicateMergeRepository,
+    SqliteDuplicateMergeRepository,
 )
 from app.repositories.duplicate_review_decision_repository import (
     DuplicateReviewDecisionRepository,
@@ -35,6 +42,7 @@ class ProjectIntegrityAuditService:
         import_history_repository: ImportHistoryRepository | None = None,
         normalization_repository: NormalizationExecutionRepository | None = None,
         decision_repository: DuplicateReviewDecisionRepository | None = None,
+        merge_repository: DuplicateMergeRepository | None = None,
         group_builder: DuplicateGroupBuilder = duplicate_group_builder,
     ) -> None:
         self._pub_repo = publication_repository or default_project_publication_repository()
@@ -46,6 +54,11 @@ class ProjectIntegrityAuditService:
             decision_repository or default_duplicate_review_decision_repository()
         )
         self._group_builder = group_builder
+        self._merge_repo = merge_repository or (
+            SqliteDuplicateMergeRepository(self._pub_repo._database_path)
+            if hasattr(self._pub_repo, "_database_path")
+            else InMemoryDuplicateMergeRepository()
+        )
 
     def audit_project(self, project_id: str) -> IntegrityAuditReport:
         checks: list[IntegrityCheckResult] = []
@@ -292,6 +305,38 @@ class ProjectIntegrityAuditService:
                         context={"orphaned_group_ids": sorted(orphaned_group_ids)},
                     )
                 )
+
+            superseded_by: dict[UUID, UUID | None]
+            if not hasattr(self._pub_repo, "get_superseded_by_map"):
+                superseded_by = {record_id: None for record_id in pub_by_id}
+            else:
+                superseded_by = self._pub_repo.get_superseded_by_map(project_id)
+            for merge in self._merge_repo.list_merges_for_project(project_id).values():
+                member_ids = set(merge.merged_publication_ids)
+                missing = sorted(str(record_id) for record_id in member_ids if record_id not in pub_by_id)
+                if missing:
+                    checks.append(IntegrityCheckResult(code="DEDUP_MERGE_MEMBER_MISSING", level=IntegrityCheckLevel.ERROR, message="Merge record references missing publication members.", context={"group_id": merge.group_id, "missing_publication_ids": missing}))
+                    continue
+                canonical = merge.canonical_record_id
+                if canonical not in member_ids or canonical not in pub_by_id:
+                    checks.append(IntegrityCheckResult(code="DEDUP_MERGE_CANONICAL_INVALID", level=IntegrityCheckLevel.ERROR, message="Merge canonical record is invalid.", context={"group_id": merge.group_id}))
+                    continue
+                if superseded_by.get(canonical) is not None:
+                    checks.append(IntegrityCheckResult(code="DEDUP_MERGE_CANONICAL_SUPERSEDED", level=IntegrityCheckLevel.ERROR, message="Merge canonical record must remain active.", context={"group_id": merge.group_id, "canonical_record_id": str(canonical)}))
+                invalid_members = [str(member) for member in member_ids - {canonical} if superseded_by.get(member) != canonical]
+                if invalid_members:
+                    checks.append(IntegrityCheckResult(code="DEDUP_MERGE_SUPERSESSION_INVALID", level=IntegrityCheckLevel.ERROR, message="Non-canonical merge members must point directly to the canonical record.", context={"group_id": merge.group_id, "member_ids": sorted(invalid_members)}))
+
+            existing_ids = set(pub_by_id)
+            for record_id, target_id in superseded_by.items():
+                if target_id is None:
+                    continue
+                if target_id == record_id:
+                    checks.append(IntegrityCheckResult(code="DEDUP_SUPERSESSION_SELF", level=IntegrityCheckLevel.ERROR, message="A publication cannot supersede itself.", context={"record_id": str(record_id)}))
+                elif target_id not in existing_ids:
+                    checks.append(IntegrityCheckResult(code="DEDUP_SUPERSESSION_BROKEN", level=IntegrityCheckLevel.ERROR, message="A superseded publication references a missing canonical record.", context={"record_id": str(record_id), "superseded_by": str(target_id)}))
+                elif superseded_by.get(target_id) is not None:
+                    checks.append(IntegrityCheckResult(code="DEDUP_SUPERSESSION_CHAIN", level=IntegrityCheckLevel.ERROR, message="Supersession chains or cycles are not permitted.", context={"record_id": str(record_id), "superseded_by": str(target_id)}))
 
         # Sort checks deterministically by code
         sorted_checks = tuple(sorted(checks, key=lambda c: c.code))

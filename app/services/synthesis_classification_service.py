@@ -17,6 +17,10 @@ from app.repositories.extraction_repository import (
     SqliteExtractionRepository,
     default_extraction_repository,
 )
+from app.repositories.project_publication_repository import (
+    SqliteProjectPublicationRepository,
+    default_project_publication_repository,
+)
 from app.repositories.project_repository import (
     ProjectNotFoundError,
     SqliteProjectRepository,
@@ -26,6 +30,7 @@ from app.repositories.synthesis_classification_repository import (
     SynthesisClassificationRepository,
     default_synthesis_classification_repository,
 )
+from app.services.active_publication_filter import active_publication_ids
 
 
 class CategoryNotFoundError(Exception):
@@ -59,10 +64,12 @@ class SynthesisClassificationService:
         classification_repo: SynthesisClassificationRepository | None = None,
         extraction_repo: SqliteExtractionRepository | None = None,
         project_repo: SqliteProjectRepository | None = None,
+        publication_repo: SqliteProjectPublicationRepository | None = None,
     ) -> None:
         self._classification_repo = classification_repo or default_synthesis_classification_repository()
         self._extraction_repo = extraction_repo or default_extraction_repository()
         self._project_repo = project_repo or default_project_repository()
+        self._publication_repo = publication_repo or default_project_publication_repository()
 
     def _ensure_project_exists(self, project_id: str) -> None:
         if self._project_repo.get(project_id) is None:
@@ -219,7 +226,12 @@ class SynthesisClassificationService:
         self._ensure_project_exists(project_id)
 
         # 1. Discover unique source terms from Phase 9 extraction revisions
-        records = self._extraction_repo.list_records(project_id)
+        active_ids = active_publication_ids(self._publication_repo, project_id)
+        records = [
+            record
+            for record in self._extraction_repo.list_records(project_id)
+            if active_ids is None or record.publication_id in active_ids
+        ]
         lean_occurrences: dict[str, dict[str, Any]] = {}
         energy_occurrences: dict[str, dict[str, Any]] = {}
 
@@ -486,4 +498,5 @@ def default_synthesis_classification_service() -> SynthesisClassificationService
         classification_repo=default_synthesis_classification_repository(),
         extraction_repo=default_extraction_repository(),
         project_repo=default_project_repository(),
+        publication_repo=default_project_publication_repository(),
     )

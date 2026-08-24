@@ -1,6 +1,6 @@
 # SLR Platform — Project Status
 
-_Last updated: 2026-08-21_
+_Last updated: 2026-08-24_
 
 ## Current status
 
@@ -14,7 +14,7 @@ development
 
 Current version:
 
-v0.5.6
+v0.5.7
 
 Current release status:
 
@@ -27,6 +27,9 @@ with rate-limited search, pagination, provenance, and PRISMA integration.
 v0.5.6 adds manual import source provenance (Google Scholar, Scopus, Web of Science,
 PubMed, EBSCO, ProQuest, Other) with optional labels, provenance preservation
 through normalization/deduplication, and PRISMA manual source breakdown.
+v0.5.7 implements canonical duplicate merge (separating reviewer decisions from
+technical merge lifecycle, sqlite-based atomic merges, supersession tracking,
+downstream active-only filtering, and integrity audit support).
 
 Current development phase:
 

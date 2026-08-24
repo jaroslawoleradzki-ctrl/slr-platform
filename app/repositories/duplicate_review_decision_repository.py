@@ -36,6 +36,8 @@ class DuplicateReviewDecisionRepository(Protocol):
         project_id: str,
         group_id: str,
         decision: DuplicateGroupReviewDecision,
+        *,
+        connection: sqlite3.Connection | None = None,
     ) -> None:
         """Store or update a decision for a duplicate group within a specific project."""
         ...
@@ -44,12 +46,14 @@ class DuplicateReviewDecisionRepository(Protocol):
         self,
         project_id: str,
         group_id: str,
+        *,
+        connection: sqlite3.Connection | None = None,
     ) -> DuplicateGroupReviewDecision | None:
         """Retrieve the stored decision for a (project_id, group_id), or None if undecided."""
         ...
 
     def list_decisions_for_project(
-        self, project_id: str
+        self, project_id: str, *, connection: sqlite3.Connection | None = None
     ) -> dict[str, DuplicateGroupReviewDecision]:
         """List all stored decisions for a project mapped by group_id."""
         ...
@@ -73,17 +77,17 @@ class InMemoryDuplicateReviewDecisionRepository:
         self._decisions: dict[tuple[str, str], DuplicateGroupReviewDecision] = {}
 
     def save_decision(
-        self, project_id: str, group_id: str, decision: DuplicateGroupReviewDecision
+        self, project_id: str, group_id: str, decision: DuplicateGroupReviewDecision, **_: object
     ) -> None:
         self._decisions[(project_id, group_id)] = decision
 
     def get_decision(
-        self, project_id: str, group_id: str
+        self, project_id: str, group_id: str, **_: object
     ) -> DuplicateGroupReviewDecision | None:
         return self._decisions.get((project_id, group_id))
 
     def list_decisions_for_project(
-        self, project_id: str
+        self, project_id: str, **_: object
     ) -> dict[str, DuplicateGroupReviewDecision]:
         return {
             group_id: decision
@@ -110,11 +114,16 @@ class SqliteDuplicateReviewDecisionRepository:
         self._apply_migrations()
 
     def save_decision(
-        self, project_id: str, group_id: str, decision: DuplicateGroupReviewDecision
+        self,
+        project_id: str,
+        group_id: str,
+        decision: DuplicateGroupReviewDecision,
+        *,
+        connection: sqlite3.Connection | None = None,
     ) -> None:
         now_str = datetime.now(timezone.utc).isoformat()
-        with self._connect() as connection:
-            connection.execute(
+        def save(conn: sqlite3.Connection) -> None:
+            conn.execute(
                 """
                 INSERT INTO duplicate_review_decisions (
                     project_id, group_id, decision, rationale, updated_at
@@ -132,12 +141,17 @@ class SqliteDuplicateReviewDecisionRepository:
                     now_str,
                 ),
             )
+        if connection is not None:
+            save(connection)
+        else:
+            with self._connect() as conn:
+                save(conn)
 
     def get_decision(
-        self, project_id: str, group_id: str
+        self, project_id: str, group_id: str, *, connection: sqlite3.Connection | None = None
     ) -> DuplicateGroupReviewDecision | None:
-        with self._connect() as connection:
-            row = connection.execute(
+        def get(conn: sqlite3.Connection):
+            return conn.execute(
                 """
                 SELECT decision, rationale
                 FROM duplicate_review_decisions
@@ -145,6 +159,11 @@ class SqliteDuplicateReviewDecisionRepository:
                 """,
                 (project_id, group_id),
             ).fetchone()
+        if connection is not None:
+            row = get(connection)
+        else:
+            with self._connect() as conn:
+                row = get(conn)
         if row is None:
             return None
         return DuplicateGroupReviewDecision(
@@ -153,10 +172,10 @@ class SqliteDuplicateReviewDecisionRepository:
         )
 
     def list_decisions_for_project(
-        self, project_id: str
+        self, project_id: str, *, connection: sqlite3.Connection | None = None
     ) -> dict[str, DuplicateGroupReviewDecision]:
-        with self._connect() as connection:
-            rows = connection.execute(
+        def get(conn: sqlite3.Connection):
+            return conn.execute(
                 """
                 SELECT group_id, decision, rationale
                 FROM duplicate_review_decisions
@@ -164,6 +183,11 @@ class SqliteDuplicateReviewDecisionRepository:
                 """,
                 (project_id,),
             ).fetchall()
+        if connection is not None:
+            rows = get(connection)
+        else:
+            with self._connect() as conn:
+                rows = get(conn)
         return {
             str(row[0]): DuplicateGroupReviewDecision(
                 decision=DuplicateDecision(str(row[1])),

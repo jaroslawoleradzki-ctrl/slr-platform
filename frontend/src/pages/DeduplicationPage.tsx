@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useProject } from '../context/ProjectContext';
-import { DuplicateDecisionStatus } from '../types';
+import { DuplicateGroupStatus } from '../types';
 import { DeduplicationSummaryCard } from '../components/deduplication/DeduplicationSummaryCard';
 import { DuplicateGroupCardPreview } from '../components/deduplication/DuplicateGroupCardPreview';
 import { LoadingSpinner } from '../components/common/LoadingSpinner';
@@ -70,7 +70,7 @@ export const DeduplicationPage: React.FC = () => {
 
   const handleGroupDecisionUpdated = (
     groupId: string,
-    decision: DuplicateDecisionStatus,
+    decision: DuplicateGroupStatus,
     rationale?: string | null
   ) => {
     updateGroupDecision(groupId, decision, rationale);
@@ -189,6 +189,7 @@ export const DeduplicationPage: React.FC = () => {
                 index={idx}
                 projectId={activeProject.id}
                 onDecisionUpdated={handleGroupDecisionUpdated}
+                onMerged={() => void refreshWorkflowStatus(activeProject.id)}
               />
             ))}
           </div>

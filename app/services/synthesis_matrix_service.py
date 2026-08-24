@@ -48,6 +48,7 @@ from app.repositories.synthesis_matrix_repository import (
     SqliteSynthesisMatrixRepository,
     default_synthesis_matrix_repository,
 )
+from app.services.active_publication_filter import active_publication_ids
 from app.services.synthesis_classification_service import (
     CANONICAL_ENERGY_FIELD_KEYS,
     CANONICAL_LEAN_FIELD_KEYS,
@@ -87,6 +88,7 @@ class SynthesisMatrixService:
         self._adapter = SynthesisExtractionAdapter(
             extraction_repo=self._extraction_repo,
             qa_repo=self._qa_repo,
+            publication_repo=self._publication_repo,
         )
 
     def _ensure_project_exists(self, project_id: str) -> None:
@@ -118,7 +120,12 @@ class SynthesisMatrixService:
         }
 
         # 3. Read latest extraction revisions across all publications in the project
-        records = self._extraction_repo.list_records(project_id)
+        active_ids = active_publication_ids(self._publication_repo, project_id)
+        records = [
+            record
+            for record in self._extraction_repo.list_records(project_id)
+            if active_ids is None or record.publication_id in active_ids
+        ]
         materialized: list[AnalyticalRelation] = []
 
         for rec in records:
@@ -147,7 +154,11 @@ class SynthesisMatrixService:
         if materialized:
             self._matrix_repo.save_analytical_relations(materialized)
 
-        return self._matrix_repo.list_analytical_relations(project_id)
+        return [
+            relation
+            for relation in self._matrix_repo.list_analytical_relations(project_id)
+            if active_ids is None or relation.publication_id in active_ids
+        ]
 
     def _build_analytical_relation_from_item(
         self,
@@ -300,7 +311,12 @@ class SynthesisMatrixService:
 
         lean_categories = self._classification_repo.list_lean_categories(project_id)
         energy_categories = self._classification_repo.list_energy_categories(project_id)
-        relations = self._matrix_repo.list_analytical_relations(project_id)
+        active_ids = active_publication_ids(self._publication_repo, project_id)
+        relations = [
+            relation
+            for relation in self._matrix_repo.list_analytical_relations(project_id)
+            if active_ids is None or relation.publication_id in active_ids
+        ]
 
         # 2. Group relations by (lean_category_id, energy_category_id)
         cell_lookup: dict[tuple[str, str], list[AnalyticalRelation]] = {}
@@ -378,6 +394,10 @@ class SynthesisMatrixService:
             lean_category_id=lean_category_id,
             energy_category_id=energy_category_id,
         )
+        active_ids = active_publication_ids(self._publication_repo, project_id)
+        cell_rels = [
+            relation for relation in cell_rels if active_ids is None or relation.publication_id in active_ids
+        ]
 
         # Build relation details with publication metadata, QA profile, and quote provenance
         details: list[AnalyticalRelationDetail] = []
@@ -394,7 +414,7 @@ class SynthesisMatrixService:
             pub_title: str | None = None
             pub_year: int | None = None
             try:
-                pubs = self._publication_repo.get_publications(project_id)
+                pubs = self._publication_repo.get_active_publications(project_id)
                 pub = next(
                     (
                         p

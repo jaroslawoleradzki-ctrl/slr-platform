@@ -49,6 +49,7 @@ from app.repositories.synthesis_mechanism_repository import (
     SqliteSynthesisMechanismRepository,
     default_synthesis_mechanism_repository,
 )
+from app.services.active_publication_filter import active_publication_ids
 
 
 def _as_datetime(val: str | datetime | None) -> datetime | None:
@@ -111,6 +112,7 @@ class SynthesisGapService:
         self._adapter = adapter or SynthesisExtractionAdapter(
             extraction_repo=self._extraction_repo,
             qa_repo=self._qa_repo,
+            publication_repo=self._publication_repo,
         )
 
     def _ensure_project_exists(self, project_id: str) -> None:
@@ -319,6 +321,9 @@ class SynthesisGapService:
             raise ResearchGapNotFoundError(f"Research gap '{gap_id}' not found in project '{project_id}'")
 
         group_item_id, publication_id, _ = self._resolve_evidence_artifact(project_id, link_type, target_id)
+        active_ids = active_publication_ids(self._publication_repo, project_id)
+        if active_ids is not None and UUID(publication_id) not in active_ids:
+            raise ResearchGapEvidenceError("superseded publications cannot be linked as synthesis evidence")
         resolved_revision_id = self._resolve_complete_revision(project_id, publication_id, group_item_id)
 
         existing = self._gap_repo.get_link_by_gap_target(project_id, gap_id, link_type.value, str(target_id))
@@ -365,10 +370,15 @@ class SynthesisGapService:
         self._ensure_project_exists(project_id)
 
         gaps: list[ResearchGapDetail] = []
+        active_ids = active_publication_ids(self._publication_repo, project_id)
         linked_publications: set[UUID] = set()
         for gap_row in self._gap_repo.list_gaps(project_id):
             gap = self._gap_from_row(gap_row)
-            links = [self._link_from_row(r) for r in self._gap_repo.list_links_for_gap(project_id, gap_row["gap_id"])]
+            links = [
+                self._link_from_row(row)
+                for row in self._gap_repo.list_links_for_gap(project_id, gap_row["gap_id"])
+                if active_ids is None or UUID(row["publication_id"]) in active_ids
+            ]
             linked_publications.update(link.publication_id for link in links)
             gaps.append(ResearchGapDetail(gap=gap, links=links))
 
@@ -395,8 +405,11 @@ class SynthesisGapService:
         self._ensure_project_exists(project_id)
 
         candidates: list[ResearchGapEvidenceCandidate] = []
+        active_ids = active_publication_ids(self._publication_repo, project_id)
 
         for rel in self._matrix_repo.list_analytical_relations(project_id):
+            if active_ids is not None and rel.publication_id not in active_ids:
+                continue
             candidates.append(
                 self._build_candidate(
                     project_id=project_id,
@@ -410,6 +423,8 @@ class SynthesisGapService:
             )
 
         for pathway in self._mechanism_repo.list_pathways(project_id):
+            if active_ids is not None and pathway.publication_id not in active_ids:
+                continue
             candidates.append(
                 self._build_candidate(
                     project_id=project_id,
@@ -423,6 +438,8 @@ class SynthesisGapService:
             )
 
         for ctx in self._context_repo.list_links(project_id):
+            if active_ids is not None and UUID(ctx["publication_id"]) not in active_ids:
+                continue
             candidates.append(
                 self._build_candidate(
                     project_id=project_id,
@@ -457,7 +474,7 @@ class SynthesisGapService:
         pub_title: str | None = None
         pub_year: int | None = None
         try:
-            pubs = self._publication_repo.get_publications(project_id)
+            pubs = self._publication_repo.get_active_publications(project_id)
             pub = next(
                 (
                     x

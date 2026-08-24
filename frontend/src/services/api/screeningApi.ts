@@ -3,7 +3,7 @@ import { API_BASE_URL } from '../../config/api';
 export type TitleAbstractStatus = 'unscreened' | 'included' | 'excluded' | 'uncertain';
 export type ScreeningOutcome = 'include' | 'exclude' | 'uncertain';
 export type AssessmentValue = 'met' | 'not_met' | 'uncertain' | 'not_assessed';
-export type ReadinessStatus = 'ready' | 'unresolved_duplicates' | 'merge_conflict';
+export type ReadinessStatus = 'ready' | 'unresolved_duplicates' | 'unmerged_duplicates' | 'merge_conflict';
 export type EvaluationMode = 'manual' | 'metadata_rule';
 export type MetadataRuleField = 'publication_year' | 'language' | 'document_type' | 'open_access' | 'doi' | 'abstract';
 export type MetadataRuleOperator = 'equals' | 'not_equals' | 'in' | 'not_in' | 'greater_than' | 'greater_than_or_equal' | 'less_than' | 'less_than_or_equal' | 'exists' | 'not_exists';

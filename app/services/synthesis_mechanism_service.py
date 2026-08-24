@@ -48,6 +48,7 @@ from app.repositories.synthesis_mechanism_repository import (
     SqliteSynthesisMechanismRepository,
     default_synthesis_mechanism_repository,
 )
+from app.services.active_publication_filter import active_publication_ids
 
 if TYPE_CHECKING:
     from app.domain.extraction import ExtractionRevision
@@ -95,6 +96,7 @@ class SynthesisMechanismService:
         self._adapter = adapter or SynthesisExtractionAdapter(
             extraction_repo=self._extraction_repo,
             qa_repo=self._qa_repo,
+            publication_repo=self._publication_repo,
         )
 
     def _ensure_project_exists(self, project_id: str) -> None:
@@ -185,7 +187,12 @@ class SynthesisMechanismService:
         """Discovers and synchronizes mechanism evidence from analytical relations and eligible COMPLETE extraction revisions."""
         self._ensure_project_exists(project_id)
 
-        relations = self._matrix_repo.list_analytical_relations(project_id)
+        active_ids = active_publication_ids(self._publication_repo, project_id)
+        relations = [
+            relation
+            for relation in self._matrix_repo.list_analytical_relations(project_id)
+            if active_ids is None or relation.publication_id in active_ids
+        ]
         existing_pathways = {p.analytical_relation_id: p for p in self._mechanism_repo.list_pathways(project_id)}
         valid_cats = {c.category_id for c in self._mechanism_repo.list_categories(project_id)}
 
@@ -362,8 +369,17 @@ class SynthesisMechanismService:
         self.synchronize_mechanism_pathways(project_id)
 
         categories = self._mechanism_repo.list_categories(project_id)
-        pathways = self._mechanism_repo.list_pathways(project_id)
-        relations = {r.relation_id: r for r in self._matrix_repo.list_analytical_relations(project_id)}
+        active_ids = active_publication_ids(self._publication_repo, project_id)
+        pathways = [
+            pathway
+            for pathway in self._mechanism_repo.list_pathways(project_id)
+            if active_ids is None or pathway.publication_id in active_ids
+        ]
+        relations = {
+            relation.relation_id: relation
+            for relation in self._matrix_repo.list_analytical_relations(project_id)
+            if active_ids is None or relation.publication_id in active_ids
+        }
         lean_cats = {c.category_id: c.name for c in self._classification_repo.list_lean_categories(project_id)}
         energy_cats = {c.category_id: c.name for c in self._classification_repo.list_energy_categories(project_id)}
         mech_cats = {c.category_id: c.name for c in categories}
@@ -389,7 +405,7 @@ class SynthesisMechanismService:
             pub_title: str | None = None
             pub_year: int | None = None
             try:
-                pubs = self._publication_repo.get_publications(project_id)
+                pubs = self._publication_repo.get_active_publications(project_id)
                 pub = next(
                     (
                         x

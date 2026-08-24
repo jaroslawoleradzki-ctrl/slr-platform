@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.5.7] — 2026-08-24
+
+### Added
+
+- **Canonical Duplicate Merge**:
+  - Separates reviewer APPROVE/REJECT decisions from the technical merge lifecycle.
+  - Explicit canonical merge operation.
+  - Deterministic canonical record selection.
+  - Preservation of all original publication records.
+  - `superseded_by` relationships instead of destructive deletion.
+  - Durable merge history and pre-merge snapshots.
+  - Atomic SQLite merge transaction.
+  - Protection against merging already-superseded members.
+  - Active-canonical-only downstream processing.
+  - PRISMA-compatible pre/post-deduplication accounting.
+  - Explicit frontend APPROVE -> MERGE -> MERGED workflow.
+  - Project deletion cleanup.
+  - Integrity/audit support.
+
 ## [0.5.6] — 2026-08-21
 
 ### Added

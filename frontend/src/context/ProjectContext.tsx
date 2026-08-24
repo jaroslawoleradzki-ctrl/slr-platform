@@ -9,7 +9,7 @@ import {
   WorkflowNavigationStatus,
   WorkflowStageState,
   ApiDuplicateGroupListResponse,
-  DuplicateDecisionStatus,
+  DuplicateGroupStatus,
   BibliographicImportHistoryRecord,
   SearchStrategy,
   ProjectUpdatePayload,
@@ -110,8 +110,8 @@ export const computeWorkflowStatus = (
   } else if (deduplication) {
     totalGroups = deduplication.total_groups_count;
     pendingGroups = deduplication.groups.filter((g) => g.status === 'PENDING').length;
-    approvedGroups = deduplication.groups.filter((g) => g.status === 'APPROVE').length;
-    rejectedGroups = deduplication.groups.filter((g) => g.status === 'REJECT').length;
+    approvedGroups = deduplication.groups.filter((g) => g.status === 'APPROVED').length;
+    rejectedGroups = deduplication.groups.filter((g) => g.status === 'REJECTED').length;
 
     if (pendingGroups > 0) {
       dedupState = 'pending_action';
@@ -352,7 +352,7 @@ interface ProjectContextType {
   refreshProjects: () => Promise<void>;
   refreshWorkflowStatus: (projectId?: string) => Promise<void>;
   runDeduplication: () => Promise<ApiDuplicateGroupListResponse>;
-  updateGroupDecision: (groupId: string, newStatus: DuplicateDecisionStatus, newRationale?: string | null) => void;
+  updateGroupDecision: (groupId: string, newStatus: DuplicateGroupStatus, newRationale?: string | null) => void;
   currentSearchStrategy: EditableSearchStrategy | null;
   lastExecutedSearchStrategy: EditableSearchStrategy | null;
   searchExecutionResult: SearchExecutionResult | null;
@@ -773,7 +773,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const updateGroupDecision = (
     groupId: string,
-    newStatus: DuplicateDecisionStatus,
+    newStatus: DuplicateGroupStatus,
     newRationale?: string | null
   ) => {
     setDuplicateData((current) => {
@@ -801,8 +801,8 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
         group.group_id === groupId ? { ...group, status: newStatus } : group
       );
       const pendingGroups = updatedGroups.filter((g) => g.status === 'PENDING').length;
-      const approvedGroups = updatedGroups.filter((g) => g.status === 'APPROVE').length;
-      const rejectedGroups = updatedGroups.filter((g) => g.status === 'REJECT').length;
+      const approvedGroups = updatedGroups.filter((g) => g.status === 'APPROVED').length;
+      const rejectedGroups = updatedGroups.filter((g) => g.status === 'REJECTED').length;
 
       return {
         ...current,
@@ -829,8 +829,8 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
       setDuplicateData(result);
       const pendingGroups = result.groups.filter((g) => g.status === 'PENDING').length;
-      const approvedGroups = result.groups.filter((g) => g.status === 'APPROVE').length;
-      const rejectedGroups = result.groups.filter((g) => g.status === 'REJECT').length;
+      const approvedGroups = result.groups.filter((g) => g.status === 'APPROVED').length;
+      const rejectedGroups = result.groups.filter((g) => g.status === 'REJECTED').length;
 
       setWorkflowStatus((current) => current ? {
         ...current,

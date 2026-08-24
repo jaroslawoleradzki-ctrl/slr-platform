@@ -148,7 +148,7 @@ def test_validation_not_ready_and_missing_reviewer(environment) -> None:
     )
 
 
-def test_noncanonical_and_cross_project_publications_return_404(environment) -> None:
+def test_approved_but_unmerged_duplicates_block_screening(environment) -> None:
     client, publications, _, _, reviews = environment
     records = [_publication(2, "10.1/x"), _publication(1, "10.1/x")]
     publications.add_publications("lean_energy", records)
@@ -160,7 +160,7 @@ def test_noncanonical_and_cross_project_publications_return_404(environment) -> 
         "/api/v1/projects/lean_energy/screening/title-abstract/decisions",
         json={"publication_id": str(records[0].record_id), "reviewer_id": "alice", "outcome": "include"},
     )
-    assert noncanonical.status_code == 404
+    assert noncanonical.status_code == 409
     generic_bypass = client.post(
         "/api/v1/projects/lean_energy/screening/decisions",
         json={
@@ -174,33 +174,9 @@ def test_noncanonical_and_cross_project_publications_return_404(environment) -> 
     assert generic_bypass.json()["detail"]["code"] == "title_abstract_workflow_required"
     canonical = client.post(
         "/api/v1/projects/lean_energy/screening/title-abstract/decisions",
-        json={
-            "publication_id": str(records[1].record_id),
-            "reviewer_id": "alice",
-            "outcome": "include",
-        },
+        json={"publication_id": str(records[1].record_id), "reviewer_id": "alice", "outcome": "include"},
     )
-    assert canonical.status_code == 201
-    decision_id = canonical.json()["decision_id"]
-    latest = client.get(
-        "/api/v1/projects/lean_energy/screening/decisions/latest",
-        params={
-            "publication_id": str(records[1].record_id),
-            "stage": "title_abstract",
-            "reviewer_id": "alice",
-        },
-    )
-    history = client.get(
-        "/api/v1/projects/lean_energy/screening/decisions/history",
-        params={
-            "publication_id": str(records[1].record_id),
-            "stage": "title_abstract",
-            "reviewer_id": "alice",
-        },
-    )
-    by_id = client.get(f"/api/v1/projects/lean_energy/screening/decisions/{decision_id}")
-    assert latest.status_code == history.status_code == by_id.status_code == 200
-    assert history.json()["total"] == 1
+    assert canonical.status_code == 409
     foreign = client.get(
         f"/api/v1/projects/ai_architecture/screening/title-abstract/records/{records[1].record_id}",
         params={"reviewer_id": "alice"},
@@ -209,7 +185,7 @@ def test_noncanonical_and_cross_project_publications_return_404(environment) -> 
     missing = client.get(
         f"/api/v1/projects/lean_energy/screening/title-abstract/records/{uuid4()}", params={"reviewer_id": "alice"}
     )
-    assert missing.status_code == 404
+    assert missing.status_code == 409
 
 
 def test_required_criterion_validation_is_422(environment) -> None:

@@ -117,8 +117,7 @@ class PrismaMetricsService:
         groups = self._builder.build(publications)
         decisions = self._decisions.list_decisions_for_project(project_id)
 
-        merged_away = sum(len(group.publication_ids) - 1 for group in groups)
-        records_after_technical_merger = max(0, working_count - merged_away)
+        records_after_technical_merger = self._publications.count_active_by_project(project_id)
         duplicate_groups_pending_review = sum(
             1 for group in groups if str(group.group_id) not in decisions
         )

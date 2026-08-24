@@ -70,6 +70,7 @@ class ProjectWorkflowStatusService:
     ) -> ProjectWorkflowStatusResponse:
         input_set = self._input_service.get_input_set(project_id)
         total_ta = len(input_set.publications)
+        active_publication_ids = {publication.record_id for publication in input_set.publications}
 
         # ── 1. Title & Abstract Stage Status ────────────────────────────────────
         ta_has_roster = self._adapter.has_active_roster(project_id, ScreeningStage.TITLE_ABSTRACT)
@@ -83,6 +84,8 @@ class ProjectWorkflowStatusService:
                 project_id, ScreeningStage.TITLE_ABSTRACT, limit=100000
             )
             for r in records:
+                if r.publication_id not in active_publication_ids:
+                    continue
                 if r.status.value in ("agreement", "resolved"):
                     ta_evaluated_count += 1
                 elif r.status.value == "conflict":
@@ -96,7 +99,7 @@ class ProjectWorkflowStatusService:
             decisions = [
                 d
                 for d in self._reporting_repo.latest_decisions(project_id, reviewer_id)
-                if d.stage == ScreeningStage.TITLE_ABSTRACT
+                if d.stage == ScreeningStage.TITLE_ABSTRACT and d.publication_id in active_publication_ids
             ]
             ta_evaluated_count = len(decisions)
 
@@ -128,6 +131,8 @@ class ProjectWorkflowStatusService:
                 project_id, ScreeningStage.FULL_TEXT, limit=100000
             )
             for r in records:
+                if r.publication_id not in active_publication_ids:
+                    continue
                 if r.status.value in ("agreement", "resolved"):
                     ft_evaluated_count += 1
                 elif r.status.value == "conflict":
@@ -141,7 +146,7 @@ class ProjectWorkflowStatusService:
             decisions = [
                 d
                 for d in self._reporting_repo.latest_decisions(project_id, reviewer_id)
-                if d.stage == ScreeningStage.FULL_TEXT
+                if d.stage == ScreeningStage.FULL_TEXT and d.publication_id in active_publication_ids
             ]
             ft_evaluated_count = len(decisions)
 

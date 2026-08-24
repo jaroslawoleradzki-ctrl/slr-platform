@@ -24,9 +24,11 @@ from app.api.main import app
 from app.api.routers.projects import get_project_deletion_service, get_project_repository
 from app.domain.duplicate_review import DuplicateDecision, DuplicateGroupReviewDecision
 from app.domain.full_text_screening import FullTextAvailability
+from app.domain.project import Project
 from app.domain.provenance import ProvenanceEntry
 from app.domain.publication import Publication
 from app.repositories.conflict_resolution_repository import SqliteConflictResolutionRepository
+from app.repositories.duplicate_merge_repository import SqliteDuplicateMergeRepository
 from app.repositories.duplicate_review_decision_repository import SqliteDuplicateReviewDecisionRepository
 from app.repositories.full_text_availability_repository import SqliteFullTextAvailabilityRepository
 from app.repositories.import_history_repository import SqliteImportHistoryRepository
@@ -83,6 +85,7 @@ def _make_service(db_path: Path) -> SqliteProjectDeletionService:
         normalization_repo=SqliteNormalizationExecutionRepository(db_path),
         publication_repo=SqliteProjectPublicationRepository(db_path),
         duplicate_review_repo=SqliteDuplicateReviewDecisionRepository(db_path),
+        duplicate_merge_repo=SqliteDuplicateMergeRepository(db_path),
         screening_decision_repo=SqliteScreeningDecisionRepository(db_path),
         screening_criterion_repo=SqliteScreeningCriterionRepository(db_path),
         search_strategy_repo=SqliteSearchStrategyRepository(db_path),
@@ -216,6 +219,48 @@ def test_delete_is_idempotent_error_on_second_call(
     service.delete_project(created_project_id)
     with pytest.raises(ProjectNotFoundError):
         service.delete_project(created_project_id)
+
+
+def test_delete_project_removes_persisted_duplicate_merge_history(db_path: Path) -> None:
+    """Project deletion must not leave canonical-merge audit records orphaned."""
+    from app.domain.identifiers import Identifier, IdentifierType
+    from app.services.project_duplicate_service import ProjectDuplicateService
+
+    project_id = "merge-cleanup"
+    SqliteProjectRepository(db_path).create(Project(project_id=project_id, title="Merge cleanup"))
+    publications = SqliteProjectPublicationRepository(db_path)
+    first = Publication(
+        title="Duplicate",
+        identifiers=[Identifier(type=IdentifierType.DOI, value="10.1000/delete")],
+        provenance=[ProvenanceEntry(source="one", source_record_id="1")],
+    )
+    second = first.model_copy(
+        update={
+            "record_id": uuid4(),
+            "provenance": [ProvenanceEntry(source="two", source_record_id="2")],
+        }
+    )
+    publications.add_publications(project_id, [first, second])
+    decisions = SqliteDuplicateReviewDecisionRepository(db_path)
+    merges = SqliteDuplicateMergeRepository(db_path)
+    duplicate_service = ProjectDuplicateService(
+        publications,
+        decisions,
+        merge_repository=merges,
+        transaction_manager=SqliteTransactionManager(db_path),
+    )
+    group_id = duplicate_service.get_candidate_duplicate_groups(project_id).groups[0].group_id
+    duplicate_service.record_decision(project_id, group_id, "APPROVE")
+    duplicate_service.merge_group(project_id, group_id)
+
+    _make_service(db_path).delete_project(project_id)
+
+    assert merges.list_merges_for_project(project_id) == {}
+    assert decisions.list_decisions_for_project(project_id) == {}
+    with sqlite3.connect(db_path) as connection:
+        assert connection.execute(
+            "SELECT COUNT(*) FROM project_publications WHERE project_id = ?", (project_id,)
+        ).fetchone()[0] == 0
 
 
 # ---------------------------------------------------------------------------

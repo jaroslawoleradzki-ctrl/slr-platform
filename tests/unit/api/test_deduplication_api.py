@@ -481,5 +481,5 @@ def test_service_with_sqlite_repository_persistence(tmp_path: Path) -> None:
     assert decision_res.rationale == "Persisted rationale text"
 
     groups_res = service2.get_candidate_duplicate_groups("proj_persist")
-    assert groups_res.groups[0].status == DuplicateDecisionStatus.APPROVE
+    assert groups_res.groups[0].status.value == "APPROVED"
     assert groups_res.groups[0].rationale == "Persisted rationale text"

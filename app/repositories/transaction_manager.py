@@ -20,8 +20,17 @@ class SqliteTransactionManager:
             # Enforce ON DELETE CASCADE during atomic multi-repository operations
             # (project lifecycle cleanup relies on it for cascade-deleted tables).
             connection.execute("PRAGMA foreign_keys = ON;")
-            with connection:
+            # Acquire the SQLite write lock before any state-dependent reads.
+            # Canonical merges validate and mutate several tables and must not
+            # observe a stale decision/member set between those operations.
+            connection.execute("BEGIN IMMEDIATE")
+            try:
                 yield connection
+            except Exception:
+                connection.rollback()
+                raise
+            else:
+                connection.commit()
         finally:
             connection.close()
 
