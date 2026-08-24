@@ -84,7 +84,7 @@ class QualityAssessmentRow:
     publication_id: UUID
     reviewer_id: str
     template_id: str
-    template_version: int
+    template_version: int | None
     responses_by_criterion: dict[UUID, QualityAssessmentResponse]
     assessed_at: datetime
 
@@ -437,7 +437,7 @@ class ExportDatasetService:
         rows: list[QualityAssessmentRow] = []
         for publication, assessment in raw_assessments:
             assessment_tmpl = templates_by_id.get(assessment.template_id)
-            template_version = assessment_tmpl.version if assessment_tmpl is not None else 0
+            template_version = assessment_tmpl.version if assessment_tmpl is not None else None
             rows.append(
                 QualityAssessmentRow(
                     publication_id=publication.record_id,

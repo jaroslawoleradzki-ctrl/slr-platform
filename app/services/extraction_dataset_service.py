@@ -77,17 +77,16 @@ class ExtractionDatasetService:
         # latest-revision hydration (the latter is explicitly three SQL queries).
         publications = self._publication_repo.get_publications(project_id)
         publication_map = {publication.record_id: publication for publication in publications}
-        try:
-            revisions = self._extraction_repo.get_latest_revision_batch(
-                project_id, eligible_ids, reviewer_id=reviewer_id
-            )
-        except TypeError:
-            revisions = self._extraction_repo.get_latest_revision_batch(project_id, eligible_ids)
+        revisions = self._extraction_repo.get_latest_revision_batch(
+            project_id, eligible_ids, reviewer_id=reviewer_id
+        )
 
         models: list[PublicationExtractionReadModel] = []
         for publication_id in eligible_ids:
             revision = revisions.get(publication_id)
             if revision is None:
+                continue
+            if reviewer_id and revision.reviewer_id != reviewer_id:
                 continue
             if status_filter is not None and revision.completeness_status is not status_filter:
                 continue

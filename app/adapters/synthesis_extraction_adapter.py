@@ -43,20 +43,24 @@ class SynthesisExtractionAdapter:
         return active_ids is None or publication_id in active_ids
 
     def get_latest_complete_revision(
-        self, project_id: str, publication_id: UUID
+        self, project_id: str, publication_id: UUID, reviewer_id: str = ""
     ) -> ExtractionRevision | None:
         """Resolves the latest COMPLETE extraction revision for a publication."""
         if not self._is_active(project_id, publication_id):
             return None
-        return self._extraction_repo.get_latest_complete_revision(project_id, publication_id)
+        return self._extraction_repo.get_latest_complete_revision(
+            project_id, publication_id, reviewer_id=reviewer_id
+        )
 
     def get_latest_complete_revision_batch(
-        self, project_id: str, publication_ids: list[UUID]
+        self, project_id: str, publication_ids: list[UUID], reviewer_id: str = ""
     ) -> dict[UUID, ExtractionRevision | None]:
         """Resolves latest COMPLETE extraction revisions across multiple publications."""
         active_ids = active_publication_ids(self._publication_repo, project_id) if self._publication_repo else None
         eligible_ids = publication_ids if active_ids is None else [publication_id for publication_id in publication_ids if publication_id in active_ids]
-        return self._extraction_repo.get_latest_complete_revision_batch(project_id, eligible_ids)
+        return self._extraction_repo.get_latest_complete_revision_batch(
+            project_id, eligible_ids, reviewer_id=reviewer_id
+        )
 
     def resolve_relation_traceability(
         self,

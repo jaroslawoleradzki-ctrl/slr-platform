@@ -721,35 +721,50 @@ class TestWorkbookAssemblyIntegration:
 
         service = ExportDatasetService(publication_repository=pub_repo)
 
-        # Test Extraction read models isolation
+        # CASE B: Request reviewer_a -> returns ONLY reviewer_a data
         models_a = service.get_extraction_read_models(PROJECT_ID, reviewer_id="reviewer_a")
-        models_b = service.get_extraction_read_models(PROJECT_ID, reviewer_id="reviewer_b")
-
         assert len(models_a) == 1
         assert models_a[0].reviewer_id == "reviewer_a"
         assert models_a[0].publication_values[0].int_value == 100
 
+        # CASE C: Request reviewer_b -> returns ONLY reviewer_b data
+        models_b = service.get_extraction_read_models(PROJECT_ID, reviewer_id="reviewer_b")
         assert len(models_b) == 1
         assert models_b[0].reviewer_id == "reviewer_b"
         assert models_b[0].publication_values[0].int_value == 999
 
-        # Test Workbook Data Extraction sheet isolation
+        # CASE A: Request reviewer_c (who has NO revision data while reviewer_a and reviewer_b have data)
+        # MUST return empty list, NEVER fall back to reviewer_a or reviewer_b
+        models_c = service.get_extraction_read_models(PROJECT_ID, reviewer_id="reviewer_c")
+        assert models_c == []
+
+        # Test Workbook Data Extraction sheet isolation across all 3 cases
         payload_a = render_research_matrix_workbook(
             collect_research_matrix_inputs(service, PROJECT_ID, reviewer_id="reviewer_a")
         )
         payload_b = render_research_matrix_workbook(
             collect_research_matrix_inputs(service, PROJECT_ID, reviewer_id="reviewer_b")
         )
+        payload_c = render_research_matrix_workbook(
+            collect_research_matrix_inputs(service, PROJECT_ID, reviewer_id="reviewer_c")
+        )
 
         rows_a = sheet_values(payload_a, SHEET_DATA_EXTRACTION)
         rows_b = sheet_values(payload_b, SHEET_DATA_EXTRACTION)
+        rows_c = sheet_values(payload_c, SHEET_DATA_EXTRACTION)
 
         # Reviewer column is index 12 in Data Extraction sheet
+        assert len(rows_a) == 2
         assert rows_a[1][12] == "reviewer_a"
+        assert len(rows_b) == 2
         assert rows_b[1][12] == "reviewer_b"
+        # reviewer_c has no data -> sheet has header only (1 row), NEVER falls back to another reviewer
+        assert len(rows_c) == 1
 
     def test_p1_4_qa_template_version_consistency(self, tmp_path: Path) -> None:
         """P1-4: QA response data is paired with metadata from its EXACT template version."""
+        import sqlite3
+
         from app.domain.project import Project
         from app.domain.quality_assessment import (
             ProjectQualityAssessmentConfiguration,
@@ -774,12 +789,13 @@ class TestWorkbookAssemblyIntegration:
         pub_repo = SqliteProjectPublicationRepository(db_path)
         pub1 = make_publication(1, title="Paper 1")
         pub2 = make_publication(2, title="Paper 2")
-        pub_repo.add_publications(PROJECT_ID, [pub1, pub2])
+        pub3 = make_publication(3, title="Paper 3 (Unresolved Template)")
+        pub_repo.add_publications(PROJECT_ID, [pub1, pub2, pub3])
 
         catalog_repo = SqliteQualityAssessmentCatalogRepository(db_path)
         tool = catalog_repo.create_tool(QualityAssessmentTool(tool_id="casp_tool", name="CASP"))
 
-        # Template v1: Question A
+        # CASE A / B setup: Template v1: Question A
         t1_id = uuid4()
         crit_a_id = uuid4()
         catalog_repo.create_template_version(
@@ -831,7 +847,7 @@ class TestWorkbookAssemblyIntegration:
             )
         )
 
-        # Assessment 1 was completed against historical Template v1
+        # Assessment 1 was completed against historical Template v1 (which exists in catalog)
         qa_repo = SqliteQualityAssessmentRepository(db_path)
         aid_1 = uuid4()
         qa_repo.save_assessment(
@@ -873,24 +889,76 @@ class TestWorkbookAssemblyIntegration:
             )
         )
 
+        # Assessment 3 references a template that is subsequently unresolvable/unavailable in catalog
+        t3_id = uuid4()
+        crit_c_id = uuid4()
+        catalog_repo.create_template_version(
+            QualityAssessmentTemplate(
+                template_id=t3_id,
+                tool_id=tool.tool_id,
+                template_key="casp",
+                name="CASP Form",
+                version=3,
+                criteria=[
+                    QualityAssessmentTemplateCriterion(
+                        criterion_id=crit_c_id,
+                        template_id=t3_id,
+                        display_order=1,
+                        question="Historical Question C",
+                    )
+                ],
+            )
+        )
+        aid_3 = uuid4()
+        qa_repo.save_assessment(
+            QualityAssessment(
+                assessment_id=aid_3,
+                project_id=PROJECT_ID,
+                publication_id=pub3.record_id,
+                reviewer_id="reviewer_3",
+                template_id=t3_id,
+                responses=[
+                    QualityAssessmentResponse(
+                        assessment_id=aid_3,
+                        criterion_id=crit_c_id,
+                        question_snapshot="Historical Question C",
+                        response_value=QualityAssessmentResponseValue.CANNOT_DETERMINE,
+                        justification="Cannot determine without full text",
+                    )
+                ],
+            )
+        )
+        # Delete template v3 from catalog to simulate missing/unresolvable template metadata
+        with sqlite3.connect(str(db_path)) as conn:
+            conn.execute("DELETE FROM quality_assessment_templates WHERE template_id = ?", (str(t3_id),))
+            conn.commit()
+
         service = ExportDatasetService(publication_repository=pub_repo)
         qa_data = service.get_quality_assessment_sheet_data(PROJECT_ID)
         assert qa_data is not None
 
-        # Verify criteria contains both Question B (from v2 config) and Question A (from v1 historical)
+        # Verify criteria contains Question B (from v2 config) and Question A (from v1 historical),
+        # but does NOT fabricate criteria for unresolvable t3_id
         question_names = [c.question for c in qa_data.criteria]
         assert "Question A" in question_names
         assert "Question B" in question_names
+        assert "Historical Question C" not in question_names
 
         # Check rows
         row_map = {row.publication_id: row for row in qa_data.rows}
+        # CASE A: v1 assessment uses v1 metadata/version
         assert row_map[pub1.record_id].template_version == 1
         assert row_map[pub1.record_id].template_id == str(t1_id)
         assert row_map[pub1.record_id].responses_by_criterion[crit_a_id].response_value == QualityAssessmentResponseValue.YES
 
+        # Current template v2 assessment uses v2 metadata
         assert row_map[pub2.record_id].template_version == 2
         assert row_map[pub2.record_id].template_id == str(t2_id)
         assert row_map[pub2.record_id].responses_by_criterion[crit_b_id].response_value == QualityAssessmentResponseValue.NO
+
+        # CASE B & C: Unresolvable historical template -> template_version is None, NEVER 0 or fabricated
+        assert row_map[pub3.record_id].template_version is None
+        assert row_map[pub3.record_id].template_id == str(t3_id)
 
         # Render workbook and verify sheet values
         payload = render_research_matrix_workbook(collect_research_matrix_inputs(service, PROJECT_ID, reviewer_id=""))
@@ -902,6 +970,7 @@ class TestWorkbookAssemblyIntegration:
 
         pub1_row = next(r for r in rows[1:] if r[0] == str(pub1.record_id))
         pub2_row = next(r for r in rows[1:] if r[0] == str(pub2.record_id))
+        pub3_row = next(r for r in rows[1:] if r[0] == str(pub3.record_id))
 
         # pub1: v1 / Question A response YES / Question B is None
         assert pub1_row[3] == 1  # template_version
@@ -912,3 +981,13 @@ class TestWorkbookAssemblyIntegration:
         assert pub2_row[3] == 2  # template_version
         assert pub2_row[q_b_col] == "NO"
         assert pub2_row[q_a_col] is None
+
+        # pub3: unresolvable template -> cell 4 is None (blank), NEVER 0, no substitution of v2
+        assert pub3_row[3] is None  # template_version blank/None
+        assert pub3_row[q_a_col] is None
+        assert pub3_row[q_b_col] is None
+
+        # Explicitly verify NO cell in column 4 contains the integer 0 or string "0"
+        for r in rows[1:]:
+            assert r[3] != 0
+            assert r[3] != "0"
