@@ -237,7 +237,10 @@ def _matches_execution_constraints(
         or publication.publication_year > payload.publication_year_to
     ):
         return False
-    if payload.languages and publication.language not in payload.languages:
+    # An unknown language (None, e.g. Semantic Scholar since v0.6.3) is not a
+    # known non-match: providers that cannot enforce the language filter on the
+    # physical query must not have their records silently discarded locally.
+    if payload.languages and publication.language is not None and publication.language not in payload.languages:
         return False
     if payload.publication_types and publication.document_type not in {
         _PUBLICATION_TYPE_DOMAIN_MAP[value] for value in payload.publication_types

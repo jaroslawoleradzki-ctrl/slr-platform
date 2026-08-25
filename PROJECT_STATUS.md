@@ -14,7 +14,7 @@ development
 
 Current version:
 
-v0.6.3
+v0.6.4
 
 Current release status:
 
@@ -36,6 +36,10 @@ v0.6.2 restores Semantic Scholar relevance-search compatibility through explicit
 provider-specific plain-text query rendering with auditable lossy translation.
 v0.6.3 removes the unsupported Semantic Scholar `language` response field while
 retaining v0.6.2 query rendering; OpenAlex and Crossref are unchanged.
+v0.6.4 fixes post-query language filtering so Semantic Scholar records with an
+unknown language are no longer incorrectly discarded; unknown language is not
+treated as a mismatch, language is never inferred, and known language values
+remain strictly filterable.
 
 Current development phase:
 

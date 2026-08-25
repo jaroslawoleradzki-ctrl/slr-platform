@@ -118,22 +118,31 @@ def _publication(
     provider: str,
     source_id: str,
     year: int = 2024,
+    language: str | None = None,
 ) -> Publication:
     return Publication(
         title=title,
         authors=[Author(display_name="Ada Author")],
         publication_year=year,
+        language=language,
         provenance=[ProvenanceEntry(source=provider, source_record_id=source_id)],
     )
 
 
-def _payload(providers: list[str] | None = None) -> dict[str, object]:
-    return {
+def _payload(
+    providers: list[str] | None = None,
+    *,
+    languages: list[str] | None = None,
+) -> dict[str, object]:
+    payload: dict[str, object] = {
         "publication_year_from": 2018,
         "publication_year_to": 2026,
         "providers": providers or ["openalex", "crossref"],
         "concept_groups": [{"id": "group-1", "name": "Lean", "terms": ["Kaizen", "Lean"]}],
     }
+    if languages is not None:
+        payload["languages"] = languages
+    return payload
 
 
 @pytest.fixture(autouse=True)
@@ -218,6 +227,185 @@ def test_execution_accepts_semantic_scholar_provider() -> None:
     assert semantic_query["is_lossless"] is False
     assert any("OR operators" in warning for warning in semantic_query["warnings"])
     assert body["provider_errors"] == []
+
+
+def test_semantic_scholar_unknown_language_is_not_rejected_by_language_filter() -> None:
+    """Regression (v0.6.4): Semantic Scholar maps language=None since v0.6.3.
+
+    A record with unknown language must not be treated as a known non-match
+    when the strategy requests languages=["en"]: it stays a candidate because
+    the provider cannot enforce the filter on the physical query.
+    """
+
+    semantic_result = _publication(
+        "Semantic Scholar unknown-language result",
+        provider="semantic_scholar",
+        source_id="S-unknown-lang",
+        year=2023,
+        language=None,
+    )
+    response = _client_with_executor(
+        _Executor([_Provider("semantic_scholar", [semantic_result], total_count=1)])
+    ).post(
+        "/api/v1/projects/lean_energy/search-strategy/executions",
+        json=_payload(["semantic_scholar"], languages=["en"]),
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total_count"] == 1
+    assert body["returned_count"] == 1
+    assert [item["provider"] for item in body["results"]] == ["semantic_scholar"]
+    assert body["results"][0]["source_id"] == "S-unknown-lang"
+    assert body["provider_errors"] == []
+
+
+def test_search_execution_total_count_survives_unknown_language_filtering() -> None:
+    """Regression (v0.6.4): production observation with Semantic Scholar only.
+
+    total_count=7574 from the provider must never be zeroed out locally by the
+    language filter alone: records with unknown language remain candidates and
+    are returned to the UI.
+    """
+
+    semantic_results = [
+        _publication(
+            f"Semantic Scholar result {index}",
+            provider="semantic_scholar",
+            source_id=f"S{index}",
+            year=2022 + (index % 5),
+        )
+        for index in range(44)
+    ]
+    response = _client_with_executor(
+        _Executor(
+            [
+                _Provider(
+                    "semantic_scholar",
+                    semantic_results,
+                    total_count=7574,
+                    next_cursor="1000",
+                )
+            ]
+        )
+    ).post(
+        "/api/v1/projects/lean_energy/search-strategy/executions",
+        json={
+            "publication_year_from": 2022,
+            "publication_year_to": 2026,
+            "providers": ["semantic_scholar"],
+            "concept_groups": [{"id": "group-1", "name": "Lean", "terms": ["Lean"]}],
+            "languages": ["en"],
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total_count"] == 7574
+    assert body["returned_count"] == 44
+    assert body["has_more"] is True
+    assert body["next_cursor"] == "1000"
+    assert all(item["provider"] == "semantic_scholar" for item in body["results"])
+    assert body["provider_errors"] == []
+
+
+def test_known_language_match_remains_kept_with_language_filter() -> None:
+    openalex_result = _publication(
+        "Known English match",
+        provider="openalex",
+        source_id="W-en",
+        language="en",
+    )
+    response = _client_with_executor(
+        _Executor([_Provider("openalex", [openalex_result], total_count=1)])
+    ).post(
+        "/api/v1/projects/lean_energy/search-strategy/executions",
+        json=_payload(["openalex"], languages=["en"]),
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total_count"] == 1
+    assert body["returned_count"] == 1
+    assert body["results"][0]["source_id"] == "W-en"
+
+
+def test_known_language_non_match_is_still_rejected_by_language_filter() -> None:
+    openalex_result = _publication(
+        "Known German record",
+        provider="openalex",
+        source_id="W-de",
+        language="de",
+    )
+    response = _client_with_executor(
+        _Executor([_Provider("openalex", [openalex_result], total_count=1)])
+    ).post(
+        "/api/v1/projects/lean_energy/search-strategy/executions",
+        json=_payload(["openalex"], languages=["en"]),
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total_count"] == 1
+    assert body["returned_count"] == 0
+    assert body["results"] == []
+
+
+def test_unknown_language_without_language_filter_remains_kept() -> None:
+    semantic_result = _publication(
+        "Semantic Scholar unknown language, no filter",
+        provider="semantic_scholar",
+        source_id="S-no-filter",
+        language=None,
+    )
+    response = _client_with_executor(
+        _Executor([_Provider("semantic_scholar", [semantic_result], total_count=1)])
+    ).post(
+        "/api/v1/projects/lean_energy/search-strategy/executions",
+        json=_payload(["semantic_scholar"]),
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["returned_count"] == 1
+    assert body["results"][0]["source_id"] == "S-no-filter"
+
+
+def test_multiple_allowed_languages_keep_match_and_reject_non_match() -> None:
+    english_match = _publication(
+        "English match",
+        provider="crossref",
+        source_id="10.1000/en",
+        language="en",
+    )
+    german_match = _publication(
+        "German match",
+        provider="crossref",
+        source_id="10.1000/de",
+        language="de",
+    )
+    polish_non_match = _publication(
+        "Polish non-match",
+        provider="crossref",
+        source_id="10.1000/pl",
+        language="pl",
+    )
+    response = _client_with_executor(
+        _Executor(
+            [_Provider("crossref", [english_match, german_match, polish_non_match], total_count=3)]
+        )
+    ).post(
+        "/api/v1/projects/lean_energy/search-strategy/executions",
+        json=_payload(["crossref"], languages=["en", "de"]),
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["returned_count"] == 2
+    assert sorted(item["source_id"] for item in body["results"]) == [
+        "10.1000/de",
+        "10.1000/en",
+    ]
 
 
 def test_semantic_scholar_http_400_remains_auditable_provider_error() -> None:

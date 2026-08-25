@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.6.4] — 2026-08-25
+
+### Fixed
+
+- **Semantic Scholar Unknown Language Filtering Fix**:
+  - Semantic Scholar records with an unknown language (`language=None`, the deliberate v0.6.3 mapping) are no longer incorrectly discarded when a language filter is active.
+  - Unknown language is no longer treated as a known non-match by the post-query execution constraints: it remains a candidate because providers that cannot apply the language filter to the physical query deliver no language evidence.
+  - Language is still never inferred or fabricated from title, abstract, authors, venue, or any heuristic; missing data remains missing data.
+  - Records with known language values remain strictly filterable: known matches are kept and known non-matches are rejected.
+  - Refined the existing Semantic Scholar language-filter warning to state that the language restriction could not be enforced for records with unknown language; `is_lossless` semantics are unchanged.
+  - v0.6.2 query rendering compatibility and v0.6.3 request-field compatibility remain unchanged.
+  - OpenAlex and Crossref behavior is unchanged.
+  - No database schema change or migration is required.
+  - No AI/LLM functionality is added.
+
 ## [0.6.3] — 2026-08-25
 
 ### Fixed

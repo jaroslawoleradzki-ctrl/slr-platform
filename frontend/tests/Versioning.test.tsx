@@ -10,7 +10,7 @@ import { parseAppVersion } from '../src/utils/versionParser';
 
 describe('Application Versioning & Release Identity', () => {
   it('provides an application version constant', () => {
-    expect(APP_VERSION).toBe('0.6.3');
+    expect(APP_VERSION).toBe('0.6.4');
     expect(RELEASE_STATUS).toBe('Development Preview');
     expect(RUNTIME_MODE).toBe('Live API / Persistent Storage');
   });
