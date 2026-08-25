@@ -240,18 +240,20 @@ def test_language_is_trimmed_and_preserves_case_in_canonical_model(
     publications = [
         _map_openalex(language=language),
         _map_crossref(language=language),
-        _map_semantic_scholar(language=language),
     ]
 
     assert {publication.language for publication in publications} == {language.strip()}
+    # Semantic Scholar paper/search does not return a language field.
+    assert _map_semantic_scholar(language=language).language is None
 
 
 @pytest.mark.parametrize("language", ["x", " "])
 def test_language_uses_canonical_validation_consistently(language: str) -> None:
     if language.strip():
-        for mapper in (_map_openalex, _map_crossref, _map_semantic_scholar):
+        for mapper in (_map_openalex, _map_crossref):
             with pytest.raises(ValidationError, match="language"):
                 mapper(language=language)
+        assert _map_semantic_scholar(language=language).language is None
     else:
         assert _map_openalex(language=language).language is None
         assert _map_crossref(language=language).language is None

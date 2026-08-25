@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.6.3] — 2026-08-25
+
+### Fixed
+
+- **Semantic Scholar Field Compatibility**:
+  - Removed the unsupported `language` field from `GET /graph/v1/paper/search` requests, preventing the upstream HTTP 400 response.
+  - Retained the v0.6.2 provider-specific plain-text query rendering unchanged.
+  - Left OpenAlex and Crossref unchanged.
+  - No database migration and no AI/LLM functionality.
+
 ## [0.6.2] — 2026-08-25
 
 ### Fixed

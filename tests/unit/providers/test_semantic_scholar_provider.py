@@ -50,6 +50,7 @@ async def test_search_with_raw_single_page() -> None:
     async def handler(request: httpx.Request) -> httpx.Response:
         assert request.url.params["query"] == "lean energy"
         assert request.url.params["offset"] == "0"
+        assert "language" not in request.url.params["fields"].split(",")
         return httpx.Response(
             200,
             json={
@@ -97,6 +98,45 @@ async def test_search_with_raw_single_page() -> None:
     assert pub.identifiers[0].value == "p1"
     assert pub.identifiers[1].type == IdentifierType.DOI
     assert pub.identifiers[1].value == "10.1000/p1"
+
+
+@pytest.mark.anyio
+async def test_search_with_raw_uses_semantic_scholar_field_contract() -> None:
+    """The request contains only fields supported by paper/search."""
+
+    expected_params = {
+        "query": "lean energy",
+        "limit": "25",
+        "offset": "0",
+        "fields": (
+            "paperId,title,abstract,authors,year,publicationDate,"
+            "publicationVenue,venue,publicationTypes,externalIds,url"
+        ),
+    }
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/graph/v1/paper/search"
+        assert dict(request.url.params) == expected_params
+        return httpx.Response(
+            200,
+            json={"total": 0, "offset": 0, "next": None, "data": []},
+            request=request,
+        )
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport) as http_client:
+        provider = SemanticScholarProvider(
+            client=SemanticScholarClient(
+                http_client=http_client,
+                requests_per_second=None,
+            )
+        )
+        search_run, search_query = build_search_context()
+        await provider.search_with_raw(
+            search_run=search_run,
+            search_query=search_query,
+            per_page=25,
+        )
 
 
 @pytest.mark.anyio
