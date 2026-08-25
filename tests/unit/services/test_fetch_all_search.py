@@ -342,6 +342,8 @@ def test_semantic_scholar_api_hard_limit_is_reported_as_complete_with_limit() ->
 
 
 def test_repeated_cursor_stops_pagination_safely() -> None:
+    """A repeated cursor means no forward progress - NOT proven completeness."""
+
     provider = FakeProvider(
         "openalex",
         [
@@ -353,12 +355,27 @@ def test_repeated_cursor_stops_pagination_safely() -> None:
 
     state = status_response.providers[0]
     assert provider.cursors == ["*", "same-cursor"]
-    assert state.status == "complete"
+    assert state.status == "partial"
+    assert state.limit_reached is True
     assert state.message is not None and "cursor" in state.message
     assert state.fetched_count == 2
 
+    # Already fetched records are preserved; the job completes with
+    # partial-success information for the affected provider.
+    assert status_response.status == "completed"
+    result = status_response.result
+    assert result is not None
+    assert [record.source_id for record in result.results] == ["W1", "W2"]
+    assert result.has_more is True
+    assert any(
+        error.provider == "openalex" and "cursor" in error.message
+        for error in result.provider_errors
+    )
+
 
 def test_empty_page_with_has_more_stops_pagination_safely() -> None:
+    """An empty page while more results are claimed is NOT proven completeness."""
+
     provider = FakeProvider(
         "openalex",
         [
@@ -370,9 +387,22 @@ def test_empty_page_with_has_more_stops_pagination_safely() -> None:
 
     state = status_response.providers[0]
     assert provider.cursors == ["*", "cursor-2"]
-    assert state.status == "complete"
+    assert state.status == "partial"
+    assert state.limit_reached is True
     assert state.message is not None and "empty page" in state.message
     assert state.fetched_count == 1
+
+    # Already fetched records are preserved; the job completes with
+    # partial-success information for the affected provider.
+    assert status_response.status == "completed"
+    result = status_response.result
+    assert result is not None
+    assert [record.source_id for record in result.results] == ["W1"]
+    assert result.has_more is True
+    assert any(
+        error.provider == "openalex" and "empty page" in error.message
+        for error in result.provider_errors
+    )
 
 
 # --- partial failure ---------------------------------------------------------

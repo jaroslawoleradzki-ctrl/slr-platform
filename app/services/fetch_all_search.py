@@ -12,6 +12,13 @@ sequentially until, per provider:
 * an unrecoverable provider error occurs (client-level retries and
   Retry-After backoff are exhausted first).
 
+Only an explicit provider end (no next cursor) proves completeness and maps
+to status ``complete``. Progress-stopping anomalies - repeated cursor or an
+empty page while more results were claimed - are reported as ``partial``
+because they do not prove all available results were retrieved; the same
+applies to safety-limit stops (``partial``) and errors after data
+(``partial``, before data ``failed``).
+
 The loop relies exclusively on the uniform ``SearchProvider.search_with_raw``
 contract returning ``ProviderSearchOutput`` (``next_cursor`` / ``has_more`` /
 ``total_count`` / warnings), so OpenAlex (opaque cursor), Crossref (opaque
@@ -414,12 +421,24 @@ class FetchAllSearchService:
                     )
                 break
             if not output.publications:
-                state.status = "complete"
-                state.message = "Provider returned an empty page while claiming more results; stopped safely."
+                # An empty page does not prove every available record was
+                # retrieved - it only proves pagination cannot safely continue.
+                state.status = "partial"
+                state.limit_reached = True
+                state.message = (
+                    "Provider returned an empty page while claiming more "
+                    "results; pagination could not safely continue."
+                )
                 break
             if next_cursor == cursor or next_cursor in seen_cursors:
-                state.status = "complete"
-                state.message = "Provider repeated its pagination cursor; stopped safely."
+                # A repeated cursor means no forward progress is possible;
+                # completeness of retrieval is NOT proven.
+                state.status = "partial"
+                state.limit_reached = True
+                state.message = (
+                    "Provider repeated its pagination cursor; pagination "
+                    "could not safely continue."
+                )
                 break
             seen_cursors.add(cursor)
             cursor = next_cursor
