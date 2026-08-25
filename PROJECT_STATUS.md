@@ -14,7 +14,7 @@ development
 
 Current version:
 
-v0.6.2
+v0.6.3
 
 Current release status:
 
@@ -34,6 +34,8 @@ v0.5.8 cleans up deprecated FastAPI/Starlette HTTP 422 status constants.
 v0.6.1 completes Stage 9 research exports and PRISMA 2020 reporting.
 v0.6.2 restores Semantic Scholar relevance-search compatibility through explicit
 provider-specific plain-text query rendering with auditable lossy translation.
+v0.6.3 removes the unsupported Semantic Scholar `language` response field while
+retaining v0.6.2 query rendering; OpenAlex and Crossref are unchanged.
 
 Current development phase:
 

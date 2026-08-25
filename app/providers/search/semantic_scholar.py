@@ -50,7 +50,6 @@ _FIELDS = [
     "publicationTypes",
     "externalIds",
     "url",
-    "language",
 ]
 
 _TRUNCATION_WARNING = (
@@ -483,7 +482,9 @@ class SemanticScholarProvider:
             identifiers=identifiers,
             venue=venue_obj,
             document_type=doc_type,
-            language=clean_string(paper.get("language")),
+            # The paper/search endpoint does not support requesting `language`.
+            # Do not infer it from other metadata when Semantic Scholar omits it.
+            language=None,
             urls=urls,
             provenance=provenance,
         )

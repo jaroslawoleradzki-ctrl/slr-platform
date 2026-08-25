@@ -127,6 +127,7 @@ def test_map_paper_minimal_record() -> None:
     assert pub.publication_date is None
     assert pub.venue is None
     assert pub.document_type is None
+    assert pub.language is None
     assert len(pub.identifiers) == 1
     assert pub.identifiers[0].value == "abc-123"
     assert pub.urls == []
