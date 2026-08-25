@@ -69,7 +69,9 @@ class SemanticScholarSearchFilters:
     The Semantic Scholar relevance search endpoint is not wired to apply any of
     these constraints in this version, so each active filter produces an explicit
     warning (no silent loss) and the physical query remains the canonical Boolean
-    expression. Result constraints are still enforced client-side by the router.
+    expression. Known-language result constraints are still enforced client-side
+    by the router; records with an unknown language remain candidates because the
+    provider cannot enforce the restriction on the physical query.
     """
 
     publication_year_from: int | None = None
@@ -91,7 +93,8 @@ class SemanticScholarSearchFilters:
         if self.languages:
             warnings.append(
                 f"Semantic Scholar relevance search does not support language filtering; "
-                f"language filter {list(self.languages)} was not applied to the physical query."
+                f"language filter {list(self.languages)} was not applied to the physical query, "
+                f"so the language restriction could not be enforced for records with unknown language."
             )
         if self.publication_types:
             warnings.append(
