@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.6.2] — 2026-08-25
+
+### Fixed
+
+- **Semantic Scholar Query Compatibility**:
+  - Added explicit provider-specific rendering for the Graph API relevance search endpoint (`GET /graph/v1/paper/search`).
+  - Translated canonical query trees to accepted plain-text search terms instead of sending unsupported Boolean operators, grouping, phrase syntax, or escaped quotes that caused HTTP 400 responses.
+  - Preserved auditability through the existing `rendered_query`, `is_lossless`, and `warnings` metadata whenever exact phrases, Boolean operators, field scopes, or special characters require best-effort translation.
+  - Kept OpenAlex and Crossref query rendering unchanged.
+  - Added no database migration and no AI/LLM functionality.
+
 ## [0.6.0] — 2026-08-24
 
 ### Added

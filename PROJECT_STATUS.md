@@ -1,6 +1,6 @@
 # SLR Platform — Project Status
 
-_Last updated: 2026-08-24_
+_Last updated: 2026-08-25_
 
 ## Current status
 
@@ -14,7 +14,7 @@ development
 
 Current version:
 
-v0.5.8
+v0.6.2
 
 Current release status:
 
@@ -31,6 +31,9 @@ v0.5.7 implements canonical duplicate merge (separating reviewer decisions from
 technical merge lifecycle, sqlite-based atomic merges, supersession tracking,
 downstream active-only filtering, and integrity audit support).
 v0.5.8 cleans up deprecated FastAPI/Starlette HTTP 422 status constants.
+v0.6.1 completes Stage 9 research exports and PRISMA 2020 reporting.
+v0.6.2 restores Semantic Scholar relevance-search compatibility through explicit
+provider-specific plain-text query rendering with auditable lossy translation.
 
 Current development phase:
 

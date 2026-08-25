@@ -54,9 +54,22 @@ async def test_search_engine_provider_specific_rendered_queries() -> None:
         )
     )
 
+    semantic_scholar_provider = AsyncMock()
+    semantic_scholar_provider.name = "semantic_scholar"
+    semantic_scholar_provider.search_with_raw = AsyncMock(
+        return_value=ProviderSearchOutput(
+            publications=[
+                Publication(title="Semantic Scholar Paper 1", publication_year=2024)
+            ],
+            raw_responses=[{"paperId": "S2-1"}],
+            total_count=1,
+            has_more=False,
+        )
+    )
+
     archive = _InMemoryRawResponseArchive()
     engine = SearchEngine(
-        providers=[openalex_provider, crossref_provider],
+        providers=[openalex_provider, crossref_provider, semantic_scholar_provider],
         raw_response_archive=archive,
     )
 
@@ -80,13 +93,32 @@ async def test_search_engine_provider_specific_rendered_queries() -> None:
         == '"lean management" "lean manufacturing" sustainability'
     )
 
+    semantic_scholar_call_kwargs = (
+        semantic_scholar_provider.search_with_raw.call_args.kwargs
+    )
+    semantic_scholar_search_run = semantic_scholar_call_kwargs["search_run"]
+    assert semantic_scholar_search_run.provider == "semantic_scholar"
+    assert (
+        semantic_scholar_search_run.rendered_query
+        == "lean management lean manufacturing sustainability"
+    )
+    assert semantic_scholar_search_run.is_lossless is False
+    assert any(
+        "OR operators" in warning
+        for warning in semantic_scholar_search_run.warnings
+    )
+
     # Verify that the two search runs have different rendered_query strings for the same SearchQuery!
     assert openalex_search_run.rendered_query != crossref_search_run.rendered_query
 
     # Verify provider results in SearchExecution
-    assert len(execution.provider_results) == 2
+    assert len(execution.provider_results) == 3
     assert execution.provider_results[0].search_run.rendered_query == openalex_search_run.rendered_query
     assert execution.provider_results[1].search_run.rendered_query == crossref_search_run.rendered_query
+    assert (
+        execution.provider_results[2].search_run.rendered_query
+        == semantic_scholar_search_run.rendered_query
+    )
 
 
 @pytest.mark.anyio
