@@ -32,7 +32,6 @@ from __future__ import annotations
 import io
 import sqlite3
 import xml.etree.ElementTree as ET
-from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
 
@@ -46,35 +45,25 @@ from app.api.routers.extraction import _get_dataset_service
 from app.domain.author import Author
 from app.domain.extraction import (
     ExtractedValueState,
-    ExtractionCompletenessStatus,
     ExtractionFieldDefinition,
-    ExtractionRecord,
-    ExtractionRevision,
     ExtractionTemplate,
     ExtractionTemplateVersion,
     FieldDataType,
-    ProjectExtractionConfiguration,
     ValueOrigin,
     ValueStatus,
 )
 from app.domain.identifiers import Identifier, IdentifierType
-from app.domain.project import Project
 from app.domain.publication import DocumentType, Publication
 from app.domain.quality_assessment import (
-    ProjectQualityAssessmentConfiguration,
-    QualityAssessment,
-    QualityAssessmentResponse,
     QualityAssessmentResponseValue,
     QualityAssessmentTemplate,
     QualityAssessmentTemplateCriterion,
     QualityAssessmentTool,
 )
 from app.domain.screening import (
-    CriterionAssessment,
     CriterionAssessmentValue,
     ScreeningCriterionStage,
     ScreeningCriterionType,
-    ScreeningDecision,
     ScreeningOutcome,
     ScreeningStage,
 )
@@ -132,15 +121,19 @@ def workflow_setup(tmp_path: Path):
     extraction_template_repo = SqliteExtractionTemplateRepository(db_path)
     extraction_repo = SqliteExtractionRepository(db_path)
 
-    # 2. Project creation
-    project_id = "proj_e2e_full"
-    project = Project(
-        project_id=project_id,
-        title="Comprehensive E2E Lean Energy Study",
-        description="End-to-end integration test across all 7 research export formats",
-        protocol_version="0.6.0",
+    # 2. Project creation via production API / router boundary
+    from app.api.dto.project import ProjectCreateRequest
+    from app.api.routers.projects import create_project
+
+    project_resp = create_project(
+        ProjectCreateRequest(
+            title="Comprehensive E2E Lean Energy Study",
+            description="End-to-end integration test across all 7 research export formats",
+            protocol_version="0.6.0",
+        ),
+        repo=project_repo,
     )
-    project_repo.create(project)
+    project_id = project_resp.project_id
 
     # 3. Seed publications with deterministic fixed UUIDs
     # Chosen explicitly so that pub2_id < pub1_id, ensuring production merge
@@ -241,110 +234,161 @@ def workflow_setup(tmp_path: Path):
     assert canonical_pub_id == pub2_id, "Production merge should select min(UUID) which is pub2_id"
     assert canonical_pub_id != pub1_id
 
-    # 5. Screening Decisions:
-    # Reviewer A: INCLUDE canonical_pub_id and pub3 (both TA and FT)
-    # Reviewer B: INCLUDE canonical_pub_id, EXCLUDE pub3 (at TA)
-    cid_ta = uuid4()
-    crit_ta = CriterionAssessment(
-        criterion_id=cid_ta,
-        criterion_name="Topic Relevance",
+    # 5. Screening Setup (Criteria Reference Data & Decisions via production ScreeningDecisionService)
+    from app.domain.screening import (
+        ScreeningCriterion,
+    )
+    from app.repositories.screening_criterion_repository import (
+        SqliteScreeningCriterionRepository,
+    )
+    from app.services.screening_decision_service import (
+        CriterionAssessmentInput,
+        ScreeningDecisionService,
+    )
+
+    screening_criterion_repo = SqliteScreeningCriterionRepository(db_path)
+    crit_ta = ScreeningCriterion(
+        project_id=project_id,
+        name="Topic Relevance",
+        description="Topic Relevance criterion",
         criterion_type=ScreeningCriterionType.INCLUSION,
-        criterion_stage=ScreeningCriterionStage.TITLE_ABSTRACT,
-        criterion_is_required=True,
-        assessment_value=CriterionAssessmentValue.MET,
+        screening_stage=ScreeningCriterionStage.TITLE_ABSTRACT,
+        display_order=1,
+        is_active=True,
+        is_required=True,
     )
-    cid_ft = uuid4()
-    crit_ft = CriterionAssessment(
-        criterion_id=cid_ft,
-        criterion_name="Full Text Quality",
+    screening_criterion_repo.create(crit_ta)
+
+    crit_ft = ScreeningCriterion(
+        project_id=project_id,
+        name="Full Text Quality",
+        description="Full Text Quality criterion",
         criterion_type=ScreeningCriterionType.INCLUSION,
-        criterion_stage=ScreeningCriterionStage.FULL_TEXT,
-        criterion_is_required=True,
-        assessment_value=CriterionAssessmentValue.MET,
+        screening_stage=ScreeningCriterionStage.FULL_TEXT,
+        display_order=2,
+        is_active=True,
+        is_required=True,
+    )
+    screening_criterion_repo.create(crit_ft)
+
+    screening_service = ScreeningDecisionService(
+        decision_repository=screening_repo,
+        criterion_repository=screening_criterion_repo,
+        publication_repository=pub_repo,
     )
 
-    # Reviewer A decisions
-    screening_repo.save(
-        ScreeningDecision(
-            project_id=project_id,
-            publication_id=canonical_pub_id,
-            stage=ScreeningStage.TITLE_ABSTRACT,
-            outcome=ScreeningOutcome.INCLUDE,
-            reviewer_id="reviewer_a",
-            criterion_assessments=[crit_ta],
-        )
+    # Reviewer A decisions (INCLUDE canonical_pub_id and pub3 at TA and FT)
+    screening_service.record_decision(
+        project_id=project_id,
+        publication_id=canonical_pub_id,
+        stage=ScreeningStage.TITLE_ABSTRACT,
+        outcome=ScreeningOutcome.INCLUDE,
+        reviewer_id="reviewer_a",
+        assessment_inputs=[
+            CriterionAssessmentInput(
+                criterion_id=crit_ta.criterion_id,
+                assessment_value=CriterionAssessmentValue.MET,
+            )
+        ],
     )
-    screening_repo.save(
-        ScreeningDecision(
-            project_id=project_id,
-            publication_id=pub3_id,
-            stage=ScreeningStage.TITLE_ABSTRACT,
-            outcome=ScreeningOutcome.INCLUDE,
-            reviewer_id="reviewer_a",
-            criterion_assessments=[crit_ta],
-        )
+    screening_service.record_decision(
+        project_id=project_id,
+        publication_id=pub3_id,
+        stage=ScreeningStage.TITLE_ABSTRACT,
+        outcome=ScreeningOutcome.INCLUDE,
+        reviewer_id="reviewer_a",
+        assessment_inputs=[
+            CriterionAssessmentInput(
+                criterion_id=crit_ta.criterion_id,
+                assessment_value=CriterionAssessmentValue.MET,
+            )
+        ],
     )
-    screening_repo.save(
-        ScreeningDecision(
-            project_id=project_id,
-            publication_id=canonical_pub_id,
-            stage=ScreeningStage.FULL_TEXT,
-            outcome=ScreeningOutcome.INCLUDE,
-            reviewer_id="reviewer_a",
-            criterion_assessments=[crit_ft],
-        )
+    screening_service.record_decision(
+        project_id=project_id,
+        publication_id=canonical_pub_id,
+        stage=ScreeningStage.FULL_TEXT,
+        outcome=ScreeningOutcome.INCLUDE,
+        reviewer_id="reviewer_a",
+        assessment_inputs=[
+            CriterionAssessmentInput(
+                criterion_id=crit_ft.criterion_id,
+                assessment_value=CriterionAssessmentValue.MET,
+            )
+        ],
     )
-    screening_repo.save(
-        ScreeningDecision(
-            project_id=project_id,
-            publication_id=pub3_id,
-            stage=ScreeningStage.FULL_TEXT,
-            outcome=ScreeningOutcome.INCLUDE,
-            reviewer_id="reviewer_a",
-            criterion_assessments=[crit_ft],
-        )
-    )
-
-    # Reviewer B decisions (canonical_pub_id included, pub3 excluded)
-    screening_repo.save(
-        ScreeningDecision(
-            project_id=project_id,
-            publication_id=canonical_pub_id,
-            stage=ScreeningStage.TITLE_ABSTRACT,
-            outcome=ScreeningOutcome.INCLUDE,
-            reviewer_id="reviewer_b",
-            criterion_assessments=[crit_ta],
-        )
-    )
-    screening_repo.save(
-        ScreeningDecision(
-            project_id=project_id,
-            publication_id=pub3_id,
-            stage=ScreeningStage.TITLE_ABSTRACT,
-            outcome=ScreeningOutcome.EXCLUDE,
-            reviewer_id="reviewer_b",
-            rationale="Out of scope",
-            criterion_assessments=[],
-        )
-    )
-    screening_repo.save(
-        ScreeningDecision(
-            project_id=project_id,
-            publication_id=canonical_pub_id,
-            stage=ScreeningStage.FULL_TEXT,
-            outcome=ScreeningOutcome.INCLUDE,
-            reviewer_id="reviewer_b",
-            criterion_assessments=[crit_ft],
-        )
+    screening_service.record_decision(
+        project_id=project_id,
+        publication_id=pub3_id,
+        stage=ScreeningStage.FULL_TEXT,
+        outcome=ScreeningOutcome.INCLUDE,
+        reviewer_id="reviewer_a",
+        assessment_inputs=[
+            CriterionAssessmentInput(
+                criterion_id=crit_ft.criterion_id,
+                assessment_value=CriterionAssessmentValue.MET,
+            )
+        ],
     )
 
-    # 6. Quality Assessment Configuration & Execution
+    # Reviewer B decisions (canonical_pub_id included, pub3 excluded at TA)
+    screening_service.record_decision(
+        project_id=project_id,
+        publication_id=canonical_pub_id,
+        stage=ScreeningStage.TITLE_ABSTRACT,
+        outcome=ScreeningOutcome.INCLUDE,
+        reviewer_id="reviewer_b",
+        assessment_inputs=[
+            CriterionAssessmentInput(
+                criterion_id=crit_ta.criterion_id,
+                assessment_value=CriterionAssessmentValue.MET,
+            )
+        ],
+    )
+    screening_service.record_decision(
+        project_id=project_id,
+        publication_id=pub3_id,
+        stage=ScreeningStage.TITLE_ABSTRACT,
+        outcome=ScreeningOutcome.EXCLUDE,
+        reviewer_id="reviewer_b",
+        rationale="Out of scope",
+        assessment_inputs=[
+            CriterionAssessmentInput(
+                criterion_id=crit_ta.criterion_id,
+                assessment_value=CriterionAssessmentValue.NOT_MET,
+            )
+        ],
+    )
+    screening_service.record_decision(
+        project_id=project_id,
+        publication_id=canonical_pub_id,
+        stage=ScreeningStage.FULL_TEXT,
+        outcome=ScreeningOutcome.INCLUDE,
+        reviewer_id="reviewer_b",
+        assessment_inputs=[
+            CriterionAssessmentInput(
+                criterion_id=crit_ft.criterion_id,
+                assessment_value=CriterionAssessmentValue.MET,
+            )
+        ],
+    )
+
+    # 6. Quality Assessment Configuration & Execution via production services
+    from app.services.quality_assessment_configuration_service import (
+        DefaultQualityAssessmentConfigurationService,
+    )
+    from app.services.quality_assessment_execution_service import (
+        CriterionResponseInput,
+        DefaultQualityAssessmentExecutionService,
+    )
+
     tool_id = "casp_tool"
     qa_catalog_repo.create_tool(
         QualityAssessmentTool(
             tool_id=tool_id,
             name="CASP Quality Assessment",
             description="CASP tool for SLR quality appraisal",
+            is_active=True,
         )
     )
     t_version_id = uuid4()
@@ -357,6 +401,7 @@ def workflow_setup(tmp_path: Path):
             version=1,
             name="CASP v1",
             description="Version 1",
+            is_active=True,
             criteria=[
                 QualityAssessmentTemplateCriterion(
                     criterion_id=crit_qa_id,
@@ -369,74 +414,77 @@ def workflow_setup(tmp_path: Path):
             ],
         )
     )
-    qa_config_repo.save_configuration(
-        ProjectQualityAssessmentConfiguration(
-            project_id=project_id,
-            tool_id=tool_id,
-            template_id=t_version_id,
-        )
+
+    qa_config_service = DefaultQualityAssessmentConfigurationService(
+        catalog_repo=qa_catalog_repo,
+        config_repo=qa_config_repo,
+        project_repo=project_repo,
+    )
+    qa_config_service.configure_project(
+        project_id=project_id,
+        tool_id=tool_id,
+        template_id=t_version_id,
+    )
+
+    qa_exec_service = DefaultQualityAssessmentExecutionService(
+        project_repo=project_repo,
+        publication_repo=pub_repo,
+        screening_decision_repo=screening_repo,
+        catalog_repo=qa_catalog_repo,
+        config_repo=qa_config_repo,
+        quality_assessment_repo=qa_repo,
     )
 
     # Reviewer A QA assessments
-    aid_a1 = uuid4()
-    qa_repo.save_assessment(
-        QualityAssessment(
-            assessment_id=aid_a1,
-            project_id=project_id,
-            publication_id=canonical_pub_id,
-            reviewer_id="reviewer_a",
-            template_id=t_version_id,
-            responses=[
-                QualityAssessmentResponse(
-                    assessment_id=aid_a1,
-                    criterion_id=crit_qa_id,
-                    question_snapshot="Did study address a clearly focused issue?",
-                    response_value=QualityAssessmentResponseValue.YES,
-                )
-            ],
-        )
+    qa_exec_service.save_assessment(
+        project_id=project_id,
+        publication_id=canonical_pub_id,
+        reviewer_id="reviewer_a",
+        response_inputs=[
+            CriterionResponseInput(
+                criterion_id=crit_qa_id,
+                response_value=QualityAssessmentResponseValue.YES,
+            )
+        ],
     )
-    aid_a2 = uuid4()
-    qa_repo.save_assessment(
-        QualityAssessment(
-            assessment_id=aid_a2,
-            project_id=project_id,
-            publication_id=pub3_id,
-            reviewer_id="reviewer_a",
-            template_id=t_version_id,
-            responses=[
-                QualityAssessmentResponse(
-                    assessment_id=aid_a2,
-                    criterion_id=crit_qa_id,
-                    question_snapshot="Did study address a clearly focused issue?",
-                    response_value=QualityAssessmentResponseValue.YES,
-                )
-            ],
-        )
+    qa_exec_service.save_assessment(
+        project_id=project_id,
+        publication_id=pub3_id,
+        reviewer_id="reviewer_a",
+        response_inputs=[
+            CriterionResponseInput(
+                criterion_id=crit_qa_id,
+                response_value=QualityAssessmentResponseValue.YES,
+            )
+        ],
     )
 
     # Reviewer B QA assessment (canonical_pub_id only)
-    aid_b1 = uuid4()
-    qa_repo.save_assessment(
-        QualityAssessment(
-            assessment_id=aid_b1,
-            project_id=project_id,
-            publication_id=canonical_pub_id,
-            reviewer_id="reviewer_b",
-            template_id=t_version_id,
-            responses=[
-                QualityAssessmentResponse(
-                    assessment_id=aid_b1,
-                    criterion_id=crit_qa_id,
-                    question_snapshot="Did study address a clearly focused issue?",
-                    response_value=QualityAssessmentResponseValue.NO,
-                    justification="Study methodology lacked focus.",
-                )
-            ],
-        )
+    qa_exec_service.save_assessment(
+        project_id=project_id,
+        publication_id=canonical_pub_id,
+        reviewer_id="reviewer_b",
+        response_inputs=[
+            CriterionResponseInput(
+                criterion_id=crit_qa_id,
+                response_value=QualityAssessmentResponseValue.NO,
+                justification="Study methodology lacked focus.",
+            )
+        ],
     )
 
-    # 7. Data Extraction Template Configuration & Revisions
+    # 7. Data Extraction Template Configuration & Execution via production services
+    from app.services.extraction_configuration_service import (
+        ExtractionConfigurationService,
+    )
+    from app.services.extraction_eligibility_service import (
+        ExtractionEligibilityService,
+        RepositoryQualityAssessmentCompletionReader,
+    )
+    from app.services.extraction_execution_service import (
+        ExtractionExecutionService,
+    )
+
     ext_template_id = "lean_extraction_tmpl"
     ext_version = "1.0.0"
     extraction_template_repo.register_template(
@@ -447,6 +495,8 @@ def workflow_setup(tmp_path: Path):
             template_id=ext_template_id,
             version=ext_version,
             name="Lean Energy Extraction Template",
+            is_active=True,
+            is_published=True,
             publication_fields=[
                 ExtractionFieldDefinition(
                     field_key="=HYPERLINK(\"http://evil.com\",\"lean_tool\")",
@@ -464,123 +514,119 @@ def workflow_setup(tmp_path: Path):
             repeating_groups=[],
         )
     )
-    extraction_repo.set_project_configuration(
-        ProjectExtractionConfiguration(
-            project_id=project_id,
-            template_id=ext_template_id,
-            template_version=ext_version,
-        )
-    )
 
-    rec_canonical = ExtractionRecord(
-        record_id=uuid4(),
+    extraction_config_service = ExtractionConfigurationService(
+        extraction_repo=extraction_repo,
+        template_repo=extraction_template_repo,
+        project_repo=project_repo,
+    )
+    extraction_config_service.set_configuration(
         project_id=project_id,
-        publication_id=canonical_pub_id,
         template_id=ext_template_id,
         template_version=ext_version,
-        current_status=ExtractionCompletenessStatus.COMPLETE,
     )
-    extraction_repo.create_record(rec_canonical)
 
-    rec_3 = ExtractionRecord(
-        record_id=uuid4(),
-        project_id=project_id,
-        publication_id=pub3_id,
-        template_id=ext_template_id,
-        template_version=ext_version,
-        current_status=ExtractionCompletenessStatus.COMPLETE,
+    from app.services.multi_reviewer_screening_service import (
+        MultiReviewerScreeningService,
     )
-    extraction_repo.create_record(rec_3)
+    from app.services.screening_input_service import (
+        ScreeningInputService,
+    )
+
+    screening_input_service = ScreeningInputService(
+        publication_repository=pub_repo,
+        decision_repository=decision_repo,
+        merge_repository=merge_repo,
+    )
+    multi_reviewer_service = MultiReviewerScreeningService(
+        input_service=screening_input_service,
+    )
+
+    extraction_eligibility_service = ExtractionEligibilityService(
+        config_service=extraction_config_service,
+        input_service=screening_input_service,
+        multi_reviewer_service=multi_reviewer_service,
+        decisions_repo=screening_repo,
+        qa_completion_reader=RepositoryQualityAssessmentCompletionReader(
+            config_repo=qa_config_repo,
+            assessment_repo=qa_repo,
+        ),
+    )
+    extraction_exec_service = ExtractionExecutionService(
+        config_service=extraction_config_service,
+        eligibility_service=extraction_eligibility_service,
+        template_repo=extraction_template_repo,
+        extraction_repo=extraction_repo,
+    )
 
     # Reviewer A extraction submissions
-    extraction_repo.append_revision(
-        ExtractionRevision(
-            revision_id=uuid4(),
-            record_id=rec_canonical.record_id,
-            project_id=project_id,
-            publication_id=canonical_pub_id,
-            reviewer_id="reviewer_a",
-            revision_index=1,
-            completeness_status=ExtractionCompletenessStatus.COMPLETE,
-            created_at=datetime.now(timezone.utc),
-            publication_values=[
-                ExtractedValueState(
-                    field_key="=HYPERLINK(\"http://evil.com\",\"lean_tool\")",
-                    status=ValueStatus.PRESENT,
-                    origin=ValueOrigin.REVIEWER_CODED,
-                    reviewer_note="Reviewer note",
-                    text_value="5S and VSM",
-                ),
-                ExtractedValueState(
-                    field_key="energy_savings_pct",
-                    status=ValueStatus.PRESENT,
-                    origin=ValueOrigin.REVIEWER_CODED,
-                    reviewer_note="Reviewer note",
-                    text_value="14.5%",
-                ),
-            ],
-            group_items=[],
-        )
+    extraction_exec_service.submit_revision(
+        project_id=project_id,
+        publication_id=canonical_pub_id,
+        reviewer_id="reviewer_a",
+        publication_values=[
+            ExtractedValueState(
+                field_key="=HYPERLINK(\"http://evil.com\",\"lean_tool\")",
+                status=ValueStatus.PRESENT,
+                origin=ValueOrigin.REVIEWER_CODED,
+                reviewer_note="Reviewer note",
+                text_value="5S and VSM",
+            ),
+            ExtractedValueState(
+                field_key="energy_savings_pct",
+                status=ValueStatus.PRESENT,
+                origin=ValueOrigin.REVIEWER_CODED,
+                reviewer_note="Reviewer note",
+                text_value="14.5%",
+            ),
+        ],
+        mark_complete=True,
     )
-    extraction_repo.append_revision(
-        ExtractionRevision(
-            revision_id=uuid4(),
-            record_id=rec_3.record_id,
-            project_id=project_id,
-            publication_id=pub3_id,
-            reviewer_id="reviewer_a",
-            revision_index=1,
-            completeness_status=ExtractionCompletenessStatus.COMPLETE,
-            created_at=datetime.now(timezone.utc),
-            publication_values=[
-                ExtractedValueState(
-                    field_key="=HYPERLINK(\"http://evil.com\",\"lean_tool\")",
-                    status=ValueStatus.PRESENT,
-                    origin=ValueOrigin.REVIEWER_CODED,
-                    reviewer_note="Reviewer note",
-                    text_value="Kaizen and TPM",
-                ),
-                ExtractedValueState(
-                    field_key="energy_savings_pct",
-                    status=ValueStatus.PRESENT,
-                    origin=ValueOrigin.REVIEWER_CODED,
-                    reviewer_note="Reviewer note",
-                    text_value="8.2%",
-                ),
-            ],
-            group_items=[],
-        )
+    extraction_exec_service.submit_revision(
+        project_id=project_id,
+        publication_id=pub3_id,
+        reviewer_id="reviewer_a",
+        publication_values=[
+            ExtractedValueState(
+                field_key="=HYPERLINK(\"http://evil.com\",\"lean_tool\")",
+                status=ValueStatus.PRESENT,
+                origin=ValueOrigin.REVIEWER_CODED,
+                reviewer_note="Reviewer note",
+                text_value="Kaizen and TPM",
+            ),
+            ExtractedValueState(
+                field_key="energy_savings_pct",
+                status=ValueStatus.PRESENT,
+                origin=ValueOrigin.REVIEWER_CODED,
+                reviewer_note="Reviewer note",
+                text_value="8.2%",
+            ),
+        ],
+        mark_complete=True,
     )
 
-    # Reviewer B extraction submission (canonical_pub_id only, revision_index=2 on rec_canonical)
-    extraction_repo.append_revision(
-        ExtractionRevision(
-            revision_id=uuid4(),
-            record_id=rec_canonical.record_id,
-            project_id=project_id,
-            publication_id=canonical_pub_id,
-            reviewer_id="reviewer_b",
-            revision_index=2,
-            completeness_status=ExtractionCompletenessStatus.COMPLETE,
-            created_at=datetime.now(timezone.utc),
-            publication_values=[
-                ExtractedValueState(
-                    field_key="=HYPERLINK(\"http://evil.com\",\"lean_tool\")",
-                    status=ValueStatus.PRESENT,
-                    origin=ValueOrigin.REVIEWER_CODED,
-                    reviewer_note="Reviewer note",
-                    text_value="Kanban",
-                ),
-                ExtractedValueState(
-                    field_key="energy_savings_pct",
-                    status=ValueStatus.PRESENT,
-                    origin=ValueOrigin.REVIEWER_CODED,
-                    reviewer_note="Reviewer note",
-                    text_value="5.0%",
-                ),
-            ],
-            group_items=[],
-        )
+    # Reviewer B extraction submission (canonical_pub_id only)
+    extraction_exec_service.submit_revision(
+        project_id=project_id,
+        publication_id=canonical_pub_id,
+        reviewer_id="reviewer_b",
+        publication_values=[
+            ExtractedValueState(
+                field_key="=HYPERLINK(\"http://evil.com\",\"lean_tool\")",
+                status=ValueStatus.PRESENT,
+                origin=ValueOrigin.REVIEWER_CODED,
+                reviewer_note="Reviewer note",
+                text_value="Kanban",
+            ),
+            ExtractedValueState(
+                field_key="energy_savings_pct",
+                status=ValueStatus.PRESENT,
+                origin=ValueOrigin.REVIEWER_CODED,
+                reviewer_note="Reviewer note",
+                text_value="5.0%",
+            ),
+        ],
+        mark_complete=True,
     )
 
     # 8. Wire Services and Dependency Overrides
@@ -740,9 +786,19 @@ class TestExportsEndToEnd:
 
     def test_empty_project_returns_valid_empty_artifacts(self, workflow_setup):
         """Ensure empty project produces clean valid artifacts, never 500."""
+        from app.api.dto.project import ProjectCreateRequest
+        from app.api.routers.projects import create_project
+
         test_client, _, _, _, project_repo = workflow_setup
-        empty_id = "proj_empty_002"
-        project_repo.create(Project(project_id=empty_id, title="Empty Project", protocol_version="0.6.0"))
+        empty_resp = create_project(
+            ProjectCreateRequest(
+                title="Empty Project",
+                description="Empty project test",
+                protocol_version="0.6.0",
+            ),
+            repo=project_repo,
+        )
+        empty_id = empty_resp.project_id
 
         # BibTeX -> 200 with D8 comment
         res = test_client.get(f"/api/v1/projects/{empty_id}/exports/bibtex")
@@ -777,8 +833,7 @@ class TestExportsEndToEnd:
 
     def test_frontend_to_backend_stage_9_contract_alignment(self, workflow_setup):
         """Contract-check that the exact HTTP requests constructed by the frontend API map to live backend routes."""
-        test_client, _, _, _, _ = workflow_setup
-        project_id = "proj_e2e_full"
+        test_client, project_id, _, _, _ = workflow_setup
         reviewer_id = "reviewer_a"
 
         # 1. exportApi.exportBibtex -> GET /api/v1/projects/{projectId}/exports/bibtex
