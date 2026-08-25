@@ -186,6 +186,49 @@ class SearchProviderErrorResponse(BaseModel):
     message: str
 
 
+class FetchAllStartResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    job_id: str
+    project_id: str
+    status: Literal["running"] = "running"
+
+
+class FetchAllProviderProgressResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    provider: str
+    status: Literal["pending", "running", "complete", "partial", "cancelled", "failed"]
+    fetched_count: int = Field(default=0, ge=0)
+    kept_count: int = Field(default=0, ge=0)
+    pages_fetched: int = Field(default=0, ge=0)
+    total_reported: int | None = Field(default=None, ge=0)
+    limit_reached: bool = False
+    message: str | None = None
+
+
+class FetchAllStatusResponse(BaseModel):
+    """Live or final status of one fetch-all job.
+
+    ``result`` is populated only once the job reaches a terminal state; while
+    running, clients poll the cheap in-memory counters instead of the slow
+    extraction progress endpoint.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    job_id: str
+    project_id: str
+    status: Literal["running", "completed", "cancelled", "failed"]
+    started_at: datetime
+    finished_at: datetime | None = None
+    providers: list[FetchAllProviderProgressResponse] = Field(default_factory=list)
+    fetched_total: int = Field(default=0, ge=0)
+    kept_total: int = Field(default=0, ge=0)
+    message: str | None = None
+    result: SearchStrategyExecutionResponse | None = None
+
+
 class SearchResultsImportRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { SearchResultsSection } from '../src/components/search/SearchResultsSection';
-import { SearchExecutionResult } from '../src/types';
+import { FetchAllStatusResult, SearchExecutionResult } from '../src/types';
 
 const result: SearchExecutionResult = {
   project_id: 'lean_energy',
@@ -48,6 +48,40 @@ const SelectableResults = () => {
       onSelectionChange={setSelectedIds}
     />
   );
+};
+
+const fetchAllRunning: FetchAllStatusResult = {
+  job_id: 'job-1',
+  project_id: 'lean_energy',
+  status: 'running',
+  started_at: '2026-08-25T10:00:00Z',
+  finished_at: null,
+  providers: [
+    {
+      provider: 'openalex',
+      status: 'complete',
+      fetched_count: 1840,
+      kept_count: 1840,
+      pages_fetched: 19,
+      total_reported: 1840,
+      limit_reached: false,
+      message: null,
+    },
+    {
+      provider: 'semantic_scholar',
+      status: 'running',
+      fetched_count: 412,
+      kept_count: 380,
+      pages_fetched: 5,
+      total_reported: 1000,
+      limit_reached: false,
+      message: null,
+    },
+  ],
+  fetched_total: 2252,
+  kept_total: 2220,
+  message: null,
+  result: null,
 };
 
 describe('SearchResultsSection', () => {
@@ -97,6 +131,93 @@ describe('SearchResultsSection', () => {
     expect(button).toBeEnabled();
     fireEvent.click(button);
     expect(onLoadMore).toHaveBeenCalledOnce();
+  });
+
+  it('shows and triggers the fetch-all button next to cursor pagination (v0.6.5)', () => {
+    const onFetchAll = vi.fn();
+    render(
+      <SearchResultsSection
+        result={result}
+        loading={false}
+        selectedIds={[]}
+        onSelectionChange={() => undefined}
+        onLoadMore={() => undefined}
+        onFetchAll={onFetchAll}
+      />,
+    );
+
+    const fetchAllButton = screen.getByRole('button', { name: 'Pobierz wszystkie dostępne' });
+    expect(fetchAllButton).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Pobierz kolejne wyniki' })).toBeInTheDocument();
+    fireEvent.click(fetchAllButton);
+    expect(onFetchAll).toHaveBeenCalledOnce();
+  });
+
+  it('disables both triggers while a fetch-all job is running and offers cancellation', () => {
+    const onFetchAll = vi.fn();
+    const onCancel = vi.fn();
+    render(
+      <SearchResultsSection
+        result={result}
+        loading={false}
+        selectedIds={[]}
+        onSelectionChange={() => undefined}
+        loadingMore={false}
+        onLoadMore={() => undefined}
+        fetchAllJob={fetchAllRunning}
+        onFetchAll={onFetchAll}
+        onCancelFetchAll={onCancel}
+      />,
+    );
+
+    expect(screen.getByTestId('fetch-all-progress')).toBeInTheDocument();
+    expect(screen.queryByTestId('fetch-all-button')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Pobierz kolejne wyniki' })).not.toBeInTheDocument();
+    const cancelButton = screen.getByRole('button', { name: 'Anuluj pobieranie' });
+    fireEvent.click(cancelButton);
+    expect(onCancel).toHaveBeenCalledOnce();
+    expect(screen.getByText(/Łącznie pobrano:\s*2\s*252/u)).toBeInTheDocument();
+    expect(screen.getByText(/Po lokalnych filtrach:\s*2\s*220/u)).toBeInTheDocument();
+    const progressPanel = screen.getByTestId('fetch-all-progress');
+    expect(progressPanel.textContent).toMatch(/OpenAlex\s*—\s*1\s*840 pobranych z ~1\s*840/u);
+    expect(screen.getByText('Zakończono')).toBeInTheDocument();
+    expect(screen.getByText('Pobieranie…')).toBeInTheDocument();
+  });
+
+  it('communicates partial provider failure after the fetch-all job finishes', () => {
+    const finishedWithPartial: FetchAllStatusResult = {
+      ...fetchAllRunning,
+      status: 'completed',
+      providers: [
+        fetchAllRunning.providers[0],
+        {
+          provider: 'semantic_scholar',
+          status: 'partial',
+          fetched_count: 412,
+          kept_count: 380,
+          pages_fetched: 5,
+          total_reported: 1000,
+          limit_reached: true,
+          message: 'Stopped by the fetch-all safety limit.',
+        },
+      ],
+      message: 'Fetch-all finished with incomplete provider coverage; see per-provider statuses.',
+    };
+    render(
+      <SearchResultsSection
+        result={result}
+        loading={false}
+        selectedIds={[]}
+        onSelectionChange={() => undefined}
+        fetchAllJob={finishedWithPartial}
+        onFetchAll={() => undefined}
+      />,
+    );
+
+    expect(screen.getAllByRole('alert').length).toBeGreaterThan(0);
+    expect(screen.getByText(/Niekompletne dane: Semantic Scholar — częściowo/)).toBeInTheDocument();
+    expect(screen.getByText(/osiągnięto limit możliwy do pobrania z API/)).toBeInTheDocument();
+    expect(screen.getByText('Pobieranie wszystkich dostępnych wyników zakończone.')).toBeInTheDocument();
   });
 
   it('hides pagination when there are no more results and disables it while loading', () => {
