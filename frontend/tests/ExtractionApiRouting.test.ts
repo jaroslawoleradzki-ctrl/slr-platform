@@ -70,4 +70,22 @@ describe('extraction API routing', () => {
       }),
     );
   });
+
+  it('propagates reviewer_id to extraction dataset exports when provided and omits when empty', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(() =>
+      Promise.resolve(new Response(new Blob(['col1,col2']), { status: 200 }))
+    );
+
+    // With explicit reviewer
+    await extractionApi.exportDataset('project-1', 'csv', 'publications', 'reviewer_a');
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      '/api/v1/projects/project-1/extraction/export?format=csv&dataset=publications&reviewer_id=reviewer_a'
+    );
+
+    // Without reviewer
+    await extractionApi.exportDataset('project-1', 'json', 'publications');
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      '/api/v1/projects/project-1/extraction/export?format=json&dataset=publications'
+    );
+  });
 });

@@ -6,7 +6,7 @@ import sqlite3
 from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Callable
+from typing import Any, Callable
 from uuid import UUID
 
 from app.domain.extraction import (
@@ -156,12 +156,14 @@ class SqliteExtractionRepository:
                 raise ExtractionRevisionConflictError("Extraction revision could not be appended atomically.") from exc
         return revision
 
-    def get_latest_revision(self, project_id: str, publication_id: UUID) -> ExtractionRevision | None:
-        values = self.get_latest_revision_batch(project_id, [publication_id])
+    def get_latest_revision(
+        self, project_id: str, publication_id: UUID, reviewer_id: str = ""
+    ) -> ExtractionRevision | None:
+        values = self.get_latest_revision_batch(project_id, [publication_id], reviewer_id=reviewer_id)
         return values.get(publication_id)
 
     def get_latest_revision_batch(
-        self, project_id: str, publication_ids: list[UUID]
+        self, project_id: str, publication_ids: list[UUID], reviewer_id: str = ""
     ) -> dict[UUID, ExtractionRevision | None]:
         """Hydrate a page of latest snapshots in three bounded SQL queries."""
         if not publication_ids:
@@ -178,28 +180,39 @@ class SqliteExtractionRepository:
                 return {publication_id: None for publication_id in publication_ids}
             record_ids = [row[0] for row in records]
             record_placeholders = ",".join("?" for _ in record_ids)
-            revisions = connection.execute(
-                f"""WITH ranked AS (
+            if reviewer_id:
+                query_sql = f"""WITH ranked AS (
+                    SELECT revision_id, record_id, project_id, publication_id, revision_index, reviewer_id,
+                           completeness_status, created_at,
+                           ROW_NUMBER() OVER (PARTITION BY record_id ORDER BY revision_index DESC) AS rank
+                    FROM extraction_revisions WHERE record_id IN ({record_placeholders}) AND reviewer_id = ?
+                ) SELECT revision_id, record_id, project_id, publication_id, revision_index, reviewer_id,
+                         completeness_status, created_at FROM ranked WHERE rank = 1"""
+                query_params: list[Any] = [*record_ids, reviewer_id]
+            else:
+                query_sql = f"""WITH ranked AS (
                     SELECT revision_id, record_id, project_id, publication_id, revision_index, reviewer_id,
                            completeness_status, created_at,
                            ROW_NUMBER() OVER (PARTITION BY record_id ORDER BY revision_index DESC) AS rank
                     FROM extraction_revisions WHERE record_id IN ({record_placeholders})
                 ) SELECT revision_id, record_id, project_id, publication_id, revision_index, reviewer_id,
-                         completeness_status, created_at FROM ranked WHERE rank = 1""",
-                record_ids,
-            ).fetchall()
+                         completeness_status, created_at FROM ranked WHERE rank = 1"""
+                query_params = list(record_ids)
+            revisions = connection.execute(query_sql, query_params).fetchall()
             hydrated = self._hydrate_revisions_with_connection(connection, revisions)
         result: dict[UUID, ExtractionRevision | None] = {publication_id: None for publication_id in publication_ids}
         for revision in hydrated:
             result[revision.publication_id] = revision
         return result
 
-    def get_latest_complete_revision(self, project_id: str, publication_id: UUID) -> ExtractionRevision | None:
-        values = self.get_latest_complete_revision_batch(project_id, [publication_id])
+    def get_latest_complete_revision(
+        self, project_id: str, publication_id: UUID, reviewer_id: str = ""
+    ) -> ExtractionRevision | None:
+        values = self.get_latest_complete_revision_batch(project_id, [publication_id], reviewer_id=reviewer_id)
         return values.get(publication_id)
 
     def get_latest_complete_revision_batch(
-        self, project_id: str, publication_ids: list[UUID]
+        self, project_id: str, publication_ids: list[UUID], reviewer_id: str = ""
     ) -> dict[UUID, ExtractionRevision | None]:
         """Hydrate latest COMPLETE extraction snapshots in three bounded SQL queries."""
         if not publication_ids:
@@ -216,8 +229,20 @@ class SqliteExtractionRepository:
                 return {publication_id: None for publication_id in publication_ids}
             record_ids = [row[0] for row in records]
             record_placeholders = ",".join("?" for _ in record_ids)
-            revisions = connection.execute(
-                f"""WITH ranked AS (
+            if reviewer_id:
+                query_sql = f"""WITH ranked AS (
+                    SELECT revision_id, record_id, project_id, publication_id, revision_index, reviewer_id,
+                           completeness_status, created_at,
+                           ROW_NUMBER() OVER (PARTITION BY record_id ORDER BY revision_index DESC) AS rank
+                    FROM extraction_revisions
+                    WHERE record_id IN ({record_placeholders})
+                      AND completeness_status = '{ExtractionCompletenessStatus.COMPLETE.value}'
+                      AND reviewer_id = ?
+                ) SELECT revision_id, record_id, project_id, publication_id, revision_index, reviewer_id,
+                         completeness_status, created_at FROM ranked WHERE rank = 1"""
+                query_params = [*record_ids, reviewer_id]
+            else:
+                query_sql = f"""WITH ranked AS (
                     SELECT revision_id, record_id, project_id, publication_id, revision_index, reviewer_id,
                            completeness_status, created_at,
                            ROW_NUMBER() OVER (PARTITION BY record_id ORDER BY revision_index DESC) AS rank
@@ -225,9 +250,9 @@ class SqliteExtractionRepository:
                     WHERE record_id IN ({record_placeholders})
                       AND completeness_status = '{ExtractionCompletenessStatus.COMPLETE.value}'
                 ) SELECT revision_id, record_id, project_id, publication_id, revision_index, reviewer_id,
-                         completeness_status, created_at FROM ranked WHERE rank = 1""",
-                record_ids,
-            ).fetchall()
+                         completeness_status, created_at FROM ranked WHERE rank = 1"""
+                query_params = list(record_ids)
+            revisions = connection.execute(query_sql, query_params).fetchall()
             hydrated = self._hydrate_revisions_with_connection(connection, revisions)
         result: dict[UUID, ExtractionRevision | None] = {publication_id: None for publication_id in publication_ids}
         for revision in hydrated:
