@@ -138,6 +138,48 @@ class ScreeningEligibilityAdapter:
 
         return tuple(eligible)
 
+    def excluded_publications(
+        self,
+        project_id: str,
+        stage: ScreeningStage,
+        reviewer_id: str,
+    ) -> tuple[UUID, ...]:
+        """Returns list of active canonical publication UUIDs with a final EXCLUDE outcome at stage.
+
+        For stage == TITLE_ABSTRACT:
+          - Multi-reviewer (active T&A roster): publications where ProjectOutcome(T&A) == EXCLUDE.
+          - Single-reviewer (no T&A roster): publications where reviewer's latest T&A decision == EXCLUDE.
+
+        For stage == FULL_TEXT:
+          - Multi-reviewer (active FT roster): publications where ProjectOutcome(FT) == EXCLUDE.
+          - Single-reviewer (no FT roster): publications where reviewer's latest FT decision == EXCLUDE.
+        """
+        input_set = self._input_service.get_input_set(project_id)
+        if not input_set.ready:
+            return ()
+
+        publications = input_set.publications
+        excluded: list[UUID] = []
+
+        if self.has_active_roster(project_id, stage):
+            for pub in publications:
+                outcome = self._multi_reviewer.project_outcome(project_id, pub.record_id, stage)
+                if outcome.is_final and outcome.outcome is ResolvedOutcome.EXCLUDE:
+                    excluded.append(pub.record_id)
+        else:
+            source_decisions = self._decisions_repo.list_by_project(project_id, stage)
+            latest_by_pub: dict[UUID, ScreeningDecision] = {}
+            for d in source_decisions:
+                if d.reviewer_id == reviewer_id:
+                    latest_by_pub.setdefault(d.publication_id, d)
+
+            for pub in publications:
+                latest = latest_by_pub.get(pub.record_id)
+                if latest and latest.outcome is ScreeningOutcome.EXCLUDE:
+                    excluded.append(pub.record_id)
+
+        return tuple(excluded)
+
     def stage_readiness(
         self,
         project_id: str,

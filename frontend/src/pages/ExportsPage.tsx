@@ -4,10 +4,13 @@ import { Card } from '../components/common/Card';
 import { ErrorAlert } from '../components/common/ErrorAlert';
 import { LivePrismaFlowChart } from '../components/workflow/LivePrismaFlowChart';
 import { extractionApi, ExtractionApiError } from '../services/api/extractionApi';
-import { FileCheck2, Download, FileSpreadsheet, Code2, Share2, Layers, Loader2, Lock } from 'lucide-react';
+import { exportApi, ExportApiError } from '../services/api/exportApi';
+import { useReviewerIdentity } from '../hooks/useReviewerIdentity';
+import { triggerBlobDownload } from '../utils/downloadHelper';
+import { FileCheck2, Download, FileSpreadsheet, Code2, Share2, Layers, Loader2, FileCode2 } from 'lucide-react';
 
 interface ExportFormat {
-  id: string;
+  id: 'csv' | 'json' | 'bib' | 'ris' | 'excel';
   name: string;
   desc: string;
   icon: React.ElementType;
@@ -16,6 +19,7 @@ interface ExportFormat {
 
 export const ExportsPage: React.FC = () => {
   const { activeProject, prismaMetricsLoading, prismaMetricsError } = useProject();
+  const { reviewerId } = useReviewerIdentity();
   const [exportingId, setExportingId] = useState<string | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
   const [exportSuccess, setExportSuccess] = useState<string | null>(null);
@@ -23,33 +27,93 @@ export const ExportsPage: React.FC = () => {
   const exportFormats: ExportFormat[] = [
     { id: 'csv', name: 'Zestawienie Rekordów CSV', desc: 'Dane publikacji i wyników ekstrakcji w formacie CSV (metadane, DOI, status kompletności)', icon: FileSpreadsheet, available: true },
     { id: 'json', name: 'Zestawienie rekordów JSON', desc: 'Dane publikacji i wyników ekstrakcji w formacie JSON', icon: Share2, available: true },
-    { id: 'bib', name: 'Eksport Bazy BibTeX (.bib)', desc: 'Format kanoniczny dla systemów LaTeX i Reference Managerów', icon: Code2, available: false },
-    { id: 'ris', name: 'Eksport Bazy RIS (.ris)', desc: 'Format zgodny z EndNote, Zotero, Mendeley i RefMan', icon: Download, available: false },
-    { id: 'excel', name: 'Arkusz Excel Matrix (.xlsx)', desc: 'Tabela syntezy z podziałem na etapy i statusy decyzji', icon: FileSpreadsheet, available: false },
+    { id: 'bib', name: 'Eksport Bazy BibTeX (.bib)', desc: 'Format kanoniczny dla systemów LaTeX i Reference Managerów', icon: Code2, available: true },
+    { id: 'ris', name: 'Eksport Bazy RIS (.ris)', desc: 'Format zgodny z EndNote, Zotero, Mendeley i RefMan', icon: Download, available: true },
+    { id: 'excel', name: 'Arkusz Excel Matrix (.xlsx)', desc: 'Tabela syntezy z podziałem na etapy i statusy decyzji', icon: FileSpreadsheet, available: true },
   ];
 
   if (!activeProject) return null;
 
   const handleExport = async (format: ExportFormat) => {
-    if (!format.available) return;
+    if (!format.available || exportingId !== null) return;
     setExportingId(format.id);
     setExportError(null);
     setExportSuccess(null);
     try {
-      const blob = await extractionApi.exportDataset(activeProject.id, format.id as 'json' | 'csv', 'publications');
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `${activeProject.id}_publications.${format.id}`;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      setTimeout(() => {
-        URL.revokeObjectURL(url);
-      }, 0);
+      let blob: Blob;
+      let filename: string;
+      const activeReviewer = reviewerId || undefined;
+
+      switch (format.id) {
+        case 'csv':
+          blob = await extractionApi.exportDataset(activeProject.id, 'csv', 'publications', activeReviewer);
+          filename = `${activeProject.id}_publications.csv`;
+          break;
+        case 'json':
+          blob = await extractionApi.exportDataset(activeProject.id, 'json', 'publications', activeReviewer);
+          filename = `${activeProject.id}_publications.json`;
+          break;
+        case 'bib':
+          blob = await exportApi.exportBibtex(activeProject.id);
+          filename = `${activeProject.id}_publications.bib`;
+          break;
+        case 'ris':
+          blob = await exportApi.exportRis(activeProject.id);
+          filename = `${activeProject.id}_publications.ris`;
+          break;
+        case 'excel':
+          blob = await exportApi.exportXlsx(activeProject.id, activeReviewer);
+          filename = `${activeProject.id}_publications.xlsx`;
+          break;
+        default:
+          throw new Error(`Unsupported export format: ${format.id}`);
+      }
+
+      triggerBlobDownload(blob, filename);
       setExportSuccess(`Pobrano plik ${format.name} dla projektu ${activeProject.title}.`);
     } catch (err) {
-      setExportError(err instanceof ExtractionApiError ? err.message : 'Nie udało się pobrać eksportu danych.');
+      if (err instanceof ExtractionApiError || err instanceof ExportApiError) {
+        setExportError(err.message);
+      } else if (err instanceof Error) {
+        setExportError(err.message);
+      } else {
+        setExportError('Nie udało się pobrać eksportu danych.');
+      }
+    } finally {
+      setExportingId(null);
+    }
+  };
+
+  const handlePrismaExport = async (format: 'svg' | 'pdf') => {
+    const actionId = `prisma_${format}`;
+    if (exportingId !== null) return;
+    setExportingId(actionId);
+    setExportError(null);
+    setExportSuccess(null);
+    try {
+      let blob: Blob;
+      let filename: string;
+      const activeReviewer = reviewerId || undefined;
+
+      if (format === 'svg') {
+        blob = await exportApi.exportPrismaSvg(activeProject.id, activeReviewer);
+        filename = `${activeProject.id}_prisma_flow.svg`;
+      } else {
+        blob = await exportApi.exportPrismaPdf(activeProject.id, activeReviewer);
+        filename = `${activeProject.id}_prisma_flow.pdf`;
+      }
+
+      triggerBlobDownload(blob, filename);
+      const label = format === 'svg' ? 'PRISMA Flow (SVG)' : 'PRISMA Flow (PDF)';
+      setExportSuccess(`Pobrano plik ${label} dla projektu ${activeProject.title}.`);
+    } catch (err) {
+      if (err instanceof ExportApiError || err instanceof ExtractionApiError) {
+        setExportError(err.message);
+      } else if (err instanceof Error) {
+        setExportError(err.message);
+      } else {
+        setExportError('Nie udało się pobrać schematu PRISMA.');
+      }
     } finally {
       setExportingId(null);
     }
@@ -118,7 +182,7 @@ export const ExportsPage: React.FC = () => {
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      color: fmt.available ? 'var(--accent-primary)' : 'var(--text-muted)',
+                      color: 'var(--accent-primary)',
                     }}
                   >
                     <Icon size={18} />
@@ -133,54 +197,29 @@ export const ExportsPage: React.FC = () => {
                   </div>
                 </div>
 
-                {fmt.available ? (
-                  <button
-                    onClick={() => handleExport(fmt)}
-                    disabled={exportingId !== null}
-                    style={{
-                      padding: '6px 12px',
-                      borderRadius: 'var(--radius-md)',
-                      backgroundColor: 'var(--bg-surface-elevated)',
-                      border: '1px solid var(--border-strong)',
-                      color: 'var(--text-primary)',
-                      fontSize: '0.75rem',
-                      fontWeight: 600,
-                      whiteSpace: 'nowrap',
-                      cursor: exportingId !== null ? 'not-allowed' : 'pointer',
-                      opacity: exportingId !== null && exportingId !== fmt.id ? 0.6 : 1,
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '6px',
-                    }}
-                    title="Pobierz eksport"
-                  >
-                    {exportingId === fmt.id && <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} />}
-                    {exportingId === fmt.id ? 'Pobieranie...' : 'Pobierz'}
-                  </button>
-                ) : (
-                  <button
-                    disabled
-                    style={{
-                      padding: '6px 12px',
-                      borderRadius: 'var(--radius-md)',
-                      backgroundColor: 'var(--bg-surface-elevated)',
-                      border: '1px dashed var(--border-subtle)',
-                      color: 'var(--text-muted)',
-                      fontSize: '0.75rem',
-                      fontWeight: 600,
-                      whiteSpace: 'nowrap',
-                      cursor: 'not-allowed',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '6px',
-                      opacity: 0.8,
-                    }}
-                    title="Not yet available"
-                  >
-                    <Lock size={14} />
-                    Not yet available
-                  </button>
-                )}
+                <button
+                  onClick={() => handleExport(fmt)}
+                  disabled={exportingId !== null}
+                  style={{
+                    padding: '6px 12px',
+                    borderRadius: 'var(--radius-md)',
+                    backgroundColor: 'var(--bg-surface-elevated)',
+                    border: '1px solid var(--border-strong)',
+                    color: 'var(--text-primary)',
+                    fontSize: '0.75rem',
+                    fontWeight: 600,
+                    whiteSpace: 'nowrap',
+                    cursor: exportingId !== null ? 'not-allowed' : 'pointer',
+                    opacity: exportingId !== null && exportingId !== fmt.id ? 0.6 : 1,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                  }}
+                  title="Pobierz eksport"
+                >
+                  {exportingId === fmt.id && <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} />}
+                  {exportingId === fmt.id ? 'Pobieranie...' : 'Pobierz'}
+                </button>
               </div>
             );
           })}
@@ -194,28 +233,62 @@ export const ExportsPage: React.FC = () => {
             <span>Generowanie Schematu i Raportu PRISMA 2020 Flow Diagram</span>
           </div>
         }
-        subtitle="Eksportuj wygenerowany wyżej schemat PRISMA do formatów SVG, PNG lub PDF dla celów publikacyjnych."
+        subtitle="Eksportuj wygenerowany wyżej schemat PRISMA do formatów SVG lub PDF dla celów publikacyjnych."
         action={
-          <button
-            disabled
-            style={{
-              padding: '8px 16px',
-              borderRadius: 'var(--radius-md)',
-              backgroundColor: 'var(--bg-surface-elevated)',
-              color: 'var(--text-muted)',
-              fontWeight: 600,
-              fontSize: '0.85rem',
-              border: '1px dashed var(--border-subtle)',
-              cursor: 'not-allowed',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-            }}
-            title="Not yet available"
-          >
-            <Lock size={14} />
-            Eksportuj PRISMA Flow (SVG/PDF) — Not yet available
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <button
+              onClick={() => handlePrismaExport('svg')}
+              disabled={exportingId !== null}
+              style={{
+                padding: '8px 14px',
+                borderRadius: 'var(--radius-md)',
+                backgroundColor: 'var(--bg-surface-elevated)',
+                color: 'var(--text-primary)',
+                fontWeight: 600,
+                fontSize: '0.85rem',
+                border: '1px solid var(--border-strong)',
+                cursor: exportingId !== null ? 'not-allowed' : 'pointer',
+                opacity: exportingId !== null && exportingId !== 'prisma_svg' ? 0.6 : 1,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+              }}
+              title="Pobierz schemat PRISMA w formacie SVG"
+            >
+              {exportingId === 'prisma_svg' ? (
+                <Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} />
+              ) : (
+                <FileCode2 size={15} style={{ color: 'var(--accent-primary)' }} />
+              )}
+              {exportingId === 'prisma_svg' ? 'Pobieranie SVG...' : 'Pobierz SVG'}
+            </button>
+            <button
+              onClick={() => handlePrismaExport('pdf')}
+              disabled={exportingId !== null}
+              style={{
+                padding: '8px 14px',
+                borderRadius: 'var(--radius-md)',
+                backgroundColor: 'var(--bg-surface-elevated)',
+                color: 'var(--text-primary)',
+                fontWeight: 600,
+                fontSize: '0.85rem',
+                border: '1px solid var(--border-strong)',
+                cursor: exportingId !== null ? 'not-allowed' : 'pointer',
+                opacity: exportingId !== null && exportingId !== 'prisma_pdf' ? 0.6 : 1,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+              }}
+              title="Pobierz schemat PRISMA w formacie PDF"
+            >
+              {exportingId === 'prisma_pdf' ? (
+                <Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} />
+              ) : (
+                <Download size={15} style={{ color: 'var(--accent-primary)' }} />
+              )}
+              {exportingId === 'prisma_pdf' ? 'Pobieranie PDF...' : 'Pobierz PDF'}
+            </button>
+          </div>
         }
       >
         {prismaMetricsLoading ? (

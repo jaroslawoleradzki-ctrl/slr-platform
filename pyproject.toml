@@ -1,6 +1,6 @@
 [project]
 name = "slr-platform"
-version = "0.6.0"
+version = "0.6.1"
 description = "Modułowa aplikacja wspomagająca systematyczne przeglądy literatury."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -12,10 +12,12 @@ dependencies = [
   "httpx>=0.28,<1.0",
   "tenacity>=9.1,<10.0",
   "python-multipart>=0.0.20,<1.0",
+  "openpyxl>=3.1,<4.0",
+  "fpdf2>=2.8,<3.0",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.4,<9.0", "ruff>=0.12,<1.0", "mypy>=1.16,<2.0", "types-pyyaml>=6.0"]
+dev = ["pytest>=8.4,<9.0", "ruff>=0.12,<1.0", "mypy>=1.16,<2.0", "types-pyyaml>=6.0", "pypdf>=6.16,<7.0"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
@@ -24,6 +26,11 @@ testpaths = ["tests"]
 [build-system]
 requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
+
+[dependency-groups]
+dev = [
+    "pypdf>=6.16.2",
+]
 
 [tool.setuptools.packages.find]
 where = ["."]
@@ -37,3 +44,18 @@ line-length = 120
 [tool.ruff.lint]
 select = ["E", "F", "W", "I"]
 ignore = ["E501", "W291"]
+
+[tool.mypy]
+ignore_missing_imports = false
+
+[[tool.mypy.overrides]]
+module = "openpyxl.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "fpdf.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "pypdf.*"
+ignore_missing_imports = true

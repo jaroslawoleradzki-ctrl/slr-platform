@@ -198,6 +198,22 @@ class ProjectWorkflowStatusService:
             ),
         )
 
+    def get_excluded_counts(
+        self, project_id: str, reviewer_id: str = "default_reviewer"
+    ) -> tuple[int, int]:
+        """Return (records_excluded_title_abstract, records_excluded_full_text) for active canonical publications."""
+        ta_excluded = len(
+            self._adapter.excluded_publications(
+                project_id, ScreeningStage.TITLE_ABSTRACT, reviewer_id
+            )
+        )
+        ft_excluded = len(
+            self._adapter.excluded_publications(
+                project_id, ScreeningStage.FULL_TEXT, reviewer_id
+            )
+        )
+        return ta_excluded, ft_excluded
+
 
 def default_project_workflow_status_service() -> ProjectWorkflowStatusService:
     return ProjectWorkflowStatusService()

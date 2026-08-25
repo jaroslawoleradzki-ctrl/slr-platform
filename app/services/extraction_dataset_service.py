@@ -17,6 +17,7 @@ from app.domain.extraction import (
     ValueStatus,
 )
 from app.domain.identifiers import IdentifierType
+from app.domain.project import Project
 from app.repositories.extraction_repository import (
     SqliteExtractionRepository,
     default_extraction_repository,
@@ -29,6 +30,11 @@ from app.repositories.project_publication_repository import (
     ProjectPublicationRepository,
     default_project_publication_repository,
 )
+from app.repositories.project_repository import (
+    ProjectRepository,
+    default_project_repository,
+)
+from app.services.export.cell_safety import sanitize_csv_cell
 from app.services.extraction_configuration_service import (
     ExtractionConfigurationService,
     default_extraction_configuration_service,
@@ -49,12 +55,20 @@ class ExtractionDatasetService:
         template_repo: SqliteExtractionTemplateRepository | None = None,
         extraction_repo: SqliteExtractionRepository | None = None,
         publication_repo: ProjectPublicationRepository | None = None,
+        project_repo: ProjectRepository | None = None,
     ) -> None:
         self._config_service = config_service or default_extraction_configuration_service()
         self._eligibility_service = eligibility_service or default_extraction_eligibility_service()
         self._template_repo = template_repo or default_extraction_template_repository()
         self._extraction_repo = extraction_repo or default_extraction_repository()
         self._publication_repo = publication_repo or default_project_publication_repository()
+        self._project_repo = project_repo or default_project_repository()
+
+    def get_project(self, project_id: str) -> Project | None:
+        try:
+            return self._project_repo.get(project_id)
+        except Exception:
+            return None
 
     def get_publication_read_models(
         self,
@@ -77,12 +91,16 @@ class ExtractionDatasetService:
         # latest-revision hydration (the latter is explicitly three SQL queries).
         publications = self._publication_repo.get_publications(project_id)
         publication_map = {publication.record_id: publication for publication in publications}
-        revisions = self._extraction_repo.get_latest_revision_batch(project_id, eligible_ids)
+        revisions = self._extraction_repo.get_latest_revision_batch(
+            project_id, eligible_ids, reviewer_id=reviewer_id
+        )
 
         models: list[PublicationExtractionReadModel] = []
         for publication_id in eligible_ids:
             revision = revisions.get(publication_id)
             if revision is None:
+                continue
+            if reviewer_id and revision.reviewer_id != reviewer_id:
                 continue
             if status_filter is not None and revision.completeness_status is not status_filter:
                 continue
@@ -135,7 +153,7 @@ class ExtractionDatasetService:
         """Return one model per repeating-group item, preserving publication grain."""
         relationships: list[RelationshipExtractionReadModel] = []
         for publication in self.get_publication_read_models(
-            project_id, reviewer_id, status_filter=status_filter
+            project_id, reviewer_id=reviewer_id, status_filter=status_filter
         ):
             for item in publication.group_items:
                 relationships.append(
@@ -197,16 +215,24 @@ class ExtractionDatasetService:
                 "template_id", "template_version", "group_key", "group_item_id", "item_index",
                 "reviewer_id", "submitted_at",
             ] + _value_headers(fields)
-            writer.writerow(headers)
+            writer.writerow([sanitize_csv_cell(h) for h in headers])
             for relationship in relationship_models:
                 values = {value.field_key: value for value in relationship.relationship_values}
-                writer.writerow([
-                    relationship.project_id, str(relationship.publication_id), relationship.canonical_title,
-                    _csv_scalar(relationship.canonical_publication_year), relationship.template_id,
-                    relationship.template_version, relationship.group_key, str(relationship.group_item_id),
-                    relationship.item_index, relationship.reviewer_id, relationship.submitted_at.isoformat(),
+                row = [
+                    relationship.project_id,
+                    str(relationship.publication_id),
+                    relationship.canonical_title,
+                    _csv_scalar(relationship.canonical_publication_year),
+                    relationship.template_id,
+                    relationship.template_version,
+                    relationship.group_key,
+                    str(relationship.group_item_id),
+                    relationship.item_index,
+                    relationship.reviewer_id,
+                    relationship.submitted_at.isoformat(),
                     *[cell for field in fields for cell in _serialize_csv_field(values.get(field.field_key), field.data_type)],
-                ])
+                ]
+                writer.writerow([sanitize_csv_cell(c) for c in row])
             return buffer.getvalue()
 
         publication_models = self.get_publication_read_models(
@@ -218,18 +244,27 @@ class ExtractionDatasetService:
             "canonical_doi", "canonical_journal", "template_id", "template_version", "completeness_status",
             "latest_revision_index", "latest_revision_id", "reviewer_id", "submitted_at",
         ] + _value_headers(fields)
-        writer.writerow(headers)
+        writer.writerow([sanitize_csv_cell(h) for h in headers])
         for publication in publication_models:
             values = {value.field_key: value for value in publication.publication_values}
-            writer.writerow([
-                publication.project_id, str(publication.publication_id), publication.canonical_title,
-                "; ".join(publication.canonical_authors), _csv_scalar(publication.canonical_publication_year),
-                publication.canonical_doi or "", publication.canonical_journal or "", publication.template_id,
-                publication.template_version, publication.completeness_status.value,
-                publication.latest_revision_index, str(publication.latest_revision_id), publication.reviewer_id,
+            row = [
+                publication.project_id,
+                str(publication.publication_id),
+                publication.canonical_title,
+                "; ".join(publication.canonical_authors),
+                _csv_scalar(publication.canonical_publication_year),
+                publication.canonical_doi or "",
+                publication.canonical_journal or "",
+                publication.template_id,
+                publication.template_version,
+                publication.completeness_status.value,
+                publication.latest_revision_index,
+                str(publication.latest_revision_id),
+                publication.reviewer_id,
                 publication.submitted_at.isoformat(),
                 *[cell for field in fields for cell in _serialize_csv_field(values.get(field.field_key), field.data_type)],
-            ])
+            ]
+            writer.writerow([sanitize_csv_cell(c) for c in row])
         return buffer.getvalue()
 
     def _configuration(self, project_id: str):
