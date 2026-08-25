@@ -14,7 +14,7 @@ development
 
 Current version:
 
-v0.6.4
+v0.6.5
 
 Current release status:
 
@@ -40,6 +40,12 @@ v0.6.4 fixes post-query language filtering so Semantic Scholar records with an
 unknown language are no longer incorrectly discarded; unknown language is not
 treated as a mismatch, language is never inferred, and known language values
 remain strictly filterable.
+v0.6.5 adds provider-agnostic "fetch all available results" background jobs
+that page every selected provider (OpenAlex, Crossref, Semantic Scholar)
+sequentially to its technical end — honoring rate limits, Retry-After/backoff,
+provider retrieval caps and safety limits — with live per-provider progress,
+cooperative cancellation and partial-success semantics; the existing cursor
+pagination remains unchanged.
 
 Current development phase:
 
@@ -59,7 +65,7 @@ Phase 6.7 & Phase 6.8 Workflow State:
   - 6.8.1 Search Strategy Backend — ✅ Completed
   - 6.8.2 Provider-Specific Query Rendering — ✅ Completed (`OpenAlexQueryRenderer`, `CrossrefQueryRenderer`, `RenderedQuery` lossy tracking)
   - 6.8.3 Search Orchestrator — ✅ Completed (`SearchEngine` multi-provider execution, merging, provenance)
-  - 6.8.4 Search Execution API — 🟨 Partial (`POST /executions` live execution without durable run GET by ID)
+  - 6.8.4 Search Execution API — 🟨 Partial (`POST /executions` live execution without durable run GET by ID; v0.6.5 adds fetch-all background jobs with in-memory progress/cancel)
   - 6.8.5 Search Execution Persistence — 🟨 Partial (publications & strategy durable; `SearchRun` & raw response archive transient)
   - 6.8.6 Search Strategy GUI Integration — ✅ Completed
   - 6.8.7 Sources Search Execution GUI — ↪ Superseded by Search Strategy execution workflow

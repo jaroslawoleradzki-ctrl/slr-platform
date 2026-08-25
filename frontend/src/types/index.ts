@@ -138,14 +138,54 @@ export interface SearchResultRecord {
   title: string;
   authors: string[];
   year: number;
-  provider: 'openalex' | 'crossref';
+  provider: 'openalex' | 'crossref' | 'semantic_scholar';
   source_id: string;
   doi: string | null;
 }
 
 export interface SearchProviderError {
-  provider: 'openalex' | 'crossref';
+  provider: 'openalex' | 'crossref' | 'semantic_scholar';
   message: string;
+}
+
+export type FetchAllProviderStatus =
+  | 'pending'
+  | 'running'
+  | 'complete'
+  | 'partial'
+  | 'cancelled'
+  | 'failed';
+
+export interface FetchAllProviderProgress {
+  provider: string;
+  status: FetchAllProviderStatus;
+  fetched_count: number;
+  kept_count: number;
+  pages_fetched: number;
+  total_reported: number | null;
+  limit_reached: boolean;
+  message: string | null;
+}
+
+export type FetchAllJobStatus = 'running' | 'completed' | 'cancelled' | 'failed';
+
+export interface FetchAllStatusResult {
+  job_id: string;
+  project_id: string;
+  status: FetchAllJobStatus;
+  started_at: string;
+  finished_at: string | null;
+  providers: FetchAllProviderProgress[];
+  fetched_total: number;
+  kept_total: number;
+  message: string | null;
+  result: SearchExecutionResult | null;
+}
+
+export interface FetchAllStartResult {
+  job_id: string;
+  project_id: string;
+  status: 'running';
 }
 
 export interface SearchResultsImportResponse {
@@ -157,7 +197,7 @@ export interface SearchResultsImportResponse {
 }
 
 export interface SearchResultsImportMetadata {
-  provider?: 'openalex' | 'crossref';
+  provider?: 'openalex' | 'crossref' | 'semantic_scholar';
   query?: string;
   total_available?: number;
 }

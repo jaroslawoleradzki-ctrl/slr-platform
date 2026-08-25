@@ -9,6 +9,8 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, s
 from app.api.dto.search_strategy import (
     BibliographicImportHistoryResponse,
     BibliographicImportResponse,
+    FetchAllStartResponse,
+    FetchAllStatusResponse,
     ManualSourceDatabase,
     ProviderQueryResponse,
     SearchProviderErrorResponse,
@@ -20,11 +22,8 @@ from app.api.dto.search_strategy import (
     SearchStrategyPutRequest,
 )
 from app.api.dto.sources_summary import SourcesSummaryResponse
-from app.domain.identifiers import IdentifierType
-from app.domain.publication import DocumentType, Publication
 from app.domain.search import SearchStrategy
 from app.normalization import normalize_publication
-from app.normalization.doi import normalize_doi
 from app.providers.import_file.bibtex.mapper import map_bibtex_record
 from app.providers.import_file.bibtex.parser import parse_bibtex
 from app.providers.import_file.ris.mapper import map_ris_record
@@ -58,26 +57,34 @@ from app.repositories.search_strategy_repository import (
     default_search_strategy_repository,
 )
 from app.repositories.transaction_manager import SqliteTransactionManager
+from app.services.fetch_all_search import (
+    FetchAllJobAlreadyRunningError,
+    FetchAllSearchService,
+    UnknownFetchAllJobError,
+    fetch_all_service,
+)
 from app.services.live_search import (
     LiveSearchExecutor,
     build_search_query,
     live_search_service,
 )
 from app.services.project_import_service import ProjectImportService
+from app.services.search_strategy_support import (
+    map_search_result_record,
+    matches_execution_constraints,
+    publication_source_id,
+)
 from app.services.sources_summary_service import SourcesSummaryService
 
 router = APIRouter(prefix="/projects", tags=["search strategy"])
 
-_PUBLICATION_TYPE_DOMAIN_MAP = {
-    "article": DocumentType.JOURNAL_ARTICLE,
-    "review": DocumentType.REVIEW,
-    "conference_paper": DocumentType.CONFERENCE_PAPER,
-    "book_chapter": DocumentType.BOOK_CHAPTER,
-}
-
 
 def get_live_search_executor() -> LiveSearchExecutor:
     return live_search_service
+
+
+def get_fetch_all_search_service() -> FetchAllSearchService:
+    return fetch_all_service
 
 
 def get_project_publication_repository() -> ProjectPublicationRepository:
@@ -197,60 +204,6 @@ def put_search_strategy(
     return strategy_repository.save(strategy)
 
 
-def _source_id(publication: Publication) -> str:
-    if publication.provenance:
-        return publication.provenance[0].source_record_id
-    return str(publication.record_id)
-
-
-def _doi(publication: Publication) -> str | None:
-    for identifier in publication.identifiers:
-        if identifier.type is IdentifierType.DOI:
-            return normalize_doi(identifier.value) or identifier.value
-    return None
-
-
-def _map_result(
-    publication: Publication,
-    *,
-    provider: str,
-    result_id: str | None = None,
-) -> SearchResultRecordResponse:
-    return SearchResultRecordResponse(
-        id=result_id or str(publication.record_id),
-        title=publication.title,
-        authors=[author.display_name for author in publication.authors],
-        year=cast(int, publication.publication_year),
-        provider=cast(Literal["openalex", "crossref", "semantic_scholar"], provider),
-        source_id=_source_id(publication),
-        doi=_doi(publication),
-    )
-
-
-def _matches_execution_constraints(
-    publication: Publication,
-    payload: SearchStrategyExecutionRequest,
-) -> bool:
-    if (
-        publication.publication_year is None
-        or publication.publication_year < payload.publication_year_from
-        or publication.publication_year > payload.publication_year_to
-    ):
-        return False
-    # An unknown language (None, e.g. Semantic Scholar since v0.6.3) is not a
-    # known non-match: providers that cannot enforce the language filter on the
-    # physical query must not have their records silently discarded locally.
-    if payload.languages and publication.language is not None and publication.language not in payload.languages:
-        return False
-    if payload.publication_types and publication.document_type not in {
-        _PUBLICATION_TYPE_DOMAIN_MAP[value] for value in payload.publication_types
-    }:
-        return False
-    if payload.open_access and publication.open_access is not True:
-        return False
-    return True
-
-
 @router.post(
     "/{project_id}/search-strategy/executions",
     response_model=SearchStrategyExecutionResponse,
@@ -277,11 +230,11 @@ async def execute_search_strategy(
         for provider_result in execution.provider_results
         if provider_result.publications is not None
         for publication in provider_result.publications
-        if _matches_execution_constraints(publication, payload)
+        if matches_execution_constraints(publication, payload)
     ]
     results = []
     for search_run, publication in publications_by_provider:
-        source_id = _source_id(publication)
+        source_id = publication_source_id(publication)
         snapshot = snapshot_repository.save(
             SearchResultSnapshot.create(
                 project_id=project_id,
@@ -291,7 +244,7 @@ async def execute_search_strategy(
                 publication=publication,
             )
         )
-        results.append(_map_result(publication, provider=search_run.provider, result_id=str(snapshot.snapshot_id)))
+        results.append(map_search_result_record(publication, provider=search_run.provider, result_id=str(snapshot.snapshot_id)))
     provider_errors = [
         SearchProviderErrorResponse(
             provider=cast(
@@ -337,6 +290,105 @@ async def execute_search_strategy(
         has_more=any(provider_result.has_more for provider_result in successful_provider_results),
         results=results,
         provider_errors=provider_errors,
+    )
+
+
+@router.post(
+    "/{project_id}/search-strategy/executions/fetch-all",
+    response_model=FetchAllStartResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def start_fetch_all_search(
+    project_id: str,
+    payload: SearchStrategyExecutionRequest,
+    project_repository: ProjectPublicationRepository = Depends(get_project_publication_repository),
+    fetch_all: FetchAllSearchService = Depends(get_fetch_all_search_service),
+) -> FetchAllStartResponse:
+    """Start a background job that pages every selected provider to its end.
+
+    The request body is the same strategy execution contract; any ``cursor``
+    value is deliberately ignored because each provider is paginated from its
+    first page. Only one fetch-all job may run per project at a time.
+    """
+
+    try:
+        project_repository.get_publications(project_id)
+    except ProjectNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+
+    try:
+        return fetch_all.start(project_id, payload)
+    except FetchAllJobAlreadyRunningError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="A fetch-all job is already running for this project.",
+        ) from exc
+
+
+@router.get(
+    "/{project_id}/search-strategy/executions/fetch-all/{job_id}",
+    response_model=FetchAllStatusResponse,
+    status_code=status.HTTP_200_OK,
+)
+def get_fetch_all_search_status(
+    project_id: str,
+    job_id: str,
+    fetch_all: FetchAllSearchService = Depends(get_fetch_all_search_service),
+) -> FetchAllStatusResponse:
+    """Return cheap in-memory progress for one fetch-all job.
+
+    This endpoint is intentionally independent of the slow extraction
+    ``/progress`` read model; it performs dictionary lookups only and embeds
+    the full result payload once the job reaches a terminal state.
+    """
+
+    try:
+        status_response = fetch_all.get_status(job_id)
+    except UnknownFetchAllJobError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Unknown fetch-all job.",
+        ) from exc
+    if status_response.project_id != project_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Unknown fetch-all job.",
+        )
+    return status_response
+
+
+@router.post(
+    "/{project_id}/search-strategy/executions/fetch-all/{job_id}/cancel",
+    response_model=FetchAllStatusResponse,
+    status_code=status.HTTP_200_OK,
+)
+def cancel_fetch_all_search(
+    project_id: str,
+    job_id: str,
+    fetch_all: FetchAllSearchService = Depends(get_fetch_all_search_service),
+) -> FetchAllStatusResponse:
+    """Cooperatively stop further page fetching while keeping fetched records."""
+
+    try:
+        status_response = fetch_all.request_cancel(job_id)
+    except UnknownFetchAllJobError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Unknown fetch-all job.",
+        ) from exc
+    if status_response.project_id != project_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Unknown fetch-all job.",
+        )
+    if status_response.status == "running":
+        return status_response
+    raise HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail=f"Fetch-all job already finished with status '{status_response.status}'.",
     )
 
 

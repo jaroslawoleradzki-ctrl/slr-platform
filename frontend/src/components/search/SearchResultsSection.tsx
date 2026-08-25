@@ -1,7 +1,8 @@
 import React from 'react';
 import { AlertTriangle, CheckSquare, Download, Search } from 'lucide-react';
-import { SearchExecutionResult, SearchResultsImportResponse } from '../../types';
+import { FetchAllStatusResult, SearchExecutionResult, SearchResultsImportResponse } from '../../types';
 import { Card } from '../common/Card';
+import { FetchAllProgressPanel } from './FetchAllProgressPanel';
 
 interface Props {
   result: SearchExecutionResult | null;
@@ -14,6 +15,11 @@ interface Props {
   loadingMore?: boolean;
   paginationError?: string | null;
   onLoadMore?: () => void;
+  fetchAllJob?: FetchAllStatusResult | null;
+  fetchAllStarting?: boolean;
+  fetchAllError?: string | null;
+  onFetchAll?: () => void;
+  onCancelFetchAll?: () => void;
 }
 
 export const SearchResultsSection: React.FC<Props> = ({
@@ -27,12 +33,18 @@ export const SearchResultsSection: React.FC<Props> = ({
   loadingMore = false,
   paginationError = null,
   onLoadMore,
+  fetchAllJob = null,
+  fetchAllStarting = false,
+  fetchAllError = null,
+  onFetchAll,
+  onCancelFetchAll,
 }) => {
   const [currentPage, setCurrentPage] = React.useState(1);
   const pageSize = 20;
 
   const totalLoaded = result ? result.results.length : 0;
   const totalLocalPages = Math.max(1, Math.ceil(totalLoaded / pageSize));
+  const fetchAllActive = fetchAllJob?.status === 'running' || (fetchAllStarting && !fetchAllJob);
 
   React.useEffect(() => {
     setCurrentPage((prev) => Math.min(Math.max(1, prev), totalLocalPages));
@@ -196,8 +208,64 @@ export const SearchResultsSection: React.FC<Props> = ({
         </div>
       )}
 
+      {fetchAllError && (
+        <div role="alert" style={{ color: 'var(--status-danger-text)', marginBottom: 12 }}>
+          {fetchAllError}
+        </div>
+      )}
+
+      {/* Fetch-all progress (v0.6.5): background retrieval of every available page */}
+      {(onFetchAll || fetchAllJob) && (
+        <FetchAllProgressPanel
+          progress={fetchAllJob}
+          starting={fetchAllStarting}
+          onCancel={onCancelFetchAll}
+        />
+      )}
+
+      {/* Fetch-all trigger (v0.6.5): retrieve every page each provider exposes */}
+      {onFetchAll && !fetchAllActive && (
+        <div
+          style={{
+            marginBottom: 12,
+            padding: '10px 14px',
+            borderRadius: 'var(--radius-md)',
+            border: '1px dashed var(--border-strong)',
+            backgroundColor: 'var(--bg-surface-elevated)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 12,
+          }}
+        >
+          <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
+            Pobrano <strong>{totalLoaded}</strong> rekordów. Providerzy mogą udostępniać
+            mniej wyników niż deklarowana łączna liczba trafień.
+          </div>
+          <button
+            type="button"
+            disabled={loadingMore}
+            onClick={onFetchAll}
+            data-testid="fetch-all-button"
+            style={{
+              padding: '7px 14px',
+              borderRadius: 'var(--radius-md)',
+              backgroundColor: 'var(--accent-primary)',
+              color: '#fff',
+              border: 'none',
+              fontWeight: 700,
+              fontSize: '0.82rem',
+              opacity: loadingMore ? 0.55 : 1,
+              cursor: loadingMore ? 'wait' : 'pointer',
+            }}
+          >
+            Pobierz wszystkie dostępne
+          </button>
+        </div>
+      )}
+
       {/* Provider Load More Section (Fetching additional batches from external API) */}
-      {onLoadMore && result.has_more && (
+      {onLoadMore && result.has_more && !fetchAllActive && (
         <div
           style={{
             marginBottom: 12,

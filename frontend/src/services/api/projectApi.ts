@@ -6,6 +6,8 @@ import {
   DuplicateDecisionType,
   EditableSearchStrategy,
   SearchExecutionResult,
+  FetchAllStartResult,
+  FetchAllStatusResult,
   BibliographicImportResponse,
   BibliographicImportHistoryRecord,
   SourcesSummaryResponse,
@@ -92,6 +94,12 @@ export interface ProjectApiService {
     strategy: EditableSearchStrategy,
     cursor?: string,
   ): Promise<SearchExecutionResult>;
+  startFetchAllSearch(
+    projectId: string,
+    strategy: EditableSearchStrategy,
+  ): Promise<FetchAllStartResult>;
+  getFetchAllSearchStatus(projectId: string, jobId: string): Promise<FetchAllStatusResult>;
+  cancelFetchAllSearch(projectId: string, jobId: string): Promise<FetchAllStatusResult>;
   getSearchStrategy(projectId: string): Promise<SearchStrategy | null>;
   saveSearchStrategy(
     projectId: string,
@@ -415,6 +423,65 @@ class MixedProjectApiService implements ProjectApiService {
       throw new Error(await formatFastApiError(response));
     }
     return response.json() as Promise<SearchExecutionResult>;
+  }
+
+  async startFetchAllSearch(
+    projectId: string,
+    strategy: EditableSearchStrategy,
+  ): Promise<FetchAllStartResult> {
+    let response: Response;
+    try {
+      response = await fetch(
+        `${API_BASE_URL}/projects/${projectId}/search-strategy/executions/fetch-all`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify({
+            publication_year_from: strategy.filters.publicationYearFrom,
+            publication_year_to: strategy.filters.publicationYearTo,
+            languages: strategy.filters.languages,
+            publication_types: strategy.filters.publicationTypes,
+            open_access: strategy.filters.fullTextOnly,
+            providers: strategy.providers,
+            concept_groups: strategy.conceptGroups,
+          }),
+        }
+      );
+    } catch {
+      throw new Error('Nie udało się połączyć z backendem. Sprawdź połączenie i spróbuj ponownie.');
+    }
+    if (!response.ok) {
+      throw new Error(await formatFastApiError(response));
+    }
+    return response.json() as Promise<FetchAllStartResult>;
+  }
+
+  async getFetchAllSearchStatus(
+    projectId: string,
+    jobId: string,
+  ): Promise<FetchAllStatusResult> {
+    const response = await fetch(
+      `${API_BASE_URL}/projects/${projectId}/search-strategy/executions/fetch-all/${jobId}`,
+      { headers: { Accept: 'application/json' } }
+    );
+    if (!response.ok) {
+      throw new Error(await formatFastApiError(response));
+    }
+    return response.json() as Promise<FetchAllStatusResult>;
+  }
+
+  async cancelFetchAllSearch(
+    projectId: string,
+    jobId: string,
+  ): Promise<FetchAllStatusResult> {
+    const response = await fetch(
+      `${API_BASE_URL}/projects/${projectId}/search-strategy/executions/fetch-all/${jobId}/cancel`,
+      { method: 'POST', headers: { Accept: 'application/json' } }
+    );
+    if (!response.ok) {
+      throw new Error(await formatFastApiError(response));
+    }
+    return response.json() as Promise<FetchAllStatusResult>;
   }
 
   async importSearchResults(

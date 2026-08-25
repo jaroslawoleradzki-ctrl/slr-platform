@@ -1,5 +1,53 @@
 # Changelog
 
+## [0.6.5] — 2026-08-25
+
+### Added
+
+- **Fetch All Available Search Results**:
+  - Added a provider-agnostic "Pobierz wszystkie dostępne" capability next to the
+    existing "Pobierz kolejne wyniki" cursor pagination on the Search Strategy
+    screen; the previous mechanism remains unchanged.
+  - One fetch-all job paginates every selected provider independently and
+    sequentially (OpenAlex opaque cursors, Crossref opaque cursors,
+    Semantic Scholar offset-as-cursor) through the uniform
+    `SearchProvider.search_with_raw` / `ProviderSearchOutput` contract — no
+    Semantic Scholar-specific code path.
+  - Fetching stops per provider on: end of results, missing/repeated cursor,
+    empty page while more results were claimed, a technical retrieval limit
+    (e.g. the Semantic Scholar relevance-search ~1000 record cap) or this
+    service's own safety caps (`FETCH_ALL_MAX_PAGES_PER_PROVIDER`,
+    `FETCH_ALL_MAX_RECORDS_PER_PROVIDER`, `FETCH_ALL_MAX_SECONDS`) preventing
+    infinite pagination.
+  - Pages are fetched strictly sequentially through the existing provider
+    clients, preserving their rate limiting (Semantic Scholar 1 rps),
+    tenacity retry/backoff and `Retry-After` handling for HTTP 429.
+  - Partial success semantics: an unrecoverable failure of one provider never
+    discards results of the others; already fetched records are kept and
+    snapshotted.
+  - New background job endpoints:
+    `POST /projects/{id}/search-strategy/executions/fetch-all` (202 + job id),
+    `GET .../executions/fetch-all/{job_id}` (cheap in-memory progress read that
+    intentionally does not use the slow extraction `/progress` endpoint) and
+    `POST .../executions/fetch-all/{job_id}/cancel` (cooperative cancellation
+    between pages that keeps fetched records). Only one fetch-all job may run
+    per project at a time (HTTP 409 otherwise).
+  - Live progress reports per-provider fetched/kept counts, provider-reported
+    totals marked as approximate (`~`), limit-reached flags and terminal
+    per-provider statuses; the UI never promises the reported match count is
+    fully retrievable ("Pobierz wszystkie dostępne", not "Pobierz wszystkie N").
+  - Local execution constraints keep v0.6.4 semantics in fetch-all jobs:
+    records with unknown language stay candidates when a language filter such
+    as `["en"]` is active. Shared constraint/mapping logic was extracted to
+    `app/services/search_strategy_support.py` so both paths use identical rules.
+  - Known limitation (documented): resumable per-provider cursors are not
+    stored between requests, so fetch-all restarts pagination from page one;
+    records are de-duplicated by `(provider, source_id)` within the whole job
+    so nothing is added or snapshotted twice, but previously downloaded
+    records may travel over the wire once more.
+  - No database schema change or migration is required.
+  - No AI/LLM functionality is added.
+
 ## [0.6.4] — 2026-08-25
 
 ### Fixed
