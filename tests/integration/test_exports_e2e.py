@@ -142,15 +142,28 @@ def workflow_setup(tmp_path: Path):
     )
     project_repo.create(project)
 
-    # 3. Seed publications
-    pub1_id = uuid4()
-    pub2_id = uuid4()
-    pub3_id = uuid4()
+    # 3. Seed publications with deterministic fixed UUIDs
+    # Chosen explicitly so that pub2_id < pub1_id, ensuring production merge
+    # selects pub2_id as canonical and marks pub1_id as superseded.
+    from uuid import UUID
 
     from app.domain.provenance import ProvenanceEntry
 
+    pub1_id = UUID("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb")
+    pub2_id = UUID("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
+    pub3_id = UUID("cccccccc-cccc-4ccc-8ccc-cccccccccccc")
+
     pub1 = Publication(
         record_id=pub1_id,
+        title="Lean energy management in automotive manufacturing (Duplicate Record)",
+        authors=[Author(display_name="Kowalski, J.", family_name="Kowalski", given_name="J.")],
+        publication_year=2023,
+        document_type=DocumentType.JOURNAL_ARTICLE,
+        identifiers=[Identifier(type=IdentifierType.DOI, value="10.1016/j.lean.2023.01")],
+        provenance=[ProvenanceEntry(source="bibtex", source_record_id=str(pub1_id))],
+    )
+    pub2 = Publication(
+        record_id=pub2_id,
         title="=HYPERLINK(\"http://evil.com\") Lean energy management in automotive manufacturing",
         authors=[Author(display_name="Kowalski, Jan", family_name="Kowalski", given_name="Jan")],
         publication_year=2023,
@@ -158,15 +171,6 @@ def workflow_setup(tmp_path: Path):
         identifiers=[Identifier(type=IdentifierType.DOI, value="10.1016/j.lean.2023.01")],
         venue=Venue(name="Journal of Cleaner Production"),
         abstract="Investigating lean energy methods in automotive plants.",
-        provenance=[ProvenanceEntry(source="bibtex", source_record_id=str(pub1_id))],
-    )
-    pub2 = Publication(
-        record_id=pub2_id,
-        title="Lean energy management in automotive manufacturing (Duplicate Record)",
-        authors=[Author(display_name="Kowalski, J.", family_name="Kowalski", given_name="J.")],
-        publication_year=2023,
-        document_type=DocumentType.JOURNAL_ARTICLE,
-        identifiers=[Identifier(type=IdentifierType.DOI, value="10.1016/j.lean.2023.01")],
         provenance=[ProvenanceEntry(source="bibtex", source_record_id=str(pub2_id))],
     )
     pub3 = Publication(
@@ -232,9 +236,14 @@ def workflow_setup(tmp_path: Path):
     merge_res = dup_service.merge_group(project_id=project_id, group_id=target_group.group_id)
     assert merge_res.status == DuplicateGroupStatus.MERGED
 
+    # Crucial: capture authoritative canonical publication ID returned by production merge
+    canonical_pub_id = UUID(str(merge_res.canonical_record_id))
+    assert canonical_pub_id == pub2_id, "Production merge should select min(UUID) which is pub2_id"
+    assert canonical_pub_id != pub1_id
+
     # 5. Screening Decisions:
-    # Reviewer A: INCLUDE pub1 and pub3 (both TA and FT)
-    # Reviewer B: INCLUDE pub1, EXCLUDE pub3 (at TA)
+    # Reviewer A: INCLUDE canonical_pub_id and pub3 (both TA and FT)
+    # Reviewer B: INCLUDE canonical_pub_id, EXCLUDE pub3 (at TA)
     cid_ta = uuid4()
     crit_ta = CriterionAssessment(
         criterion_id=cid_ta,
@@ -258,7 +267,7 @@ def workflow_setup(tmp_path: Path):
     screening_repo.save(
         ScreeningDecision(
             project_id=project_id,
-            publication_id=pub1_id,
+            publication_id=canonical_pub_id,
             stage=ScreeningStage.TITLE_ABSTRACT,
             outcome=ScreeningOutcome.INCLUDE,
             reviewer_id="reviewer_a",
@@ -278,7 +287,7 @@ def workflow_setup(tmp_path: Path):
     screening_repo.save(
         ScreeningDecision(
             project_id=project_id,
-            publication_id=pub1_id,
+            publication_id=canonical_pub_id,
             stage=ScreeningStage.FULL_TEXT,
             outcome=ScreeningOutcome.INCLUDE,
             reviewer_id="reviewer_a",
@@ -296,11 +305,11 @@ def workflow_setup(tmp_path: Path):
         )
     )
 
-    # Reviewer B decisions (pub1 included, pub3 excluded)
+    # Reviewer B decisions (canonical_pub_id included, pub3 excluded)
     screening_repo.save(
         ScreeningDecision(
             project_id=project_id,
-            publication_id=pub1_id,
+            publication_id=canonical_pub_id,
             stage=ScreeningStage.TITLE_ABSTRACT,
             outcome=ScreeningOutcome.INCLUDE,
             reviewer_id="reviewer_b",
@@ -321,7 +330,7 @@ def workflow_setup(tmp_path: Path):
     screening_repo.save(
         ScreeningDecision(
             project_id=project_id,
-            publication_id=pub1_id,
+            publication_id=canonical_pub_id,
             stage=ScreeningStage.FULL_TEXT,
             outcome=ScreeningOutcome.INCLUDE,
             reviewer_id="reviewer_b",
@@ -374,7 +383,7 @@ def workflow_setup(tmp_path: Path):
         QualityAssessment(
             assessment_id=aid_a1,
             project_id=project_id,
-            publication_id=pub1_id,
+            publication_id=canonical_pub_id,
             reviewer_id="reviewer_a",
             template_id=t_version_id,
             responses=[
@@ -406,13 +415,13 @@ def workflow_setup(tmp_path: Path):
         )
     )
 
-    # Reviewer B QA assessment (pub1 only)
+    # Reviewer B QA assessment (canonical_pub_id only)
     aid_b1 = uuid4()
     qa_repo.save_assessment(
         QualityAssessment(
             assessment_id=aid_b1,
             project_id=project_id,
-            publication_id=pub1_id,
+            publication_id=canonical_pub_id,
             reviewer_id="reviewer_b",
             template_id=t_version_id,
             responses=[
@@ -463,15 +472,15 @@ def workflow_setup(tmp_path: Path):
         )
     )
 
-    rec_1 = ExtractionRecord(
+    rec_canonical = ExtractionRecord(
         record_id=uuid4(),
         project_id=project_id,
-        publication_id=pub1_id,
+        publication_id=canonical_pub_id,
         template_id=ext_template_id,
         template_version=ext_version,
         current_status=ExtractionCompletenessStatus.COMPLETE,
     )
-    extraction_repo.create_record(rec_1)
+    extraction_repo.create_record(rec_canonical)
 
     rec_3 = ExtractionRecord(
         record_id=uuid4(),
@@ -487,9 +496,9 @@ def workflow_setup(tmp_path: Path):
     extraction_repo.append_revision(
         ExtractionRevision(
             revision_id=uuid4(),
-            record_id=rec_1.record_id,
+            record_id=rec_canonical.record_id,
             project_id=project_id,
-            publication_id=pub1_id,
+            publication_id=canonical_pub_id,
             reviewer_id="reviewer_a",
             revision_index=1,
             completeness_status=ExtractionCompletenessStatus.COMPLETE,
@@ -543,13 +552,13 @@ def workflow_setup(tmp_path: Path):
         )
     )
 
-    # Reviewer B extraction submission (pub1 only, revision_index=2 on rec_1)
+    # Reviewer B extraction submission (canonical_pub_id only, revision_index=2 on rec_canonical)
     extraction_repo.append_revision(
         ExtractionRevision(
             revision_id=uuid4(),
-            record_id=rec_1.record_id,
+            record_id=rec_canonical.record_id,
             project_id=project_id,
-            publication_id=pub1_id,
+            publication_id=canonical_pub_id,
             reviewer_id="reviewer_b",
             revision_index=2,
             completeness_status=ExtractionCompletenessStatus.COMPLETE,
