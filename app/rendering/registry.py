@@ -4,6 +4,7 @@ from app.domain.search import SearchQuery
 from app.rendering.base import QueryRenderer, RenderedQuery
 from app.rendering.crossref import CrossrefQueryRenderer
 from app.rendering.openalex import OpenAlexQueryRenderer
+from app.rendering.semantic_scholar import SemanticScholarQueryRenderer
 
 
 class GenericBooleanQueryRenderer:
@@ -24,6 +25,7 @@ class GenericBooleanQueryRenderer:
 _DEFAULT_RENDERERS: dict[str, QueryRenderer] = {
     "openalex": OpenAlexQueryRenderer(),
     "crossref": CrossrefQueryRenderer(),
+    "semantic_scholar": SemanticScholarQueryRenderer(),
 }
 
 

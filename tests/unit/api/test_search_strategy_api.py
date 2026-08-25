@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from pathlib import Path
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 
@@ -208,7 +209,38 @@ def test_execution_accepts_semantic_scholar_provider() -> None:
     assert any(
         pq["provider"] == "semantic_scholar" for pq in body["provider_queries"]
     )
+    semantic_query = next(
+        pq
+        for pq in body["provider_queries"]
+        if pq["provider"] == "semantic_scholar"
+    )
+    assert semantic_query["rendered_query"] == "Kaizen Lean"
+    assert semantic_query["is_lossless"] is False
+    assert any("OR operators" in warning for warning in semantic_query["warnings"])
     assert body["provider_errors"] == []
+
+
+def test_semantic_scholar_http_400_remains_auditable_provider_error() -> None:
+    request = httpx.Request(
+        "GET", "https://api.semanticscholar.org/graph/v1/paper/search"
+    )
+    with pytest.raises(httpx.HTTPStatusError) as error_info:
+        httpx.Response(400, request=request).raise_for_status()
+
+    response = _client_with_executor(
+        _Executor([_Provider("semantic_scholar", error=error_info.value)])
+    ).post(
+        "/api/v1/projects/lean_energy/search-strategy/executions",
+        json=_payload(["semantic_scholar"]),
+    )
+
+    assert response.status_code == 200
+    provider_errors = response.json()["provider_errors"]
+    assert len(provider_errors) == 1
+    assert provider_errors[0]["provider"] == "semantic_scholar"
+    assert provider_errors[0]["message"].startswith(
+        "HTTPStatusError: Client error '400 Bad Request'"
+    )
 
 
 @pytest.mark.parametrize(

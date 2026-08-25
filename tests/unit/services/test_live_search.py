@@ -254,12 +254,26 @@ def test_build_providers_semantic_scholar_handles_missing_api_key() -> None:
 
 @pytest.mark.anyio
 async def test_live_search_service_executes_semantic_scholar_end_to_end() -> None:
-    strategy = _sample_strategy(providers=["semantic_scholar"])
+    strategy = _sample_strategy(providers=["semantic_scholar"]).model_copy(
+        update={
+            "concept_groups": [
+                ConceptGroupRequest(
+                    id="regression",
+                    name="Reported regression",
+                    terms=["Lean", "lean manufacturing energy efficiency"],
+                )
+            ]
+        }
+    )
 
     async def handler(request: httpx.Request) -> httpx.Response:
         assert request.url.host == "api.semanticscholar.org"
         assert request.url.path == "/graph/v1/paper/search"
-        assert "lean production" in request.url.params["query"]
+        assert request.url.params["query"] == (
+            "Lean lean manufacturing energy efficiency"
+        )
+        assert "OR" not in request.url.params["query"]
+        assert '"' not in request.url.params["query"]
         return httpx.Response(
             200,
             json={
@@ -299,6 +313,11 @@ async def test_live_search_service_executes_semantic_scholar_end_to_end() -> Non
     assert result.has_more is False
 
     warnings = result.search_run.warnings
+    assert result.search_run.rendered_query == (
+        "Lean lean manufacturing energy efficiency"
+    )
+    assert any("exact-phrase syntax" in w for w in warnings)
+    assert any("OR operators" in w for w in warnings)
     assert any("year range filtering" in w for w in warnings)
     assert any("language filtering" in w for w in warnings)
     assert any("publication type filtering" in w for w in warnings)
