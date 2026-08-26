@@ -207,3 +207,52 @@ def test_delete_for_project_removes_both_snapshots_and_audits(tmp_path) -> None:
     assert audits_a == 0
     assert snapshots_b == 1
     assert audits_b == 1
+
+
+def test_get_for_search_run_returns_ordered_snapshots(tmp_path) -> None:
+    database = tmp_path / "snapshots_run.db"
+    repository = SqliteSearchResultSnapshotRepository(database)
+    run_id = UUID("00000000-0000-0000-0000-000000000010")
+    other_run_id = UUID("00000000-0000-0000-0000-000000000020")
+
+    pub1 = Publication(
+        record_id=UUID("00000000-0000-0000-0000-000000000101"),
+        title="Publication 1",
+        provenance=[ProvenanceEntry(source="openalex", source_record_id="W1", run_id=run_id)],
+    )
+    pub2 = Publication(
+        record_id=UUID("00000000-0000-0000-0000-000000000102"),
+        title="Publication 2",
+        provenance=[ProvenanceEntry(source="openalex", source_record_id="W2", run_id=run_id)],
+    )
+    pub_other = Publication(
+        record_id=UUID("00000000-0000-0000-0000-000000000103"),
+        title="Publication Other",
+        provenance=[ProvenanceEntry(source="openalex", source_record_id="W3", run_id=other_run_id)],
+    )
+
+    s1 = repository.save(
+        SearchResultSnapshot.create(
+            project_id="proj_run", search_run_id=run_id, provider="openalex", source_id="W1", publication=pub1
+        )
+    )
+    s2 = repository.save(
+        SearchResultSnapshot.create(
+            project_id="proj_run", search_run_id=run_id, provider="openalex", source_id="W2", publication=pub2
+        )
+    )
+    repository.save(
+        SearchResultSnapshot.create(
+            project_id="proj_run", search_run_id=other_run_id, provider="openalex", source_id="W3", publication=pub_other
+        )
+    )
+
+    results = repository.get_for_search_run("proj_run", run_id)
+    assert len(results) == 2
+    assert results[0].snapshot_id == s1.snapshot_id
+    assert results[0].publication.title == "Publication 1"
+    assert results[1].snapshot_id == s2.snapshot_id
+    assert results[1].publication.title == "Publication 2"
+
+    # Other project or run returns empty
+    assert repository.get_for_search_run("other_proj", run_id) == []

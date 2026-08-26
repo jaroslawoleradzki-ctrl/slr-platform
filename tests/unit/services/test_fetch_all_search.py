@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 import dataclasses
 from typing import Any
+from uuid import UUID
 
 import httpx
 
@@ -20,7 +21,10 @@ from app.domain.identifiers import Identifier, IdentifierType
 from app.domain.provenance import ProvenanceEntry
 from app.domain.publication import DocumentType, Publication
 from app.providers.search.base import ProviderSearchOutput
-from app.repositories.search_result_snapshot_repository import SearchResultSnapshot
+from app.repositories.search_result_snapshot_repository import (
+    DuplicateSearchResultSnapshotError,
+    SearchResultSnapshot,
+)
 from app.services.fetch_all_search import FetchAllSearchService
 
 
@@ -29,8 +33,24 @@ class FakeSnapshotRepository:
         self.saved: list[SearchResultSnapshot] = []
 
     def save(self, snapshot: SearchResultSnapshot) -> SearchResultSnapshot:
+        for existing in self.saved:
+            if (
+                existing.project_id == snapshot.project_id
+                and existing.search_run_id == snapshot.search_run_id
+                and existing.publication.record_id == snapshot.publication.record_id
+            ):
+                raise DuplicateSearchResultSnapshotError(
+                    "publication already has a snapshot in this project search run"
+                )
         self.saved.append(snapshot)
         return snapshot
+
+    def get_for_search_run(
+        self, project_id: str, search_run_id: UUID, *, connection: Any = None
+    ) -> list[SearchResultSnapshot]:
+        return [
+            s for s in self.saved if s.project_id == project_id and s.search_run_id == search_run_id
+        ]
 
 
 class FakeProvider:

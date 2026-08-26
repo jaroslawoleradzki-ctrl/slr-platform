@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import json
 import os
-from dataclasses import dataclass
-from datetime import datetime, timezone
-from pathlib import Path
 import sqlite3
+from dataclasses import dataclass
+from datetime import datetime
+from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 from uuid import UUID
 
@@ -88,6 +88,7 @@ class SqliteSearchRunCheckpointRepository:
                 warnings, created_at, updated_at
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(search_run_id) DO UPDATE SET
+                job_id = excluded.job_id,
                 cursor = excluded.cursor,
                 pages_fetched = excluded.pages_fetched,
                 fetched_count = excluded.fetched_count,
@@ -184,7 +185,8 @@ class SqliteSearchRunCheckpointRepository:
         cursor = conn.execute(
             """SELECT job_id FROM search_run_checkpoints
                WHERE project_id = ?
-               ORDER BY updated_at DESC LIMIT 1""",
+               GROUP BY job_id
+               ORDER BY MAX(updated_at) DESC LIMIT 1""",
             (project_id,),
         )
         row = cursor.fetchone()
