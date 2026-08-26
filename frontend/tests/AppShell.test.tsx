@@ -29,10 +29,12 @@ describe('AppShell Component', () => {
     );
 
     expect(await screen.findByText('SLR PLATFORM')).toBeInTheDocument();
-    expect(screen.getAllByText(/1. Search Strategy/i).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/4. Deduplication/i).length).toBeGreaterThan(0);
-    expect(screen.getAllByRole('link', { name: /5\. Screening/i })).toHaveLength(2);
-    screen.getAllByRole('link', { name: /5\. Screening/i }).forEach((link) => {
+    expect(screen.getAllByText(/Search Strategy/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Deduplication/i).length).toBeGreaterThan(0);
+    // Sidebar ("Screening") and top overview bar ("5. Screening") both link to the same stage
+    const screeningLinks = screen.getAllByRole('link', { name: /Screening/i });
+    expect(screeningLinks).toHaveLength(2);
+    screeningLinks.forEach((link) => {
       expect(link).toHaveAttribute('href', '/projects/project-shell/screen/title-abstract');
     });
     expect(screen.getByText('Dashboard Content')).toBeInTheDocument();

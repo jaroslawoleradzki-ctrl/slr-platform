@@ -1,6 +1,17 @@
 import React from 'react';
-import { AlertTriangle, CheckCircle2, Loader2 } from 'lucide-react';
-import { FetchAllProviderProgress, FetchAllStatusResult } from '../../types';
+import {
+  AlertTriangle,
+  Ban,
+  CheckCircle2,
+  CircleDashed,
+  Loader2,
+  OctagonX,
+} from 'lucide-react';
+import {
+  FetchAllProviderProgress,
+  FetchAllProviderStatus,
+  FetchAllStatusResult,
+} from '../../types';
 
 const PROVIDER_LABELS: Record<string, string> = {
   openalex: 'OpenAlex',
@@ -8,7 +19,7 @@ const PROVIDER_LABELS: Record<string, string> = {
   semantic_scholar: 'Semantic Scholar',
 };
 
-const STATUS_LABELS: Record<FetchAllProviderProgress['status'], string> = {
+const STATUS_LABELS: Record<FetchAllProviderStatus, string> = {
   pending: 'Oczekuje…',
   running: 'Pobieranie…',
   complete: 'Zakończono',
@@ -17,7 +28,35 @@ const STATUS_LABELS: Record<FetchAllProviderProgress['status'], string> = {
   failed: 'Błąd',
 };
 
+/** Distinct glyph per state so status never relies on colour alone. */
+const statusMeta = (
+  status: FetchAllProviderStatus
+): { icon: React.ReactNode; color: string } => {
+  switch (status) {
+    case 'complete':
+      return { icon: <CheckCircle2 size={13} />, color: 'var(--status-success-text)' };
+    case 'running':
+      return { icon: <Loader2 size={13} className="spin" />, color: 'var(--status-info-text)' };
+    case 'partial':
+      return { icon: <AlertTriangle size={13} />, color: 'var(--status-warning-text)' };
+    case 'cancelled':
+      return { icon: <Ban size={13} />, color: 'var(--text-muted)' };
+    case 'failed':
+      return { icon: <OctagonX size={13} />, color: 'var(--status-error-text)' };
+    case 'pending':
+    default:
+      return { icon: <CircleDashed size={13} />, color: 'var(--text-muted)' };
+  }
+};
+
 const formatNumber = (value: number): string => value.toLocaleString('pl-PL');
+
+const gridStyle: React.CSSProperties = {
+  display: 'grid',
+  gridTemplateColumns: 'minmax(150px, 1.4fr) minmax(170px, 1fr) repeat(2, minmax(96px, 0.6fr))',
+  columnGap: 12,
+  alignItems: 'center',
+};
 
 interface Props {
   progress: FetchAllStatusResult | null;
@@ -87,36 +126,36 @@ export const FetchAllProgressPanel: React.FC<Props> = ({
                 : 'Pobieranie wszystkich dostępnych wyników zakończone.'}
         </strong>
         {onCancel && running && (
-          <button type="button" onClick={onCancel} className="btn-secondary">
+          <button type="button" onClick={onCancel} style={{ ...ghostButtonStyle }}>
             Anuluj pobieranie
           </button>
         )}
       </div>
 
-      <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
-        {progress.providers.map((provider) => (
-          <div key={provider.provider} style={{ fontSize: '0.82rem' }}>
-            <span style={{ fontWeight: 700 }}>
-              {PROVIDER_LABELS[provider.provider] ?? provider.provider}
-            </span>{' '}
-            —{' '}
-            <span>
-              {formatNumber(provider.fetched_count)} pobranych
-              {provider.total_reported !== null && (
-                <>
-                  {' '}z ~{formatNumber(provider.total_reported)} zgłoszonych przez
-                  providera
-                </>
-              )}
-            </span>
-            {provider.limit_reached && (
-              <span style={{ color: 'var(--status-warning-text)' }}>
-                {' '}· osiągnięto limit możliwy do pobrania z API
-              </span>
-            )}{' '}
-            — <em>{STATUS_LABELS[provider.status]}</em>
+      <div style={{ marginTop: 10, overflowX: 'auto' }}>
+        <div style={{ minWidth: 520 }}>
+          {/* Header row */}
+          <div
+            style={{
+              ...gridStyle,
+              padding: '4px 10px',
+              fontSize: '0.68rem',
+              textTransform: 'uppercase',
+              letterSpacing: '0.05em',
+              fontWeight: 700,
+              color: 'var(--text-muted)',
+            }}
+          >
+            <span>Provider</span>
+            <span>Status</span>
+            <span style={{ textAlign: 'right' }}>Pobrano</span>
+            <span style={{ textAlign: 'right' }}>Zgłoszono</span>
           </div>
-        ))}
+
+          {progress.providers.map((provider) => (
+            <ProviderRow key={provider.provider} provider={provider} running={running} />
+          ))}
+        </div>
       </div>
 
       <div style={{ marginTop: 8, fontSize: '0.85rem', fontWeight: 600 }}>
@@ -158,7 +197,7 @@ export const FetchAllProgressPanel: React.FC<Props> = ({
         progress.status === 'completed' &&
         incompleteProviders.length === 0 && (
           <div
-            role="status"
+            data-testid="fetch-all-complete-note"
             style={{
               marginTop: 8,
               display: 'flex',
@@ -174,4 +213,69 @@ export const FetchAllProgressPanel: React.FC<Props> = ({
         )}
     </div>
   );
+};
+
+const ProviderRow: React.FC<{ provider: FetchAllProviderProgress; running: boolean }> = ({
+  provider,
+  running,
+}) => {
+  const meta = statusMeta(provider.status);
+  const name = PROVIDER_LABELS[provider.provider] ?? provider.provider;
+
+  return (
+    <div
+      data-testid={`fetch-all-provider-row-${provider.provider}`}
+      style={{
+        ...gridStyle,
+        padding: '7px 10px',
+        borderTop: '1px solid var(--border-subtle)',
+        fontSize: '0.82rem',
+        opacity: provider.status === 'pending' && running ? 0.65 : 1,
+      }}
+    >
+      <span style={{ fontWeight: 700 }} title={provider.message ?? undefined}>
+        {name}
+        {provider.limit_reached && (
+          <span
+            style={{
+              display: 'block',
+              fontWeight: 400,
+              fontSize: '0.72rem',
+              color: 'var(--status-warning-text)',
+            }}
+          >
+            osiągnięto limit możliwy do pobrania z API
+          </span>
+        )}
+      </span>
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: meta.color }}>
+        {meta.icon}
+        {STATUS_LABELS[provider.status]}
+      </span>
+      <span style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: '0.8rem' }}>
+        {formatNumber(provider.fetched_count)}
+      </span>
+      <span
+        style={{
+          textAlign: 'right',
+          fontFamily: 'var(--font-mono)',
+          fontSize: '0.8rem',
+          color: 'var(--text-secondary)',
+        }}
+      >
+        {provider.total_reported !== null ? `~${formatNumber(provider.total_reported)}` : '–'}
+      </span>
+    </div>
+  );
+};
+
+export const ghostButtonStyle: React.CSSProperties = {
+  padding: '6px 12px',
+  borderRadius: 'var(--radius-md)',
+  border: '1px solid var(--border-strong)',
+  backgroundColor: 'transparent',
+  color: 'var(--text-primary)',
+  fontWeight: 600,
+  fontSize: '0.78rem',
+  cursor: 'pointer',
 };
