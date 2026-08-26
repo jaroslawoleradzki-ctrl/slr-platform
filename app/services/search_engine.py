@@ -270,6 +270,14 @@ class SearchEngine:
             for publication in provider_result.publications
         ]
         merged_publications = self._result_merger.merge(normalized_publications)
+        post_merge_validations = [
+            validate_canonical_query(search_query, publication) for publication in merged_publications
+        ]
+        final_merged_publications = [
+            publication
+            for publication, validation in zip(merged_publications, post_merge_validations, strict=True)
+            if validation.status is not CanonicalMatchStatus.NON_MATCH
+        ]
         execution_finished_at = self._clock()
         duplicate_groups = self._duplicate_group_builder.build(
             normalized_publications,
@@ -279,7 +287,7 @@ class SearchEngine:
             canonical_query=search_query,
             provider_results=provider_results,
             normalized_publications=normalized_publications,
-            merged_publications=merged_publications,
+            merged_publications=final_merged_publications,
             duplicate_groups=duplicate_groups,
             result_provenance=result_provenance,
             execution_provenance=SearchExecutionProvenance(
@@ -289,7 +297,7 @@ class SearchEngine:
                 total_provider_results=sum(
                     len(result.publications) for result in provider_results if result.publications is not None
                 ),
-                merged_result_count=len(merged_publications),
+                merged_result_count=len(final_merged_publications),
             ),
         )
 

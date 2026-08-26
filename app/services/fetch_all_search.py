@@ -758,6 +758,14 @@ class FetchAllSearchService:
                 else:
                     seen_dois.add(doi)
         merged_publications = ResultMerger().merge(publication for publication, _ in all_records)
+        post_merge_validations = [
+            validate_canonical_query(job.query, publication) for publication in merged_publications
+        ]
+        merged_publications = [
+            publication
+            for publication, validation in zip(merged_publications, post_merge_validations, strict=True)
+            if validation.status is not CanonicalMatchStatus.NON_MATCH
+        ]
         finished_at = datetime.now(timezone.utc)
         save_audit = getattr(self._snapshot_repo(), "save_audit", None)
         if callable(save_audit):
