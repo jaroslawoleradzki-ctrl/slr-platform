@@ -468,9 +468,21 @@ class FetchAllSearchService:
         state.resumable = resumable
 
         plan_meta = {"strategy": job.strategy.model_dump(mode="json")}
+        if job.resumed_from_job_id:
+            plan_meta["resumed_from_job_id"] = job.resumed_from_job_id
         if state.plan_metadata:
             plan_meta.update(state.plan_metadata)
+        if cursor and cursor.startswith("crossref-plan:"):
+            from app.providers.search.crossref import CrossrefProvider
+            try:
+                q_idx, phys_cur = CrossrefProvider._decode_candidate_cursor(cursor)
+                plan_meta["current_query_index"] = q_idx
+                plan_meta["current_physical_cursor"] = phys_cur
+            except Exception:
+                pass
+
         checkpoint = SearchRunCheckpoint(
+
             search_run_id=state.search_run_id,
             project_id=job.project_id,
             job_id=UUID(job.job_id),
@@ -599,11 +611,14 @@ class FetchAllSearchService:
         )
         state.rendered_query = rendered.query_string
         state.lossless = rendered.is_lossless
+        if rendered.metadata:
+            state.plan_metadata = {**(state.plan_metadata or {}), **rendered.metadata}
         for w in rendered.warnings:
             if w not in state.warnings:
                 state.warnings.append(w)
         state.search_run_id = search_run.run_id
         state.status = "running"
+
 
         seen_source_ids: set[str] = set()
         seen_cursors: set[str] = set()
@@ -764,8 +779,13 @@ class FetchAllSearchService:
             for state in job.providers:
                 if state.search_run_id is None:
                     continue
+                if job.resumed_from_job_id:
+                    resume_notice = f"Execution resumed from job {job.resumed_from_job_id}"
+                    if resume_notice not in state.warnings:
+                        state.warnings.append(resume_notice)
                 rendered = get_query_renderer(state.name).render(job.query)
                 save_audit(
+
                     SearchRunAudit(
                         search_run_id=state.search_run_id,
                         project_id=job.project_id,

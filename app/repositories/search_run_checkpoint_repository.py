@@ -88,6 +88,7 @@ class SqliteSearchRunCheckpointRepository:
                 warnings, created_at, updated_at
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(search_run_id) DO UPDATE SET
+                job_id = excluded.job_id,
                 cursor = excluded.cursor,
                 pages_fetched = excluded.pages_fetched,
                 fetched_count = excluded.fetched_count,
@@ -100,6 +101,7 @@ class SqliteSearchRunCheckpointRepository:
                 plan_metadata = excluded.plan_metadata,
                 warnings = excluded.warnings,
                 updated_at = excluded.updated_at""",
+
             (
                 str(checkpoint.search_run_id),
                 checkpoint.project_id,
