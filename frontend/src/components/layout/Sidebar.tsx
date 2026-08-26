@@ -16,31 +16,49 @@ import { useProject } from '../../context/ProjectContext';
 import { Badge } from '../common/Badge';
 import { APP_VERSION } from '../../config/version';
 import { WorkflowNavigationStatus } from '../../types';
+import { WORKFLOW_STAGES, buildStagePath } from '../../config/workflowStages';
+import { getStageStatusPresentation } from '../workflow/stageStatusPresentation';
+
+const STAGE_ICONS: Record<string, React.ComponentType<{ size?: number | string; style?: React.CSSProperties }>> = {
+  search: Search,
+  sources: Download,
+  normalize: Sparkles,
+  dedup: GitMerge,
+  screening: Filter,
+  'quality-assessment': Award,
+  extract: FileSpreadsheet,
+  synthesis: Layers,
+  exports: FileCheck2,
+};
 
 export const Sidebar: React.FC = () => {
   const { projectId } = useParams<{ projectId?: string }>();
   const { activeProject, workflowStatus } = useProject();
   const currentId = projectId || activeProject?.id || '';
 
-  const renderBadge = (stage: keyof WorkflowNavigationStatus | 'dashboard' | 'synthesis') => {
-    if (!workflowStatus || stage === 'dashboard' || stage === 'synthesis') return null;
-    const item = workflowStatus[stage];
+  /** Detailed right-hand status for one stage; keeps the exact labels users already know. */
+  const renderStageStatus = (
+    stageKey: keyof WorkflowNavigationStatus,
+    stageId: string
+  ): React.ReactNode => {
+    if (!workflowStatus) return null;
+    const item = workflowStatus[stageKey];
 
-    if (stage === 'deduplication') {
+    if (stageId === 'dedup') {
       const dedup = workflowStatus.deduplication;
       if (dedup.state === 'error') {
-        return <span style={{ fontSize: '0.7rem', color: 'var(--status-error-text)' }}>Błąd</span>;
+        return (
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: '0.72rem', color: 'var(--status-error-text)' }}>
+            Błąd
+          </span>
+        );
       }
       if (dedup.pendingGroups > 0) {
-        return (
-          <Badge variant="pending_action">
-            {dedup.pendingGroups} do oceny
-          </Badge>
-        );
+        return <Badge variant="pending_action">{dedup.pendingGroups} do oceny</Badge>;
       }
       if (dedup.state === 'completed') {
         return (
-          <span style={{ fontSize: '0.7rem', color: 'var(--status-success-text)', fontWeight: 600 }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: '0.72rem', color: 'var(--status-success-text)', fontWeight: 600 }}>
             Oceniono
           </span>
         );
@@ -48,101 +66,42 @@ export const Sidebar: React.FC = () => {
       return null;
     }
 
-    if (item.state === 'not_available') {
-      return <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{item.label || 'Niedostępne'}</span>;
+    if (item.state === 'pending_action') {
+      return <Badge variant="pending_action">{item.label}</Badge>;
     }
 
-    if (item.state === 'error') {
-      return <span style={{ fontSize: '0.7rem', color: 'var(--status-error-text)' }}>{item.label || 'Błąd'}</span>;
-    }
-
-    if (item.state === 'completed') {
+    if (item.state === 'in_progress' || item.state === 'warning' || item.state === 'error' || item.state === 'completed') {
+      const p = getStageStatusPresentation(item.state, 12);
       return (
-        <span style={{ fontSize: '0.7rem', color: 'var(--status-success-text)', fontWeight: 600 }}>
-          {item.label || 'Skończono'}
+        <span
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 4,
+            fontSize: '0.72rem',
+            color: p.color,
+            fontWeight: item.state === 'completed' ? 600 : 500,
+          }}
+        >
+          {p.icon}
+          {item.label}
         </span>
       );
     }
 
-    if (item.state === 'in_progress' || item.state === 'pending_action') {
-      return (
-        <Badge variant={item.state === 'pending_action' ? 'pending_action' : 'default'}>
-          {item.label}
-        </Badge>
-      );
-    }
-
-    if (item.label) {
-      return <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{item.label}</span>;
-    }
-
-    return null;
+    // not_started / not_available — quiet muted hint
+    return (
+      <span
+        style={{
+          fontSize: '0.72rem',
+          color: 'var(--text-muted)',
+          opacity: item.state === 'not_available' ? 0.7 : 1,
+        }}
+      >
+        {item.label}
+      </span>
+    );
   };
-
-  const buildPath = (suffix: string) => (currentId ? `/projects/${currentId}/${suffix}` : '/projects');
-
-  const navItems = [
-    {
-      to: buildPath('dashboard'),
-      label: 'Dashboard',
-      icon: LayoutDashboard,
-      stage: 'dashboard' as const,
-    },
-    {
-      to: buildPath('search'),
-      label: '1. Search Strategy',
-      icon: Search,
-      stage: 'search' as const,
-    },
-    {
-      to: buildPath('sources'),
-      label: '2. Sources & Imports',
-      icon: Download,
-      stage: 'sources' as const,
-    },
-    {
-      to: buildPath('normalize'),
-      label: '3. Normalization',
-      icon: Sparkles,
-      stage: 'normalization' as const,
-    },
-    {
-      to: buildPath('dedup'),
-      label: '4. Deduplication',
-      icon: GitMerge,
-      stage: 'deduplication' as const,
-    },
-    {
-      to: buildPath('screen/title-abstract'),
-      label: '5. Screening',
-      icon: Filter,
-      stage: 'screening' as const,
-    },
-    {
-      to: buildPath('quality-assessment'),
-      label: '6. Quality Assessment',
-      icon: Award,
-      stage: 'qualityAssessment' as const,
-    },
-    {
-      to: buildPath('extract'),
-      label: '7. Data Extraction',
-      icon: FileSpreadsheet,
-      stage: 'dataExtraction' as const,
-    },
-    {
-      to: `/projects/${currentId}/synthesis`,
-      label: '8. Evidence Synthesis',
-      icon: Layers,
-      stage: 'synthesis' as const,
-    },
-    {
-      to: `/projects/${currentId}/exports`,
-      label: '9. Exports & PRISMA',
-      icon: FileCheck2,
-      stage: 'exports' as const,
-    },
-  ];
 
   return (
     <aside
@@ -152,58 +111,107 @@ export const Sidebar: React.FC = () => {
         borderRight: '1px solid var(--border-subtle)',
         display: 'flex',
         flexDirection: 'column',
-        padding: '16px 12px',
-        gap: '4px',
+        padding: '16px 10px',
+        gap: '2px',
         flexShrink: 0,
+        overflowY: 'auto',
       }}
     >
-      <div style={{ padding: '4px 12px 12px 12px', borderBottom: '1px solid var(--border-subtle)', marginBottom: '8px' }}>
-        <span style={{ fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', fontWeight: 600 }}>
+      <div style={{ padding: '4px 10px 10px 10px', borderBottom: '1px solid var(--border-subtle)', marginBottom: '8px' }}>
+        <span style={{ fontSize: '0.68rem', textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-muted)', fontWeight: 700 }}>
           Kroki Procesu SLR
         </span>
       </div>
 
-      {navItems.map((item) => {
-        const Icon = item.icon;
-        const badgeContent = renderBadge(item.stage);
-
-        return (
-          <NavLink
-            key={item.stage}
-            to={item.to}
-            className={({ isActive }) => (isActive ? 'active-nav-link' : '')}
-            style={({ isActive }) => ({
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              padding: '8px 12px',
-              borderRadius: 'var(--radius-md)',
-              color: isActive ? 'var(--text-primary)' : 'var(--text-secondary)',
-              backgroundColor: isActive ? 'var(--accent-subtle)' : 'transparent',
-              borderLeft: isActive ? '3px solid var(--accent-primary)' : '3px solid transparent',
-              fontSize: '0.85rem',
-              fontWeight: isActive ? 600 : 400,
-              transition: 'all 0.15s ease',
-            })}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <Icon size={16} style={{ color: 'var(--accent-primary)' }} />
-              <span>{item.label}</span>
-            </div>
-            {badgeContent && (
-              <span style={{ fontSize: '0.75rem' }}>
-                {badgeContent}
+      <nav style={{ display: 'flex', flexDirection: 'column', gap: 2 }} aria-label="Kroki procesu SLR">
+        <NavLink
+          to={buildPath('dashboard')}
+          style={({ isActive }) => stageRowStyle(isActive)}
+        >
+          {({ isActive }) => (
+            <>
+              <span style={stageNumberStyle(false, isActive)} aria-hidden="true">
+                <LayoutDashboard size={12} />
               </span>
-            )}
-          </NavLink>
-        );
-      })}
+              <span style={{ flex: 1 }}>Dashboard</span>
+            </>
+          )}
+        </NavLink>
+
+        {WORKFLOW_STAGES.map((stage) => {
+          const Icon = STAGE_ICONS[stage.id] ?? Layers;
+          const statusContent = stage.statusKey ? renderStageStatus(stage.statusKey, stage.id) : null;
+
+          return (
+            <NavLink
+              key={stage.id}
+              to={buildStagePath(currentId || undefined, stage.pathSuffix)}
+              style={({ isActive }) => stageRowStyle(isActive)}
+            >
+              {({ isActive }) => (
+                <>
+                  <span style={stageNumberStyle(true, isActive)} aria-hidden="true">
+                    {stage.number}
+                  </span>
+                  <span style={{ flex: 1, minWidth: 0 }}>{stage.fullLabel}</span>
+                  {statusContent && (
+                    <span style={{ display: 'inline-flex', alignItems: 'center', maxWidth: '45%' }}>
+                      {statusContent}
+                    </span>
+                  )}
+                  {!statusContent && (
+                    <span style={{ color: isActive ? 'var(--accent-light)' : 'var(--text-muted)' }}>
+                      <Icon size={14} />
+                    </span>
+                  )}
+                </>
+              )}
+            </NavLink>
+          );
+        })}
+      </nav>
 
       <div style={{ marginTop: 'auto', paddingTop: '16px', borderTop: '1px solid var(--border-subtle)', textAlign: 'center' }}>
-        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+        <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
           SLR Platform v{APP_VERSION}
         </span>
       </div>
     </aside>
   );
+
+  function buildPath(suffix: string): string {
+    return currentId ? `/projects/${currentId}/${suffix}` : '/projects';
+  }
 };
+
+const stageRowStyle = (isActive: boolean): React.CSSProperties => ({
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  gap: 8,
+  padding: '7px 9px',
+  borderRadius: 'var(--radius-md)',
+  color: isActive ? 'var(--text-primary)' : 'var(--text-secondary)',
+  backgroundColor: isActive ? 'var(--accent-subtle)' : 'transparent',
+  borderLeft: isActive ? '3px solid var(--accent-primary)' : '3px solid transparent',
+  paddingLeft: isActive ? 6 : 9,
+  fontSize: '0.84rem',
+  lineHeight: 1.25,
+  fontWeight: isActive ? 600 : 400,
+  transition: 'background-color 0.15s ease',
+});
+
+const stageNumberStyle = (_numbered: boolean, isActive: boolean): React.CSSProperties => ({
+  width: 20,
+  height: 20,
+  flexShrink: 0,
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  borderRadius: 'var(--radius-full)',
+  fontSize: '0.68rem',
+  fontFamily: 'var(--font-mono)',
+  fontWeight: 700,
+  color: isActive ? '#fff' : 'var(--text-secondary)',
+  backgroundColor: isActive ? 'var(--accent-primary)' : 'var(--bg-surface-elevated)',
+});

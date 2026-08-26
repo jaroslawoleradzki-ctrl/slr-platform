@@ -1,4 +1,4 @@
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent, within } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { ProjectProvider } from '../src/context/ProjectContext';
@@ -361,7 +361,7 @@ describe('ProjectDashboardPage — real data, no mock values', () => {
     renderWithNav();
     await waitFor(() => expect(screen.getByText('5 grup')).toBeInTheDocument());
     expect(screen.getByText('5 do oceny')).toBeInTheDocument(); // Sidebar badge
-    expect(screen.getByText('5')).toBeInTheDocument();          // WorkflowStepper alertCount
+    expect(within(screen.getByTestId('workflow-stepper')).getByText('5')).toBeInTheDocument(); // WorkflowStepper alertCount
   });
 
   it('Sidebar shows "Oceniono" when all dedup groups reviewed', async () => {
