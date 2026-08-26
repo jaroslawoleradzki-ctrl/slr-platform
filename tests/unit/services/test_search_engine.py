@@ -986,3 +986,36 @@ async def test_post_merge_canonical_validation_not_operator_rejection(
     # merged_result_count reflects the count directly after ResultMerger.merge()
     assert result.execution_provenance.merged_result_count == 1
 
+
+@pytest.mark.anyio
+async def test_search_engine_high_indeterminate_warning() -> None:
+    archive = FakeRawResponseArchive()
+    query = SearchQuery(
+        query_id=UUID("11111111-1111-1111-1111-111111111111"),
+        name="Test",
+        version=1,
+        expression=SearchGroup(
+            operator=BooleanOperator.AND,
+            children=[
+                SearchTerm(value="Kaizen"),
+                SearchTerm(value="Energy"),
+            ],
+        ),
+    )
+
+    # 3 publications: 1 matches title completely, 2 only have "Kaizen" and no abstract -> indeterminate (2/3 > 50%)
+    pub1 = Publication(title="Kaizen and Energy")
+    pub2 = Publication(title="Kaizen only", abstract=None)
+    pub3 = Publication(title="Something with Kaizen", abstract=None)
+
+    # 2 out of 3 indeterminate (>50%)
+    provider = FakeSearchProvider("provider1", [pub1, pub2, pub3])
+
+    result = await SearchEngine(
+        providers=[provider],
+        raw_response_archive=archive,
+    ).execute(query)
+
+    run = result.provider_results[0].search_run
+    assert run.canonical_indeterminate_count == 2
+    assert any("High indeterminate rate: over 50%" in w for w in run.warnings)

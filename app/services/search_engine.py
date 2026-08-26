@@ -228,6 +228,10 @@ class SearchEngine:
                     combined_warnings.append(
                         "Some candidates could not be fully evaluated because a canonically scoped field was missing; they were retained to protect recall."
                     )
+                if retrieved_publications and indeterminate_count / len(retrieved_publications) > 0.5:
+                    combined_warnings.append(
+                        "High indeterminate rate: over 50% of candidates could not be fully evaluated because abstract or scoped fields were missing (commonly observed with Crossref); records were retained to protect recall."
+                    )
 
                 search_run_with_output_metadata = search_run.model_copy(
                     update={

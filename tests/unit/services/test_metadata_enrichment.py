@@ -7,7 +7,6 @@ import pytest
 from app.domain.identifiers import Identifier, IdentifierType
 from app.domain.provenance import ProvenanceEntry
 from app.domain.publication import Publication
-from app.domain.search import BooleanOperator, SearchGroup, SearchQuery, SearchTerm
 from app.providers.openalex import OpenAlexClient
 from app.providers.semantic_scholar import SemanticScholarClient
 from app.services.canonical_query_validator import (
@@ -46,7 +45,7 @@ def make_test_publication(
 @pytest.mark.anyio
 async def test_scenario_1_internal_merge_reuses_existing_abstract_without_http() -> None:
     """Scenario 1: Crossref (no abstract) + OpenAlex (with abstract) with same DOI.
-    
+
     Internal merge reuses OpenAlex abstract without issuing any external HTTP lookups.
     """
     doi = "10.1016/j.lean.energy.2026.100"

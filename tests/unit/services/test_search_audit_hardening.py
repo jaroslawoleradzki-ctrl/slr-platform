@@ -16,16 +16,12 @@ from app.domain.identifiers import Identifier, IdentifierType
 from app.domain.provenance import ProvenanceEntry
 from app.domain.publication import DocumentType, Publication
 from app.domain.search import (
-    BooleanOperator,
-    SearchGroup,
     SearchQuery,
     SearchRun,
-    SearchTerm,
 )
 from app.providers.search.base import ProviderSearchOutput
 from app.providers.search.crossref import CrossrefProvider
 from app.repositories.search_result_snapshot_repository import (
-    SearchResultSnapshot,
     SqliteSearchResultSnapshotRepository,
 )
 from app.repositories.search_run_checkpoint_repository import (
@@ -323,3 +319,57 @@ async def test_wp5_project_deletion_cleans_all_audits_and_checkpoints(tmp_path: 
         assert conn.execute("SELECT COUNT(*) FROM search_run_audits WHERE project_id = 'proj_to_delete'").fetchone()[0] == 0
         assert conn.execute("SELECT COUNT(*) FROM search_run_checkpoints WHERE project_id = 'proj_to_delete'").fetchone()[0] == 0
 
+
+@pytest.mark.anyio
+async def test_wp5_crossref_mass_indeterminate_generates_warning_and_preserves_recall(tmp_path: Path) -> None:
+    db_path = tmp_path / "crossref_mass_indet.db"
+    snapshot_repo = SqliteSearchResultSnapshotRepository(db_path)
+    checkpoint_repo = SqliteSearchRunCheckpointRepository(db_path)
+
+    # 100 mock Crossref publications with 0% abstracts, only partial title match (cannot satisfy all 3 canonical blocks)
+    pubs = [
+        Publication(
+            title=f"Lean Management Study #{i}",
+            abstract=None,
+            authors=[Author(display_name=f"Author {i}")],
+            publication_year=2024,
+            document_type=DocumentType.JOURNAL_ARTICLE,
+            provenance=[
+                ProvenanceEntry(
+                    source="crossref",
+                    source_record_id=f"10.1000/cr_{i}",
+                    run_id=uuid4(),
+                    retrieved_at=datetime.now(timezone.utc),
+                )
+            ],
+            identifiers=[],
+        )
+        for i in range(100)
+    ]
+
+    pages = {"*": (pubs, None)}
+    provider = ScriptedProvider("crossref", pages)
+    service = FetchAllSearchService(
+        provider_factory=lambda strategy, client: [provider],
+        snapshot_repository=snapshot_repo,
+        checkpoint_repository=checkpoint_repo,
+        max_records_per_provider=200,
+    )
+
+    strat = _strategy(["crossref"])
+    start_resp = service.start("proj_mass_indet", strat)
+    job = await service.wait(start_resp.job_id)
+
+    assert job.status == "completed"
+    assert len(job.providers) == 1
+    state = job.providers[0]
+
+    # Verify that indeterminate count >= 90 (all 100 in this case)
+    assert state.fetched_count == 100
+    assert state.canonical_indeterminate_count >= 90
+    assert state.canonical_accepted_count == 0
+    # Recall preserved (indeterminate records kept)
+    assert state.kept_count == 100
+
+    # High indeterminate rate warning generated
+    assert any("High indeterminate rate: over 50%" in w for w in state.warnings)

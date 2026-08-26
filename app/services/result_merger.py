@@ -112,10 +112,10 @@ class ResultMerger:
             (entry.source.casefold(), entry.source_record_id, entry.run_id) for entry in provenance
         }
         for entry in incoming.provenance:
-            key = (entry.source.casefold(), entry.source_record_id, entry.run_id)
-            if key not in seen_provenance:
+            prov_key = (entry.source.casefold(), entry.source_record_id, entry.run_id)
+            if prov_key not in seen_provenance:
                 provenance.append(entry)
-                seen_provenance.add(key)
+                seen_provenance.add(prov_key)
         if provenance != canonical.provenance:
             updates["provenance"] = provenance
 

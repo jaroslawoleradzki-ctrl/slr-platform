@@ -474,7 +474,7 @@ class FetchAllSearchService:
             state.search_run_id = self._run_id_factory()
         state.resumable = resumable
 
-        plan_meta = {"strategy": job.strategy.model_dump(mode="json")}
+        plan_meta: dict[str, Any] = {"strategy": job.strategy.model_dump(mode="json")}
         if job.resumed_from_job_id:
             plan_meta["resumed_from_job_id"] = job.resumed_from_job_id
         if state.plan_metadata:
@@ -717,6 +717,13 @@ class FetchAllSearchService:
                 if matches_execution_constraints(enriched, job.strategy):
                     state.kept_records.append(enriched)
                     state.kept_count += 1
+
+            if state.fetched_count > 0 and state.canonical_indeterminate_count / state.fetched_count > 0.5:
+                high_indeterminate_warning = (
+                    "High indeterminate rate: over 50% of candidates could not be fully evaluated because abstract or scoped fields were missing (commonly observed with Crossref); records were retained to protect recall."
+                )
+                if high_indeterminate_warning not in state.warnings:
+                    state.warnings.append(high_indeterminate_warning)
 
             next_cursor = output.next_cursor
             state.cursor = next_cursor

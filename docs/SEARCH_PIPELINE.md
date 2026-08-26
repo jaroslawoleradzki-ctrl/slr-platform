@@ -51,6 +51,12 @@ smallest required positive child plan; for an `OR`, it unions child queries. Thi
 candidate superset without generating the Cartesian product of all blocks. Source IDs are
 deduplicated across physical requests, and every candidate receives canonical validation.
 
+Crossref metadata frequently omits publication abstracts. When abstracts are absent and cannot be
+enriched via external DOI lookup, local canonical validation cannot definitively evaluate
+abstract-dependent Boolean expressions. In such cases, candidates are marked as `indeterminate` and
+retained to prevent false negatives. When indeterminate records exceed 50% of retrieved records, a
+prominent warning is reported in the execution status and audit logs.
+
 ### Semantic Scholar
 
 The adapter uses `/graph/v1/paper/search/bulk` and maps `AND` to `+`, `OR` to `|`, phrases to
