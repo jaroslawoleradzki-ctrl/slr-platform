@@ -1,4 +1,4 @@
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent, within } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { MemoryRouter, Route, Routes, useNavigate } from 'react-router-dom';
 import { ProjectProvider, useProject } from '../src/context/ProjectContext';
@@ -135,7 +135,8 @@ describe('v0.2.2 — WorkflowNavigationStatus Unit & Integration Tests', () => {
     renderNav();
 
     await waitFor(() => expect(screen.getByText('7 do oceny')).toBeInTheDocument());
-    expect(screen.getByText('7')).toBeInTheDocument();
+    // Top overview bar keeps only the numeric alert count
+    expect(within(screen.getByTestId('workflow-stepper')).getByText('7')).toBeInTheDocument();
   });
 
   it('C. Decision update: changing last PENDING group to APPROVE transitions Sidebar & Stepper to completed', async () => {

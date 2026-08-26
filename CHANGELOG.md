@@ -1,5 +1,46 @@
 # Changelog
 
+## [0.6.6] — 2026-08-26
+
+### Changed
+
+- **Search Results UI — clearer hierarchy and presentation**:
+  - Query preview is now collapsible (default folded); canonical Boolean query shown in one line with expand/copy buttons; per-provider rendered queries available on demand.
+  - Lossless-adaptation warnings (“Dostosowano składnię/ograniczenia”) remain visible as chips even when preview is collapsed.
+  - Provider retrieval status presented as structured rows: Provider | Status | Fetched | Reported, with distinct icons per state (pending/running/complete/partial/cancelled/failed) — status never relies on colour alone.
+  - Result statistics moved to a prominent three-card strip: “Znaleziono w providerach”, “Pobrane rekordy”, “Wybrane do importu”.
+  - Selection/actions toolbar grouped: page checkbox, “wszystkie pobrane (N)” link, “Importuj zaznaczone” primary button, plus inline explanation of the three selection scopes (visible page / all loaded records / all provider-reported records).
+  - Fetch-all trigger button text clarified to explain the difference between loaded records and provider-reported totals.
+  - Local pagination moved directly under the record list, visually bound to the list with matching background/border.
+
+- **Left Workflow Sidebar — calmer, more scannable**:
+  - Numbered chips (1–9) in monospaced font, fixed 20×20 px; active stage highlighted with accent background and filled chip.
+  - Completed stages show green check icon + label (“Skończono”, “Oceniono”, “OK”); pending-action shows amber badge with count (“N do oceny”, “Wymaga konfiguracji”); error shows red alert; not-available/not-started show muted Clock + label.
+  - Removed visual “alarm” density — colour used only for actionable states (pending-action, error).
+  - Active route highlighted with accent left border + bold label.
+
+- **Top Workflow Bar — compact overview, real statuses**:
+  - Nine compact chips: short labels (“Search”, “Sources”, “Normalize”, “Dedupe”, “Screening”, “QA”, “Extraction”, “Synthesis”, “Export”) with state icon + optional alert count.
+  - Statuses derived from single shared source (`WorkflowStages` config + `stageStatusPresentation` model) — no hardcoded values for Extraction/Synthesis/Exports.
+  - Evidence Synthesis state derived from upstream progress (extraction completed ∨ exports actionable → “in_progress”).
+  - QA link corrected to canonical `/quality-assessment` path (was `/qa` redirect).
+  - Tooltips show full stage name + detail label + state name for quick overview.
+  - Both navigation elements remain clickable but non-competing: top bar = overview, sidebar = navigation + detail.
+
+- **Shared status presentation model**:
+  - New `config/workflowStages.ts` single registry for all 9 stages (label, path, status key).
+  - New `components/workflow/stageStatusPresentation.tsx` mapping each `WorkflowStageState` to distinct glyph + colour + label — seven states, four+ distinct glyphs so meaning never relies on colour alone.
+  - Sidebar and top bar both consume this model.
+
+### Added
+
+- New unit tests: `FetchAllProgressPanel.test.tsx` (six provider states, limits, cancel, starting placeholder), `WorkflowStageStatus.test.tsx` (glyphs, labels, Synthesis derivation, integration with Sidebar+Stepper).
+- Updated integration tests: `SearchResultsSection.test.tsx` (stats strip, provider rows), `AppShell.test.tsx`, `ProjectDashboard.test.tsx`, `WorkflowNavigation.test.tsx` (scoped queries for alert counts).
+
+### Fixed
+
+- Responsive layout verified at 1920 / 1440 / 1280 px: no horizontal scroll, no overlapping elements, statuses readable, active stage unambiguous, sidebar+topbar never show conflicting statuses.
+
 ## [0.6.5] — 2026-08-25
 
 ### Added
