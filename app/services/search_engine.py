@@ -297,7 +297,7 @@ class SearchEngine:
                 total_provider_results=sum(
                     len(result.publications) for result in provider_results if result.publications is not None
                 ),
-                merged_result_count=len(final_merged_publications),
+                merged_result_count=len(merged_publications),
             ),
         )
 

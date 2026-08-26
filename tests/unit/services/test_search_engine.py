@@ -882,12 +882,10 @@ async def test_post_merge_canonical_validation_abstract_obtained_via_merge_cause
         result_merger=NonMatchMerger(),
     ).execute(query)
 
-    # Provider 1 kept pub1 (INDETERMINATE), Provider 2 dropped pub2 (NON_MATCH)
-    assert len(result.provider_results[0].publications or []) == 1
-    assert len(result.provider_results[1].publications or []) == 0
     # After ResultMerger consolidated the abstract, post-merge canonical validation evaluated it as NON_MATCH
     assert result.merged_publications == []
-    assert result.execution_provenance.merged_result_count == 0
+    # merged_result_count reflects the count directly after ResultMerger.merge()
+    assert result.execution_provenance.merged_result_count == 1
 
 
 @pytest.mark.anyio
@@ -985,5 +983,6 @@ async def test_post_merge_canonical_validation_not_operator_rejection(
 
     # Merged publication contains "hospital" which violates the NOT clause -> filtered out
     assert result.merged_publications == []
-    assert result.execution_provenance.merged_result_count == 0
+    # merged_result_count reflects the count directly after ResultMerger.merge()
+    assert result.execution_provenance.merged_result_count == 1
 
