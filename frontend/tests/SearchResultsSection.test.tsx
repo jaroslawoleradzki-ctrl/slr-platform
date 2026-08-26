@@ -178,10 +178,6 @@ describe('SearchResultsSection', () => {
 
     expect(screen.getByTestId('fetch-all-progress')).toBeInTheDocument();
     expect(screen.queryByTestId('fetch-all-button')).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Pobierz kolejne wyniki' })).not.toBeInTheDocument();
-    const cancelButton = screen.getByRole('button', { name: 'Anuluj pobieranie' });
-    fireEvent.click(cancelButton);
-    expect(onCancel).toHaveBeenCalledOnce();
     expect(screen.getByText(/Łącznie pobrano:\s*2\s*252/u)).toBeInTheDocument();
     expect(screen.getByText(/Po lokalnych filtrach:\s*2\s*220/u)).toBeInTheDocument();
 

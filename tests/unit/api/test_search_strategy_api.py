@@ -119,12 +119,14 @@ def _publication(
     source_id: str,
     year: int = 2024,
     language: str | None = None,
+    doi: str | None = None,
 ) -> Publication:
     return Publication(
         title=title,
         authors=[Author(display_name="Ada Author")],
         publication_year=year,
         language=language,
+        identifiers=([Identifier(type=IdentifierType.DOI, value=doi)] if doi is not None else []),
         provenance=[ProvenanceEntry(source=provider, source_record_id=source_id)],
     )
 
@@ -157,16 +159,18 @@ def _client_with_executor(executor: _Executor) -> TestClient:
     return TestClient(app)
 
 
-def test_openalex_and_crossref_success_are_returned_without_deduplication() -> None:
+def test_openalex_and_crossref_same_doi_are_returned_once_after_deduplication() -> None:
     openalex = _publication(
         "Shared record",
         provider="openalex",
         source_id="https://openalex.org/W1",
+        doi="10.1000/shared",
     )
     crossref = _publication(
         "Shared record",
         provider="crossref",
         source_id="10.1000/shared",
+        doi="10.1000/shared",
     )
     client = _client_with_executor(
         _Executor(
@@ -185,15 +189,11 @@ def test_openalex_and_crossref_success_are_returned_without_deduplication() -> N
     assert response.status_code == 200
     body = response.json()
     assert body["total_count"] == 2
-    assert body["returned_count"] == 2
-    assert [item["provider"] for item in body["results"]] == [
-        "openalex",
-        "crossref",
-    ]
-    assert [item["source_id"] for item in body["results"]] == [
-        "https://openalex.org/W1",
-        "10.1000/shared",
-    ]
+    assert body["returned_count"] == 1
+    assert body["deduplicated_count"] == 1
+    assert body["results"][0]["provider"] == "openalex"
+    assert body["results"][0]["source_id"] == "https://openalex.org/W1"
+    assert body["provider_queries"][1]["deduplicated_count"] == 1
     assert body["provider_errors"] == []
 
 
@@ -215,17 +215,12 @@ def test_execution_accepts_semantic_scholar_provider() -> None:
     assert body["returned_count"] == 1
     assert body["results"][0]["provider"] == "semantic_scholar"
     assert body["results"][0]["source_id"] == "S1"
-    assert any(
-        pq["provider"] == "semantic_scholar" for pq in body["provider_queries"]
-    )
-    semantic_query = next(
-        pq
-        for pq in body["provider_queries"]
-        if pq["provider"] == "semantic_scholar"
-    )
-    assert semantic_query["rendered_query"] == "Kaizen Lean"
-    assert semantic_query["is_lossless"] is False
-    assert any("OR operators" in warning for warning in semantic_query["warnings"])
+    assert any(pq["provider"] == "semantic_scholar" for pq in body["provider_queries"])
+    semantic_query = next(pq for pq in body["provider_queries"] if pq["provider"] == "semantic_scholar")
+    assert semantic_query["rendered_query"] == '("Kaizen" | "Lean")'
+    assert semantic_query["is_lossless"] is True
+    assert any("missing" in warning for warning in semantic_query["warnings"])
+    assert semantic_query["canonical_indeterminate_count"] == 1
     assert body["provider_errors"] == []
 
 
@@ -244,9 +239,7 @@ def test_semantic_scholar_unknown_language_is_not_rejected_by_language_filter() 
         year=2023,
         language=None,
     )
-    response = _client_with_executor(
-        _Executor([_Provider("semantic_scholar", [semantic_result], total_count=1)])
-    ).post(
+    response = _client_with_executor(_Executor([_Provider("semantic_scholar", [semantic_result], total_count=1)])).post(
         "/api/v1/projects/lean_energy/search-strategy/executions",
         json=_payload(["semantic_scholar"], languages=["en"]),
     )
@@ -316,9 +309,7 @@ def test_known_language_match_remains_kept_with_language_filter() -> None:
         source_id="W-en",
         language="en",
     )
-    response = _client_with_executor(
-        _Executor([_Provider("openalex", [openalex_result], total_count=1)])
-    ).post(
+    response = _client_with_executor(_Executor([_Provider("openalex", [openalex_result], total_count=1)])).post(
         "/api/v1/projects/lean_energy/search-strategy/executions",
         json=_payload(["openalex"], languages=["en"]),
     )
@@ -337,9 +328,7 @@ def test_known_language_non_match_is_still_rejected_by_language_filter() -> None
         source_id="W-de",
         language="de",
     )
-    response = _client_with_executor(
-        _Executor([_Provider("openalex", [openalex_result], total_count=1)])
-    ).post(
+    response = _client_with_executor(_Executor([_Provider("openalex", [openalex_result], total_count=1)])).post(
         "/api/v1/projects/lean_energy/search-strategy/executions",
         json=_payload(["openalex"], languages=["en"]),
     )
@@ -358,9 +347,7 @@ def test_unknown_language_without_language_filter_remains_kept() -> None:
         source_id="S-no-filter",
         language=None,
     )
-    response = _client_with_executor(
-        _Executor([_Provider("semantic_scholar", [semantic_result], total_count=1)])
-    ).post(
+    response = _client_with_executor(_Executor([_Provider("semantic_scholar", [semantic_result], total_count=1)])).post(
         "/api/v1/projects/lean_energy/search-strategy/executions",
         json=_payload(["semantic_scholar"]),
     )
@@ -391,9 +378,7 @@ def test_multiple_allowed_languages_keep_match_and_reject_non_match() -> None:
         language="pl",
     )
     response = _client_with_executor(
-        _Executor(
-            [_Provider("crossref", [english_match, german_match, polish_non_match], total_count=3)]
-        )
+        _Executor([_Provider("crossref", [english_match, german_match, polish_non_match], total_count=3)])
     ).post(
         "/api/v1/projects/lean_energy/search-strategy/executions",
         json=_payload(["crossref"], languages=["en", "de"]),
@@ -409,15 +394,11 @@ def test_multiple_allowed_languages_keep_match_and_reject_non_match() -> None:
 
 
 def test_semantic_scholar_http_400_remains_auditable_provider_error() -> None:
-    request = httpx.Request(
-        "GET", "https://api.semanticscholar.org/graph/v1/paper/search"
-    )
+    request = httpx.Request("GET", "https://api.semanticscholar.org/graph/v1/paper/search")
     with pytest.raises(httpx.HTTPStatusError) as error_info:
         httpx.Response(400, request=request).raise_for_status()
 
-    response = _client_with_executor(
-        _Executor([_Provider("semantic_scholar", error=error_info.value)])
-    ).post(
+    response = _client_with_executor(_Executor([_Provider("semantic_scholar", error=error_info.value)])).post(
         "/api/v1/projects/lean_energy/search-strategy/executions",
         json=_payload(["semantic_scholar"]),
     )
@@ -426,9 +407,7 @@ def test_semantic_scholar_http_400_remains_auditable_provider_error() -> None:
     provider_errors = response.json()["provider_errors"]
     assert len(provider_errors) == 1
     assert provider_errors[0]["provider"] == "semantic_scholar"
-    assert provider_errors[0]["message"].startswith(
-        "HTTPStatusError: Client error '400 Bad Request'"
-    )
+    assert provider_errors[0]["message"].startswith("HTTPStatusError: Client error '400 Bad Request'")
 
 
 @pytest.mark.parametrize(
@@ -593,7 +572,7 @@ def test_new_project_accepts_frontend_search_contract_and_preserves_snapshot_met
         snapshot_repository,
     )
     publication = Publication(
-        title="Fresh OpenAlex result",
+        title="Fresh lean OpenAlex result",
         abstract="An abstract retained from the provider response.",
         authors=[Author(display_name="Ada Author")],
         publication_year=2024,
@@ -612,9 +591,7 @@ def test_new_project_accepts_frontend_search_contract_and_preserves_snapshot_met
     app.dependency_overrides[get_search_strategy_repository] = lambda: strategy_repository
     app.dependency_overrides[get_search_result_snapshot_repository] = lambda: snapshot_repository
     app.dependency_overrides[get_project_import_service] = lambda: import_service
-    app.dependency_overrides[get_live_search_executor] = lambda: _Executor(
-        [_Provider("openalex", [publication])]
-    )
+    app.dependency_overrides[get_live_search_executor] = lambda: _Executor([_Provider("openalex", [publication])])
     client = TestClient(app)
 
     created = client.post(
@@ -631,9 +608,7 @@ def test_new_project_accepts_frontend_search_contract_and_preserves_snapshot_met
             "name": "Fresh strategy",
             "description": None,
             "research_questions": ["RQ"],
-            "concept_groups": [
-                {"group_id": "lean", "name": "Lean", "terms": ["lean"], "operator": "or"}
-            ],
+            "concept_groups": [{"group_id": "lean", "name": "Lean", "terms": ["lean"], "operator": "or"}],
             "group_operator": "and",
             "constraints": {
                 "publication_year_from": 2024,
@@ -885,9 +860,7 @@ def test_real_browser_flow_lean_energy_strategy_execution_and_import(tmp_path: P
         "name": "Lean Energy Strategy",
         "description": "Strategy for lean energy research",
         "research_questions": ["What is the energy efficiency?"],
-        "concept_groups": [
-            {"group_id": "grp-1", "name": "Lean Energy", "terms": ["lean energy"], "operator": "or"}
-        ],
+        "concept_groups": [{"group_id": "grp-1", "name": "Lean Energy", "terms": ["lean energy"], "operator": "or"}],
         "group_operator": "and",
         "constraints": {
             "publication_year_from": 2020,

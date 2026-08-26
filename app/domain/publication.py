@@ -111,3 +111,32 @@ class Publication(BaseModel):
         ):
             raise ValueError("publication_date and publication_year must agree")
         return self
+
+    @property
+    def discovered_by(self) -> str:
+        """Name of the provider that originally discovered this record in search."""
+        for entry in self.provenance:
+            if not entry.transformation or not entry.transformation.startswith("enrichment"):
+                return entry.source
+        return self.provenance[0].source if self.provenance else "unknown"
+
+    @property
+    def enrichment_sources(self) -> tuple[str, ...]:
+        """Sources that contributed metadata via enrichment."""
+        return tuple(
+            dict.fromkeys(
+                entry.source
+                for entry in self.provenance
+                if entry.transformation and entry.transformation.startswith("enrichment")
+            )
+        )
+
+    @property
+    def abstract_source(self) -> str | None:
+        """Provider source that supplied the abstract (discovery provider or enrichment provider)."""
+        if self.abstract is None:
+            return None
+        for entry in self.provenance:
+            if entry.transformation and "abstract" in entry.transformation:
+                return entry.source
+        return self.discovered_by

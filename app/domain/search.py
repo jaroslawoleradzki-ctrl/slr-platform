@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 from datetime import date, datetime, timezone
 from enum import StrEnum
 from typing import Annotated, Literal
@@ -120,6 +122,22 @@ class SearchQuery(BaseModel):
 
         return self.expression.to_boolean_query()
 
+    @property
+    def canonical_hash(self) -> str:
+        """Stable SHA-256 identity of the versioned canonical expression."""
+
+        payload = {
+            "version": self.version,
+            "expression": self.expression.model_dump(mode="json"),
+        }
+        serialized = json.dumps(
+            payload,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+
 
 class SearchConceptGroup(BaseModel):
     """A named set of concepts retained independently from rendered queries."""
@@ -178,9 +196,7 @@ class SearchConstraints(BaseModel):
             and self.publication_year_to is not None
             and self.publication_year_from > self.publication_year_to
         ):
-            raise ValueError(
-                "publication_year_from must not be later than publication_year_to"
-            )
+            raise ValueError("publication_year_from must not be later than publication_year_to")
         return self
 
 
@@ -196,9 +212,7 @@ class SearchStrategy(BaseModel):
     queries: list[SearchQuery] = Field(min_length=1)
     research_questions: list[str] = Field(default_factory=list)
     concept_groups: list[SearchConceptGroup] = Field(default_factory=list)
-    group_operator: Literal[BooleanOperator.AND, BooleanOperator.OR] = (
-        BooleanOperator.AND
-    )
+    group_operator: Literal[BooleanOperator.AND, BooleanOperator.OR] = BooleanOperator.AND
     constraints: SearchConstraints = Field(default_factory=SearchConstraints)
     providers: list[str] = Field(default_factory=list)
     version: int = Field(default=1, ge=1)
@@ -273,12 +287,18 @@ class SearchRun(BaseModel):
     provider: str = Field(min_length=1)
     provider_version: str | None = None
     rendered_query: str = Field(min_length=1)
+    canonical_hash: str | None = None
+    physical_endpoint: str | None = None
     is_lossless: bool = True
     warnings: list[str] = Field(default_factory=list)
     date_from: date | None = None
     date_to: date | None = None
     status: SearchRunStatus = SearchRunStatus.PENDING
     records_retrieved: int = Field(default=0, ge=0)
+    canonical_accepted_count: int = Field(default=0, ge=0)
+    canonical_rejected_count: int = Field(default=0, ge=0)
+    canonical_indeterminate_count: int = Field(default=0, ge=0)
+    deduplicated_count: int = Field(default=0, ge=0)
     error_count: int = Field(default=0, ge=0)
     errors: list[str] = Field(default_factory=list)
     started_at: datetime | None = None
@@ -290,6 +310,8 @@ class SearchRun(BaseModel):
         "provider",
         "provider_version",
         "rendered_query",
+        "canonical_hash",
+        "physical_endpoint",
         "config_hash",
         "git_commit",
     )
@@ -330,11 +352,15 @@ class SearchRun(BaseModel):
                 raise ValueError("started_at must not be later than finished_at")
         if self.status is SearchRunStatus.RUNNING and self.started_at is None:
             raise ValueError("running searches require started_at")
-        if self.status in {
-            SearchRunStatus.COMPLETED,
-            SearchRunStatus.FAILED,
-            SearchRunStatus.CANCELLED,
-        } and self.finished_at is None:
+        if (
+            self.status
+            in {
+                SearchRunStatus.COMPLETED,
+                SearchRunStatus.FAILED,
+                SearchRunStatus.CANCELLED,
+            }
+            and self.finished_at is None
+        ):
             raise ValueError("finished searches require finished_at")
         if self.finished_at is not None and self.started_at is None:
             raise ValueError("finished_at requires started_at")

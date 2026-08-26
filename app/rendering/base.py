@@ -12,6 +12,7 @@ class RenderedQuery:
 
     provider: str
     query_string: str
+    physical_endpoint: str = ""
     is_lossless: bool = True
     warnings: tuple[str, ...] = ()
     metadata: dict[str, Any] = field(default_factory=dict)
@@ -22,5 +23,4 @@ class QueryRenderer(Protocol):
 
     provider: str
 
-    def render(self, search_query: SearchQuery) -> RenderedQuery:
-        ...
+    def render(self, search_query: SearchQuery) -> RenderedQuery: ...

@@ -9,8 +9,19 @@ import pytest
 
 from app.domain.identifiers import Identifier, IdentifierType
 from app.domain.publication import Publication
-from app.domain.search import SearchQuery, SearchRun, SearchRunStatus, SearchTerm
+from app.domain.search import (
+    BooleanOperator,
+    SearchGroup,
+    SearchQuery,
+    SearchRun,
+    SearchRunStatus,
+    SearchTerm,
+)
 from app.providers.search.base import JsonObject, ProviderSearchOutput
+from app.services.canonical_query_validator import (
+    CanonicalMatchStatus,
+    validate_canonical_query,
+)
 from app.services.duplicate_group_builder import DuplicateGroupBuilder
 from app.services.publication_merge_policy import PublicationMergePolicy
 from app.services.result_merger import ResultMerger
@@ -23,6 +34,7 @@ from app.storage.raw_response_archive import (
     RawResponseArchiveEntry,
     RawResponseStatus,
 )
+from tests.unit.services.test_search_canonical_regression import canonical_regression_query
 
 _CAPTURED_AT = datetime(2026, 7, 28, 12, 0, tzinfo=timezone.utc)
 
@@ -774,3 +786,236 @@ async def test_execute_with_no_providers_returns_empty_result(
 
 def test_fake_provider_structurally_satisfies_search_provider() -> None:
     assert isinstance(FakeSearchProvider("fake"), RuntimeSearchProvider)
+
+
+@pytest.mark.anyio
+async def test_post_merge_canonical_validation_abstract_obtained_via_merge_causes_match(
+    archive: FakeRawResponseArchive,
+) -> None:
+    """1. Brak abstraktu przed merge -> INDETERMINATE (zachowany w provider 1).
+    2. Drugi rekord tego samego artykułu z abstraktem -> MATCH przed merge (zachowany w provider 2).
+    3. Merge konsoliduje rekord i dołącza abstrakt.
+    4. Po merge obecność abstraktu daje MATCH i publikacja zostaje w merged_publications.
+    """
+    query = canonical_regression_query()
+    doi = "10.1016/j.test.match.1"
+
+    # Provider 1: Title matches Kaizen (block 1) & industrial plants (block 3), missing Energy (block 2).
+    # Abstract is None -> INDETERMINATE before merge.
+    pub1 = Publication(
+        title="Kaizen in industrial plants",
+        abstract=None,
+        identifiers=[Identifier(type=IdentifierType.DOI, value=doi)],
+    )
+    assert validate_canonical_query(query, pub1).status is CanonicalMatchStatus.INDETERMINATE
+
+    # Provider 2: Has the abstract with energy efficiency -> MATCH before merge.
+    pub2 = Publication(
+        title="Kaizen in industrial plants",
+        abstract="A case study of energy efficiency in manufacturing.",
+        identifiers=[Identifier(type=IdentifierType.DOI, value=doi)],
+    )
+    assert validate_canonical_query(query, pub2).status is CanonicalMatchStatus.MATCH
+
+    provider1 = FakeSearchProvider("provider1", [pub1])
+    provider2 = FakeSearchProvider("provider2", [pub2])
+
+    result = await SearchEngine(
+        providers=[provider1, provider2],
+        raw_response_archive=archive,
+    ).execute(query)
+
+    assert len(result.provider_results[0].publications or []) == 1
+    assert len(result.provider_results[1].publications or []) == 1
+    assert len(result.normalized_publications) == 2
+    assert len(result.merged_publications) == 1
+    merged = result.merged_publications[0]
+    assert merged.abstract == "A case study of energy efficiency in manufacturing."
+    assert validate_canonical_query(query, merged).status is CanonicalMatchStatus.MATCH
+    assert result.execution_provenance.merged_result_count == 1
+
+
+@pytest.mark.anyio
+async def test_post_merge_canonical_validation_abstract_obtained_via_merge_causes_non_match(
+    archive: FakeRawResponseArchive,
+) -> None:
+    """1. Brak abstraktu przed merge -> INDETERMINATE (zachowany w provider 1 ze względu na recall-first).
+    2. Drugi rekord dostarcza abstrakt, w którym brakuje wymaganego bloku tematycznego.
+    3. Merge konsoliduje metadane rekordu.
+    4. Po merge pełny rekord (tytuł + abstrakt) jest oceniany jako NON_MATCH i zostaje odrzucony z merged_publications.
+    """
+    query = canonical_regression_query()
+    doi = "10.1016/j.test.nonmatch.1"
+
+    # Provider 1: Title has Kaizen & industrial plants, Abstract is None -> INDETERMINATE before merge.
+    pub1 = Publication(
+        title="Kaizen in industrial plants",
+        abstract=None,
+        identifiers=[Identifier(type=IdentifierType.DOI, value=doi)],
+    )
+    assert validate_canonical_query(query, pub1).status is CanonicalMatchStatus.INDETERMINATE
+
+    # Provider 2: Abstract discusses healthcare without energy concepts -> when merged into pub1,
+    # the complete title + abstract lacks Block 2 (Energy), making it a definitive NON_MATCH.
+    pub2 = Publication(
+        title="Kaizen in industrial plants",
+        abstract="A healthcare hospital case study focusing purely on ergonomics without any energy concepts.",
+        identifiers=[Identifier(type=IdentifierType.DOI, value=doi)],
+    )
+    assert validate_canonical_query(query, pub2).status is CanonicalMatchStatus.NON_MATCH
+
+    # Custom merger that simulates consolidation of pub2's abstract into pub1
+    class NonMatchMerger(ResultMerger):
+        def merge(self, publications: Iterable[Publication]) -> list[Publication]:
+            pubs = list(publications)
+            if len(pubs) == 1 and pubs[0].identifiers:
+                # Merge incoming abstract into candidate
+                return [pubs[0].model_copy(update={"abstract": pub2.abstract})]
+            return super().merge(pubs)
+
+    provider1 = FakeSearchProvider("provider1", [pub1])
+    provider2 = FakeSearchProvider("provider2", [pub2])
+
+    result = await SearchEngine(
+        providers=[provider1, provider2],
+        raw_response_archive=archive,
+        result_merger=NonMatchMerger(),
+    ).execute(query)
+
+    # After ResultMerger consolidated the abstract, post-merge canonical validation evaluated it as NON_MATCH
+    assert result.merged_publications == []
+    # merged_result_count reflects the count directly after ResultMerger.merge()
+    assert result.execution_provenance.merged_result_count == 1
+
+
+@pytest.mark.anyio
+async def test_post_merge_canonical_validation_preserves_indeterminate_when_still_insufficient_data(
+    archive: FakeRawResponseArchive,
+) -> None:
+    """1. Brak abstraktu przed merge -> INDETERMINATE (zachowany w obu providerach).
+    2. Po merge rekord nadal nie posiada abstraktu (dane nadal niewystarczające).
+    3. Po merge rekord nadal otrzymuje INDETERMINATE i jest zachowany w merged_publications (polityka recall-first).
+    """
+    query = canonical_regression_query()
+    doi = "10.1016/j.test.indeterminate.1"
+
+    pub1 = Publication(
+        title="Kaizen in industrial plants",
+        abstract=None,
+        identifiers=[Identifier(type=IdentifierType.DOI, value=doi)],
+    )
+    pub2 = Publication(
+        title="Kaizen in industrial plants",
+        abstract=None,
+        identifiers=[Identifier(type=IdentifierType.DOI, value=doi)],
+    )
+    assert validate_canonical_query(query, pub1).status is CanonicalMatchStatus.INDETERMINATE
+    assert validate_canonical_query(query, pub2).status is CanonicalMatchStatus.INDETERMINATE
+
+    provider1 = FakeSearchProvider("provider1", [pub1])
+    provider2 = FakeSearchProvider("provider2", [pub2])
+
+    result = await SearchEngine(
+        providers=[provider1, provider2],
+        raw_response_archive=archive,
+    ).execute(query)
+
+    assert len(result.provider_results[0].publications or []) == 1
+    assert len(result.provider_results[1].publications or []) == 1
+    assert len(result.normalized_publications) == 2
+    assert len(result.merged_publications) == 1
+    merged = result.merged_publications[0]
+    assert merged.abstract is None
+    assert validate_canonical_query(query, merged).status is CanonicalMatchStatus.INDETERMINATE
+    assert result.execution_provenance.merged_result_count == 1
+
+
+@pytest.mark.anyio
+async def test_post_merge_canonical_validation_not_operator_rejection(
+    archive: FakeRawResponseArchive,
+) -> None:
+    """NOT operator: brak abstraktu daje INDETERMINATE, ale abstrakt po merge zawiera zanegowany termin -> NON_MATCH."""
+    query = SearchQuery(
+        name="Kaizen manufacturing without hospitals",
+        expression=SearchGroup(
+            operator=BooleanOperator.AND,
+            children=[
+                SearchTerm(value="Kaizen"),
+                SearchTerm(value="Manufacturing"),
+                SearchGroup(
+                    operator=BooleanOperator.NOT,
+                    children=[SearchTerm(value="Hospital")],
+                ),
+            ],
+        ),
+    )
+    doi = "10.1016/j.test.not.1"
+
+    pub1 = Publication(
+        title="Kaizen in manufacturing operations",
+        abstract=None,
+        identifiers=[Identifier(type=IdentifierType.DOI, value=doi)],
+    )
+    assert validate_canonical_query(query, pub1).status is CanonicalMatchStatus.INDETERMINATE
+
+    pub2 = Publication(
+        title="Kaizen in manufacturing operations",
+        abstract="Application in hospital emergency maintenance.",
+        identifiers=[Identifier(type=IdentifierType.DOI, value=doi)],
+    )
+    assert validate_canonical_query(query, pub2).status is CanonicalMatchStatus.NON_MATCH
+
+    class NotMerger(ResultMerger):
+        def merge(self, publications: Iterable[Publication]) -> list[Publication]:
+            pubs = list(publications)
+            if len(pubs) == 1:
+                return [pubs[0].model_copy(update={"abstract": pub2.abstract})]
+            return super().merge(pubs)
+
+    provider1 = FakeSearchProvider("provider1", [pub1])
+    provider2 = FakeSearchProvider("provider2", [pub2])
+
+    result = await SearchEngine(
+        providers=[provider1, provider2],
+        raw_response_archive=archive,
+        result_merger=NotMerger(),
+    ).execute(query)
+
+    # Merged publication contains "hospital" which violates the NOT clause -> filtered out
+    assert result.merged_publications == []
+    # merged_result_count reflects the count directly after ResultMerger.merge()
+    assert result.execution_provenance.merged_result_count == 1
+
+
+@pytest.mark.anyio
+async def test_search_engine_high_indeterminate_warning() -> None:
+    archive = FakeRawResponseArchive()
+    query = SearchQuery(
+        query_id=UUID("11111111-1111-1111-1111-111111111111"),
+        name="Test",
+        version=1,
+        expression=SearchGroup(
+            operator=BooleanOperator.AND,
+            children=[
+                SearchTerm(value="Kaizen"),
+                SearchTerm(value="Energy"),
+            ],
+        ),
+    )
+
+    # 3 publications: 1 matches title completely, 2 only have "Kaizen" and no abstract -> indeterminate (2/3 > 50%)
+    pub1 = Publication(title="Kaizen and Energy")
+    pub2 = Publication(title="Kaizen only", abstract=None)
+    pub3 = Publication(title="Something with Kaizen", abstract=None)
+
+    # 2 out of 3 indeterminate (>50%)
+    provider = FakeSearchProvider("provider1", [pub1, pub2, pub3])
+
+    result = await SearchEngine(
+        providers=[provider],
+        raw_response_archive=archive,
+    ).execute(query)
+
+    run = result.provider_results[0].search_run
+    assert run.canonical_indeterminate_count == 2
+    assert any("High indeterminate rate: over 50%" in w for w in run.warnings)
