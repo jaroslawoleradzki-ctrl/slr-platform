@@ -610,7 +610,7 @@ class FetchAllSearchService:
                         state = FetchAllProviderState(name=p.name)
                     job.providers.append(state)
 
-                enricher = LiveSearchService._build_enricher(http_client)
+                enricher = LiveSearchService._build_enricher(http_client, enable_external_lookups=False)
                 known_abstracts: dict[str, tuple[str, str]] = {}
                 for provider, state in zip(providers, job.providers, strict=True):
                     if job.cancel_requested:
