@@ -698,7 +698,7 @@ async def test_wp4_duplicate_snapshot_error_handled_specifically(tmp_path: Path)
 
 @pytest.mark.anyio
 async def test_wp4_missing_strategy_metadata_raises_controlled_error(tmp_path: Path) -> None:
-    """Requirement F: Missing/corrupt strategy metadata raises controlled ValueError without ValidationError."""
+    """Requirement F1: Missing strategy metadata raises controlled ValueError."""
     db_path = tmp_path / "missing_strategy.db"
     checkpoint_repo = SqliteSearchRunCheckpointRepository(db_path)
 
@@ -732,3 +732,83 @@ async def test_wp4_missing_strategy_metadata_raises_controlled_error(tmp_path: P
 
     with pytest.raises(ValueError, match="search strategy metadata is missing"):
         svc.start_resume_job("proj_no_strat", job_id=job_id)
+
+
+@pytest.mark.anyio
+async def test_wp4_invalid_strategy_metadata_raises_controlled_error_with_cause(tmp_path: Path) -> None:
+    """Requirement F2: Invalid / corrupted strategy metadata raises ValueError with invalid message and chained cause."""
+    db_path = tmp_path / "invalid_strategy.db"
+    checkpoint_repo = SqliteSearchRunCheckpointRepository(db_path)
+
+    run_id = uuid4()
+    job_id = uuid4()
+    cp = SearchRunCheckpoint(
+        search_run_id=run_id,
+        project_id="proj_inv_strat",
+        job_id=job_id,
+        provider="openalex",
+        cursor="cursor_page_2",
+        pages_fetched=1,
+        fetched_count=1,
+        canonical_accepted_count=1,
+        canonical_rejected_count=0,
+        canonical_indeterminate_count=0,
+        deduplicated_count=0,
+        status="partial",
+        resumable=True,
+        plan_metadata={"strategy": {"invalid_field": "corrupted", "providers": "not_a_list"}},
+        warnings=(),
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
+    )
+    checkpoint_repo.save_checkpoint(cp)
+
+    svc = FetchAllSearchService(
+        checkpoint_repository=checkpoint_repo,
+    )
+
+    with pytest.raises(ValueError, match="search strategy metadata in checkpoint is invalid") as exc_info:
+        svc.start_resume_job("proj_inv_strat", job_id=job_id)
+
+    assert exc_info.value.__cause__ is not None
+
+
+@pytest.mark.anyio
+async def test_wp4_valid_checkpoint_strategy_resumes_without_in_memory_job(tmp_path: Path) -> None:
+    """Requirement F3: Valid checkpoint strategy metadata is deserialized correctly without in-memory job."""
+    db_path = tmp_path / "valid_strategy.db"
+    snapshot_repo = SqliteSearchResultSnapshotRepository(db_path)
+    checkpoint_repo = SqliteSearchRunCheckpointRepository(db_path)
+
+    pub1 = _make_publication("openalex", "W1", "Lean Energy in Manufacturing 1")
+    pub2 = _make_publication("openalex", "W2", "Lean Energy in Manufacturing 2")
+    pages = {
+        "*": ([pub1], "cursor_page_2"),
+        "cursor_page_2": ([pub2], None),
+    }
+    mock_provider = MockPaginatingProvider("openalex", pages)
+
+    svc1 = FetchAllSearchService(
+        provider_factory=lambda s, c: [mock_provider],
+        snapshot_repository=snapshot_repo,
+        checkpoint_repository=checkpoint_repo,
+        max_pages_per_provider=1,
+    )
+    s1 = svc1.start("proj_valid_strat", _build_test_strategy(["openalex"]))
+    await svc1.wait(s1.job_id)
+
+    # Fresh service instance (empty _jobs dictionary)
+    svc2 = FetchAllSearchService(
+        provider_factory=lambda s, c: [mock_provider],
+        snapshot_repository=snapshot_repo,
+        checkpoint_repository=checkpoint_repo,
+        max_pages_per_provider=5,
+    )
+    assert s1.job_id not in svc2._jobs
+
+    s2 = svc2.start_resume_job("proj_valid_strat", s1.job_id)
+    j2 = await svc2.wait(s2.job_id)
+    assert j2.status == "completed"
+    assert j2.result is not None
+    assert len(j2.result.results) == 2
+    assert [r.source_id for r in j2.result.results] == ["W1", "W2"]

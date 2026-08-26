@@ -57,6 +57,7 @@ from typing import Any, Literal, Protocol, cast
 from uuid import UUID, uuid4
 
 import httpx
+from pydantic import ValidationError
 
 from app.api.dto.search_strategy import (
     FetchAllProviderProgressResponse,
@@ -291,11 +292,15 @@ class FetchAllSearchService:
         else:
             for cp in checkpoints:
                 if cp.plan_metadata and "strategy" in cp.plan_metadata:
+                    raw_strategy = cp.plan_metadata["strategy"]
                     try:
-                        strategy = SearchStrategyExecutionRequest.model_validate(cp.plan_metadata["strategy"])
+                        strategy = SearchStrategyExecutionRequest.model_validate(raw_strategy)
                         break
-                    except Exception:
-                        pass
+                    except (ValidationError, TypeError, ValueError) as exc:
+                        raise ValueError(
+                            f"Cannot resume search for project '{project_id}': "
+                            "search strategy metadata in checkpoint is invalid"
+                        ) from exc
         if strategy is None:
             raise ValueError(
                 f"Cannot resume search for project '{project_id}': search strategy metadata is missing from checkpoints"
