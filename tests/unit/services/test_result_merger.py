@@ -3,6 +3,7 @@ from copy import deepcopy
 import pytest
 
 from app.domain.identifiers import Identifier, IdentifierType
+from app.domain.provenance import ProvenanceEntry
 from app.domain.publication import Publication
 from app.services.publication_merge_policy import PublicationMergePolicy
 from app.services.result_merger import ResultMerger
@@ -46,6 +47,24 @@ def test_merge_same_doi_keeps_first_object() -> None:
 
     assert result == [first]
     assert result[0] is first
+
+
+def test_merge_same_doi_preserves_provenance_from_both_providers() -> None:
+    first = Publication(
+        title="OpenAlex title",
+        identifiers=[_doi("10.1000/shared")],
+        provenance=[ProvenanceEntry(source="openalex", source_record_id="W1")],
+    )
+    duplicate = Publication(
+        title="Crossref title",
+        identifiers=[_doi("10.1000/shared")],
+        provenance=[ProvenanceEntry(source="crossref", source_record_id="10.1000/shared")],
+    )
+
+    result = ResultMerger().merge([first, duplicate])
+
+    assert len(result) == 1
+    assert [entry.source for entry in result[0].provenance] == ["openalex", "crossref"]
 
 
 def test_merge_normalizes_doi_case() -> None:

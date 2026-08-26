@@ -27,6 +27,7 @@ from app.repositories.project_publication_repository import (
     ProjectPublicationRepository,
     default_project_publication_repository,
 )
+from app.services.metadata_enrichment import MetadataEnrichmentService
 from app.services.search_engine import SearchEngine, SearchExecution, SearchProvider
 from app.storage.raw_response_archive import RawResponseArchiveEntry
 
@@ -57,16 +58,13 @@ class LiveSearchExecutor(Protocol):
 
 
 def build_search_query(strategy: SearchStrategyExecutionRequest) -> SearchQuery:
+    if strategy.canonical_query is not None:
+        return strategy.canonical_query
     group_expressions: list[SearchExpression] = []
     for group in strategy.concept_groups:
-        terms: list[SearchExpression] = [
-            SearchTerm(value=term, exact_phrase=True)
-            for term in group.terms
-        ]
+        terms: list[SearchExpression] = [SearchTerm(value=term, exact_phrase=True) for term in group.terms]
         group_expressions.append(
-            terms[0]
-            if len(terms) == 1
-            else SearchGroup(operator=BooleanOperator.OR, children=terms)
+            terms[0] if len(terms) == 1 else SearchGroup(operator=BooleanOperator.OR, children=terms)
         )
     expression: SearchExpression = (
         group_expressions[0]
@@ -100,14 +98,35 @@ class LiveSearchService:
         self._repository.get_publications(project_id)
         async with httpx.AsyncClient(timeout=30.0) as http_client:
             providers = self._build_providers(strategy, http_client)
+            enricher = self._build_enricher(http_client)
             engine = SearchEngine(
                 providers=providers,
                 raw_response_archive=_InMemoryRawResponseArchive(),
+                metadata_enricher=enricher,
             )
             return await engine.execute(
                 build_search_query(strategy),
                 cursor=strategy.cursor or "*",
             )
+
+    @staticmethod
+    def _build_enricher(http_client: httpx.AsyncClient) -> MetadataEnrichmentService:
+        openalex_email = (
+            (os.getenv("OPENALEX_EMAIL") or "").strip() or (os.getenv("CROSSREF_EMAIL") or "").strip() or None
+        )
+        semantic_scholar_api_key = (os.getenv("SEMANTIC_SCHOLAR_API_KEY") or "").strip() or None
+        return MetadataEnrichmentService(
+            openalex_client=OpenAlexClient(
+                http_client=http_client,
+                mailto=openalex_email,
+            ),
+            semantic_scholar_client=SemanticScholarClient(
+                http_client=http_client,
+                api_key=semantic_scholar_api_key,
+                requests_per_second=1.0,
+            ),
+        )
+
 
     @staticmethod
     def _build_providers(
@@ -116,14 +135,10 @@ class LiveSearchService:
     ) -> list[SearchProvider]:
         providers: list[SearchProvider] = []
         openalex_email = (
-            (os.getenv("OPENALEX_EMAIL") or "").strip()
-            or (os.getenv("CROSSREF_EMAIL") or "").strip()
-            or None
+            (os.getenv("OPENALEX_EMAIL") or "").strip() or (os.getenv("CROSSREF_EMAIL") or "").strip() or None
         )
         crossref_email = (
-            (os.getenv("CROSSREF_EMAIL") or "").strip()
-            or (os.getenv("OPENALEX_EMAIL") or "").strip()
-            or None
+            (os.getenv("CROSSREF_EMAIL") or "").strip() or (os.getenv("OPENALEX_EMAIL") or "").strip() or None
         )
 
         for name in strategy.providers:
@@ -163,9 +178,7 @@ class LiveSearchService:
                     )
                 )
             elif name == "semantic_scholar":
-                semantic_scholar_api_key = (
-                    (os.getenv("SEMANTIC_SCHOLAR_API_KEY") or "").strip() or None
-                )
+                semantic_scholar_api_key = (os.getenv("SEMANTIC_SCHOLAR_API_KEY") or "").strip() or None
                 providers.append(
                     SemanticScholarProvider(
                         client=SemanticScholarClient(

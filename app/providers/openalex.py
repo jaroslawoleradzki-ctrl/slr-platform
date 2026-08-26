@@ -124,7 +124,12 @@ class OpenAlexClient:
                     await self._sleep(delay)
             self._last_request_started_at = self._clock()
 
-    async def _get(self, *, params: dict[str, str | int]) -> httpx.Response:
+    async def _get(
+        self,
+        *,
+        path: str = "/works",
+        params: dict[str, str | int] | None = None,
+    ) -> httpx.Response:
         async for attempt in AsyncRetrying(
             stop=stop_after_attempt(self._max_attempts),
             wait=wait_exponential(
@@ -137,13 +142,36 @@ class OpenAlexClient:
             with attempt:
                 await self._wait_for_rate_limit()
                 response = await self._http_client.get(
-                    f"{self._base_url}/works",
-                    params=params,
+                    f"{self._base_url}{path}",
+                    params=params or {},
                 )
                 response.raise_for_status()
                 return response
 
         raise RuntimeError("retry loop completed without returning a response")
+
+    async def get_work_by_doi(self, doi: str) -> dict[str, Any] | None:
+        """Fetch a single work from OpenAlex by its normalized DOI."""
+        normalized_doi = doi.strip()
+        if not normalized_doi:
+            return None
+        params: dict[str, str | int] = {}
+        if self._mailto is not None:
+            params["mailto"] = self._mailto
+        try:
+            response = await self._get(
+                path=f"/works/https://doi.org/{normalized_doi}",
+                params=params,
+            )
+            payload = response.json()
+            return payload if isinstance(payload, dict) else None
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code == 404:
+                return None
+            raise
+        except Exception:
+            return None
+
 
     async def search_works(
         self,

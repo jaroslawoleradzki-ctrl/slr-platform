@@ -11,8 +11,9 @@ def test_crossref_renderer_single_term() -> None:
     rendered = renderer.render(query)
     assert rendered.provider == "crossref"
     assert rendered.query_string == "robotics"
-    assert rendered.is_lossless is True
-    assert rendered.warnings == ()
+    assert rendered.physical_endpoint == "https://api.crossref.org/works"
+    assert rendered.is_lossless is False
+    assert "cannot execute" in rendered.warnings[0]
     assert rendered.metadata["canonical_query"] == "robotics"
 
 
@@ -24,8 +25,7 @@ def test_crossref_renderer_exact_phrase() -> None:
     )
     rendered = renderer.render(query)
     assert rendered.query_string == '"machine learning"'
-    assert rendered.is_lossless is True
-    assert rendered.warnings == ()
+    assert rendered.is_lossless is False
 
 
 def test_crossref_renderer_and_terms() -> None:
@@ -39,9 +39,9 @@ def test_crossref_renderer_and_terms() -> None:
     )
     query = SearchQuery(name="AND Query", expression=expression)
     rendered = renderer.render(query)
-    assert rendered.query_string == '"lean management" "energy efficiency"'
-    assert rendered.is_lossless is True
-    assert rendered.warnings == ()
+    assert rendered.query_string == '"lean management"'
+    assert rendered.metadata["candidate_queries"] == ['"lean management"']
+    assert rendered.is_lossless is False
 
 
 def test_crossref_renderer_or_terms_flagged_as_lossy() -> None:
@@ -55,14 +55,10 @@ def test_crossref_renderer_or_terms_flagged_as_lossy() -> None:
     )
     query = SearchQuery(name="OR Query", expression=expression)
     rendered = renderer.render(query)
-    assert rendered.query_string == '"lean management" "lean manufacturing"'
+    assert rendered.query_string == '"lean management" || "lean manufacturing"'
     assert rendered.is_lossless is False
-    assert len(rendered.warnings) == 1
-    assert "does not support OR operators" in rendered.warnings[0]
-    assert (
-        rendered.metadata["canonical_query"]
-        == '("lean management" OR "lean manufacturing")'
-    )
+    assert len(rendered.warnings) == 2
+    assert rendered.metadata["canonical_query"] == '("lean management" OR "lean manufacturing")'
 
 
 def test_crossref_renderer_not_terms_flagged_as_lossy() -> None:
@@ -81,12 +77,8 @@ def test_crossref_renderer_not_terms_flagged_as_lossy() -> None:
     rendered = renderer.render(query)
     assert rendered.query_string == '"artificial intelligence"'
     assert rendered.is_lossless is False
-    assert len(rendered.warnings) == 1
-    assert "does not support NOT operators" in rendered.warnings[0]
-    assert (
-        rendered.metadata["canonical_query"]
-        == '("artificial intelligence" AND NOT (robotics))'
-    )
+    assert len(rendered.warnings) == 2
+    assert rendered.metadata["canonical_query"] == '("artificial intelligence" AND NOT (robotics))'
 
 
 def test_crossref_renderer_deterministic() -> None:
@@ -138,17 +130,15 @@ def test_crossref_renderer_complex_boolean_query_with_or_and_not() -> None:
     rendered = renderer.render(query)
 
     assert rendered.provider == "crossref"
-    assert (
-        rendered.query_string
-        == '"lean manufacturing" "lean production" "energy efficiency" "energy consumption"'
-    )
+    assert rendered.query_string == '"lean manufacturing" || "lean production"'
     assert rendered.is_lossless is False
     assert len(rendered.warnings) == 2
-    assert any("does not support NOT operators" in w for w in rendered.warnings)
-    assert any("does not support OR operators" in w for w in rendered.warnings)
+    assert rendered.metadata["candidate_queries"] == [
+        '"lean manufacturing"',
+        '"lean production"',
+    ]
     assert rendered.metadata["canonical_query"] == (
         '(("lean manufacturing" OR "lean production") AND '
         '("energy efficiency" OR "energy consumption") AND '
         'NOT ("building"))'
     )
-

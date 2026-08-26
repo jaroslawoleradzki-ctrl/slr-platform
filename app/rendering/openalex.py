@@ -14,8 +14,11 @@ class OpenAlexQueryRenderer:
         return RenderedQuery(
             provider=self.provider,
             query_string=query_string,
-            is_lossless=True,
-            warnings=(),
+            physical_endpoint="https://api.openalex.org/works",
+            is_lossless=False,
+            warnings=(
+                "OpenAlex search also covers full text, while canonical ANY validation uses title and abstract; the provider response is treated as a candidate set.",
+            ),
         )
 
     def _render_expression(self, expression: SearchExpression) -> str:
@@ -31,9 +34,7 @@ class OpenAlexQueryRenderer:
                 return f"NOT ({child_rendered})"
 
             op_str = f" {expression.operator.value.upper()} "
-            children_rendered = [
-                self._render_expression(child) for child in expression.children
-            ]
+            children_rendered = [self._render_expression(child) for child in expression.children]
             return f"({op_str.join(children_rendered)})"
 
         raise TypeError(f"Unsupported search expression type: {type(expression)}")

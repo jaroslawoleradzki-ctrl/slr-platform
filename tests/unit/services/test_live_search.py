@@ -195,12 +195,12 @@ async def test_live_search_service_executes_crossref_end_to_end() -> None:
     assert result.next_cursor is None
     assert result.has_more is False
 
-    # Warnings from unsupported filters (languages, open_access, review) + Boolean OR flattening
+    # Warnings from unsupported filters plus the explicit lossy candidate plan.
     warnings = result.search_run.warnings
     assert any("language filtering" in w for w in warnings)
     assert any("open access filtering" in w for w in warnings)
     assert any("review" in w for w in warnings)
-    assert any("OR operators" in w for w in warnings)
+    assert any("candidate" in w.casefold() for w in warnings)
     assert result.search_run.is_lossless is False
 
     assert len(execution.normalized_publications) == 1
@@ -236,7 +236,7 @@ def test_build_providers_configures_semantic_scholar_and_api_key() -> None:
     assert filters.publication_types == ("article", "review")
     assert filters.open_access is True
     assert filters.is_lossless is False
-    assert len(filters.get_warnings()) == 4
+    assert len(filters.get_warnings()) == 1
 
 
 def test_build_providers_semantic_scholar_handles_missing_api_key() -> None:
@@ -268,18 +268,12 @@ async def test_live_search_service_executes_semantic_scholar_end_to_end() -> Non
 
     async def handler(request: httpx.Request) -> httpx.Response:
         assert request.url.host == "api.semanticscholar.org"
-        assert request.url.path == "/graph/v1/paper/search"
-        assert request.url.params["query"] == (
-            "Lean lean manufacturing energy efficiency"
-        )
-        assert "OR" not in request.url.params["query"]
-        assert '"' not in request.url.params["query"]
+        assert request.url.path == "/graph/v1/paper/search/bulk"
+        assert request.url.params["query"] == ('("Lean" | "lean manufacturing energy efficiency")')
         return httpx.Response(
             200,
             json={
                 "total": 1,
-                "offset": 0,
-                "next": None,
                 "data": [
                     {
                         "paperId": "s1",
@@ -313,15 +307,8 @@ async def test_live_search_service_executes_semantic_scholar_end_to_end() -> Non
     assert result.has_more is False
 
     warnings = result.search_run.warnings
-    assert result.search_run.rendered_query == (
-        "Lean lean manufacturing energy efficiency"
-    )
-    assert any("exact-phrase syntax" in w for w in warnings)
-    assert any("OR operators" in w for w in warnings)
-    assert any("year range filtering" in w for w in warnings)
+    assert result.search_run.rendered_query == ('("Lean" | "lean manufacturing energy efficiency")')
     assert any("language filtering" in w for w in warnings)
-    assert any("publication type filtering" in w for w in warnings)
-    assert any("open access filtering" in w for w in warnings)
     assert result.search_run.is_lossless is False
 
     assert len(execution.normalized_publications) == 1

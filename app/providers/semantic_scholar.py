@@ -28,10 +28,7 @@ def _is_retryable_exception(exception: BaseException) -> bool:
 
 
 def _parse_retry_after(response: httpx.Response) -> float | None:
-    retry_after_header = (
-        response.headers.get("retry-after")
-        or response.headers.get("Retry-After")
-    )
+    retry_after_header = response.headers.get("retry-after") or response.headers.get("Retry-After")
     if not retry_after_header:
         return None
     cleaned = retry_after_header.strip()
@@ -66,12 +63,8 @@ class _SemanticScholarWaitStrategy:
 class SemanticScholarSearchFilters:
     """Filters requested by the search strategy.
 
-    The Semantic Scholar relevance search endpoint is not wired to apply any of
-    these constraints in this version, so each active filter produces an explicit
-    warning (no silent loss) and the physical query remains the canonical Boolean
-    expression. Known-language result constraints are still enforced client-side
-    by the router; records with an unknown language remain candidates because the
-    provider cannot enforce the restriction on the physical query.
+    Bulk search supports date/year, publication type and open-access constraints.
+    Language remains unavailable and is therefore validated locally when known.
     """
 
     publication_year_from: int | None = None
@@ -83,28 +76,31 @@ class SemanticScholarSearchFilters:
     def to_filter_param(self) -> None:
         return None
 
+    def to_query_params(self) -> dict[str, str]:
+        params: dict[str, str] = {}
+        if self.publication_year_from is not None or self.publication_year_to is not None:
+            start = str(self.publication_year_from or "")
+            end = str(self.publication_year_to or "")
+            params["publicationDateOrYear"] = f"{start}:{end}"
+        if self.publication_types:
+            type_map = {
+                "article": "JournalArticle",
+                "review": "Review",
+                "conference_paper": "Conference",
+                "book_chapter": "BookSection",
+            }
+            params["publicationTypes"] = ",".join(type_map[value] for value in self.publication_types)
+        if self.open_access:
+            params["openAccessPdf"] = ""
+        return params
+
     def get_warnings(self) -> tuple[str, ...]:
         warnings: list[str] = []
-        if self.publication_year_from is not None or self.publication_year_to is not None:
-            warnings.append(
-                "Semantic Scholar relevance search does not support year range filtering "
-                "in this version; the year filter was not applied to the physical query."
-            )
         if self.languages:
             warnings.append(
-                f"Semantic Scholar relevance search does not support language filtering; "
+                f"Semantic Scholar bulk search does not support language filtering; "
                 f"language filter {list(self.languages)} was not applied to the physical query, "
                 f"so the language restriction could not be enforced for records with unknown language."
-            )
-        if self.publication_types:
-            warnings.append(
-                f"Semantic Scholar relevance search does not support publication type filtering; "
-                f"publication type filter {list(self.publication_types)} was not applied to the physical query."
-            )
-        if self.open_access:
-            warnings.append(
-                "Semantic Scholar relevance search does not support open access filtering; "
-                "open_access filter was not applied to the physical query."
             )
         return tuple(warnings)
 
@@ -121,6 +117,14 @@ class SemanticScholarSearchPage:
     total: int | None
     offset: int
     next: int | None
+    payload: dict[str, Any]
+
+
+@dataclass(frozen=True, slots=True)
+class SemanticScholarBulkSearchPage:
+    data: list[dict[str, Any]]
+    total: int | None
+    token: str | None
     payload: dict[str, Any]
 
 
@@ -157,14 +161,10 @@ class SemanticScholarClient:
             raise ValueError("retry_wait_max must not be negative")
 
         if requests_per_second is not None:
-            if isinstance(requests_per_second, bool) or not isinstance(
-                requests_per_second, (int, float)
-            ):
+            if isinstance(requests_per_second, bool) or not isinstance(requests_per_second, (int, float)):
                 raise TypeError("requests_per_second must be a number or None")
             if not math.isfinite(requests_per_second) or requests_per_second <= 0:
-                raise ValueError(
-                    "requests_per_second must be a finite positive number or None"
-                )
+                raise ValueError("requests_per_second must be a finite positive number or None")
 
         self._http_client = http_client
         self._base_url = base_url.rstrip("/")
@@ -176,9 +176,7 @@ class SemanticScholarClient:
         self._retry_attempts = retry_attempts
         self._retry_wait_multiplier = retry_wait_multiplier
         self._retry_wait_max = retry_wait_max
-        self._minimum_interval = (
-            None if requests_per_second is None else 1 / requests_per_second
-        )
+        self._minimum_interval = None if requests_per_second is None else 1 / requests_per_second
         self._clock = clock
         self._sleep = sleep
         self._rate_limit_lock = asyncio.Lock()
@@ -195,9 +193,7 @@ class SemanticScholarClient:
         async with self._rate_limit_lock:
             now = self._clock()
             if self._last_request_started_at is not None:
-                delay = self._minimum_interval - (
-                    now - self._last_request_started_at
-                )
+                delay = self._minimum_interval - (now - self._last_request_started_at)
                 if delay > 0:
                     await self._sleep(delay)
             self._last_request_started_at = self._clock()
@@ -300,6 +296,36 @@ class SemanticScholarClient:
         payload = self._parse_payload(response.json())
         return self._parse_data(payload)
 
+    async def get_paper_by_doi(
+        self,
+        doi: str,
+        *,
+        fields: list[str] | None = None,
+    ) -> dict[str, Any] | None:
+        """Fetch a single paper from Semantic Scholar by its normalized DOI."""
+        normalized_doi = doi.strip()
+        if not normalized_doi:
+            return None
+        params: dict[str, Any] = {}
+        if fields:
+            params["fields"] = ",".join(fields)
+        try:
+            url = f"{self._base_url}/paper/DOI:{normalized_doi}"
+            response = await self._get(
+                url=url,
+                params=params,
+                headers=self._headers(),
+            )
+            payload = response.json()
+            return payload if isinstance(payload, dict) else None
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code == 404:
+                return None
+            raise
+        except Exception:
+            return None
+
+
     async def search_papers_page(
         self,
         query: str,
@@ -320,36 +346,63 @@ class SemanticScholarClient:
         data = self._parse_data(payload)
 
         total = payload.get("total")
-        if total is not None and (
-            not isinstance(total, int)
-            or isinstance(total, bool)
-            or total < 0
-        ):
-            raise ValueError(
-                "Semantic Scholar response total must be a non-negative integer"
-            )
+        if total is not None and (not isinstance(total, int) or isinstance(total, bool) or total < 0):
+            raise ValueError("Semantic Scholar response total must be a non-negative integer")
 
         page_offset = payload.get("offset", offset)
         if not isinstance(page_offset, int) or isinstance(page_offset, bool) or page_offset < 0:
-            raise ValueError(
-                "Semantic Scholar response offset must be a non-negative integer"
-            )
+            raise ValueError("Semantic Scholar response offset must be a non-negative integer")
 
         next_offset = payload.get("next")
         if next_offset is not None and (
-            not isinstance(next_offset, int)
-            or isinstance(next_offset, bool)
-            or next_offset < 0
+            not isinstance(next_offset, int) or isinstance(next_offset, bool) or next_offset < 0
         ):
-            raise ValueError(
-                "Semantic Scholar response next must be a non-negative integer or null"
-            )
+            raise ValueError("Semantic Scholar response next must be a non-negative integer or null")
 
         return SemanticScholarSearchPage(
             data=data,
             total=total,
             offset=page_offset,
             next=next_offset,
+            payload=payload,
+        )
+
+    async def search_papers_bulk_page(
+        self,
+        query: str,
+        *,
+        token: str | None = None,
+        fields: list[str] | None = None,
+        filters: SemanticScholarSearchFilters | None = None,
+    ) -> SemanticScholarBulkSearchPage:
+        if not isinstance(query, str) or not query.strip():
+            raise ValueError("query must not be blank")
+        params: dict[str, Any] = {"query": query.strip()}
+        if token is not None:
+            if not token.strip():
+                raise ValueError("token must not be blank")
+            params["token"] = token.strip()
+        if fields:
+            params["fields"] = ",".join(field.strip() for field in fields)
+        if filters is not None:
+            params.update(filters.to_query_params())
+        response = await self._get(
+            url=f"{self._base_url}/paper/search/bulk",
+            params=params,
+            headers=self._headers(),
+        )
+        payload = self._parse_payload(response.json())
+        data = self._parse_data(payload)
+        total = payload.get("total")
+        if total is not None and (not isinstance(total, int) or isinstance(total, bool) or total < 0):
+            raise ValueError("Semantic Scholar bulk total must be a non-negative integer")
+        next_token = payload.get("token")
+        if next_token is not None and (not isinstance(next_token, str) or not next_token.strip()):
+            raise ValueError("Semantic Scholar bulk token must be a non-blank string or null")
+        return SemanticScholarBulkSearchPage(
+            data=data,
+            total=total,
+            token=next_token,
             payload=payload,
         )
 

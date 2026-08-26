@@ -12,52 +12,54 @@ class CrossrefQueryRenderer:
     provider: str = "crossref"
 
     def render(self, search_query: SearchQuery) -> RenderedQuery:
-        has_not = False
-        has_or = False
-        terms: list[str] = []
-
-        def collect_terms(expr: SearchExpression) -> None:
-            nonlocal has_not, has_or
-            if isinstance(expr, SearchTerm):
-                val = expr.value
-                if expr.exact_phrase or " " in val:
-                    terms.append(f'"{val}"')
-                else:
-                    terms.append(val)
-            elif isinstance(expr, SearchGroup):
-                if expr.operator is BooleanOperator.NOT:
-                    has_not = True
-                    # NOT clauses cannot be expressed in Crossref query parameter.
-                    # We omit them from physical keywords to avoid matching them.
-                    return
-                if expr.operator is BooleanOperator.OR:
-                    has_or = True
-                for child in expr.children:
-                    collect_terms(child)
-
-        collect_terms(search_query.expression)
-
-        query_string = " ".join(terms) if terms else search_query.to_boolean_query()
-
-        warnings_list: list[str] = []
-        if has_not:
-            warnings_list.append(
-                "Crossref free-text query parameter does not support NOT operators; NOT clauses were excluded from the physical query string."
-            )
-        if has_or:
-            warnings_list.append(
-                "Crossref free-text query parameter does not support OR operators; OR terms were flattened to space-separated keywords."
-            )
-
-        is_lossless = not (has_not or has_or)
+        candidate_queries = build_crossref_candidate_queries(search_query.expression)
+        query_string = " || ".join(candidate_queries)
+        warnings_list = [
+            "Crossref REST free-text search cannot execute the canonical Boolean tree losslessly; physical queries form a candidate retrieval plan and every candidate is validated locally.",
+            f"Candidate retrieval uses {len(candidate_queries)} physical queries from the smallest required positive branch to avoid a Cartesian product.",
+        ]
         metadata: dict[str, Any] = {
             "canonical_query": search_query.to_boolean_query(),
+            "candidate_queries": candidate_queries,
+            "translation": "multi_query_positive_anchor_candidates",
         }
 
         return RenderedQuery(
             provider=self.provider,
             query_string=query_string,
-            is_lossless=is_lossless,
+            physical_endpoint="https://api.crossref.org/works",
+            is_lossless=False,
             warnings=tuple(warnings_list),
             metadata=metadata,
         )
+
+
+def _render_term(term: SearchTerm) -> str:
+    return f'"{term.value}"' if term.exact_phrase or " " in term.value else term.value
+
+
+def build_crossref_candidate_queries(expression: SearchExpression) -> list[str]:
+    """Return a bounded positive-anchor plan without a Cartesian product.
+
+    For an AND expression every canonical match must satisfy every child, so
+    querying the child with the fewest positive alternatives is sufficient to
+    obtain a candidate superset.  OR expressions require the union of their
+    child plans.  Final Boolean semantics are enforced locally.
+    """
+
+    if isinstance(expression, SearchTerm):
+        return [_render_term(expression)]
+    if not isinstance(expression, SearchGroup):
+        raise TypeError(f"Unsupported search expression type: {type(expression)}")
+    if expression.operator is BooleanOperator.NOT:
+        return []
+    child_plans = [build_crossref_candidate_queries(child) for child in expression.children]
+    non_empty = [plan for plan in child_plans if plan]
+    if not non_empty:
+        raise ValueError("Crossref candidate retrieval requires a positive search term")
+    selected = (
+        min(non_empty, key=len)
+        if expression.operator is BooleanOperator.AND
+        else [query for plan in non_empty for query in plan]
+    )
+    return list(dict.fromkeys(selected))

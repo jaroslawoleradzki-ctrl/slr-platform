@@ -40,6 +40,7 @@ interface Props {
   fetchAllError?: string | null;
   onFetchAll?: () => void;
   onCancelFetchAll?: () => void;
+  onResumeFetchAll?: () => void;
 }
 
 /** Collapsible query definition: canonical query stays visible in one line,
@@ -200,7 +201,9 @@ export const SearchResultsSection: React.FC<Props> = ({
   fetchAllError = null,
   onFetchAll,
   onCancelFetchAll,
+  onResumeFetchAll,
 }) => {
+
   const [currentPage, setCurrentPage] = React.useState(1);
   const pageSize = 20;
 
@@ -295,6 +298,7 @@ export const SearchResultsSection: React.FC<Props> = ({
           progress={fetchAllJob}
           starting={fetchAllStarting}
           onCancel={onCancelFetchAll}
+          onResume={onResumeFetchAll}
         />
       )}
 

@@ -48,6 +48,7 @@ from app.repositories.project_publication_repository import (
 from app.repositories.search_result_snapshot_repository import (
     SearchResultSnapshot,
     SearchResultSnapshotRepository,
+    SearchRunAudit,
     SqliteSearchResultSnapshotRepository,
     default_search_result_snapshot_repository,
 )
@@ -65,13 +66,13 @@ from app.services.fetch_all_search import (
 )
 from app.services.live_search import (
     LiveSearchExecutor,
-    build_search_query,
     live_search_service,
 )
 from app.services.project_import_service import ProjectImportService
 from app.services.search_strategy_support import (
     map_search_result_record,
     matches_execution_constraints,
+    publication_doi,
     publication_source_id,
 )
 from app.services.sources_summary_service import SourcesSummaryService
@@ -225,13 +226,19 @@ async def execute_search_strategy(
             detail=str(exc),
         ) from exc
 
-    publications_by_provider = [
-        (provider_result.search_run, publication)
-        for provider_result in execution.provider_results
-        if provider_result.publications is not None
-        for publication in provider_result.publications
-        if matches_execution_constraints(publication, payload)
-    ]
+    query = execution.canonical_query
+
+    runs_by_id = {
+        provider_result.search_run.run_id: provider_result.search_run for provider_result in execution.provider_results
+    }
+    publications_by_provider = []
+    for publication in execution.merged_publications:
+        if not matches_execution_constraints(publication, payload):
+            continue
+        run_id = publication.provenance[0].run_id if publication.provenance else None
+        if run_id is None or run_id not in runs_by_id:
+            continue
+        publications_by_provider.append((runs_by_id[run_id], publication))
     results = []
     for search_run, publication in publications_by_provider:
         source_id = publication_source_id(publication)
@@ -244,7 +251,9 @@ async def execute_search_strategy(
                 publication=publication,
             )
         )
-        results.append(map_search_result_record(publication, provider=search_run.provider, result_id=str(snapshot.snapshot_id)))
+        results.append(
+            map_search_result_record(publication, provider=search_run.provider, result_id=str(snapshot.snapshot_id))
+        )
     provider_errors = [
         SearchProviderErrorResponse(
             provider=cast(
@@ -266,19 +275,69 @@ async def execute_search_strategy(
         for provider_result in successful_provider_results
     )
     next_cursor = successful_provider_results[0].next_cursor if len(successful_provider_results) == 1 else None
-    query = build_search_query(payload)
+    deduplicated_by_run = {provider_result.search_run.run_id: 0 for provider_result in execution.provider_results}
+    seen_dois: set[str] = set()
+    for provider_result in execution.provider_results:
+        for publication in provider_result.publications or []:
+            doi = publication_doi(publication)
+            if doi is None:
+                continue
+            if doi in seen_dois:
+                deduplicated_by_run[provider_result.search_run.run_id] += 1
+            else:
+                seen_dois.add(doi)
+
+    save_audit = getattr(snapshot_repository, "save_audit", None)
+    if callable(save_audit):
+        for provider_result in execution.provider_results:
+            run = provider_result.search_run
+            if run.started_at is None or run.finished_at is None:
+                continue
+            save_audit(
+                SearchRunAudit(
+                    search_run_id=run.run_id,
+                    project_id=project_id,
+                    canonical_query_id=query.query_id,
+                    canonical_version=query.version,
+                    canonical_hash=query.canonical_hash,
+                    provider=run.provider,
+                    physical_endpoint=run.physical_endpoint or "unknown",
+                    physical_query=run.rendered_query,
+                    translation_lossless=run.is_lossless,
+                    translation_warnings=tuple(run.warnings),
+                    retrieved_count=run.records_retrieved,
+                    canonical_accepted_count=run.canonical_accepted_count,
+                    canonical_rejected_count=run.canonical_rejected_count,
+                    canonical_indeterminate_count=run.canonical_indeterminate_count,
+                    deduplicated_count=deduplicated_by_run[run.run_id],
+                    started_at=run.started_at,
+                    finished_at=run.finished_at,
+                )
+            )
     provider_queries = [
         ProviderQueryResponse(
             provider=provider_result.search_run.provider,
             rendered_query=provider_result.search_run.rendered_query,
+            canonical_query_id=query.query_id,
+            canonical_version=query.version,
+            canonical_hash=query.canonical_hash,
+            physical_endpoint=provider_result.search_run.physical_endpoint,
             is_lossless=provider_result.search_run.is_lossless,
             warnings=provider_result.search_run.warnings,
+            retrieved_count=provider_result.search_run.records_retrieved,
+            canonical_accepted_count=provider_result.search_run.canonical_accepted_count,
+            canonical_rejected_count=provider_result.search_run.canonical_rejected_count,
+            canonical_indeterminate_count=provider_result.search_run.canonical_indeterminate_count,
+            deduplicated_count=deduplicated_by_run[provider_result.search_run.run_id],
         )
         for provider_result in execution.provider_results
     ]
     return SearchStrategyExecutionResponse(
         project_id=project_id,
         rendered_query=query.to_boolean_query(),
+        canonical_query_id=query.query_id,
+        canonical_version=query.version,
+        canonical_hash=query.canonical_hash,
         provider_queries=provider_queries,
         providers=list(payload.providers),
         publication_year_from=payload.publication_year_from,
@@ -286,6 +345,21 @@ async def execute_search_strategy(
         executed_at=datetime.now(timezone.utc),
         total_count=total_count,
         returned_count=len(results),
+        retrieved_count=sum(result.search_run.records_retrieved for result in execution.provider_results),
+        canonical_accepted_count=sum(
+            result.search_run.canonical_accepted_count for result in execution.provider_results
+        ),
+        canonical_rejected_count=sum(
+            result.search_run.canonical_rejected_count for result in execution.provider_results
+        ),
+        canonical_indeterminate_count=sum(
+            result.search_run.canonical_indeterminate_count for result in execution.provider_results
+        ),
+        deduplicated_count=max(
+            0,
+            sum(len(result.publications or []) for result in execution.provider_results)
+            - len(execution.merged_publications),
+        ),
         next_cursor=next_cursor,
         has_more=any(provider_result.has_more for provider_result in successful_provider_results),
         results=results,
@@ -393,7 +467,77 @@ def cancel_fetch_all_search(
 
 
 @router.post(
+    "/{project_id}/search-strategy/executions/fetch-all/resume",
+    response_model=FetchAllStartResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def resume_fetch_all_search(
+    project_id: str,
+    project_repository: ProjectPublicationRepository = Depends(get_project_publication_repository),
+    fetch_all: FetchAllSearchService = Depends(get_fetch_all_search_service),
+) -> FetchAllStartResponse:
+    """Resume a previous fetch-all search run from its persisted checkpoints."""
+
+    try:
+        project_repository.get_publications(project_id)
+    except ProjectNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+
+    try:
+        return fetch_all.start_resume_job(project_id)
+    except FetchAllJobAlreadyRunningError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="A fetch-all job is already running for this project.",
+        ) from exc
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+
+
+@router.post(
+    "/{project_id}/search-strategy/executions/fetch-all/{job_id}/resume",
+    response_model=FetchAllStartResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def resume_specific_fetch_all_search(
+    project_id: str,
+    job_id: str,
+    project_repository: ProjectPublicationRepository = Depends(get_project_publication_repository),
+    fetch_all: FetchAllSearchService = Depends(get_fetch_all_search_service),
+) -> FetchAllStartResponse:
+    """Resume a specific fetch-all search job from its persisted checkpoints."""
+
+    try:
+        project_repository.get_publications(project_id)
+    except ProjectNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+
+    try:
+        return fetch_all.start_resume_job(project_id, job_id=job_id)
+    except FetchAllJobAlreadyRunningError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="A fetch-all job is already running for this project.",
+        ) from exc
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+
+
+@router.post(
     "/{project_id}/search-results/imports",
+
     response_model=SearchResultsImportResponse,
     status_code=status.HTTP_200_OK,
 )

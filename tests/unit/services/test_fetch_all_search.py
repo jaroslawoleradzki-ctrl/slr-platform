@@ -11,15 +11,20 @@ from __future__ import annotations
 import asyncio
 import dataclasses
 from typing import Any
+from uuid import UUID
 
 import httpx
 
 from app.api.dto.search_strategy import SearchStrategyExecutionRequest
 from app.domain.author import Author
+from app.domain.identifiers import Identifier, IdentifierType
 from app.domain.provenance import ProvenanceEntry
 from app.domain.publication import DocumentType, Publication
 from app.providers.search.base import ProviderSearchOutput
-from app.repositories.search_result_snapshot_repository import SearchResultSnapshot
+from app.repositories.search_result_snapshot_repository import (
+    DuplicateSearchResultSnapshotError,
+    SearchResultSnapshot,
+)
 from app.services.fetch_all_search import FetchAllSearchService
 
 
@@ -28,8 +33,24 @@ class FakeSnapshotRepository:
         self.saved: list[SearchResultSnapshot] = []
 
     def save(self, snapshot: SearchResultSnapshot) -> SearchResultSnapshot:
+        for existing in self.saved:
+            if (
+                existing.project_id == snapshot.project_id
+                and existing.search_run_id == snapshot.search_run_id
+                and existing.publication.record_id == snapshot.publication.record_id
+            ):
+                raise DuplicateSearchResultSnapshotError(
+                    "publication already has a snapshot in this project search run"
+                )
         self.saved.append(snapshot)
         return snapshot
+
+    def get_for_search_run(
+        self, project_id: str, search_run_id: UUID, *, connection: Any = None
+    ) -> list[SearchResultSnapshot]:
+        return [
+            s for s in self.saved if s.project_id == project_id and s.search_run_id == search_run_id
+        ]
 
 
 class FakeProvider:
@@ -57,8 +78,7 @@ class FakeProvider:
             publication.model_copy(
                 update={
                     "provenance": [
-                        entry.model_copy(update={"run_id": search_run.run_id})
-                        for entry in publication.provenance
+                        entry.model_copy(update={"run_id": search_run.run_id}) for entry in publication.provenance
                     ]
                 }
             )
@@ -76,6 +96,7 @@ def _publication(
     language: str | None = None,
     document_type: DocumentType | None = DocumentType.JOURNAL_ARTICLE,
     open_access: bool | None = False,
+    doi: str | None = None,
 ) -> Publication:
     return Publication(
         title=title,
@@ -84,6 +105,7 @@ def _publication(
         language=language,
         document_type=document_type,
         open_access=open_access,
+        identifiers=([Identifier(type=IdentifierType.DOI, value=doi)] if doi is not None else []),
         provenance=[ProvenanceEntry(source=provider, source_record_id=source_id)],
     )
 
@@ -94,6 +116,7 @@ def _out(
     *,
     total_count: int | None = None,
     warnings: tuple[str, ...] = (),
+    is_lossless: bool | None = None,
 ) -> ProviderSearchOutput:
     return ProviderSearchOutput(
         publications=list(publications),
@@ -102,6 +125,7 @@ def _out(
         next_cursor=next_cursor,
         has_more=next_cursor is not None,
         warnings=warnings,
+        is_lossless=is_lossless,
     )
 
 
@@ -197,9 +221,7 @@ def test_semantic_scholar_offset_cursor_pagination_is_followed() -> None:
             _out([_publication("S3", provider="semantic_scholar", source_id="P3")], None),
         ],
     )
-    _, _, status_response = run_fetch_all(
-        [provider], _strategy(providers=["semantic_scholar"])
-    )
+    _, _, status_response = run_fetch_all([provider], _strategy(providers=["semantic_scholar"]))
 
     assert status_response.status == "completed"
     # Semantic Scholar paginates by numeric offset surfaced as cursor string.
@@ -271,20 +293,13 @@ def test_provider_that_ends_after_first_page_is_marked_complete() -> None:
 def test_record_safety_cap_stops_pagination_without_infinite_loop() -> None:
     endless_pages = [
         _out(
-            [
-                _publication(
-                    f"A{page}-{i}", provider="openalex", source_id=f"W{page}-{i}"
-                )
-                for i in range(4)
-            ],
+            [_publication(f"A{page}-{i}", provider="openalex", source_id=f"W{page}-{i}") for i in range(4)],
             f"cursor-{page}",
         )
         for page in range(50)
     ]
     provider = FakeProvider("openalex", endless_pages)
-    _, _, status_response = run_fetch_all(
-        [provider], max_records_per_provider=10, max_pages_per_provider=200
-    )
+    _, _, status_response = run_fetch_all([provider], max_records_per_provider=10, max_pages_per_provider=200)
 
     state = status_response.providers[0]
     assert state.fetched_count == 12
@@ -317,17 +332,12 @@ def test_page_safety_cap_limits_request_count() -> None:
 def test_semantic_scholar_api_hard_limit_is_reported_as_complete_with_limit() -> None:
     """Provider reports many matches but stops offering further pages."""
 
-    records = [
-        _publication(f"S{i}", provider="semantic_scholar", source_id=f"P{i}")
-        for i in range(2)
-    ]
+    records = [_publication(f"S{i}", provider="semantic_scholar", source_id=f"P{i}") for i in range(2)]
     provider = FakeProvider(
         "semantic_scholar",
         [_out(records, None, total_count=7574)],
     )
-    _, _, status_response = run_fetch_all(
-        [provider], _strategy(providers=["semantic_scholar"])
-    )
+    _, _, status_response = run_fetch_all([provider], _strategy(providers=["semantic_scholar"]))
 
     state = status_response.providers[0]
     assert state.status == "complete"
@@ -367,10 +377,7 @@ def test_repeated_cursor_stops_pagination_safely() -> None:
     assert result is not None
     assert [record.source_id for record in result.results] == ["W1", "W2"]
     assert result.has_more is True
-    assert any(
-        error.provider == "openalex" and "cursor" in error.message
-        for error in result.provider_errors
-    )
+    assert any(error.provider == "openalex" and "cursor" in error.message for error in result.provider_errors)
 
 
 def test_empty_page_with_has_more_stops_pagination_safely() -> None:
@@ -399,10 +406,7 @@ def test_empty_page_with_has_more_stops_pagination_safely() -> None:
     assert result is not None
     assert [record.source_id for record in result.results] == ["W1"]
     assert result.has_more is True
-    assert any(
-        error.provider == "openalex" and "empty page" in error.message
-        for error in result.provider_errors
-    )
+    assert any(error.provider == "openalex" and "empty page" in error.message for error in result.provider_errors)
 
 
 # --- partial failure ---------------------------------------------------------
@@ -486,12 +490,8 @@ def test_local_filters_are_applied_to_every_fetched_page() -> None:
                         year=2024,
                         open_access=True,
                     ),
-                    _publication(
-                        "Too old", provider="openalex", source_id="W2", year=2001
-                    ),
-                    _publication(
-                        "Too new", provider="openalex", source_id="W3", year=2030
-                    ),
+                    _publication("Too old", provider="openalex", source_id="W2", year=2001),
+                    _publication("Too new", provider="openalex", source_id="W3", year=2030),
                 ],
                 "cursor-2",
             ),
@@ -633,9 +633,7 @@ def test_cancel_between_pages_keeps_already_fetched_records() -> None:
         async def search_with_raw(self, *, search_run, search_query, cursor="*"):
             if cursor == "cursor-2":
                 self.job_holder["cancel"]()
-            return await super().search_with_raw(
-                search_run=search_run, search_query=search_query, cursor=cursor
-            )
+            return await super().search_with_raw(search_run=search_run, search_query=search_query, cursor=cursor)
 
     provider = CancelBeforeSecondPage()
 
@@ -681,6 +679,7 @@ def test_provider_warnings_and_losslessness_survive_fetch_all() -> None:
                 [_publication("S1", provider="semantic_scholar", source_id="P1")],
                 None,
                 warnings=(warning,),
+                is_lossless=False,
             )
         ],
     )
@@ -695,6 +694,52 @@ def test_provider_warnings_and_losslessness_survive_fetch_all() -> None:
     assert warning in query.warnings
 
 
+def test_cross_provider_doi_dedup_persists_one_snapshot_with_both_provenances() -> None:
+    openalex = FakeProvider(
+        "openalex",
+        [
+            _out(
+                [
+                    _publication(
+                        "Lean result",
+                        provider="openalex",
+                        source_id="W1",
+                        doi="10.1000/shared",
+                    )
+                ]
+            )
+        ],
+    )
+    crossref = FakeProvider(
+        "crossref",
+        [
+            _out(
+                [
+                    _publication(
+                        "Lean duplicate",
+                        provider="crossref",
+                        source_id="10.1000/shared",
+                        doi="10.1000/shared",
+                    )
+                ]
+            )
+        ],
+    )
+
+    service, _, status = run_fetch_all(
+        [openalex, crossref],
+        _strategy(providers=["openalex", "crossref"]),
+    )
+
+    assert status.result is not None
+    assert status.result.returned_count == 1
+    assert status.result.deduplicated_count == 1
+    repository = service._snapshot_repository
+    assert isinstance(repository, FakeSnapshotRepository)
+    assert len(repository.saved) == 1
+    assert [entry.source for entry in repository.saved[0].publication.provenance] == ["openalex", "crossref"]
+
+
 def test_job_status_reports_running_state_before_completion() -> None:
     started_flag: dict[str, bool] = {"started": False}
 
@@ -704,9 +749,7 @@ def test_job_status_reports_running_state_before_completion() -> None:
             import asyncio as _asyncio
 
             await _asyncio.sleep(0.2)
-            return await super().search_with_raw(
-                search_run=search_run, search_query=search_query, cursor=cursor
-            )
+            return await super().search_with_raw(search_run=search_run, search_query=search_query, cursor=cursor)
 
     provider = BlockingProvider(
         "openalex",
@@ -776,10 +819,7 @@ def test_second_parallel_fetch_all_for_same_project_is_rejected() -> None:
 def test_finished_jobs_are_pruned_to_the_retention_limit() -> None:
     provider = FakeProvider(
         "openalex",
-        [
-            _out([_publication(f"A{i}", provider="openalex", source_id=f"W{i}")], None)
-            for i in range(30)
-        ],
+        [_out([_publication(f"A{i}", provider="openalex", source_id=f"W{i}")], None) for i in range(30)],
     )
 
     async def factory(strategy: Any, http_client: httpx.AsyncClient) -> list[Any]:

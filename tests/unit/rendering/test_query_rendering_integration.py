@@ -32,9 +32,7 @@ async def test_search_engine_provider_specific_rendered_queries() -> None:
     openalex_provider.name = "openalex"
     openalex_provider.search_with_raw = AsyncMock(
         return_value=ProviderSearchOutput(
-            publications=[
-                Publication(title="OpenAlex Work 1", publication_year=2024)
-            ],
+            publications=[Publication(title="Lean management sustainability", publication_year=2024)],
             raw_responses=[{"id": "W1"}],
             total_count=1,
             has_more=False,
@@ -45,9 +43,7 @@ async def test_search_engine_provider_specific_rendered_queries() -> None:
     crossref_provider.name = "crossref"
     crossref_provider.search_with_raw = AsyncMock(
         return_value=ProviderSearchOutput(
-            publications=[
-                Publication(title="Crossref Work 1", publication_year=2024)
-            ],
+            publications=[Publication(title="Lean management sustainability", publication_year=2024)],
             raw_responses=[{"id": "CR1"}],
             total_count=1,
             has_more=False,
@@ -58,9 +54,7 @@ async def test_search_engine_provider_specific_rendered_queries() -> None:
     semantic_scholar_provider.name = "semantic_scholar"
     semantic_scholar_provider.search_with_raw = AsyncMock(
         return_value=ProviderSearchOutput(
-            publications=[
-                Publication(title="Semantic Scholar Paper 1", publication_year=2024)
-            ],
+            publications=[Publication(title="Lean management sustainability", publication_year=2024)],
             raw_responses=[{"paperId": "S2-1"}],
             total_count=1,
             has_more=False,
@@ -79,34 +73,19 @@ async def test_search_engine_provider_specific_rendered_queries() -> None:
     openalex_call_kwargs = openalex_provider.search_with_raw.call_args.kwargs
     openalex_search_run = openalex_call_kwargs["search_run"]
     assert openalex_search_run.provider == "openalex"
-    assert (
-        openalex_search_run.rendered_query
-        == '(("lean management" OR "lean manufacturing") AND sustainability)'
-    )
+    assert openalex_search_run.rendered_query == '(("lean management" OR "lean manufacturing") AND sustainability)'
 
     # Check Crossref executed query
     crossref_call_kwargs = crossref_provider.search_with_raw.call_args.kwargs
     crossref_search_run = crossref_call_kwargs["search_run"]
     assert crossref_search_run.provider == "crossref"
-    assert (
-        crossref_search_run.rendered_query
-        == '"lean management" "lean manufacturing" sustainability'
-    )
+    assert crossref_search_run.rendered_query == "sustainability"
 
-    semantic_scholar_call_kwargs = (
-        semantic_scholar_provider.search_with_raw.call_args.kwargs
-    )
+    semantic_scholar_call_kwargs = semantic_scholar_provider.search_with_raw.call_args.kwargs
     semantic_scholar_search_run = semantic_scholar_call_kwargs["search_run"]
     assert semantic_scholar_search_run.provider == "semantic_scholar"
-    assert (
-        semantic_scholar_search_run.rendered_query
-        == "lean management lean manufacturing sustainability"
-    )
-    assert semantic_scholar_search_run.is_lossless is False
-    assert any(
-        "OR operators" in warning
-        for warning in semantic_scholar_search_run.warnings
-    )
+    assert semantic_scholar_search_run.rendered_query == '(("lean management" | "lean manufacturing") + sustainability)'
+    assert semantic_scholar_search_run.is_lossless is True
 
     # Verify that the two search runs have different rendered_query strings for the same SearchQuery!
     assert openalex_search_run.rendered_query != crossref_search_run.rendered_query
@@ -115,10 +94,7 @@ async def test_search_engine_provider_specific_rendered_queries() -> None:
     assert len(execution.provider_results) == 3
     assert execution.provider_results[0].search_run.rendered_query == openalex_search_run.rendered_query
     assert execution.provider_results[1].search_run.rendered_query == crossref_search_run.rendered_query
-    assert (
-        execution.provider_results[2].search_run.rendered_query
-        == semantic_scholar_search_run.rendered_query
-    )
+    assert execution.provider_results[2].search_run.rendered_query == semantic_scholar_search_run.rendered_query
 
 
 @pytest.mark.anyio
@@ -130,9 +106,7 @@ async def test_search_engine_partial_failure_preserves_rendered_queries() -> Non
 
     openalex_provider = AsyncMock()
     openalex_provider.name = "openalex"
-    openalex_provider.search_with_raw = AsyncMock(
-        side_effect=RuntimeError("OpenAlex HTTP 500 Server Error")
-    )
+    openalex_provider.search_with_raw = AsyncMock(side_effect=RuntimeError("OpenAlex HTTP 500 Server Error"))
 
     crossref_provider = AsyncMock()
     crossref_provider.name = "crossref"
