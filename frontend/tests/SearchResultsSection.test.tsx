@@ -176,9 +176,12 @@ describe('SearchResultsSection', () => {
     const cancelButton = screen.getByRole('button', { name: 'Anuluj pobieranie' });
     fireEvent.click(cancelButton);
     expect(onCancel).toHaveBeenCalledOnce();
-    expect(screen.getByText(/Łącznie pobrano:\s*2\s*252/u)).toBeInTheDocument();
-    expect(screen.getByText(/Po lokalnych filtrach:\s*2\s*220/u)).toBeInTheDocument();
     const progressPanel = screen.getByTestId('fetch-all-progress');
+    expect(progressPanel.textContent).toMatch(/Pobrano:\s*2\s*252/u);
+    expect(progressPanel.textContent).toMatch(/Canonical accepted:/u);
+    expect(progressPanel.textContent).toMatch(/Canonical rejected:/u);
+    expect(progressPanel.textContent).toMatch(/Nieokreślone:/u);
+    expect(progressPanel.textContent).toMatch(/Zapisano po ograniczeniach metadanych:\s*2\s*220/u);
     expect(progressPanel.textContent).toMatch(/OpenAlex\s*—\s*1\s*840 pobranych z ~1\s*840/u);
     expect(screen.getByText('Zakończono')).toBeInTheDocument();
     expect(screen.getByText('Pobieranie…')).toBeInTheDocument();

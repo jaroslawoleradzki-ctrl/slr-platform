@@ -21,6 +21,27 @@ class DuplicateSearchResultSnapshotError(ValueError):
 
 
 @dataclass(frozen=True, slots=True)
+class SearchRunAudit:
+    search_run_id: UUID
+    project_id: str
+    canonical_query_id: UUID
+    canonical_version: int
+    canonical_hash: str
+    provider: str
+    physical_endpoint: str
+    physical_query: str
+    translation_lossless: bool
+    translation_warnings: tuple[str, ...]
+    retrieved_count: int
+    canonical_accepted_count: int
+    canonical_rejected_count: int
+    canonical_indeterminate_count: int
+    deduplicated_count: int
+    started_at: datetime
+    finished_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
 class SearchResultSnapshot:
     snapshot_id: UUID
     project_id: str
@@ -63,9 +84,8 @@ class SearchResultSnapshot:
 class SearchResultSnapshotRepository(Protocol):
     def save(self, snapshot: SearchResultSnapshot) -> SearchResultSnapshot: ...
     def get(self, project_id: str, snapshot_id: UUID) -> SearchResultSnapshot: ...
-    def delete_for_project(
-        self, project_id: str, *, connection: sqlite3.Connection | None = None
-    ) -> None: ...
+    def save_audit(self, audit: SearchRunAudit) -> None: ...
+    def delete_for_project(self, project_id: str, *, connection: sqlite3.Connection | None = None) -> None: ...
 
 
 class SqliteSearchResultSnapshotRepository:
@@ -119,12 +139,55 @@ class SqliteSearchResultSnapshotRepository:
             datetime.fromisoformat(row[4]),
         )
 
-    def delete_for_project(
-        self, project_id: str, *, connection: sqlite3.Connection | None = None
-    ) -> None:
+    def save_audit(self, audit: SearchRunAudit) -> None:
+        with sqlite3.connect(self._database_path) as connection:
+            connection.execute(
+                """INSERT INTO search_run_audits (
+                       search_run_id, project_id, canonical_query_id,
+                       canonical_version, canonical_hash, provider,
+                       physical_endpoint, physical_query, translation_lossless,
+                       translation_warnings, retrieved_count,
+                       canonical_accepted_count, canonical_rejected_count,
+                       canonical_indeterminate_count, deduplicated_count,
+                       started_at, finished_at
+                   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                   ON CONFLICT(search_run_id) DO UPDATE SET
+                       retrieved_count = excluded.retrieved_count,
+                       canonical_accepted_count = excluded.canonical_accepted_count,
+                       canonical_rejected_count = excluded.canonical_rejected_count,
+                       canonical_indeterminate_count = excluded.canonical_indeterminate_count,
+                       deduplicated_count = excluded.deduplicated_count,
+                       translation_warnings = excluded.translation_warnings,
+                       finished_at = excluded.finished_at""",
+                (
+                    str(audit.search_run_id),
+                    audit.project_id,
+                    str(audit.canonical_query_id),
+                    audit.canonical_version,
+                    audit.canonical_hash,
+                    audit.provider,
+                    audit.physical_endpoint,
+                    audit.physical_query,
+                    int(audit.translation_lossless),
+                    json.dumps(list(audit.translation_warnings)),
+                    audit.retrieved_count,
+                    audit.canonical_accepted_count,
+                    audit.canonical_rejected_count,
+                    audit.canonical_indeterminate_count,
+                    audit.deduplicated_count,
+                    audit.started_at.isoformat(),
+                    audit.finished_at.isoformat(),
+                ),
+            )
+
+    def delete_for_project(self, project_id: str, *, connection: sqlite3.Connection | None = None) -> None:
         if connection is not None:
             connection.execute(
                 "DELETE FROM search_result_snapshots WHERE project_id = ?",
+                (project_id,),
+            )
+            connection.execute(
+                "DELETE FROM search_run_audits WHERE project_id = ?",
                 (project_id,),
             )
         else:
@@ -133,6 +196,11 @@ class SqliteSearchResultSnapshotRepository:
                     "DELETE FROM search_result_snapshots WHERE project_id = ?",
                     (project_id,),
                 )
+                conn.execute(
+                    "DELETE FROM search_run_audits WHERE project_id = ?",
+                    (project_id,),
+                )
+
 
     def _apply_migrations(self) -> None:
         migration_directory = Path(__file__).parents[2] / "migrations"

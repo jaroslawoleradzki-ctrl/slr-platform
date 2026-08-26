@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import base64
 import html
+import json
 import re
 from collections.abc import AsyncIterator, Callable
 from datetime import date, datetime, timezone
@@ -20,6 +22,7 @@ from app.providers.search.mapping_utils import (
     normalize_issn,
     normalize_url,
 )
+from app.rendering.crossref import build_crossref_candidate_queries
 
 _TYPE_MAP = {
     "journal-article": DocumentType.JOURNAL_ARTICLE,
@@ -60,10 +63,7 @@ def _parse_crossref_date(date_dict: Any) -> tuple[int, date | None] | None:
         return None
     if len(parts) > 3:
         return None
-    if not all(
-        isinstance(part, int) and not isinstance(part, bool)
-        for part in parts
-    ):
+    if not all(isinstance(part, int) and not isinstance(part, bool) for part in parts):
         return None
 
     year = parts[0]
@@ -100,14 +100,18 @@ class CrossrefProvider:
         retrieval_clock: Callable[[], datetime] = _utc_now,
         paginate: bool = False,
         max_results: int = 100,
+        max_physical_requests_per_call: int = 10,
         filters: CrossrefSearchFilters | None = None,
     ) -> None:
         if max_results < 1:
             raise ValueError("max_results must be at least 1")
+        if max_physical_requests_per_call < 1:
+            raise ValueError("max_physical_requests_per_call must be at least 1")
         self._client = client
         self._retrieval_clock = retrieval_clock
         self._paginate = paginate
         self._max_results = max_results
+        self._max_physical_requests_per_call = max_physical_requests_per_call
         self._filters = filters
 
     @staticmethod
@@ -118,11 +122,7 @@ class CrossrefProvider:
         total_results = message.get("total-results")
         if total_results is None:
             return None
-        if (
-            not isinstance(total_results, int)
-            or isinstance(total_results, bool)
-            or total_results < 0
-        ):
+        if not isinstance(total_results, int) or isinstance(total_results, bool) or total_results < 0:
             raise ValueError("Crossref message.total-results must be a non-negative integer")
         return total_results
 
@@ -164,50 +164,124 @@ class CrossrefProvider:
         rows: int = 20,
         cursor: str | None = None,
     ) -> ProviderSearchOutput:
-        """Fetch one page once, then expose its mapping and original payload."""
+        """Execute a bounded multi-query candidate retrieval plan."""
 
         client = self._require_client()
         self._validate_search_context(search_run, search_query)
-        if self._paginate:
-            return await self._search_paginated_with_raw(
-                client=client,
-                search_run=search_run,
-                search_query=search_query,
-                rows=rows,
-                cursor=cursor or "*",
+        candidate_queries = build_crossref_candidate_queries(search_query.expression)
+        query_index, physical_cursor = self._decode_candidate_cursor(cursor)
+        target = self._max_results if self._paginate else rows
+        publications: list[Publication] = []
+        raw_responses: list[JsonObject] = []
+        seen_source_ids: set[str] = set()
+        seen_positions: set[tuple[int, str]] = set()
+        next_cursor: str | None = None
+        candidate_total = 0
+        has_candidate_total = False
+
+        while (
+            query_index < len(candidate_queries)
+            and len(publications) < target
+            and len(raw_responses) < self._max_physical_requests_per_call
+        ):
+            position = (query_index, physical_cursor)
+            if position in seen_positions:
+                break
+            seen_positions.add(position)
+            requested_rows = min(rows, target - len(publications))
+            payload = await client.search_works(
+                candidate_queries[query_index],
+                rows=requested_rows,
+                cursor=physical_cursor,
+                filters=self._filters,
             )
-        payload = await client.search_works(
-            search_run.rendered_query,
-            rows=rows,
-            cursor=cursor,
-            filters=self._filters,
-        )
-        message = payload["message"]
-        items = message["items"]
-        retrieved_at = self._retrieval_clock()
-        publications = [
-            self._map_work_with_provenance(
-                work,
-                search_run=search_run,
-                search_query=search_query,
-                retrieved_at=retrieved_at,
+            raw_responses.append(cast(JsonObject, payload))
+            page_total = self._read_total_count(payload)
+            if page_total is not None and (
+                physical_cursor == "*" or (len(candidate_queries) == 1 and not has_candidate_total)
+            ):
+                candidate_total += page_total
+                has_candidate_total = True
+            message = payload["message"]
+            items = message["items"]
+            retrieved_at = self._retrieval_clock()
+            for work in items:
+                publication = self._map_work_with_provenance(
+                    work,
+                    search_run=search_run,
+                    search_query=search_query,
+                    retrieved_at=retrieved_at,
+                )
+                source_id = publication.provenance[0].source_record_id
+                if source_id not in seen_source_ids:
+                    seen_source_ids.add(source_id)
+                    publications.append(publication)
+
+            raw_next = self._read_next_cursor(payload)
+            query_complete = not items or raw_next is None or raw_next == physical_cursor
+            if query_complete:
+                query_index += 1
+                physical_cursor = "*"
+            else:
+                assert raw_next is not None
+                physical_cursor = raw_next
+
+            if not self._paginate:
+                break
+
+        if query_index < len(candidate_queries):
+            next_cursor = (
+                physical_cursor
+                if len(candidate_queries) == 1
+                else self._encode_candidate_cursor(query_index, physical_cursor)
             )
-            for work in items
-        ]
-        total_count = self._read_total_count(payload)
-        raw_next_cursor = self._read_next_cursor(payload)
-        next_cursor = raw_next_cursor if items and raw_next_cursor != cursor else None
         filter_warnings = self._filters.get_warnings() if self._filters else ()
-        is_lossless = self._filters.is_lossless if self._filters else True
+        plan_warnings = [
+            f"Crossref candidate plan executed {len(raw_responses)} physical request(s) in this page; canonical validation is required."
+        ]
+        if next_cursor is not None and len(raw_responses) >= self._max_physical_requests_per_call:
+            plan_warnings.append(
+                "Crossref candidate-plan request bound was reached; continue with the returned opaque cursor."
+            )
         return ProviderSearchOutput(
             publications=publications,
-            raw_responses=[cast(JsonObject, payload)],
-            total_count=total_count,
+            raw_responses=raw_responses,
+            # Totals from multiple free-text queries overlap and cannot be
+            # summed into a meaningful candidate-set total.
+            total_count=(
+                candidate_total
+                if len(candidate_queries) == 1 and has_candidate_total
+                else None
+            ),
             next_cursor=next_cursor,
             has_more=next_cursor is not None,
-            warnings=filter_warnings,
-            is_lossless=is_lossless,
+            warnings=tuple([*filter_warnings, *plan_warnings]),
+            is_lossless=False,
         )
+
+    @staticmethod
+    def _encode_candidate_cursor(query_index: int, physical_cursor: str) -> str:
+        payload = json.dumps([query_index, physical_cursor], separators=(",", ":"))
+        return "crossref-plan:" + base64.urlsafe_b64encode(payload.encode()).decode()
+
+    @staticmethod
+    def _decode_candidate_cursor(cursor: str | None) -> tuple[int, str]:
+        if cursor is None or cursor == "*":
+            return 0, "*"
+        prefix = "crossref-plan:"
+        if not cursor.startswith(prefix):
+            # Backwards-compatible physical cursor supplied by older clients.
+            return 0, cursor
+        try:
+            decoded = base64.urlsafe_b64decode(cursor[len(prefix) :]).decode()
+            query_index, physical_cursor = json.loads(decoded)
+        except (ValueError, TypeError, json.JSONDecodeError) as exc:
+            raise ValueError("invalid Crossref candidate-plan cursor") from exc
+        if not isinstance(query_index, int) or query_index < 0:
+            raise ValueError("invalid Crossref candidate query index")
+        if not isinstance(physical_cursor, str) or not physical_cursor:
+            raise ValueError("invalid Crossref physical cursor")
+        return query_index, physical_cursor
 
     async def _search_paginated_with_raw(
         self,
@@ -343,9 +417,7 @@ class CrossrefProvider:
                     author_identifiers = []
                     orcid = normalize_orcid(a_dict.get("ORCID"))
                     if orcid:
-                        author_identifiers.append(
-                            Identifier(type=IdentifierType.ORCID, value=orcid)
-                        )
+                        author_identifiers.append(Identifier(type=IdentifierType.ORCID, value=orcid))
 
                     affiliations = []
                     aff_list = a_dict.get("affiliation")
@@ -391,10 +463,7 @@ class CrossrefProvider:
             if isinstance(issns, list):
                 for issn in issns:
                     normalized_issn = normalize_issn(issn)
-                    if (
-                        normalized_issn is not None
-                        and normalized_issn not in seen_issns
-                    ):
+                    if normalized_issn is not None and normalized_issn not in seen_issns:
                         seen_issns.add(normalized_issn)
                         venue_identifiers.append(
                             Identifier(
@@ -492,6 +561,4 @@ class CrossrefProvider:
         if search_run.query_id != search_query.query_id:
             raise ValueError("search_run and search_query must have the same query_id")
         if search_run.query_version != search_query.version:
-            raise ValueError(
-                "search_run query_version must match search_query version"
-            )
+            raise ValueError("search_run query_version must match search_query version")

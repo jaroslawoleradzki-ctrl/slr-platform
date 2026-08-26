@@ -109,6 +109,12 @@ export const FetchAllProgressPanel: React.FC<Props> = ({
                 </>
               )}
             </span>
+            <span>
+              {' '}· canonical: {formatNumber(provider.canonical_accepted_count ?? 0)} zaakceptowanych,
+              {' '}{formatNumber(provider.canonical_rejected_count ?? 0)} odrzuconych
+              {' '}· nieokreślone: {formatNumber(provider.canonical_indeterminate_count ?? 0)}
+              {' '}· duplikaty: {formatNumber(provider.deduplicated_count ?? 0)}
+            </span>
             {provider.limit_reached && (
               <span style={{ color: 'var(--status-warning-text)' }}>
                 {' '}· osiągnięto limit możliwy do pobrania z API
@@ -120,8 +126,16 @@ export const FetchAllProgressPanel: React.FC<Props> = ({
       </div>
 
       <div style={{ marginTop: 8, fontSize: '0.85rem', fontWeight: 600 }}>
-        Łącznie pobrano: {formatNumber(progress.fetched_total)} · Po lokalnych
-        filtrach: {formatNumber(progress.kept_total)}
+        Pobrano: {formatNumber(progress.fetched_total)} · Canonical accepted:{' '}
+        {formatNumber(progress.canonical_accepted_total ?? 0)} · Canonical rejected:{' '}
+        {formatNumber(progress.canonical_rejected_total ?? 0)} · Nieokreślone:{' '}
+        {formatNumber(progress.canonical_indeterminate_total ?? 0)} · Po deduplikacji:{' '}
+        {formatNumber(
+          (progress.canonical_accepted_total ?? 0) +
+          (progress.canonical_indeterminate_total ?? 0) -
+          (progress.deduplicated_total ?? 0)
+        )} ·
+        Zapisano po ograniczeniach metadanych: {formatNumber(progress.kept_total)}
       </div>
 
       {!running && incompleteProviders.length > 0 && (

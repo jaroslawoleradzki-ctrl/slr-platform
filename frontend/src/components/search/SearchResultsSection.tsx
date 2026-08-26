@@ -97,17 +97,35 @@ export const SearchResultsSection: React.FC<Props> = ({
       }
       subtitle={`Znaleziono ${result.total_count} rekordów. Zwrócono ${result.returned_count}. Wybrano ${selectedIds.length}.`}
     >
+      <div style={{ marginBottom: 12, fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
+        Pobrano: {result.retrieved_count ?? result.returned_count} · Canonical accepted:{' '}
+        {result.canonical_accepted_count ?? result.returned_count} · Canonical rejected:{' '}
+        {result.canonical_rejected_count ?? 0} · Nieokreślone (brak danych):{' '}
+        {result.canonical_indeterminate_count ?? 0} · Usunięto jako duplikaty:{' '}
+        {result.deduplicated_count ?? 0}
+      </div>
       {result.provider_queries && result.provider_queries.length > 0 && (
         <div style={{ marginBottom: 12, padding: 10, borderRadius: 'var(--radius-md)', backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-subtle)', fontSize: '0.8rem' }}>
           <div style={{ fontWeight: 700, marginBottom: 4 }}>Wykonane zapytania providerów:</div>
+          <div style={{ marginBottom: 6 }}>
+            <strong>Canonical query:</strong> <code>{result.rendered_query}</code>
+          </div>
           {result.provider_queries.map((pq) => (
             <div key={pq.provider} style={{ marginTop: 4 }}>
-              <span style={{ fontWeight: 600 }}>{pq.provider}:</span> <code>{pq.rendered_query}</code>
+              <span style={{ fontWeight: 600 }}>{pq.provider}:</span>{' '}
+              <strong>{pq.is_lossless === false ? 'LOSSY TRANSLATION' : 'LOSSLESS TRANSLATION'}</strong>
+              {pq.physical_endpoint && <div>Endpoint: <code>{pq.physical_endpoint}</code></div>}
+              <div>Physical query: <code>{pq.rendered_query}</code></div>
               {pq.is_lossless === false && (
-                <span style={{ marginLeft: 6, color: 'var(--status-warning-text)', fontSize: '0.75rem' }}>
-                  (Dostosowano składnię/ograniczenia)
-                </span>
+                <div style={{ color: 'var(--status-warning-text)', fontSize: '0.75rem' }}>
+                  Provider zwrócił candidate set; zastosowano lokalną canonical validation.
+                </div>
               )}
+              {pq.warnings?.map((warning) => (
+                <div key={warning} style={{ color: 'var(--status-warning-text)', fontSize: '0.75rem' }}>
+                  {warning}
+                </div>
+              ))}
             </div>
           ))}
         </div>

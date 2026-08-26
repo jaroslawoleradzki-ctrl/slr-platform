@@ -168,14 +168,14 @@ export const SearchStrategyPage: React.FC = () => {
     setImportError(null);
   };
 
-  const saveStrategy = async (): Promise<boolean> => {
-    if (!activeProject || !strategy || saving) return false;
+  const saveStrategy = async (): Promise<SearchStrategy | null> => {
+    if (!activeProject || !strategy || saving) return null;
     const errors = validate(strategy);
     setValidationErrors(errors);
     setSaveError(null);
     setExecutionError(null);
     setImportError(null);
-    if (errors.length > 0) return false;
+    if (errors.length > 0) return null;
 
     const expression = expressionFromStrategy(strategy);
     const payload: SearchStrategyWriteRequest = {
@@ -204,10 +204,10 @@ export const SearchStrategyPage: React.FC = () => {
       setDirty(false);
       setSaved(true);
       setNotFound(false);
-      return true;
+      return response;
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : 'Nie udało się zapisać strategii.');
-      return false;
+      return null;
     } finally {
       setSaving(false);
     }
@@ -216,8 +216,8 @@ export const SearchStrategyPage: React.FC = () => {
   const handleSearch = async () => {
     setExecutionError(null);
     setImportError(null);
-    const saveSuccess = await saveStrategy();
-    if (!saveSuccess || !strategy) return;
+    const savedStrategy = await saveStrategy();
+    if (!savedStrategy || !strategy) return;
 
     const editableStrategy: EditableSearchStrategy = {
       providers: strategy.providers,
@@ -226,6 +226,7 @@ export const SearchStrategyPage: React.FC = () => {
         name: g.name,
         terms: g.terms,
       })),
+      canonicalQuery: savedStrategy.queries[0],
       filters: {
         publicationYearFrom: strategy.constraints.publication_year_from,
         publicationYearTo: strategy.constraints.publication_year_to,

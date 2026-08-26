@@ -412,6 +412,7 @@ class MixedProjectApiService implements ProjectApiService {
             open_access: strategy.filters.fullTextOnly,
             providers: strategy.providers,
             concept_groups: strategy.conceptGroups,
+            ...(strategy.canonicalQuery ? { canonical_query: strategy.canonicalQuery } : {}),
             ...(cursor ? { cursor } : {}),
           }),
         }
@@ -444,6 +445,7 @@ class MixedProjectApiService implements ProjectApiService {
             open_access: strategy.filters.fullTextOnly,
             providers: strategy.providers,
             concept_groups: strategy.conceptGroups,
+            ...(strategy.canonicalQuery ? { canonical_query: strategy.canonicalQuery } : {}),
           }),
         }
       );

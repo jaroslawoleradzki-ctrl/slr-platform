@@ -42,14 +42,13 @@ class SearchStrategyExecutionRequest(BaseModel):
 
     publication_year_from: int = Field(ge=1000, le=9999)
     publication_year_to: int = Field(ge=1000, le=9999)
-    providers: list[
-        Literal["openalex", "crossref", "semantic_scholar"]
-    ] = Field(min_length=1)
+    providers: list[Literal["openalex", "crossref", "semantic_scholar"]] = Field(min_length=1)
     concept_groups: list[ConceptGroupRequest] = Field(min_length=1)
+    canonical_query: SearchQuery | None = None
     languages: list[str] = Field(default_factory=list)
-    publication_types: list[
-        Literal["article", "review", "conference_paper", "book_chapter"]
-    ] = Field(default_factory=list)
+    publication_types: list[Literal["article", "review", "conference_paper", "book_chapter"]] = Field(
+        default_factory=list
+    )
     open_access: bool = False
     cursor: str | None = None
 
@@ -76,9 +75,7 @@ class SearchStrategyExecutionRequest(BaseModel):
     @model_validator(mode="after")
     def validate_year_range(self) -> "SearchStrategyExecutionRequest":
         if self.publication_year_from > self.publication_year_to:
-            raise ValueError(
-                "publication_year_from must not be later than publication_year_to"
-            )
+            raise ValueError("publication_year_from must not be later than publication_year_to")
         return self
 
 
@@ -92,13 +89,9 @@ class SearchStrategyPutRequest(BaseModel):
     description: str | None = None
     research_questions: list[str] = Field(min_length=1)
     concept_groups: list[SearchConceptGroup] = Field(min_length=1)
-    group_operator: Literal[BooleanOperator.AND, BooleanOperator.OR] = (
-        BooleanOperator.AND
-    )
+    group_operator: Literal[BooleanOperator.AND, BooleanOperator.OR] = BooleanOperator.AND
     constraints: SearchConstraints
-    providers: list[
-        Literal["openalex", "crossref", "semantic_scholar"]
-    ] = Field(min_length=1)
+    providers: list[Literal["openalex", "crossref", "semantic_scholar"]] = Field(min_length=1)
     queries: list[SearchQuery] = Field(min_length=1)
     version: int = Field(default=1, ge=1)
     created_at: datetime | None = None
@@ -139,8 +132,17 @@ class ProviderQueryResponse(BaseModel):
 
     provider: str
     rendered_query: str
+    canonical_query_id: UUID | None = None
+    canonical_version: int | None = None
+    canonical_hash: str | None = None
+    physical_endpoint: str | None = None
     is_lossless: bool = True
     warnings: list[str] = Field(default_factory=list)
+    retrieved_count: int = Field(default=0, ge=0)
+    canonical_accepted_count: int = Field(default=0, ge=0)
+    canonical_rejected_count: int = Field(default=0, ge=0)
+    canonical_indeterminate_count: int = Field(default=0, ge=0)
+    deduplicated_count: int = Field(default=0, ge=0)
 
 
 class SearchStrategyExecutionResponse(BaseModel):
@@ -148,9 +150,10 @@ class SearchStrategyExecutionResponse(BaseModel):
 
     project_id: str
     status: Literal["validated"] = "validated"
-    rendered_query: str = Field(
-        description="Canonical provider-independent Boolean query tree preview"
-    )
+    rendered_query: str = Field(description="Canonical provider-independent Boolean query tree preview")
+    canonical_query_id: UUID | None = None
+    canonical_version: int | None = None
+    canonical_hash: str | None = None
     provider_queries: list[ProviderQueryResponse] = Field(
         default_factory=list,
         description="Physical executed provider queries derived from execution SearchRun objects",
@@ -161,6 +164,11 @@ class SearchStrategyExecutionResponse(BaseModel):
     executed_at: datetime
     total_count: int = Field(ge=0)
     returned_count: int = Field(ge=0)
+    retrieved_count: int = Field(default=0, ge=0)
+    canonical_accepted_count: int = Field(default=0, ge=0)
+    canonical_rejected_count: int = Field(default=0, ge=0)
+    canonical_indeterminate_count: int = Field(default=0, ge=0)
+    deduplicated_count: int = Field(default=0, ge=0)
     next_cursor: str | None = None
     has_more: bool
     results: list["SearchResultRecordResponse"]
@@ -201,6 +209,10 @@ class FetchAllProviderProgressResponse(BaseModel):
     status: Literal["pending", "running", "complete", "partial", "cancelled", "failed"]
     fetched_count: int = Field(default=0, ge=0)
     kept_count: int = Field(default=0, ge=0)
+    canonical_accepted_count: int = Field(default=0, ge=0)
+    canonical_rejected_count: int = Field(default=0, ge=0)
+    canonical_indeterminate_count: int = Field(default=0, ge=0)
+    deduplicated_count: int = Field(default=0, ge=0)
     pages_fetched: int = Field(default=0, ge=0)
     total_reported: int | None = Field(default=None, ge=0)
     limit_reached: bool = False
@@ -225,6 +237,10 @@ class FetchAllStatusResponse(BaseModel):
     providers: list[FetchAllProviderProgressResponse] = Field(default_factory=list)
     fetched_total: int = Field(default=0, ge=0)
     kept_total: int = Field(default=0, ge=0)
+    canonical_accepted_total: int = Field(default=0, ge=0)
+    canonical_rejected_total: int = Field(default=0, ge=0)
+    canonical_indeterminate_total: int = Field(default=0, ge=0)
+    deduplicated_total: int = Field(default=0, ge=0)
     message: str | None = None
     result: SearchStrategyExecutionResponse | None = None
 

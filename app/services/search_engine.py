@@ -16,7 +16,12 @@ from app.domain.search_provenance import (
 from app.normalization import normalize_publication
 from app.providers.search.base import ProviderSearchOutput
 from app.rendering import get_query_renderer
+from app.services.canonical_query_validator import (
+    CanonicalMatchStatus,
+    validate_canonical_query,
+)
 from app.services.duplicate_group_builder import DuplicateGroupBuilder
+from app.services.metadata_enrichment import MetadataEnrichmentService
 from app.services.result_merger import ResultMerger
 from app.storage.raw_response_archive import (
     RawResponseArchive,
@@ -56,23 +61,20 @@ class ProviderSearchResult:
 
     def __post_init__(self) -> None:
         if (self.publications is None) == (self.error is None):
-            raise ValueError(
-                "ProviderSearchResult must contain either publications or an error"
-            )
+            raise ValueError("ProviderSearchResult must contain either publications or an error")
 
     @property
     def duration_seconds(self) -> float:
         if self.search_run.started_at is None or self.search_run.finished_at is None:
             raise ValueError("completed provider results require run timestamps")
-        return (
-            self.search_run.finished_at - self.search_run.started_at
-        ).total_seconds()
+        return (self.search_run.finished_at - self.search_run.started_at).total_seconds()
 
 
 @dataclass(frozen=True, slots=True)
 class SearchExecution:
     """Ordered, separate results from one sequential provider execution."""
 
+    canonical_query: SearchQuery
     provider_results: list[ProviderSearchResult]
     normalized_publications: list[Publication]
     merged_publications: list[Publication]
@@ -94,20 +96,19 @@ class SearchEngine:
         clock: Callable[[], datetime] = _utc_now,
         result_merger: ResultMerger | None = None,
         duplicate_group_builder: DuplicateGroupBuilder | None = None,
+        metadata_enricher: MetadataEnrichmentService | None = None,
     ) -> None:
         self._providers = tuple(providers)
         self._raw_response_archive = raw_response_archive
         self._run_id_factory = run_id_factory
         self._archive_id_factory = archive_id_factory
         self._clock = clock
-        self._result_merger = (
-            result_merger if result_merger is not None else ResultMerger()
-        )
+        self._result_merger = result_merger if result_merger is not None else ResultMerger()
         self._duplicate_group_builder = (
-            duplicate_group_builder
-            if duplicate_group_builder is not None
-            else DuplicateGroupBuilder()
+            duplicate_group_builder if duplicate_group_builder is not None else DuplicateGroupBuilder()
         )
+        self._metadata_enricher = metadata_enricher
+
 
     async def execute(
         self,
@@ -120,6 +121,7 @@ class SearchEngine:
         execution_started_at = self._clock()
         provider_results: list[ProviderSearchResult] = []
         result_provenance: list[PublicationSearchProvenance] = []
+        known_abstracts: dict[str, tuple[str, str]] = {}
         for provider in self._providers:
             provider_started_at = self._clock()
             renderer = get_query_renderer(provider.name)
@@ -130,6 +132,8 @@ class SearchEngine:
                 query_version=search_query.version,
                 provider=provider.name,
                 rendered_query=rendered_query_obj.query_string,
+                canonical_hash=search_query.canonical_hash,
+                physical_endpoint=rendered_query_obj.physical_endpoint or None,
                 is_lossless=rendered_query_obj.is_lossless,
                 warnings=list(rendered_query_obj.warnings),
                 status=SearchRunStatus.RUNNING,
@@ -160,6 +164,9 @@ class SearchEngine:
                     status=SearchRunStatus.FAILED,
                     finished_at=self._clock(),
                     records_retrieved=0,
+                    canonical_accepted_count=0,
+                    canonical_rejected_count=0,
+                    canonical_indeterminate_count=0,
                     errors=[f"{type(error).__name__}: {error}"],
                 )
                 provider_results.append(
@@ -181,10 +188,35 @@ class SearchEngine:
                         responses=output.raw_responses,
                     )
                 )
-                normalized_publications = [
-                    normalize_publication(publication)
-                    for publication in output.publications
+                retrieved_publications = [normalize_publication(publication) for publication in output.publications]
+                for pub in retrieved_publications:
+                    if pub.abstract is not None:
+                        doi = MetadataEnrichmentService.extract_doi(pub)
+                        if doi:
+                            known_abstracts[doi] = (pub.abstract, provider.name)
+
+                if self._metadata_enricher is not None:
+                    enriched_publications = await self._metadata_enricher.enrich_batch(
+                        retrieved_publications,
+                        known_abstracts=known_abstracts,
+                    )
+                else:
+                    enriched_publications = retrieved_publications
+
+                validations = [
+                    validate_canonical_query(search_query, publication) for publication in enriched_publications
                 ]
+                normalized_publications = [
+                    publication
+                    for publication, validation in zip(enriched_publications, validations, strict=True)
+                    if validation.status is not CanonicalMatchStatus.NON_MATCH
+                ]
+                rejected_count = len(retrieved_publications) - len(normalized_publications)
+                accepted_count = sum(validation.status is CanonicalMatchStatus.MATCH for validation in validations)
+                indeterminate_count = sum(
+                    validation.status is CanonicalMatchStatus.INDETERMINATE for validation in validations
+                )
+
                 combined_warnings = list(search_run.warnings)
                 for w in output.warnings:
                     if w not in combined_warnings:
@@ -192,6 +224,10 @@ class SearchEngine:
                 is_lossless = search_run.is_lossless
                 if output.is_lossless is False:
                     is_lossless = False
+                if any(validation.status is CanonicalMatchStatus.INDETERMINATE for validation in validations):
+                    combined_warnings.append(
+                        "Some candidates could not be fully evaluated because a canonically scoped field was missing; they were retained to protect recall."
+                    )
 
                 search_run_with_output_metadata = search_run.model_copy(
                     update={
@@ -203,7 +239,10 @@ class SearchEngine:
                     search_run_with_output_metadata,
                     status=SearchRunStatus.COMPLETED,
                     finished_at=self._clock(),
-                    records_retrieved=len(normalized_publications),
+                    records_retrieved=len(retrieved_publications),
+                    canonical_accepted_count=accepted_count,
+                    canonical_rejected_count=rejected_count,
+                    canonical_indeterminate_count=indeterminate_count,
                     errors=[],
                 )
                 provider_results.append(
@@ -237,6 +276,7 @@ class SearchEngine:
             created_at=execution_finished_at,
         )
         return SearchExecution(
+            canonical_query=search_query,
             provider_results=provider_results,
             normalized_publications=normalized_publications,
             merged_publications=merged_publications,
@@ -245,13 +285,9 @@ class SearchEngine:
             execution_provenance=SearchExecutionProvenance(
                 started_at=execution_started_at,
                 finished_at=execution_finished_at,
-                provider_run_ids=tuple(
-                    result.search_run.run_id for result in provider_results
-                ),
+                provider_run_ids=tuple(result.search_run.run_id for result in provider_results),
                 total_provider_results=sum(
-                    len(result.publications)
-                    for result in provider_results
-                    if result.publications is not None
+                    len(result.publications) for result in provider_results if result.publications is not None
                 ),
                 merged_result_count=len(merged_publications),
             ),
@@ -264,6 +300,9 @@ class SearchEngine:
         status: SearchRunStatus,
         finished_at: datetime,
         records_retrieved: int,
+        canonical_accepted_count: int,
+        canonical_rejected_count: int,
+        canonical_indeterminate_count: int,
         errors: list[str],
     ) -> SearchRun:
         data = search_run.model_dump()
@@ -271,6 +310,9 @@ class SearchEngine:
             status=status,
             finished_at=finished_at,
             records_retrieved=records_retrieved,
+            canonical_accepted_count=canonical_accepted_count,
+            canonical_rejected_count=canonical_rejected_count,
+            canonical_indeterminate_count=canonical_indeterminate_count,
             error_count=len(errors),
             errors=errors,
         )

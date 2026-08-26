@@ -11,8 +11,9 @@ def test_openalex_renderer_single_term() -> None:
     rendered = renderer.render(query)
     assert rendered.provider == "openalex"
     assert rendered.query_string == "robotics"
-    assert rendered.is_lossless is True
-    assert rendered.warnings == ()
+    assert rendered.physical_endpoint == "https://api.openalex.org/works"
+    assert rendered.is_lossless is False
+    assert "full text" in rendered.warnings[0]
 
 
 def test_openalex_renderer_exact_phrase() -> None:
@@ -23,7 +24,7 @@ def test_openalex_renderer_exact_phrase() -> None:
     )
     rendered = renderer.render(query)
     assert rendered.query_string == '"machine learning"'
-    assert rendered.is_lossless is True
+    assert rendered.is_lossless is False
 
 
 def test_openalex_renderer_nested_and_or() -> None:
@@ -53,7 +54,7 @@ def test_openalex_renderer_nested_and_or() -> None:
         rendered.query_string
         == '(("lean management" OR "lean manufacturing") AND ("energy efficiency" OR sustainability))'
     )
-    assert rendered.is_lossless is True
+    assert rendered.is_lossless is False
 
 
 def test_openalex_renderer_not_operator() -> None:
@@ -71,7 +72,7 @@ def test_openalex_renderer_not_operator() -> None:
     query = SearchQuery(name="NOT Query", expression=expression)
     rendered = renderer.render(query)
     assert rendered.query_string == '("artificial intelligence" AND NOT (robotics))'
-    assert rendered.is_lossless is True
+    assert rendered.is_lossless is False
 
 
 def test_openalex_renderer_deterministic() -> None:

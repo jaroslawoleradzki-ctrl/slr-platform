@@ -37,6 +37,7 @@ export interface EditableSearchStrategy {
   filters: SearchFilters;
   providers: string[];
   conceptGroups: ConceptGroup[];
+  canonicalQuery?: SearchQuery;
 }
 
 export type BooleanOperator = 'and' | 'or';
@@ -112,14 +113,26 @@ export interface SearchStrategy extends Omit<SearchStrategyWriteRequest, 'querie
 export interface ProviderQuery {
   provider: string;
   rendered_query: string;
+  canonical_query_id?: string | null;
+  canonical_version?: number | null;
+  canonical_hash?: string | null;
+  physical_endpoint?: string | null;
   is_lossless?: boolean;
   warnings?: string[];
+  retrieved_count?: number;
+  canonical_accepted_count?: number;
+  canonical_rejected_count?: number;
+  canonical_indeterminate_count?: number;
+  deduplicated_count?: number;
 }
 
 export interface SearchExecutionResult {
   project_id: string;
   status: 'validated';
   rendered_query: string;
+  canonical_query_id?: string | null;
+  canonical_version?: number | null;
+  canonical_hash?: string | null;
   provider_queries?: ProviderQuery[];
   providers: string[];
   publication_year_from: number;
@@ -127,6 +140,11 @@ export interface SearchExecutionResult {
   executed_at: string;
   total_count: number;
   returned_count: number;
+  retrieved_count?: number;
+  canonical_accepted_count?: number;
+  canonical_rejected_count?: number;
+  canonical_indeterminate_count?: number;
+  deduplicated_count?: number;
   next_cursor: string | null;
   has_more: boolean;
   results: SearchResultRecord[];
@@ -161,6 +179,10 @@ export interface FetchAllProviderProgress {
   status: FetchAllProviderStatus;
   fetched_count: number;
   kept_count: number;
+  canonical_accepted_count?: number;
+  canonical_rejected_count?: number;
+  canonical_indeterminate_count?: number;
+  deduplicated_count?: number;
   pages_fetched: number;
   total_reported: number | null;
   limit_reached: boolean;
@@ -178,6 +200,10 @@ export interface FetchAllStatusResult {
   providers: FetchAllProviderProgress[];
   fetched_total: number;
   kept_total: number;
+  canonical_accepted_total?: number;
+  canonical_rejected_total?: number;
+  canonical_indeterminate_total?: number;
+  deduplicated_total?: number;
   message: string | null;
   result: SearchExecutionResult | null;
 }

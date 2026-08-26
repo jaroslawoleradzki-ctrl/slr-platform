@@ -51,9 +51,7 @@ async def test_search_maps_crossref_provenance() -> None:
         )
 
     search_run, search_query = _search_context()
-    async with httpx.AsyncClient(
-        transport=httpx.MockTransport(handler)
-    ) as http_client:
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client:
         provider = CrossrefProvider(
             client=CrossrefClient(http_client=http_client),
             retrieval_clock=lambda: _RETRIEVED_AT,
@@ -100,9 +98,7 @@ async def test_search_with_raw_reuses_single_payload() -> None:
         return httpx.Response(200, json=payload, request=request)
 
     search_run, search_query = _search_context()
-    async with httpx.AsyncClient(
-        transport=httpx.MockTransport(handler)
-    ) as http_client:
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client:
         provider = CrossrefProvider(
             client=CrossrefClient(http_client=http_client),
             retrieval_clock=lambda: _RETRIEVED_AT,
@@ -114,9 +110,7 @@ async def test_search_with_raw_reuses_single_payload() -> None:
 
     assert request_count == 1
     assert output.raw_responses == [payload]
-    assert [publication.title for publication in output.publications] == [
-        "Lean Energy"
-    ]
+    assert [publication.title for publication in output.publications] == ["Lean Energy"]
     assert output.publications[0].provenance[0].run_id == search_run.run_id
 
 
@@ -139,17 +133,13 @@ async def test_live_provider_mode_collects_cursor_pages_with_a_bound() -> None:
                             "title": [f"Result {index}"],
                         }
                     ],
-                    "next-cursor": (
-                        "page-2" if index == 1 else "page-3"
-                    ),
+                    "next-cursor": ("page-2" if index == 1 else "page-3"),
                 }
             },
             request=request,
         )
 
-    async with httpx.AsyncClient(
-        transport=httpx.MockTransport(handler)
-    ) as http_client:
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client:
         provider = CrossrefProvider(
             client=CrossrefClient(http_client=http_client),
             paginate=True,
@@ -192,9 +182,7 @@ async def test_search_uses_one_retrieval_timestamp_for_page() -> None:
         )
 
     search_run, search_query = _search_context()
-    async with httpx.AsyncClient(
-        transport=httpx.MockTransport(handler)
-    ) as http_client:
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client:
         provider = CrossrefProvider(
             client=CrossrefClient(http_client=http_client),
             retrieval_clock=lambda: next(clock_values),
@@ -223,9 +211,7 @@ async def test_iterate_maps_provenance_for_each_work() -> None:
         )
 
     search_run, search_query = _search_context()
-    async with httpx.AsyncClient(
-        transport=httpx.MockTransport(handler)
-    ) as http_client:
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client:
         provider = CrossrefProvider(
             client=CrossrefClient(http_client=http_client),
             retrieval_clock=lambda: _RETRIEVED_AT,
@@ -252,9 +238,7 @@ async def test_search_preserves_work_without_doi_with_deterministic_fallback_pro
         )
 
     search_run, search_query = _search_context()
-    async with httpx.AsyncClient(
-        transport=httpx.MockTransport(handler)
-    ) as http_client:
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client:
         provider = CrossrefProvider(
             client=CrossrefClient(http_client=http_client),
             retrieval_clock=lambda: _RETRIEVED_AT,
@@ -288,9 +272,7 @@ async def test_search_preserves_work_without_abstract() -> None:
         )
 
     search_run, search_query = _search_context()
-    async with httpx.AsyncClient(
-        transport=httpx.MockTransport(handler)
-    ) as http_client:
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client:
         provider = CrossrefProvider(
             client=CrossrefClient(http_client=http_client),
             retrieval_clock=lambda: _RETRIEVED_AT,
@@ -320,9 +302,7 @@ async def test_search_with_raw_returns_total_count_next_cursor_and_has_more() ->
         return httpx.Response(200, json=payload, request=request)
 
     search_run, search_query = _search_context()
-    async with httpx.AsyncClient(
-        transport=httpx.MockTransport(handler)
-    ) as http_client:
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client:
         provider = CrossrefProvider(
             client=CrossrefClient(http_client=http_client),
             retrieval_clock=lambda: _RETRIEVED_AT,
@@ -353,9 +333,7 @@ async def test_search_with_raw_empty_page_returns_has_more_false() -> None:
         return httpx.Response(200, json=payload, request=request)
 
     search_run, search_query = _search_context()
-    async with httpx.AsyncClient(
-        transport=httpx.MockTransport(handler)
-    ) as http_client:
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client:
         provider = CrossrefProvider(
             client=CrossrefClient(http_client=http_client),
             retrieval_clock=lambda: _RETRIEVED_AT,
@@ -386,9 +364,7 @@ async def test_search_with_raw_repeating_cursor_returns_has_more_false() -> None
         return httpx.Response(200, json=payload, request=request)
 
     search_run, search_query = _search_context()
-    async with httpx.AsyncClient(
-        transport=httpx.MockTransport(handler)
-    ) as http_client:
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client:
         provider = CrossrefProvider(
             client=CrossrefClient(http_client=http_client),
             retrieval_clock=lambda: _RETRIEVED_AT,
@@ -427,9 +403,7 @@ async def test_search_paginated_with_raw_fetches_more_than_100_records() -> None
             request=request,
         )
 
-    async with httpx.AsyncClient(
-        transport=httpx.MockTransport(handler)
-    ) as http_client:
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client:
         provider = CrossrefProvider(
             client=CrossrefClient(http_client=http_client),
             paginate=True,
@@ -473,9 +447,7 @@ async def test_search_with_raw_propagates_filters_and_warnings() -> None:
         open_access=True,
     )
 
-    async with httpx.AsyncClient(
-        transport=httpx.MockTransport(handler)
-    ) as http_client:
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client:
         provider = CrossrefProvider(
             client=CrossrefClient(http_client=http_client),
             filters=filters,
@@ -485,11 +457,11 @@ async def test_search_with_raw_propagates_filters_and_warnings() -> None:
             search_query=search_query,
         )
 
-    assert len(output.warnings) == 3
+    assert len(output.warnings) == 4
+    assert any("canonical validation" in warning for warning in output.warnings)
     assert output.is_lossless is False
     assert output.total_count == 10
     assert len(output.publications) == 1
-
 
 
 @pytest.mark.anyio
@@ -524,9 +496,7 @@ async def test_search_validates_search_context(
     )
 
     async with httpx.AsyncClient() as http_client:
-        provider = CrossrefProvider(
-            client=CrossrefClient(http_client=http_client)
-        )
+        provider = CrossrefProvider(client=CrossrefClient(http_client=http_client))
         with pytest.raises(ValueError, match=message):
             await provider.search(
                 search_run=search_run,

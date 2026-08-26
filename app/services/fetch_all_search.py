@@ -74,13 +74,21 @@ from app.providers.search.base import ProviderSearchOutput
 from app.rendering import get_query_renderer
 from app.repositories.search_result_snapshot_repository import (
     SearchResultSnapshot,
+    SearchRunAudit,
     default_search_result_snapshot_repository,
 )
+from app.services.canonical_query_validator import (
+    CanonicalMatchStatus,
+    validate_canonical_query,
+)
 from app.services.live_search import LiveSearchService, build_search_query
+from app.services.metadata_enrichment import MetadataEnrichmentService
+from app.services.result_merger import ResultMerger
 from app.services.search_engine import SearchProvider
 from app.services.search_strategy_support import (
     map_search_result_record,
     matches_execution_constraints,
+    publication_doi,
     publication_source_id,
 )
 
@@ -125,6 +133,10 @@ class FetchAllProviderState:
     status: str = "pending"
     fetched_count: int = 0
     kept_count: int = 0
+    canonical_accepted_count: int = 0
+    canonical_rejected_count: int = 0
+    canonical_indeterminate_count: int = 0
+    deduplicated_count: int = 0
     pages_fetched: int = 0
     total_reported: int | None = None
     limit_reached: bool = False
@@ -133,19 +145,21 @@ class FetchAllProviderState:
     warnings: list[str] = field(default_factory=list)
     lossless: bool = True
     search_run_id: UUID | None = None
-    kept_records: list[tuple[Publication, str]] = field(default_factory=list)
+    kept_records: list[Publication] = field(default_factory=list)
 
     def to_response(self) -> FetchAllProviderProgressResponse:
         return FetchAllProviderProgressResponse(
             provider=self.name,
             status=cast(
-                Literal[
-                    "pending", "running", "complete", "partial", "cancelled", "failed"
-                ],
+                Literal["pending", "running", "complete", "partial", "cancelled", "failed"],
                 self.status,
             ),
             fetched_count=self.fetched_count,
             kept_count=self.kept_count,
+            canonical_accepted_count=self.canonical_accepted_count,
+            canonical_rejected_count=self.canonical_rejected_count,
+            canonical_indeterminate_count=self.canonical_indeterminate_count,
+            deduplicated_count=self.deduplicated_count,
             pages_fetched=self.pages_fetched,
             total_reported=self.total_reported,
             limit_reached=self.limit_reached,
@@ -194,9 +208,7 @@ class FetchAllSearchService:
             raise ValueError("max_records_per_provider must be at least 1")
         if max_seconds < 0:
             raise ValueError("max_seconds must not be negative")
-        self._provider_factory: ProviderFactory = (
-            provider_factory or LiveSearchService._build_providers
-        )
+        self._provider_factory: ProviderFactory = provider_factory or LiveSearchService._build_providers
         self._snapshot_repository = snapshot_repository
         self._run_id_factory = run_id_factory
         self._clock = clock
@@ -245,6 +257,10 @@ class FetchAllSearchService:
             providers=providers,
             fetched_total=sum(state.fetched_count for state in job.providers),
             kept_total=sum(state.kept_count for state in job.providers),
+            canonical_accepted_total=sum(state.canonical_accepted_count for state in job.providers),
+            canonical_rejected_total=sum(state.canonical_rejected_count for state in job.providers),
+            canonical_indeterminate_total=sum(state.canonical_indeterminate_count for state in job.providers),
+            deduplicated_total=sum(state.deduplicated_count for state in job.providers),
             message=job.message,
             result=job.result,
         )
@@ -285,9 +301,7 @@ class FetchAllSearchService:
 
     def _prune_finished_jobs(self) -> None:
         finished = [
-            (job.started_at, job_id, job.project_id)
-            for job_id, job in self._jobs.items()
-            if job.status != "running"
+            (job.started_at, job_id, job.project_id) for job_id, job in self._jobs.items() if job.status != "running"
         ]
         if len(finished) <= MAX_FINISHED_JOBS_KEPT:
             return
@@ -311,11 +325,13 @@ class FetchAllSearchService:
                 if inspect.isawaitable(providers):
                     providers = await providers
                 job.providers = [FetchAllProviderState(name=p.name) for p in providers]
+                enricher = LiveSearchService._build_enricher(http_client)
+                known_abstracts: dict[str, tuple[str, str]] = {}
                 for provider, state in zip(providers, job.providers, strict=True):
                     if job.cancel_requested:
                         state.status = "cancelled"
                         continue
-                    await self._run_single_provider(job, provider, state, started_clock)
+                    await self._run_single_provider(job, provider, state, started_clock, enricher, known_abstracts)
             self._finalize_job(job)
         except Exception as error:  # pragma: no cover - defensive last resort
             job.status = "failed"
@@ -334,6 +350,8 @@ class FetchAllSearchService:
         provider: SearchProvider,
         state: FetchAllProviderState,
         started_clock: float,
+        enricher: MetadataEnrichmentService | None = None,
+        known_abstracts: dict[str, tuple[str, str]] | None = None,
     ) -> None:
         renderer = get_query_renderer(provider.name)
         rendered = renderer.render(job.query)
@@ -343,6 +361,8 @@ class FetchAllSearchService:
             query_version=job.query.version,
             provider=provider.name,
             rendered_query=rendered.query_string,
+            canonical_hash=job.query.canonical_hash,
+            physical_endpoint=rendered.physical_endpoint,
             is_lossless=rendered.is_lossless,
             warnings=list(rendered.warnings),
             status=SearchRunStatus.RUNNING,
@@ -354,7 +374,6 @@ class FetchAllSearchService:
         state.search_run_id = search_run.run_id
         state.status = "running"
 
-        snapshot_repository = self._snapshot_repo()
         seen_source_ids: set[str] = set()
         seen_cursors: set[str] = set()
         cursor = "*"
@@ -393,26 +412,37 @@ class FetchAllSearchService:
                     continue
                 seen_source_ids.add(source_id)
                 state.fetched_count += 1
-                if matches_execution_constraints(normalized, job.strategy):
-                    snapshot = snapshot_repository.save(
-                        SearchResultSnapshot.create(
-                            project_id=job.project_id,
-                            search_run_id=search_run.run_id,
-                            provider=provider.name,
-                            source_id=source_id,
-                            publication=normalized,
-                        )
-                    )
-                    state.kept_records.append((normalized, str(snapshot.snapshot_id)))
+
+                doi = publication_doi(normalized)
+                if normalized.abstract is not None and doi:
+                    if known_abstracts is not None:
+                        known_abstracts[doi] = (normalized.abstract, state.name)
+
+                if enricher is not None and normalized.abstract is None and doi:
+                    enriched, _ = await enricher.enrich_single(normalized, known_abstracts=known_abstracts)
+                else:
+                    enriched = normalized
+
+                validation = validate_canonical_query(job.query, enriched)
+                if validation.status is CanonicalMatchStatus.NON_MATCH:
+                    state.canonical_rejected_count += 1
+                    continue
+                if validation.status is CanonicalMatchStatus.INDETERMINATE:
+                    state.canonical_indeterminate_count += 1
+                    warning = "A candidate had a missing canonically scoped field and was retained to protect recall."
+                    if warning not in state.warnings:
+                        state.warnings.append(warning)
+                else:
+                    state.canonical_accepted_count += 1
+                if matches_execution_constraints(enriched, job.strategy):
+                    state.kept_records.append(enriched)
                     state.kept_count += 1
+
 
             next_cursor = output.next_cursor
             if next_cursor is None:
                 state.status = "complete"
-                if (
-                    state.total_reported is not None
-                    and state.fetched_count < state.total_reported
-                ):
+                if state.total_reported is not None and state.fetched_count < state.total_reported:
                     state.limit_reached = True
                     state.message = (
                         f"Provider reported {state.total_reported} matching records but "
@@ -426,8 +456,7 @@ class FetchAllSearchService:
                 state.status = "partial"
                 state.limit_reached = True
                 state.message = (
-                    "Provider returned an empty page while claiming more "
-                    "results; pagination could not safely continue."
+                    "Provider returned an empty page while claiming more results; pagination could not safely continue."
                 )
                 break
             if next_cursor == cursor or next_cursor in seen_cursors:
@@ -435,10 +464,7 @@ class FetchAllSearchService:
                 # completeness of retrieval is NOT proven.
                 state.status = "partial"
                 state.limit_reached = True
-                state.message = (
-                    "Provider repeated its pagination cursor; pagination "
-                    "could not safely continue."
-                )
+                state.message = "Provider repeated its pagination cursor; pagination could not safely continue."
                 break
             seen_cursors.add(cursor)
             cursor = next_cursor
@@ -472,34 +498,93 @@ class FetchAllSearchService:
             # itself completed with the remaining results preserved.
             job.status = "completed"
         if partial_any:
-            job.message = (
-                "Fetch-all finished with incomplete provider coverage; "
-                "see per-provider statuses."
-            )
-        results = []
-        for state in job.providers:
-            for publication, snapshot_id in state.kept_records:
-                results.append(
-                    map_search_result_record(
-                        publication,
+            job.message = "Fetch-all finished with incomplete provider coverage; see per-provider statuses."
+        all_records = [(publication, state) for state in job.providers for publication in state.kept_records]
+        seen_dois: set[str] = set()
+        for publication, state in all_records:
+            doi = publication_doi(publication)
+            if doi is not None:
+                if doi in seen_dois:
+                    state.deduplicated_count += 1
+                else:
+                    seen_dois.add(doi)
+        merged_publications = ResultMerger().merge(publication for publication, _ in all_records)
+        finished_at = datetime.now(timezone.utc)
+        save_audit = getattr(self._snapshot_repo(), "save_audit", None)
+        if callable(save_audit):
+            for state in job.providers:
+                if state.search_run_id is None:
+                    continue
+                rendered = get_query_renderer(state.name).render(job.query)
+                save_audit(
+                    SearchRunAudit(
+                        search_run_id=state.search_run_id,
+                        project_id=job.project_id,
+                        canonical_query_id=job.query.query_id,
+                        canonical_version=job.query.version,
+                        canonical_hash=job.query.canonical_hash,
                         provider=state.name,
-                        result_id=snapshot_id,
+                        physical_endpoint=rendered.physical_endpoint,
+                        physical_query=state.rendered_query,
+                        translation_lossless=state.lossless,
+                        translation_warnings=tuple(state.warnings),
+                        retrieved_count=state.fetched_count,
+                        canonical_accepted_count=state.canonical_accepted_count,
+                        canonical_rejected_count=state.canonical_rejected_count,
+                        canonical_indeterminate_count=state.canonical_indeterminate_count,
+                        deduplicated_count=state.deduplicated_count,
+                        started_at=job.started_at,
+                        finished_at=finished_at,
                     )
                 )
+        results = []
+        state_by_run_id = {state.search_run_id: state for state in job.providers if state.search_run_id is not None}
+        for publication in merged_publications:
+            run_id = publication.provenance[0].run_id
+            if run_id is None or run_id not in state_by_run_id:
+                continue
+            state = state_by_run_id[run_id]
+            provider = state.name
+            snapshot = self._snapshot_repo().save(
+                SearchResultSnapshot.create(
+                    project_id=job.project_id,
+                    search_run_id=run_id,
+                    provider=provider,
+                    source_id=publication_source_id(publication),
+                    publication=publication,
+                )
+            )
+            results.append(
+                map_search_result_record(
+                    publication,
+                    provider=provider,
+                    result_id=str(snapshot.snapshot_id),
+                )
+            )
         total_count = sum(
-            state.total_reported
-            if state.total_reported is not None
-            else state.fetched_count
-            for state in job.providers
+            state.total_reported if state.total_reported is not None else state.fetched_count for state in job.providers
         )
-        job.result = SearchStrategyExecutionResponse(            project_id=job.project_id,
+        job.result = SearchStrategyExecutionResponse(
+            project_id=job.project_id,
             rendered_query=job.query.to_boolean_query(),
+            canonical_query_id=job.query.query_id,
+            canonical_version=job.query.version,
+            canonical_hash=job.query.canonical_hash,
             provider_queries=[
                 ProviderQueryResponse(
                     provider=state.name,
                     rendered_query=state.rendered_query,
+                    canonical_query_id=job.query.query_id,
+                    canonical_version=job.query.version,
+                    canonical_hash=job.query.canonical_hash,
+                    physical_endpoint=get_query_renderer(state.name).render(job.query).physical_endpoint,
                     is_lossless=state.lossless,
                     warnings=list(state.warnings),
+                    retrieved_count=state.fetched_count,
+                    canonical_accepted_count=state.canonical_accepted_count,
+                    canonical_rejected_count=state.canonical_rejected_count,
+                    canonical_indeterminate_count=state.canonical_indeterminate_count,
+                    deduplicated_count=state.deduplicated_count,
                 )
                 for state in job.providers
             ],
@@ -509,6 +594,11 @@ class FetchAllSearchService:
             executed_at=job.started_at,
             total_count=max(total_count, len(results)),
             returned_count=len(results),
+            retrieved_count=sum(state.fetched_count for state in job.providers),
+            canonical_accepted_count=sum(state.canonical_accepted_count for state in job.providers),
+            canonical_rejected_count=sum(state.canonical_rejected_count for state in job.providers),
+            canonical_indeterminate_count=sum(state.canonical_indeterminate_count for state in job.providers),
+            deduplicated_count=sum(state.deduplicated_count for state in job.providers),
             next_cursor=None,
             has_more=bool(partial_any or cancelled_any),
             results=results,
@@ -518,15 +608,13 @@ class FetchAllSearchService:
                         Literal["openalex", "crossref", "semantic_scholar"],
                         state.name,
                     ),
-                    message=(
-                        f"Fetch-all stopped early ({state.status}): {state.message}"
-                    ),
+                    message=(f"Fetch-all stopped early ({state.status}): {state.message}"),
                 )
                 for state in job.providers
                 if state.status in {"failed", "partial"} and state.message is not None
             ],
         )
-        job.finished_at = datetime.now(timezone.utc)
+        job.finished_at = finished_at
 
 
 fetch_all_service = FetchAllSearchService()

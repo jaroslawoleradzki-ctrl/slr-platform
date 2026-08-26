@@ -69,9 +69,7 @@ def _parse_offset(cursor: str) -> int:
     try:
         offset = int(cursor)
     except (TypeError, ValueError) as exc:
-        raise ValueError(
-            "semantic_scholar cursor must be an offset integer string or '*'"
-        ) from exc
+        raise ValueError("semantic_scholar cursor must be an offset integer string or '*'") from exc
     if offset < 0:
         raise ValueError("semantic_scholar cursor offset must not be negative")
     return offset
@@ -140,20 +138,12 @@ class SemanticScholarProvider:
 
         client = self._require_client()
         self._validate_search_context(search_run, search_query)
-        if self._paginate:
-            return await self._search_paginated_with_raw(
-                client=client,
-                search_run=search_run,
-                search_query=search_query,
-                per_page=per_page,
-                cursor=cursor,
-            )
-
-        page = await client.search_papers_page(
+        del per_page  # bulk search controls its own page size (up to 1000)
+        page = await client.search_papers_bulk_page(
             search_run.rendered_query,
-            limit=per_page,
-            offset=_parse_offset(cursor),
+            token=None if cursor == "*" else cursor,
             fields=_FIELDS,
+            filters=self._filters,
         )
         retrieved_at = self._retrieval_clock()
         publications = [
@@ -165,23 +155,16 @@ class SemanticScholarProvider:
             )
             for paper in page.data
         ]
-        next_cursor = (
-            str(page.next)
-            if page.data and page.next is not None and page.next != page.offset
-            else None
-        )
+        next_cursor = page.token if page.data else None
         filter_warnings = self._filters.get_warnings() if self._filters else ()
         is_lossless = self._filters.is_lossless if self._filters else True
-        warnings = self._truncation_warnings(
-            len(publications), page.total, next_cursor
-        )
         return ProviderSearchOutput(
             publications=publications,
             raw_responses=[cast(JsonObject, page.payload)],
             total_count=page.total,
             next_cursor=next_cursor,
             has_more=next_cursor is not None,
-            warnings=tuple([*filter_warnings, *warnings]),
+            warnings=filter_warnings,
             is_lossless=is_lossless,
         )
 
@@ -247,9 +230,7 @@ class SemanticScholarProvider:
 
         filter_warnings = self._filters.get_warnings() if self._filters else ()
         is_lossless = self._filters.is_lossless if self._filters else True
-        truncation_warnings = self._truncation_warnings(
-            len(publications), total_count, next_cursor
-        )
+        truncation_warnings = self._truncation_warnings(len(publications), total_count, next_cursor)
         return ProviderSearchOutput(
             publications=publications,
             raw_responses=raw_responses,
@@ -266,14 +247,8 @@ class SemanticScholarProvider:
         total_count: int | None,
         next_cursor: str | None,
     ) -> list[str]:
-        if (
-            next_cursor is None
-            and total_count is not None
-            and fetched < total_count
-        ):
-            return [
-                _TRUNCATION_WARNING.format(fetched=fetched, total=total_count)
-            ]
+        if next_cursor is None and total_count is not None and fetched < total_count:
+            return [_TRUNCATION_WARNING.format(fetched=fetched, total=total_count)]
         return []
 
     async def iterate(
@@ -382,10 +357,7 @@ class SemanticScholarProvider:
             if isinstance(issns, list):
                 for single_issn in issns:
                     normalized_issn = normalize_issn(single_issn)
-                    if (
-                        normalized_issn is not None
-                        and normalized_issn not in seen_issns
-                    ):
+                    if normalized_issn is not None and normalized_issn not in seen_issns:
                         seen_issns.add(normalized_issn)
                         venue_identifiers.append(
                             Identifier(
@@ -522,9 +494,7 @@ class SemanticScholarProvider:
 
     def _require_client(self) -> SemanticScholarClient:
         if self._client is None:
-            raise RuntimeError(
-                "SemanticScholarProvider requires a client for search operations"
-            )
+            raise RuntimeError("SemanticScholarProvider requires a client for search operations")
         return self._client
 
     def _validate_search_context(
@@ -537,6 +507,4 @@ class SemanticScholarProvider:
         if search_run.query_id != search_query.query_id:
             raise ValueError("search_run and search_query must have the same query_id")
         if search_run.query_version != search_query.version:
-            raise ValueError(
-                "search_run query_version must match search_query version"
-            )
+            raise ValueError("search_run query_version must match search_query version")
