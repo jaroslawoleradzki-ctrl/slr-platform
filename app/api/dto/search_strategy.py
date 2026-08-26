@@ -216,6 +216,7 @@ class FetchAllProviderProgressResponse(BaseModel):
     pages_fetched: int = Field(default=0, ge=0)
     total_reported: int | None = Field(default=None, ge=0)
     limit_reached: bool = False
+    resumable: bool = False
     message: str | None = None
 
 
@@ -241,8 +242,10 @@ class FetchAllStatusResponse(BaseModel):
     canonical_rejected_total: int = Field(default=0, ge=0)
     canonical_indeterminate_total: int = Field(default=0, ge=0)
     deduplicated_total: int = Field(default=0, ge=0)
+    resumable: bool = False
     message: str | None = None
     result: SearchStrategyExecutionResponse | None = None
+
 
 
 class SearchResultsImportRequest(BaseModel):

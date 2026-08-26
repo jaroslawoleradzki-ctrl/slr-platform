@@ -20,6 +20,7 @@ interface Props {
   fetchAllError?: string | null;
   onFetchAll?: () => void;
   onCancelFetchAll?: () => void;
+  onResumeFetchAll?: () => void;
 }
 
 export const SearchResultsSection: React.FC<Props> = ({
@@ -38,7 +39,9 @@ export const SearchResultsSection: React.FC<Props> = ({
   fetchAllError = null,
   onFetchAll,
   onCancelFetchAll,
+  onResumeFetchAll,
 }) => {
+
   const [currentPage, setCurrentPage] = React.useState(1);
   const pageSize = 20;
 
@@ -238,8 +241,10 @@ export const SearchResultsSection: React.FC<Props> = ({
           progress={fetchAllJob}
           starting={fetchAllStarting}
           onCancel={onCancelFetchAll}
+          onResume={onResumeFetchAll}
         />
       )}
+
 
       {/* Fetch-all trigger (v0.6.5): retrieve every page each provider exposes */}
       {onFetchAll && !fetchAllActive && (

@@ -190,6 +190,10 @@ class SqliteSearchResultSnapshotRepository:
                 "DELETE FROM search_run_audits WHERE project_id = ?",
                 (project_id,),
             )
+            connection.execute(
+                "DELETE FROM search_run_checkpoints WHERE project_id = ?",
+                (project_id,),
+            )
         else:
             with sqlite3.connect(self._database_path) as conn:
                 conn.execute(
@@ -200,6 +204,11 @@ class SqliteSearchResultSnapshotRepository:
                     "DELETE FROM search_run_audits WHERE project_id = ?",
                     (project_id,),
                 )
+                conn.execute(
+                    "DELETE FROM search_run_checkpoints WHERE project_id = ?",
+                    (project_id,),
+                )
+
 
 
     def _apply_migrations(self) -> None:

@@ -365,7 +365,9 @@ interface ProjectContextType {
   searchLoadingMore: boolean;
   searchPaginationError: string | null;
   startFetchAllResults: () => Promise<FetchAllStatusResult | null>;
+  resumeFetchAllResults: () => Promise<FetchAllStatusResult | null>;
   cancelFetchAllResults: () => Promise<void>;
+
   fetchAllJob: FetchAllStatusResult | null;
   fetchAllStarting: boolean;
   fetchAllError: string | null;
@@ -870,6 +872,91 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   };
 
+  const resumeFetchAllResults = async (): Promise<FetchAllStatusResult | null> => {
+    const targetProjectId = activeProjectIdRef.current;
+    if (fetchAllJobIdRef.current !== null || fetchAllStarting) return null;
+    if (searchLoadingMoreRef.current) return null;
+
+    const currentVersion = searchExecutionVersionRef.current;
+    setFetchAllStarting(true);
+    setFetchAllError(null);
+
+    const scheduleNextPoll = (delay: number) => {
+      fetchAllPollTimerRef.current = window.setTimeout(() => void poll(), delay);
+    };
+
+    const poll = async (): Promise<void> => {
+      const jobId = fetchAllJobIdRef.current;
+      if (!jobId) return;
+      try {
+        const statusResult = await projectApiService.getFetchAllSearchStatus(targetProjectId, jobId);
+        if (
+          activeProjectIdRef.current !== targetProjectId ||
+          searchExecutionVersionRef.current !== currentVersion
+        ) {
+          return;
+        }
+        fetchAllFailureCountRef.current = 0;
+        setFetchAllJob(statusResult);
+        if (statusResult.status === 'running') {
+          scheduleNextPoll(1500);
+          return;
+        }
+        stopFetchAllPolling();
+        if (statusResult.result && statusResult.status !== 'failed') {
+          setSearchExecutionResult((previous) =>
+            previous ? mergeFetchAllResults(previous, statusResult.result as SearchExecutionResult) : previous
+          );
+        }
+        void refreshWorkflowStatus(targetProjectId);
+      } catch (err) {
+        fetchAllFailureCountRef.current += 1;
+        if (fetchAllFailureCountRef.current >= 5) {
+          stopFetchAllPolling();
+          const message = err instanceof Error ? err.message : 'Nie udało się pobrać statusu pobierania wyników.';
+          if (
+            activeProjectIdRef.current === targetProjectId &&
+            searchExecutionVersionRef.current === currentVersion
+          ) {
+            setFetchAllError(message);
+          }
+          return;
+        }
+        scheduleNextPoll(1500 * fetchAllFailureCountRef.current);
+      }
+    };
+
+    try {
+      const started = await projectApiService.resumeFetchAllSearch(targetProjectId, fetchAllJob?.job_id);
+      if (
+        activeProjectIdRef.current !== targetProjectId ||
+        searchExecutionVersionRef.current !== currentVersion
+      ) {
+        return null;
+      }
+      fetchAllJobIdRef.current = started.job_id;
+      setFetchAllJob(null);
+      scheduleNextPoll(500);
+      return null;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Nie udało się wznowić pobierania wyników.';
+      if (
+        activeProjectIdRef.current === targetProjectId &&
+        searchExecutionVersionRef.current === currentVersion
+      ) {
+        setFetchAllError(message);
+      }
+      return null;
+    } finally {
+      if (
+        activeProjectIdRef.current === targetProjectId &&
+        searchExecutionVersionRef.current === currentVersion
+      ) {
+        setFetchAllStarting(false);
+      }
+    }
+  };
+
   const cancelFetchAllResults = async (): Promise<void> => {
     const targetProjectId = activeProjectIdRef.current;
     const jobId = fetchAllJobIdRef.current;
@@ -883,6 +970,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
       }
     }
   };
+
 
   const importSelectedSearchResults = async (): Promise<SearchResultsImportResponse | null> => {
     const targetProjectId = activeProjectIdRef.current;
@@ -1053,8 +1141,10 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
         searchLoadingMore,
         searchPaginationError,
         startFetchAllResults,
+        resumeFetchAllResults,
         cancelFetchAllResults,
         fetchAllJob,
+
         fetchAllStarting,
         fetchAllError,
         importSelectedSearchResults,

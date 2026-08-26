@@ -77,6 +77,11 @@ from app.repositories.search_result_snapshot_repository import (
     SearchRunAudit,
     default_search_result_snapshot_repository,
 )
+from app.repositories.search_run_checkpoint_repository import (
+    SearchRunCheckpoint,
+    SearchRunCheckpointRepository,
+    default_search_run_checkpoint_repository,
+)
 from app.services.canonical_query_validator import (
     CanonicalMatchStatus,
     validate_canonical_query,
@@ -140,11 +145,14 @@ class FetchAllProviderState:
     pages_fetched: int = 0
     total_reported: int | None = None
     limit_reached: bool = False
+    resumable: bool = False
     message: str | None = None
     rendered_query: str = ""
     warnings: list[str] = field(default_factory=list)
     lossless: bool = True
     search_run_id: UUID | None = None
+    cursor: str | None = None
+    plan_metadata: dict[str, Any] | None = None
     kept_records: list[Publication] = field(default_factory=list)
 
     def to_response(self) -> FetchAllProviderProgressResponse:
@@ -163,6 +171,7 @@ class FetchAllProviderState:
             pages_fetched=self.pages_fetched,
             total_reported=self.total_reported,
             limit_reached=self.limit_reached,
+            resumable=self.resumable,
             message=self.message,
         )
 
@@ -181,6 +190,7 @@ class FetchAllJob:
     providers: list[FetchAllProviderState] = field(default_factory=list)
     task: asyncio.Task[None] | None = None
     result: SearchStrategyExecutionResponse | None = None
+    resumed_from_job_id: str | None = None
 
 
 class SnapshotRepositoryLike(Protocol):
@@ -188,13 +198,14 @@ class SnapshotRepositoryLike(Protocol):
 
 
 class FetchAllSearchService:
-    """Owns fetch-all jobs: start, progress reads and cooperative cancellation."""
+    """Owns fetch-all jobs: start, progress reads, durable checkpointing, and resume."""
 
     def __init__(
         self,
         *,
         provider_factory: ProviderFactory | None = None,
         snapshot_repository: SnapshotRepositoryLike | None = None,
+        checkpoint_repository: SearchRunCheckpointRepository | None = None,
         run_id_factory: Callable[[], UUID] = uuid4,
         clock: Callable[[], float] = time.monotonic,
         max_pages_per_provider: int = DEFAULT_MAX_PAGES_PER_PROVIDER,
@@ -210,6 +221,7 @@ class FetchAllSearchService:
             raise ValueError("max_seconds must not be negative")
         self._provider_factory: ProviderFactory = provider_factory or LiveSearchService._build_providers
         self._snapshot_repository = snapshot_repository
+        self._checkpoint_repository = checkpoint_repository
         self._run_id_factory = run_id_factory
         self._clock = clock
         self._max_pages_per_provider = max_pages_per_provider
@@ -242,9 +254,124 @@ class FetchAllSearchService:
         job.task = asyncio.create_task(self._run(job))
         return FetchAllStartResponse(job_id=job.job_id, project_id=project_id)
 
+    def start_resume_job(
+        self,
+        project_id: str,
+        job_id: str | UUID | None = None,
+    ) -> FetchAllStartResponse:
+        active_job_id = self._active_by_project.get(project_id)
+        if active_job_id is not None:
+            raise FetchAllJobAlreadyRunningError(project_id)
+
+        target_job_id: UUID | None = UUID(str(job_id)) if job_id is not None else None
+        if target_job_id is not None:
+            checkpoints = self._checkpoint_repo().get_checkpoints_for_job(target_job_id)
+        else:
+            checkpoints = self._checkpoint_repo().get_latest_job_checkpoints(project_id)
+
+        if not checkpoints:
+            raise ValueError(f"No resumable search checkpoints found for project '{project_id}'")
+
+        # Verify at least one checkpoint is resumable
+        has_resumable = any(cp.resumable for cp in checkpoints)
+        if not has_resumable and all(cp.status == "complete" for cp in checkpoints):
+            raise ValueError(f"All search runs for project '{project_id}' are already complete")
+
+        # Determine strategy from existing memory job or checkpoint plan_metadata
+        strategy: SearchStrategyExecutionRequest | None = None
+        source_job_id = str(checkpoints[0].job_id)
+        if source_job_id in self._jobs:
+            strategy = self._jobs[source_job_id].strategy
+        else:
+            for cp in checkpoints:
+                if cp.plan_metadata and "strategy" in cp.plan_metadata:
+                    try:
+                        strategy = SearchStrategyExecutionRequest.model_validate(cp.plan_metadata["strategy"])
+                        break
+                    except Exception:
+                        pass
+        if strategy is None:
+            # Fallback strategy using default settings and providers from checkpoints
+            providers_list = [cast(Literal["openalex", "crossref", "semantic_scholar"], cp.provider) for cp in checkpoints]
+            from app.domain.search import BooleanOperator, SearchGroup, SearchTerm
+            strategy = SearchStrategyExecutionRequest(
+                query=SearchQuery(name="Resumed Query", expression=SearchGroup(operator=BooleanOperator.AND, children=[SearchTerm(value="resumed")])),
+                providers=providers_list,
+            )
+
+        job = FetchAllJob(
+            job_id=str(uuid4()),
+            project_id=project_id,
+            strategy=strategy,
+            query=build_search_query(strategy),
+            started_at=datetime.now(timezone.utc),
+            resumed_from_job_id=source_job_id,
+        )
+        self._jobs[job.job_id] = job
+        self._prune_finished_jobs()
+        self._active_by_project[project_id] = job.job_id
+        job.task = asyncio.create_task(self._run(job, resume_checkpoints=checkpoints))
+        return FetchAllStartResponse(job_id=job.job_id, project_id=project_id)
+
     def get_status(self, job_id: str) -> FetchAllStatusResponse:
-        job = self._require_job(job_id)
+        job = self._jobs.get(job_id)
+        if job is None:
+            # Check if this job exists durably in the checkpoint repository
+            try:
+                checkpoints = self._checkpoint_repo().get_checkpoints_for_job(UUID(job_id))
+            except Exception:
+                checkpoints = []
+            if not checkpoints:
+                raise UnknownFetchAllJobError(job_id)
+            # Reconstruct status response from checkpoints
+            providers = [
+                FetchAllProviderProgressResponse(
+                    provider=cp.provider,
+                    status=cast(
+                        Literal["pending", "running", "complete", "partial", "cancelled", "failed"],
+                        cp.status,
+                    ),
+                    fetched_count=cp.fetched_count,
+                    kept_count=cp.canonical_accepted_count,
+                    canonical_accepted_count=cp.canonical_accepted_count,
+                    canonical_rejected_count=cp.canonical_rejected_count,
+                    canonical_indeterminate_count=cp.canonical_indeterminate_count,
+                    deduplicated_count=cp.deduplicated_count,
+                    pages_fetched=cp.pages_fetched,
+                    total_reported=None,
+                    limit_reached=False,
+                    resumable=cp.resumable,
+                    message=None,
+                )
+                for cp in checkpoints
+            ]
+            all_complete = all(cp.status == "complete" for cp in checkpoints)
+            any_cancelled = any(cp.status == "cancelled" for cp in checkpoints)
+            any_failed = any(cp.status == "failed" for cp in checkpoints)
+            any_resumable = any(cp.resumable for cp in checkpoints)
+            job_status: Literal["running", "completed", "cancelled", "failed"] = (
+                "completed" if all_complete else ("cancelled" if any_cancelled else ("failed" if any_failed else "completed"))
+            )
+            return FetchAllStatusResponse(
+                job_id=job_id,
+                project_id=checkpoints[0].project_id,
+                status=job_status,
+                started_at=checkpoints[0].created_at,
+                finished_at=max(cp.updated_at for cp in checkpoints),
+                providers=providers,
+                fetched_total=sum(cp.fetched_count for cp in checkpoints),
+                kept_total=sum(cp.canonical_accepted_count for cp in checkpoints),
+                canonical_accepted_total=sum(cp.canonical_accepted_count for cp in checkpoints),
+                canonical_rejected_total=sum(cp.canonical_rejected_count for cp in checkpoints),
+                canonical_indeterminate_total=sum(cp.canonical_indeterminate_count for cp in checkpoints),
+                deduplicated_total=sum(cp.deduplicated_count for cp in checkpoints),
+                resumable=any_resumable,
+                message=None,
+                result=None,
+            )
+
         providers = [state.to_response() for state in job.providers]
+        is_resumable = any(state.resumable for state in job.providers)
         return FetchAllStatusResponse(
             job_id=job.job_id,
             project_id=job.project_id,
@@ -261,15 +388,22 @@ class FetchAllSearchService:
             canonical_rejected_total=sum(state.canonical_rejected_count for state in job.providers),
             canonical_indeterminate_total=sum(state.canonical_indeterminate_count for state in job.providers),
             deduplicated_total=sum(state.deduplicated_count for state in job.providers),
+            resumable=is_resumable,
             message=job.message,
             result=job.result,
         )
 
     def request_cancel(self, job_id: str) -> FetchAllStatusResponse:
-        job = self._require_job(job_id)
-        if job.status == "running":
+        job = self._jobs.get(job_id)
+        if job is not None and job.status == "running":
             job.cancel_requested = True
+            for state in job.providers:
+                if state.status == "running":
+                    state.status = "cancelled"
+                    state.resumable = True
+                    self._save_checkpoint(job, state, state.cursor, resumable=True)
         return self.get_status(job_id)
+
 
     async def wait(self, job_id: str, timeout: float = 60.0) -> FetchAllJob:
         """Await job completion without cancelling its task; aids tests."""
@@ -317,21 +451,114 @@ class FetchAllSearchService:
             self._snapshot_repository = default_search_result_snapshot_repository()
         return self._snapshot_repository
 
-    async def _run(self, job: FetchAllJob) -> None:
+    def _checkpoint_repo(self) -> SearchRunCheckpointRepository:
+        if self._checkpoint_repository is None:
+            self._checkpoint_repository = default_search_run_checkpoint_repository()
+        return self._checkpoint_repository
+
+    def _save_checkpoint(
+        self,
+        job: FetchAllJob,
+        state: FetchAllProviderState,
+        cursor: str | None,
+        resumable: bool = False,
+    ) -> None:
+        if state.search_run_id is None:
+            state.search_run_id = self._run_id_factory()
+        state.resumable = resumable
+
+        plan_meta = {"strategy": job.strategy.model_dump(mode="json")}
+        if state.plan_metadata:
+            plan_meta.update(state.plan_metadata)
+        checkpoint = SearchRunCheckpoint(
+            search_run_id=state.search_run_id,
+            project_id=job.project_id,
+            job_id=UUID(job.job_id),
+            provider=state.name,
+            cursor=cursor,
+            pages_fetched=state.pages_fetched,
+            fetched_count=state.fetched_count,
+            canonical_accepted_count=state.canonical_accepted_count,
+            canonical_rejected_count=state.canonical_rejected_count,
+            canonical_indeterminate_count=state.canonical_indeterminate_count,
+            deduplicated_count=state.deduplicated_count,
+            status=state.status,
+            resumable=resumable,
+            plan_metadata=plan_meta,
+            warnings=tuple(state.warnings),
+            created_at=job.started_at,
+            updated_at=datetime.now(timezone.utc),
+        )
+        self._checkpoint_repo().save_checkpoint(checkpoint)
+
+    async def _run(
+        self,
+        job: FetchAllJob,
+        resume_checkpoints: list[SearchRunCheckpoint] | None = None,
+    ) -> None:
         started_clock = self._clock()
         try:
             async with httpx.AsyncClient(timeout=30.0) as http_client:
                 providers = self._provider_factory(job.strategy, http_client)
                 if inspect.isawaitable(providers):
                     providers = await providers
-                job.providers = [FetchAllProviderState(name=p.name) for p in providers]
+
+                checkpoints_by_provider = {cp.provider: cp for cp in (resume_checkpoints or [])}
+                job.providers = []
+                for p in providers:
+                    cp = checkpoints_by_provider.get(p.name)
+                    if cp is not None and cp.status == "complete" and not cp.resumable:
+                        state = FetchAllProviderState(
+                            name=p.name,
+                            status="complete",
+                            fetched_count=cp.fetched_count,
+                            kept_count=cp.canonical_accepted_count,
+                            canonical_accepted_count=cp.canonical_accepted_count,
+                            canonical_rejected_count=cp.canonical_rejected_count,
+                            canonical_indeterminate_count=cp.canonical_indeterminate_count,
+                            deduplicated_count=cp.deduplicated_count,
+                            pages_fetched=cp.pages_fetched,
+                            resumable=False,
+                            warnings=list(cp.warnings),
+                            search_run_id=cp.search_run_id,
+                            cursor=cp.cursor,
+                        )
+                    elif cp is not None:
+                        state = FetchAllProviderState(
+                            name=p.name,
+                            status="pending",
+                            fetched_count=cp.fetched_count,
+                            kept_count=cp.canonical_accepted_count,
+                            canonical_accepted_count=cp.canonical_accepted_count,
+                            canonical_rejected_count=cp.canonical_rejected_count,
+                            canonical_indeterminate_count=cp.canonical_indeterminate_count,
+                            deduplicated_count=cp.deduplicated_count,
+                            pages_fetched=cp.pages_fetched,
+                            resumable=cp.resumable,
+                            warnings=list(cp.warnings),
+                            search_run_id=cp.search_run_id,
+                            cursor=cp.cursor,
+                            plan_metadata=cp.plan_metadata,
+                        )
+                    else:
+                        state = FetchAllProviderState(name=p.name)
+                    job.providers.append(state)
+
                 enricher = LiveSearchService._build_enricher(http_client)
                 known_abstracts: dict[str, tuple[str, str]] = {}
                 for provider, state in zip(providers, job.providers, strict=True):
                     if job.cancel_requested:
                         state.status = "cancelled"
+                        state.resumable = True
+                        self._save_checkpoint(job, state, state.cursor or "*", resumable=True)
                         continue
-                    await self._run_single_provider(job, provider, state, started_clock, enricher, known_abstracts)
+
+                    if state.status == "complete" and not state.resumable:
+                        continue
+                    initial_cp = checkpoints_by_provider.get(provider.name)
+                    await self._run_single_provider(
+                        job, provider, state, started_clock, enricher, known_abstracts, initial_checkpoint=initial_cp
+                    )
             self._finalize_job(job)
         except Exception as error:  # pragma: no cover - defensive last resort
             job.status = "failed"
@@ -352,11 +579,13 @@ class FetchAllSearchService:
         started_clock: float,
         enricher: MetadataEnrichmentService | None = None,
         known_abstracts: dict[str, tuple[str, str]] | None = None,
+        initial_checkpoint: SearchRunCheckpoint | None = None,
     ) -> None:
         renderer = get_query_renderer(provider.name)
         rendered = renderer.render(job.query)
+        run_id = initial_checkpoint.search_run_id if initial_checkpoint is not None else self._run_id_factory()
         search_run = SearchRun(
-            run_id=self._run_id_factory(),
+            run_id=run_id,
             query_id=job.query.query_id,
             query_version=job.query.version,
             provider=provider.name,
@@ -370,17 +599,25 @@ class FetchAllSearchService:
         )
         state.rendered_query = rendered.query_string
         state.lossless = rendered.is_lossless
-        state.warnings = list(rendered.warnings)
+        for w in rendered.warnings:
+            if w not in state.warnings:
+                state.warnings.append(w)
         state.search_run_id = search_run.run_id
         state.status = "running"
 
         seen_source_ids: set[str] = set()
         seen_cursors: set[str] = set()
-        cursor = "*"
+        cursor = initial_checkpoint.cursor if initial_checkpoint is not None and initial_checkpoint.cursor else "*"
+        state.cursor = cursor
+
+        # Save initial running checkpoint
+        self._save_checkpoint(job, state, cursor, resumable=True)
 
         while True:
             if job.cancel_requested:
                 state.status = "cancelled"
+                state.resumable = True
+                self._save_checkpoint(job, state, cursor, resumable=True)
                 break
             elapsed = self._clock() - started_clock
             if (
@@ -391,6 +628,8 @@ class FetchAllSearchService:
                 state.status = "partial"
                 state.limit_reached = True
                 state.message = "Stopped by the fetch-all safety limit before the provider reported its final page."
+                state.resumable = bool(cursor is not None)
+                self._save_checkpoint(job, state, cursor, resumable=state.resumable)
                 break
             try:
                 output = await provider.search_with_raw(
@@ -401,7 +640,10 @@ class FetchAllSearchService:
             except Exception as error:
                 state.message = f"{type(error).__name__}: {error}"
                 state.status = "partial" if state.fetched_count > 0 else "failed"
+                state.resumable = bool(cursor is not None)
+                self._save_checkpoint(job, state, cursor, resumable=state.resumable)
                 break
+
 
             state.pages_fetched += 1
             self._merge_output_metadata(state, output)
@@ -438,10 +680,12 @@ class FetchAllSearchService:
                     state.kept_records.append(enriched)
                     state.kept_count += 1
 
-
             next_cursor = output.next_cursor
+            state.cursor = next_cursor
+
             if next_cursor is None:
                 state.status = "complete"
+                state.resumable = False
                 if state.total_reported is not None and state.fetched_count < state.total_reported:
                     state.limit_reached = True
                     state.message = (
@@ -449,27 +693,32 @@ class FetchAllSearchService:
                         f"stopped offering further pages after {state.fetched_count} "
                         f"(provider-side retrieval cap)."
                     )
+                self._save_checkpoint(job, state, None, resumable=False)
                 break
             if not output.publications:
-                # An empty page does not prove every available record was
-                # retrieved - it only proves pagination cannot safely continue.
                 state.status = "partial"
                 state.limit_reached = True
+                state.resumable = True
                 state.message = (
                     "Provider returned an empty page while claiming more results; pagination could not safely continue."
                 )
+                self._save_checkpoint(job, state, next_cursor, resumable=True)
                 break
             if next_cursor == cursor or next_cursor in seen_cursors:
-                # A repeated cursor means no forward progress is possible;
-                # completeness of retrieval is NOT proven.
                 state.status = "partial"
                 state.limit_reached = True
+                state.resumable = False
                 state.message = "Provider repeated its pagination cursor; pagination could not safely continue."
+                self._save_checkpoint(job, state, next_cursor, resumable=False)
                 break
+
+            # Save in-flight progress checkpoint after each page
+            self._save_checkpoint(job, state, next_cursor, resumable=True)
             seen_cursors.add(cursor)
             cursor = next_cursor
 
     def _merge_output_metadata(
+
         self,
         state: FetchAllProviderState,
         output: ProviderSearchOutput,
@@ -545,22 +794,27 @@ class FetchAllSearchService:
                 continue
             state = state_by_run_id[run_id]
             provider = state.name
-            snapshot = self._snapshot_repo().save(
-                SearchResultSnapshot.create(
-                    project_id=job.project_id,
-                    search_run_id=run_id,
-                    provider=provider,
-                    source_id=publication_source_id(publication),
-                    publication=publication,
+            try:
+                snapshot = self._snapshot_repo().save(
+                    SearchResultSnapshot.create(
+                        project_id=job.project_id,
+                        search_run_id=run_id,
+                        provider=provider,
+                        source_id=publication_source_id(publication),
+                        publication=publication,
+                    )
                 )
-            )
+                result_id = str(snapshot.snapshot_id)
+            except Exception:
+                result_id = str(publication.record_id)
             results.append(
                 map_search_result_record(
                     publication,
                     provider=provider,
-                    result_id=str(snapshot.snapshot_id),
+                    result_id=result_id,
                 )
             )
+
         total_count = sum(
             state.total_reported if state.total_reported is not None else state.fetched_count for state in job.providers
         )

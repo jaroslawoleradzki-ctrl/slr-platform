@@ -108,8 +108,10 @@ export const SearchStrategyPage: React.FC = () => {
     searchLoadingMore,
     searchPaginationError,
     startFetchAllResults,
+    resumeFetchAllResults,
     cancelFetchAllResults,
     fetchAllJob,
+
     fetchAllStarting,
     fetchAllError,
     selectedSearchResultIds,
@@ -498,7 +500,9 @@ export const SearchStrategyPage: React.FC = () => {
         fetchAllError={fetchAllError}
         onFetchAll={() => void startFetchAllResults()}
         onCancelFetchAll={() => void cancelFetchAllResults()}
+        onResumeFetchAll={() => void resumeFetchAllResults()}
         onImport={async () => {
+
           setImporting(true);
           setImportError(null);
           try {

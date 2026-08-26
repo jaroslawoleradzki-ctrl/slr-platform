@@ -467,7 +467,77 @@ def cancel_fetch_all_search(
 
 
 @router.post(
+    "/{project_id}/search-strategy/executions/fetch-all/resume",
+    response_model=FetchAllStartResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def resume_fetch_all_search(
+    project_id: str,
+    project_repository: ProjectPublicationRepository = Depends(get_project_publication_repository),
+    fetch_all: FetchAllSearchService = Depends(get_fetch_all_search_service),
+) -> FetchAllStartResponse:
+    """Resume a previous fetch-all search run from its persisted checkpoints."""
+
+    try:
+        project_repository.get_publications(project_id)
+    except ProjectNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+
+    try:
+        return fetch_all.start_resume_job(project_id)
+    except FetchAllJobAlreadyRunningError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="A fetch-all job is already running for this project.",
+        ) from exc
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+
+
+@router.post(
+    "/{project_id}/search-strategy/executions/fetch-all/{job_id}/resume",
+    response_model=FetchAllStartResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def resume_specific_fetch_all_search(
+    project_id: str,
+    job_id: str,
+    project_repository: ProjectPublicationRepository = Depends(get_project_publication_repository),
+    fetch_all: FetchAllSearchService = Depends(get_fetch_all_search_service),
+) -> FetchAllStartResponse:
+    """Resume a specific fetch-all search job from its persisted checkpoints."""
+
+    try:
+        project_repository.get_publications(project_id)
+    except ProjectNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+
+    try:
+        return fetch_all.start_resume_job(project_id, job_id=job_id)
+    except FetchAllJobAlreadyRunningError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="A fetch-all job is already running for this project.",
+        ) from exc
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+
+
+@router.post(
     "/{project_id}/search-results/imports",
+
     response_model=SearchResultsImportResponse,
     status_code=status.HTTP_200_OK,
 )

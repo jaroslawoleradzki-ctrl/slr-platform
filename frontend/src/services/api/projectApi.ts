@@ -96,7 +96,11 @@ export interface ProjectApiService {
   ): Promise<SearchExecutionResult>;
   startFetchAllSearch(
     projectId: string,
-    strategy: EditableSearchStrategy,
+    strategy: EditableSearchStrategy
+  ): Promise<FetchAllStartResult>;
+  resumeFetchAllSearch(
+    projectId: string,
+    jobId?: string,
   ): Promise<FetchAllStartResult>;
   getFetchAllSearchStatus(projectId: string, jobId: string): Promise<FetchAllStatusResult>;
   cancelFetchAllSearch(projectId: string, jobId: string): Promise<FetchAllStatusResult>;
@@ -458,7 +462,30 @@ class MixedProjectApiService implements ProjectApiService {
     return response.json() as Promise<FetchAllStartResult>;
   }
 
+  async resumeFetchAllSearch(
+    projectId: string,
+    jobId?: string,
+  ): Promise<FetchAllStartResult> {
+    const url = jobId
+      ? `${API_BASE_URL}/projects/${projectId}/search-strategy/executions/fetch-all/${jobId}/resume`
+      : `${API_BASE_URL}/projects/${projectId}/search-strategy/executions/fetch-all/resume`;
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        method: 'POST',
+        headers: { Accept: 'application/json' },
+      });
+    } catch {
+      throw new Error('Nie udało się połączyć z backendem. Sprawdź połączenie i spróbuj ponownie.');
+    }
+    if (!response.ok) {
+      throw new Error(await formatFastApiError(response, 'wznowić pobieranie'));
+    }
+    return response.json() as Promise<FetchAllStartResult>;
+  }
+
   async getFetchAllSearchStatus(
+
     projectId: string,
     jobId: string,
   ): Promise<FetchAllStatusResult> {

@@ -186,6 +186,7 @@ export interface FetchAllProviderProgress {
   pages_fetched: number;
   total_reported: number | null;
   limit_reached: boolean;
+  resumable?: boolean;
   message: string | null;
 }
 
@@ -204,9 +205,11 @@ export interface FetchAllStatusResult {
   canonical_rejected_total?: number;
   canonical_indeterminate_total?: number;
   deduplicated_total?: number;
+  resumable?: boolean;
   message: string | null;
   result: SearchExecutionResult | null;
 }
+
 
 export interface FetchAllStartResult {
   job_id: string;

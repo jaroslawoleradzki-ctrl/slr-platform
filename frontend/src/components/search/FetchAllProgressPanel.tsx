@@ -23,12 +23,14 @@ interface Props {
   progress: FetchAllStatusResult | null;
   starting: boolean;
   onCancel?: () => void;
+  onResume?: () => void;
 }
 
 export const FetchAllProgressPanel: React.FC<Props> = ({
   progress,
   starting,
   onCancel,
+  onResume,
 }) => {
   if (!progress) {
     if (!starting) return null;
@@ -56,6 +58,7 @@ export const FetchAllProgressPanel: React.FC<Props> = ({
   const incompleteProviders = progress.providers.filter(
     (p) => p.status === 'partial' || p.status === 'failed'
   );
+  const canResume = !running && Boolean(progress.resumable || incompleteProviders.some(p => p.resumable));
 
   return (
     <div
@@ -86,12 +89,20 @@ export const FetchAllProgressPanel: React.FC<Props> = ({
                 ? 'Pobieranie zakończyło się błędem.'
                 : 'Pobieranie wszystkich dostępnych wyników zakończone.'}
         </strong>
-        {onCancel && running && (
-          <button type="button" onClick={onCancel} className="btn-secondary">
-            Anuluj pobieranie
-          </button>
-        )}
+        <div style={{ display: 'flex', gap: 8 }}>
+          {onCancel && running && (
+            <button type="button" onClick={onCancel} className="btn-secondary">
+              Anuluj pobieranie
+            </button>
+          )}
+          {onResume && canResume && (
+            <button type="button" onClick={onResume} className="btn-primary" data-testid="resume-fetch-all-btn">
+              Wznów pobieranie (Resume)
+            </button>
+          )}
+        </div>
       </div>
+
 
       <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
         {progress.providers.map((provider) => (
