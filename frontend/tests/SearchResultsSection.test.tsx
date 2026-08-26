@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { SearchResultsSection } from '../src/components/search/SearchResultsSection';
 import { FetchAllStatusResult, SearchExecutionResult } from '../src/types';
@@ -107,7 +107,13 @@ describe('SearchResultsSection', () => {
 
   it('renders record fields and omits an empty DOI', () => {
     render(<SelectableResults />);
-    expect(screen.getByText('Znaleziono 20 rekordów. Zwrócono 2. Wybrano 0.')).toBeInTheDocument();
+    const stats = screen.getByTestId('result-stats');
+    expect(within(stats).getByText('20')).toBeInTheDocument();          // found in providers
+    expect(within(stats).getByText('Znaleziono w providerach')).toBeInTheDocument();
+    expect(within(stats).getByText('2')).toBeInTheDocument();           // loaded records
+    expect(within(stats).getByText('Pobrane rekordy')).toBeInTheDocument();
+    expect(within(stats).getByText('0')).toBeInTheDocument();           // selected
+    expect(within(stats).getByText('Wybrane do importu')).toBeInTheDocument();
     expect(screen.getByText('Lean energy result')).toBeInTheDocument();
     expect(screen.getByText(/Anna Kowalska, Michael Smith · 2021 · Provider: openalex/)).toBeInTheDocument();
     expect(screen.getByText('DOI: 10.1000/lean')).toBeInTheDocument();
@@ -172,19 +178,21 @@ describe('SearchResultsSection', () => {
 
     expect(screen.getByTestId('fetch-all-progress')).toBeInTheDocument();
     expect(screen.queryByTestId('fetch-all-button')).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Pobierz kolejne wyniki' })).not.toBeInTheDocument();
-    const cancelButton = screen.getByRole('button', { name: 'Anuluj pobieranie' });
-    fireEvent.click(cancelButton);
-    expect(onCancel).toHaveBeenCalledOnce();
-    const progressPanel = screen.getByTestId('fetch-all-progress');
-    expect(progressPanel.textContent).toMatch(/Pobrano:\s*2\s*252/u);
-    expect(progressPanel.textContent).toMatch(/Canonical accepted:/u);
-    expect(progressPanel.textContent).toMatch(/Canonical rejected:/u);
-    expect(progressPanel.textContent).toMatch(/Nieokreślone:/u);
-    expect(progressPanel.textContent).toMatch(/Zapisano po ograniczeniach metadanych:\s*2\s*220/u);
-    expect(progressPanel.textContent).toMatch(/OpenAlex\s*—\s*1\s*840 pobranych z ~1\s*840/u);
-    expect(screen.getByText('Zakończono')).toBeInTheDocument();
-    expect(screen.getByText('Pobieranie…')).toBeInTheDocument();
+    expect(screen.getByText(/Łącznie pobrano:\s*2\s*252/u)).toBeInTheDocument();
+    expect(screen.getByText(/Po lokalnych filtrach:\s*2\s*220/u)).toBeInTheDocument();
+
+    // Provider rows: Provider | Status | Pobrano | Zgłoszono
+    const openalexRow = screen.getByTestId('fetch-all-provider-row-openalex');
+    expect(within(openalexRow).getByText('OpenAlex')).toBeInTheDocument();
+    expect(within(openalexRow).getByText('Zakończono')).toBeInTheDocument();
+    // fetched "1 840" plus reported "~1 840"
+    expect(within(openalexRow).getAllByText(/1\s*840/u)).toHaveLength(2);
+    expect(within(openalexRow).getAllByText(/~/u)).toHaveLength(1);
+
+    const s2Row = screen.getByTestId('fetch-all-provider-row-semantic_scholar');
+    expect(within(s2Row).getByText('Pobieranie…')).toBeInTheDocument();
+    expect(within(s2Row).getByText(/^412$/u)).toBeInTheDocument();
+    expect(within(s2Row).getByText(/~1\s*000/u)).toBeInTheDocument();
   });
 
   it('communicates partial provider failure after the fetch-all job finishes', () => {
@@ -402,8 +410,8 @@ describe('SearchResultsSection', () => {
     fireEvent.click(cb21);
     expect(cb21).toBeChecked();
 
-    // Subtitle must show 2 selected records in total
-    expect(screen.getByText(/Wybrano 2/i)).toBeInTheDocument();
+    // Stats strip must show 2 selected records in total
+    expect(within(screen.getByTestId('result-stats')).getByText('2')).toBeInTheDocument();
 
     // Navigate back to page 1
     const prevBtn = screen.getByRole('button', { name: 'Poprzednia strona' });

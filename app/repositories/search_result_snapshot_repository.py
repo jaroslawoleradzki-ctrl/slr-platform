@@ -84,6 +84,9 @@ class SearchResultSnapshot:
 class SearchResultSnapshotRepository(Protocol):
     def save(self, snapshot: SearchResultSnapshot) -> SearchResultSnapshot: ...
     def get(self, project_id: str, snapshot_id: UUID) -> SearchResultSnapshot: ...
+    def get_for_search_run(
+        self, project_id: str, search_run_id: UUID, *, connection: sqlite3.Connection | None = None
+    ) -> list[SearchResultSnapshot]: ...
     def save_audit(self, audit: SearchRunAudit) -> None: ...
     def delete_for_project(self, project_id: str, *, connection: sqlite3.Connection | None = None) -> None: ...
 
@@ -138,6 +141,38 @@ class SqliteSearchResultSnapshotRepository:
             Publication.model_validate(json.loads(row[3])),
             datetime.fromisoformat(row[4]),
         )
+
+    def get_for_search_run(
+        self, project_id: str, search_run_id: UUID, *, connection: sqlite3.Connection | None = None
+    ) -> list[SearchResultSnapshot]:
+        if connection is not None:
+            return self._get_for_search_run_with_conn(connection, project_id, search_run_id)
+        with sqlite3.connect(self._database_path) as conn:
+            return self._get_for_search_run_with_conn(conn, project_id, search_run_id)
+
+    def _get_for_search_run_with_conn(
+        self, conn: sqlite3.Connection, project_id: str, search_run_id: UUID
+    ) -> list[SearchResultSnapshot]:
+        cursor = conn.execute(
+            """SELECT snapshot_id, project_id, search_run_id, provider, source_id,
+                      publication_document, created_at
+               FROM search_result_snapshots
+               WHERE project_id = ? AND search_run_id = ?
+               ORDER BY created_at ASC""",
+            (project_id, str(search_run_id)),
+        )
+        return [
+            SearchResultSnapshot(
+                UUID(row[0]),
+                row[1],
+                UUID(row[2]),
+                row[3],
+                row[4],
+                Publication.model_validate(json.loads(row[5])),
+                datetime.fromisoformat(row[6]),
+            )
+            for row in cursor.fetchall()
+        ]
 
     def save_audit(self, audit: SearchRunAudit) -> None:
         with sqlite3.connect(self._database_path) as connection:

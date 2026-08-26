@@ -820,7 +820,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
         stopFetchAllPolling();
         if (statusResult.result && statusResult.status !== 'failed') {
           setSearchExecutionResult((previous) =>
-            previous ? mergeFetchAllResults(previous, statusResult.result as SearchExecutionResult) : previous
+            previous ? mergeFetchAllResults(previous, statusResult.result as SearchExecutionResult) : (statusResult.result as SearchExecutionResult)
           );
         }
         void refreshWorkflowStatus(targetProjectId);
@@ -905,7 +905,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
         stopFetchAllPolling();
         if (statusResult.result && statusResult.status !== 'failed') {
           setSearchExecutionResult((previous) =>
-            previous ? mergeFetchAllResults(previous, statusResult.result as SearchExecutionResult) : previous
+            previous ? mergeFetchAllResults(previous, statusResult.result as SearchExecutionResult) : (statusResult.result as SearchExecutionResult)
           );
         }
         void refreshWorkflowStatus(targetProjectId);

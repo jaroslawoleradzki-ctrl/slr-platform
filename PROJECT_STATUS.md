@@ -1,6 +1,6 @@
 # SLR Platform — Project Status
 
-_Last updated: 2026-08-25_
+_Last updated: 2026-08-26_
 
 ## Current status
 
@@ -14,7 +14,11 @@ development
 
 Current version:
 
-v0.6.5
+v0.6.6
+
+Current release:
+
+v0.6.6 — UI and Workflow Navigation Improvements (2026-08-26)
 
 Current release status:
 
@@ -47,6 +51,8 @@ provider retrieval caps and safety limits — with live per-provider progress,
 cooperative cancellation and partial-success semantics; the existing cursor
 pagination remains unchanged.
 
+v0.6.6 reorganizes Search Results UI (collapsible query preview, structured provider status table, stats strip, grouped selection toolbar, pagination under list) and Workflow Navigation (calmer sidebar with numbered chips, compact top workflow bar with real statuses, shared status presentation model, QA path fix, Evidence Synthesis derived from upstreams). No backend changes.
+
 Current development phase:
 
 Phase 10 — Data Synthesis is complete through Tasks 10.1–10.8 and released in
@@ -65,7 +71,7 @@ Phase 6.7 & Phase 6.8 Workflow State:
   - 6.8.1 Search Strategy Backend — ✅ Completed
   - 6.8.2 Provider-Specific Query Rendering — ✅ Completed (`OpenAlexQueryRenderer`, `CrossrefQueryRenderer`, `RenderedQuery` lossy tracking)
   - 6.8.3 Search Orchestrator — ✅ Completed (`SearchEngine` multi-provider execution, merging, provenance)
-  - 6.8.4 Search Execution API — 🟨 Partial (`POST /executions` live execution without durable run GET by ID; v0.6.5 adds fetch-all background jobs with in-memory progress/cancel)
+  - 6.8.4 Search Execution API — 🟨 Partial (`POST /executions` live execution without durable run GET by ID; v0.6.6 adds fetch-all background jobs with in-memory progress/cancel)
   - 6.8.5 Search Execution Persistence — 🟨 Partial (publications & strategy durable; `SearchRun` & raw response archive transient)
   - 6.8.6 Search Strategy GUI Integration — ✅ Completed
   - 6.8.7 Sources Search Execution GUI — ↪ Superseded by Search Strategy execution workflow

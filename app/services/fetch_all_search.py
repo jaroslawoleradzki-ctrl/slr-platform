@@ -53,10 +53,11 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Literal, Protocol, cast
+from typing import Any, Literal, Protocol, cast
 from uuid import UUID, uuid4
 
 import httpx
+from pydantic import ValidationError
 
 from app.api.dto.search_strategy import (
     FetchAllProviderProgressResponse,
@@ -73,6 +74,7 @@ from app.normalization import normalize_publication
 from app.providers.search.base import ProviderSearchOutput
 from app.rendering import get_query_renderer
 from app.repositories.search_result_snapshot_repository import (
+    DuplicateSearchResultSnapshotError,
     SearchResultSnapshot,
     SearchRunAudit,
     default_search_result_snapshot_repository,
@@ -195,6 +197,9 @@ class FetchAllJob:
 
 class SnapshotRepositoryLike(Protocol):
     def save(self, snapshot: SearchResultSnapshot) -> SearchResultSnapshot: ...
+    def get_for_search_run(
+        self, project_id: str, search_run_id: UUID, *, connection: Any = None
+    ) -> list[SearchResultSnapshot]: ...
 
 
 class FetchAllSearchService:
@@ -266,6 +271,8 @@ class FetchAllSearchService:
         target_job_id: UUID | None = UUID(str(job_id)) if job_id is not None else None
         if target_job_id is not None:
             checkpoints = self._checkpoint_repo().get_checkpoints_for_job(target_job_id)
+            if checkpoints and any(cp.project_id != project_id for cp in checkpoints):
+                raise ValueError(f"Search job '{job_id}' does not belong to project '{project_id}'")
         else:
             checkpoints = self._checkpoint_repo().get_latest_job_checkpoints(project_id)
 
@@ -285,18 +292,18 @@ class FetchAllSearchService:
         else:
             for cp in checkpoints:
                 if cp.plan_metadata and "strategy" in cp.plan_metadata:
+                    raw_strategy = cp.plan_metadata["strategy"]
                     try:
-                        strategy = SearchStrategyExecutionRequest.model_validate(cp.plan_metadata["strategy"])
+                        strategy = SearchStrategyExecutionRequest.model_validate(raw_strategy)
                         break
-                    except Exception:
-                        pass
+                    except (ValidationError, TypeError, ValueError) as exc:
+                        raise ValueError(
+                            f"Cannot resume search for project '{project_id}': "
+                            "search strategy metadata in checkpoint is invalid"
+                        ) from exc
         if strategy is None:
-            # Fallback strategy using default settings and providers from checkpoints
-            providers_list = [cast(Literal["openalex", "crossref", "semantic_scholar"], cp.provider) for cp in checkpoints]
-            from app.domain.search import BooleanOperator, SearchGroup, SearchTerm
-            strategy = SearchStrategyExecutionRequest(
-                query=SearchQuery(name="Resumed Query", expression=SearchGroup(operator=BooleanOperator.AND, children=[SearchTerm(value="resumed")])),
-                providers=providers_list,
+            raise ValueError(
+                f"Cannot resume search for project '{project_id}': search strategy metadata is missing from checkpoints"
             )
 
         job = FetchAllJob(
@@ -517,9 +524,17 @@ class FetchAllSearchService:
 
                 checkpoints_by_provider = {cp.provider: cp for cp in (resume_checkpoints or [])}
                 job.providers = []
+                get_snapshots = getattr(self._snapshot_repo(), "get_for_search_run", None)
                 for p in providers:
                     cp = checkpoints_by_provider.get(p.name)
                     if cp is not None and cp.status == "complete" and not cp.resumable:
+                        prev_records: list[Publication] = []
+                        if callable(get_snapshots):
+                            prev_records = [
+                                s.publication
+                                for s in get_snapshots(job.project_id, cp.search_run_id)
+                                if s.provider.casefold() == p.name.casefold()
+                            ]
                         state = FetchAllProviderState(
                             name=p.name,
                             status="complete",
@@ -534,8 +549,16 @@ class FetchAllSearchService:
                             warnings=list(cp.warnings),
                             search_run_id=cp.search_run_id,
                             cursor=cp.cursor,
+                            kept_records=prev_records,
                         )
                     elif cp is not None:
+                        prev_records = []
+                        if callable(get_snapshots):
+                            prev_records = [
+                                s.publication
+                                for s in get_snapshots(job.project_id, cp.search_run_id)
+                                if s.provider.casefold() == p.name.casefold()
+                            ]
                         state = FetchAllProviderState(
                             name=p.name,
                             status="pending",
@@ -551,6 +574,7 @@ class FetchAllSearchService:
                             search_run_id=cp.search_run_id,
                             cursor=cp.cursor,
                             plan_metadata=cp.plan_metadata,
+                            kept_records=prev_records,
                         )
                     else:
                         state = FetchAllProviderState(name=p.name)
@@ -619,8 +643,7 @@ class FetchAllSearchService:
         state.search_run_id = search_run.run_id
         state.status = "running"
 
-
-        seen_source_ids: set[str] = set()
+        seen_source_ids: set[str] = {publication_source_id(p) for p in state.kept_records}
         seen_cursors: set[str] = set()
         cursor = initial_checkpoint.cursor if initial_checkpoint is not None and initial_checkpoint.cursor else "*"
         state.cursor = cursor
@@ -763,6 +786,8 @@ class FetchAllSearchService:
             job.status = "completed"
         if partial_any:
             job.message = "Fetch-all finished with incomplete provider coverage; see per-provider statuses."
+        for state in job.providers:
+            state.deduplicated_count = 0
         all_records = [(publication, state) for state in job.providers for publication in state.kept_records]
         seen_dois: set[str] = set()
         for publication, state in all_records:
@@ -773,6 +798,14 @@ class FetchAllSearchService:
                 else:
                     seen_dois.add(doi)
         merged_publications = ResultMerger().merge(publication for publication, _ in all_records)
+        post_merge_validations = [
+            validate_canonical_query(job.query, publication) for publication in merged_publications
+        ]
+        merged_publications = [
+            publication
+            for publication, validation in zip(merged_publications, post_merge_validations, strict=True)
+            if validation.status is not CanonicalMatchStatus.NON_MATCH
+        ]
         finished_at = datetime.now(timezone.utc)
         save_audit = getattr(self._snapshot_repo(), "save_audit", None)
         if callable(save_audit):
@@ -808,25 +841,35 @@ class FetchAllSearchService:
                 )
         results = []
         state_by_run_id = {state.search_run_id: state for state in job.providers if state.search_run_id is not None}
+        existing_snapshots_by_key: dict[tuple[UUID, str], SearchResultSnapshot] = {}
+        get_snapshots = getattr(self._snapshot_repo(), "get_for_search_run", None)
+        if callable(get_snapshots):
+            for state in job.providers:
+                if state.search_run_id is not None:
+                    for snap in get_snapshots(job.project_id, state.search_run_id):
+                        existing_snapshots_by_key[(snap.search_run_id, snap.source_id)] = snap
+
         for publication in merged_publications:
             run_id = publication.provenance[0].run_id
             if run_id is None or run_id not in state_by_run_id:
                 continue
             state = state_by_run_id[run_id]
             provider = state.name
+            source_id = publication_source_id(publication)
             try:
                 snapshot = self._snapshot_repo().save(
                     SearchResultSnapshot.create(
                         project_id=job.project_id,
                         search_run_id=run_id,
                         provider=provider,
-                        source_id=publication_source_id(publication),
+                        source_id=source_id,
                         publication=publication,
                     )
                 )
                 result_id = str(snapshot.snapshot_id)
-            except Exception:
-                result_id = str(publication.record_id)
+            except DuplicateSearchResultSnapshotError:
+                existing = existing_snapshots_by_key.get((run_id, source_id))
+                result_id = str(existing.snapshot_id) if existing is not None else str(publication.record_id)
             results.append(
                 map_search_result_record(
                     publication,

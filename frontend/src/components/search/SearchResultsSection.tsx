@@ -1,8 +1,28 @@
 import React from 'react';
-import { AlertTriangle, CheckSquare, Download, Search } from 'lucide-react';
-import { FetchAllStatusResult, SearchExecutionResult, SearchResultsImportResponse } from '../../types';
+import {
+  AlertTriangle,
+  CheckSquare,
+  ChevronDown,
+  ChevronUp,
+  Copy,
+  Download,
+  FileText,
+  Search,
+} from 'lucide-react';
+import {
+  FetchAllStatusResult,
+  ProviderQuery,
+  SearchExecutionResult,
+  SearchResultsImportResponse,
+} from '../../types';
 import { Card } from '../common/Card';
-import { FetchAllProgressPanel } from './FetchAllProgressPanel';
+import { FetchAllProgressPanel, ghostButtonStyle } from './FetchAllProgressPanel';
+
+const PROVIDER_LABELS: Record<string, string> = {
+  openalex: 'OpenAlex',
+  crossref: 'Crossref',
+  semantic_scholar: 'Semantic Scholar',
+};
 
 interface Props {
   result: SearchExecutionResult | null;
@@ -22,6 +42,148 @@ interface Props {
   onCancelFetchAll?: () => void;
   onResumeFetchAll?: () => void;
 }
+
+/** Collapsible query definition: canonical query stays visible in one line,
+ * full provider queries are available on demand; lossless warnings stay visible always. */
+const QueryPreview: React.FC<{ result: SearchExecutionResult }> = ({ result }) => {
+  const [expanded, setExpanded] = React.useState(false);
+  const [copied, setCopied] = React.useState(false);
+
+  const providerQueries = result.provider_queries ?? [];
+  const adjustedProviders = providerQueries.filter((pq) => pq.is_lossless === false);
+  const fullText =
+    providerQueries.length > 0
+      ? providerQueries
+          .map((pq) => `${PROVIDER_LABELS[pq.provider] ?? pq.provider}: ${pq.rendered_query}`)
+          .join('\n')
+      : result.rendered_query;
+
+  const copyQuery = async () => {
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(fullText);
+      } else {
+        const textarea = document.createElement('textarea');
+        textarea.value = fullText;
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+      }
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // clipboard unavailable — silently ignore
+    }
+  };
+
+  return (
+    <div
+      data-testid="query-preview"
+      style={{
+        marginBottom: 12,
+        padding: '8px 12px',
+        borderRadius: 'var(--radius-md)',
+        backgroundColor: 'var(--bg-primary)',
+        border: '1px solid var(--border-subtle)',
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: '0.78rem', fontWeight: 700 }}>
+          <FileText size={13} style={{ color: 'var(--accent-primary)' }} />
+          Zapytanie
+        </span>
+        {adjustedProviders.map((pq) => (
+          <span
+            key={`warn-${pq.provider}`}
+            style={{
+              fontSize: '0.7rem',
+              color: 'var(--status-warning-text)',
+              border: '1px solid var(--status-warning-border)',
+              backgroundColor: 'var(--status-warning-bg)',
+              borderRadius: 'var(--radius-full)',
+              padding: '1px 8px',
+            }}
+          >
+            {PROVIDER_LABELS[pq.provider] ?? pq.provider}: dostosowano składnię/ograniczenia
+          </span>
+        ))}
+        <span style={{ flex: 1 }} />
+        <button type="button" onClick={() => void copyQuery()} style={{ ...ghostButtonStyle, padding: '3px 9px' }}>
+          <Copy size={11} style={{ marginRight: 4, verticalAlign: -1 }} />
+          {copied ? 'Skopiowano' : 'Kopiuj'}
+        </button>
+        <button
+          type="button"
+          data-testid="query-preview-toggle"
+          aria-expanded={expanded}
+          onClick={() => setExpanded((prev) => !prev)}
+          style={{ ...ghostButtonStyle, padding: '3px 9px' }}
+        >
+          {expanded ? (
+            <>
+              <ChevronUp size={11} style={{ marginRight: 4, verticalAlign: -1 }} />Ukryj
+            </>
+          ) : (
+            <>
+              <ChevronDown size={11} style={{ marginRight: 4, verticalAlign: -1 }} />
+              Pokaż pełne zapytania
+            </>
+          )}
+        </button>
+      </div>
+
+      {!expanded && (
+        <code
+          data-testid="query-preview-summary"
+          title={result.rendered_query}
+          style={{
+            display: 'block',
+            marginTop: 6,
+            fontFamily: 'var(--font-mono)',
+            fontSize: '0.76rem',
+            color: 'var(--text-secondary)',
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+          }}
+        >
+          {result.rendered_query}
+        </code>
+      )}
+
+      {expanded && (
+        <div data-testid="query-preview-details" style={{ marginTop: 6 }}>
+          <div style={{ fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 700, color: 'var(--text-muted)' }}>
+            Canonical query
+          </div>
+          <pre style={{ margin: '2px 0 8px', padding: 8, borderRadius: 'var(--radius-sm)', backgroundColor: 'var(--bg-surface)', fontSize: '0.76rem', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+            {result.rendered_query}
+          </pre>
+          {providerQueries.map((pq) => (
+            <ProviderQueryLine key={pq.provider} query={pq} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+const ProviderQueryLine: React.FC<{ query: ProviderQuery }> = ({ query }) => (
+  <div>
+    <div style={{ marginTop: 4, fontSize: '0.75rem', fontWeight: 600 }}>
+      {PROVIDER_LABELS[query.provider] ?? query.provider}
+      {query.is_lossless === false && (
+        <span style={{ marginLeft: 6, color: 'var(--status-warning-text)', fontSize: '0.72rem' }}>
+          (Dostosowano składnię/ograniczenia)
+        </span>
+      )}
+    </div>
+    <pre style={{ margin: '2px 0 6px', padding: 8, borderRadius: 'var(--radius-sm)', backgroundColor: 'var(--bg-surface)', fontSize: '0.76rem', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+      {query.rendered_query}
+    </pre>
+  </div>
+);
 
 export const SearchResultsSection: React.FC<Props> = ({
   result,
@@ -90,6 +252,11 @@ export const SearchResultsSection: React.FC<Props> = ({
     }
   };
 
+  const executedAt = new Date(result.executed_at);
+  const executedAtLabel = Number.isNaN(executedAt.getTime())
+    ? result.executed_at
+    : executedAt.toLocaleString('pl-PL');
+
   return (
     <Card
       title={
@@ -98,46 +265,12 @@ export const SearchResultsSection: React.FC<Props> = ({
           <span>Wyniki wyszukiwania</span>
         </div>
       }
-      subtitle={`Znaleziono ${result.total_count} rekordów. Zwrócono ${result.returned_count}. Wybrano ${selectedIds.length}.`}
+      subtitle={`Wykonano: ${executedAtLabel} · Providerzy: ${result.providers.join(', ')}`}
     >
-      <div style={{ marginBottom: 12, fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
-        Pobrano: {result.retrieved_count ?? result.returned_count} · Canonical accepted:{' '}
-        {result.canonical_accepted_count ?? result.returned_count} · Canonical rejected:{' '}
-        {result.canonical_rejected_count ?? 0} · Nieokreślone (brak danych):{' '}
-        {result.canonical_indeterminate_count ?? 0} · Usunięto jako duplikaty:{' '}
-        {result.deduplicated_count ?? 0}
-      </div>
-      {result.provider_queries && result.provider_queries.length > 0 && (
-        <div style={{ marginBottom: 12, padding: 10, borderRadius: 'var(--radius-md)', backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-subtle)', fontSize: '0.8rem' }}>
-          <div style={{ fontWeight: 700, marginBottom: 4 }}>Wykonane zapytania providerów:</div>
-          <div style={{ marginBottom: 6 }}>
-            <strong>Canonical query:</strong> <code>{result.rendered_query}</code>
-          </div>
-          {result.provider_queries.map((pq) => (
-            <div key={pq.provider} style={{ marginTop: 4 }}>
-              <span style={{ fontWeight: 600 }}>{pq.provider}:</span>{' '}
-              <strong>{pq.is_lossless === false ? 'LOSSY TRANSLATION' : 'LOSSLESS TRANSLATION'}</strong>
-              {pq.physical_endpoint && <div>Endpoint: <code>{pq.physical_endpoint}</code></div>}
-              <div>Physical query: <code>{pq.rendered_query}</code></div>
-              {pq.is_lossless === false && (
-                <div style={{ color: 'var(--status-warning-text)', fontSize: '0.75rem' }}>
-                  Provider zwrócił candidate set; zastosowano lokalną canonical validation.
-                </div>
-              )}
-              {pq.warnings?.map((warning) => (
-                <div key={warning} style={{ color: 'var(--status-warning-text)', fontSize: '0.75rem' }}>
-                  {warning}
-                </div>
-              ))}
-            </div>
-          ))}
-        </div>
-      )}
-      {result.results.length === 0 && (
-        <div style={{ color: 'var(--text-secondary)', marginBottom: 12 }}>
-          Nie znaleziono rekordów dla tej strategii.
-        </div>
-      )}
+      {/* ── 1. Query / search definition ─────────────────────────────────── */}
+      <QueryPreview result={result} />
+
+      {/* ── 2. Provider retrieval status & retrieval actions ─────────────── */}
       {result.provider_errors && result.provider_errors.length > 0 && (
         <div
           role="alert"
@@ -160,82 +293,6 @@ export const SearchResultsSection: React.FC<Props> = ({
         </div>
       )}
 
-      {result.results.length > 0 && (
-        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 16, marginBottom: 12 }}>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <input
-              type="checkbox"
-              checked={allSelectedOnPage}
-              onChange={(event) => togglePageSelection(event.target.checked)}
-            />
-            <CheckSquare size={15} />
-            <span>Zaznacz wszystkie widoczne rekordy{totalLocalPages > 1 ? ` (strona ${currentPage})` : ''}</span>
-          </label>
-
-          {totalLocalPages > 1 && (
-            <button
-              type="button"
-              onClick={() => toggleAllSelection(!allSelectedInTotal)}
-              style={{
-                fontSize: '0.78rem',
-                color: 'var(--accent-primary)',
-                background: 'none',
-                border: 'none',
-                padding: 0,
-                cursor: 'pointer',
-                textDecoration: 'underline',
-              }}
-            >
-              {allSelectedInTotal ? 'Odznacz wszystkie pobrane rekordy' : `Zaznacz wszystkie pobrane (${totalLoaded})`}
-            </button>
-          )}
-        </div>
-      )}
-
-      {onImport && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-          <button
-            type="button"
-            disabled={selectedIds.length === 0 || importing}
-            onClick={onImport}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 7,
-              padding: '8px 14px',
-              borderRadius: 'var(--radius-md)',
-              backgroundColor: 'var(--accent-primary)',
-              color: '#fff',
-              fontWeight: 700,
-              opacity: selectedIds.length === 0 || importing ? 0.5 : 1,
-            }}
-          >
-            <Download size={15} />
-            {importing ? 'Importowanie…' : 'Importuj zaznaczone'}
-          </button>
-          {importResult !== null && (
-            <span role="status" style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-              Zaimportowano: {importResult.imported_count}. Pominięto istniejące:{' '}
-              {importResult.skipped_count}. Working Collection:{' '}
-              {importResult.working_collection_count}.
-            </span>
-          )}
-        </div>
-      )}
-
-      {paginationError && (
-        <div role="alert" style={{ color: 'var(--status-danger-text)', marginBottom: 12 }}>
-          {paginationError}
-        </div>
-      )}
-
-      {fetchAllError && (
-        <div role="alert" style={{ color: 'var(--status-danger-text)', marginBottom: 12 }}>
-          {fetchAllError}
-        </div>
-      )}
-
-      {/* Fetch-all progress (v0.6.5): background retrieval of every available page */}
       {(onFetchAll || fetchAllJob) && (
         <FetchAllProgressPanel
           progress={fetchAllJob}
@@ -245,49 +302,12 @@ export const SearchResultsSection: React.FC<Props> = ({
         />
       )}
 
-
-      {/* Fetch-all trigger (v0.6.5): retrieve every page each provider exposes */}
-      {onFetchAll && !fetchAllActive && (
-        <div
-          style={{
-            marginBottom: 12,
-            padding: '10px 14px',
-            borderRadius: 'var(--radius-md)',
-            border: '1px dashed var(--border-strong)',
-            backgroundColor: 'var(--bg-surface-elevated)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: 12,
-          }}
-        >
-          <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
-            Pobrano <strong>{totalLoaded}</strong> rekordów. Providerzy mogą udostępniać
-            mniej wyników niż deklarowana łączna liczba trafień.
-          </div>
-          <button
-            type="button"
-            disabled={loadingMore}
-            onClick={onFetchAll}
-            data-testid="fetch-all-button"
-            style={{
-              padding: '7px 14px',
-              borderRadius: 'var(--radius-md)',
-              backgroundColor: 'var(--accent-primary)',
-              color: '#fff',
-              border: 'none',
-              fontWeight: 700,
-              fontSize: '0.82rem',
-              opacity: loadingMore ? 0.55 : 1,
-              cursor: loadingMore ? 'wait' : 'pointer',
-            }}
-          >
-            Pobierz wszystkie dostępne
-          </button>
+      {fetchAllError && (
+        <div role="alert" style={{ color: 'var(--status-error-text)', marginBottom: 12 }}>
+          {fetchAllError}
         </div>
       )}
 
-      {/* Provider Load More Section (Fetching additional batches from external API) */}
       {onLoadMore && result.has_more && !fetchAllActive && (
         <div
           style={{
@@ -300,6 +320,7 @@ export const SearchResultsSection: React.FC<Props> = ({
             alignItems: 'center',
             justifyContent: 'space-between',
             gap: 12,
+            flexWrap: 'wrap',
           }}
         >
           <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
@@ -326,18 +347,213 @@ export const SearchResultsSection: React.FC<Props> = ({
         </div>
       )}
 
-      {/* Local Pagination Bar (Navigation over already loaded records) */}
+      {onFetchAll && !fetchAllActive && (
+        <div
+          style={{
+            marginBottom: 12,
+            padding: '10px 14px',
+            borderRadius: 'var(--radius-md)',
+            border: '1px dashed var(--border-strong)',
+            backgroundColor: 'var(--bg-surface-elevated)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 12,
+            flexWrap: 'wrap',
+          }}
+        >
+          <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
+            Providerzy mogą udostępniać mniej wyników niż deklarowana łączna liczba
+            trafień (<strong>{result.total_count}</strong>). Pełne pobieranie działa w tle.
+          </div>
+          <button
+            type="button"
+            disabled={loadingMore}
+            onClick={onFetchAll}
+            data-testid="fetch-all-button"
+            style={{
+              padding: '7px 14px',
+              borderRadius: 'var(--radius-md)',
+              backgroundColor: 'var(--accent-primary)',
+              color: '#fff',
+              border: 'none',
+              fontWeight: 700,
+              fontSize: '0.82rem',
+              opacity: loadingMore ? 0.55 : 1,
+              cursor: loadingMore ? 'wait' : 'pointer',
+            }}
+          >
+            Pobierz wszystkie dostępne
+          </button>
+        </div>
+      )}
+
+      {/* ── 3. Result statistics ─────────────────────────────────────────── */}
+      <div
+        data-testid="result-stats"
+        style={{
+          display: 'flex',
+          gap: 10,
+          flexWrap: 'wrap',
+          marginBottom: 12,
+        }}
+      >
+        <StatCell value={result.total_count.toLocaleString('pl-PL')} label="Znaleziono w providerach" />
+        <StatCell value={totalLoaded.toLocaleString('pl-PL')} label="Pobrane rekordy" />
+        <StatCell value={selectedIds.length.toLocaleString('pl-PL')} label="Wybrane do importu" accent />
+      </div>
+
+      {paginationError && (
+        <div role="alert" style={{ color: 'var(--status-error-text)', marginBottom: 12 }}>
+          {paginationError}
+        </div>
+      )}
+
+      {result.results.length === 0 && (
+        <div style={{ color: 'var(--text-secondary)', marginBottom: 12 }}>
+          Nie znaleziono rekordów dla tej strategii.
+        </div>
+      )}
+
+      {/* ── 4. Selection & actions ───────────────────────────────────────── */}
+      {result.results.length > 0 && (
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 8,
+            marginBottom: 12,
+            padding: '10px 12px',
+            borderRadius: 'var(--radius-md)',
+            border: '1px solid var(--border-subtle)',
+            backgroundColor: 'var(--bg-surface-elevated)',
+          }}
+        >
+          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 16 }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <input
+                type="checkbox"
+                checked={allSelectedOnPage}
+                onChange={(event) => togglePageSelection(event.target.checked)}
+              />
+              <CheckSquare size={15} />
+              <span>Zaznacz wszystkie widoczne rekordy{totalLocalPages > 1 ? ` (strona ${currentPage})` : ''}</span>
+            </label>
+
+            {totalLocalPages > 1 && (
+              <button
+                type="button"
+                onClick={() => toggleAllSelection(!allSelectedInTotal)}
+                style={{
+                  fontSize: '0.78rem',
+                  color: 'var(--accent-primary)',
+                  background: 'none',
+                  border: 'none',
+                  padding: 0,
+                  cursor: 'pointer',
+                  textDecoration: 'underline',
+                }}
+              >
+                {allSelectedInTotal ? 'Odznacz wszystkie pobrane rekordy' : `Zaznacz wszystkie pobrane (${totalLoaded})`}
+              </button>
+            )}
+
+            {onImport && (
+              <>
+                <span style={{ flex: 1 }} />
+                <button
+                  type="button"
+                  disabled={selectedIds.length === 0 || importing}
+                  onClick={onImport}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 7,
+                    padding: '8px 14px',
+                    borderRadius: 'var(--radius-md)',
+                    backgroundColor: 'var(--accent-primary)',
+                    color: '#fff',
+                    fontWeight: 700,
+                    opacity: selectedIds.length === 0 || importing ? 0.5 : 1,
+                  }}
+                >
+                  <Download size={15} />
+                  {importing ? 'Importowanie…' : 'Importuj zaznaczone'}
+                </button>
+              </>
+            )}
+          </div>
+          <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>
+            Zakres zaznaczenia: „widoczne” dotyczy bieżącej strony listy, „pobrane” — wszystkich
+            wczytanych rekordów ({totalLoaded}); pełny zestaw zgłoszony przez providerów wymaga
+            akcji „Pobierz wszystkie dostępne”.
+          </div>
+          {importResult !== null && (
+            <div role="status" style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+              Zaimportowano: {importResult.imported_count}. Pominięto istniejące:{' '}
+              {importResult.skipped_count}. Working Collection:{' '}
+              {importResult.working_collection_count}.
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── 5. Result list ───────────────────────────────────────────────── */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }} data-testid="record-list">
+        {visibleRecords.map((record) => (
+          <label
+            key={record.id}
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'auto 1fr',
+              gap: 12,
+              padding: 14,
+              borderRadius: 'var(--radius-md)',
+              border: '1px solid var(--border-subtle)',
+              backgroundColor: 'var(--bg-primary)',
+              cursor: 'pointer',
+            }}
+          >
+            <input
+              aria-label={`Wybierz rekord ${record.title}`}
+              type="checkbox"
+              checked={selectedIds.includes(record.id)}
+              onChange={(event) => onSelectionChange(
+                event.target.checked
+                  ? [...selectedIds, record.id]
+                  : selectedIds.filter((id) => id !== record.id)
+              )}
+            />
+            <div>
+              <div style={{ fontWeight: 700 }}>{record.title}</div>
+              <div style={{ marginTop: 4, fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
+                {record.authors.join(', ')} · {record.year} · Provider: {record.provider}
+              </div>
+              {record.doi && (
+                <div style={{ marginTop: 3, fontSize: '0.78rem', color: 'var(--status-info-text)' }}>
+                  DOI: {record.doi}
+                </div>
+              )}
+            </div>
+          </label>
+        ))}
+      </div>
+
+      {/* ── 6. Local pagination (bound to the record list above) ────────── */}
       {totalLocalPages > 1 && (
         <div
+          data-testid="local-pagination"
           style={{
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
+            gap: 8,
+            flexWrap: 'wrap',
+            marginTop: 12,
             padding: '8px 12px',
             backgroundColor: 'var(--bg-surface-elevated)',
             borderRadius: 'var(--radius-md)',
             border: '1px solid var(--border-subtle)',
-            marginBottom: 12,
           }}
         >
           <button
@@ -383,47 +599,29 @@ export const SearchResultsSection: React.FC<Props> = ({
           </button>
         </div>
       )}
-
-      {/* Record list for visible local page */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {visibleRecords.map((record) => (
-          <label
-            key={record.id}
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'auto 1fr',
-              gap: 12,
-              padding: 14,
-              borderRadius: 'var(--radius-md)',
-              border: '1px solid var(--border-subtle)',
-              backgroundColor: 'var(--bg-primary)',
-              cursor: 'pointer',
-            }}
-          >
-            <input
-              aria-label={`Wybierz rekord ${record.title}`}
-              type="checkbox"
-              checked={selectedIds.includes(record.id)}
-              onChange={(event) => onSelectionChange(
-                event.target.checked
-                  ? [...selectedIds, record.id]
-                  : selectedIds.filter((id) => id !== record.id)
-              )}
-            />
-            <div>
-              <div style={{ fontWeight: 700 }}>{record.title}</div>
-              <div style={{ marginTop: 4, fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
-                {record.authors.join(', ')} · {record.year} · Provider: {record.provider}
-              </div>
-              {record.doi && (
-                <div style={{ marginTop: 3, fontSize: '0.78rem', color: 'var(--status-info-text)' }}>
-                  DOI: {record.doi}
-                </div>
-              )}
-            </div>
-          </label>
-        ))}
-      </div>
     </Card>
   );
 };
+
+const StatCell: React.FC<{ value: string; label: string; accent?: boolean }> = ({
+  value,
+  label,
+  accent = false,
+}) => (
+  <div
+    style={{
+      minWidth: 150,
+      padding: '8px 14px',
+      borderRadius: 'var(--radius-md)',
+      border: accent ? '1px solid var(--accent-primary)' : '1px solid var(--border-subtle)',
+      backgroundColor: accent ? 'var(--accent-subtle)' : 'var(--bg-primary)',
+    }}
+  >
+    <div style={{ fontSize: '1.05rem', fontWeight: 800, fontFamily: 'var(--font-mono)', color: 'var(--text-primary)' }}>
+      {value}
+    </div>
+    <div style={{ fontSize: '0.68rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', fontWeight: 600 }}>
+      {label}
+    </div>
+  </div>
+);
