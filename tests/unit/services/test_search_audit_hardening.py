@@ -43,12 +43,17 @@ def _strategy(providers: list[str] | None = None) -> SearchStrategyExecutionRequ
     )
 
 
-def _publication(provider: str, source_id: str, title: str, doi: str | None = None) -> Publication:
+def _publication(
+    provider: str,
+    source_id: str,
+    title: str,
+    doi: str | None = None,
+    abstract: str | None = "Lean Management and Energy Efficiency in Manufacturing.",
+) -> Publication:
     return Publication(
         title=title,
-        abstract="Lean Management and Energy Efficiency in Manufacturing.",
+        abstract=abstract,
         authors=[Author(display_name="Ada Author")],
-
         publication_year=2024,
         document_type=DocumentType.JOURNAL_ARTICLE,
         provenance=[
@@ -85,6 +90,14 @@ class ScriptedProvider:
                     "provenance": [
                         p.provenance[0].model_copy(
                             update={"run_id": search_run.run_id, "query_id": search_query.query_id}
+                        )
+                        if p.provenance
+                        else ProvenanceEntry(
+                            source=self.name,
+                            source_record_id=str(p.record_id),
+                            run_id=search_run.run_id,
+                            query_id=search_query.query_id,
+                            retrieved_at=datetime.now(timezone.utc),
                         )
                     ]
                 }
@@ -373,3 +386,346 @@ async def test_wp5_crossref_mass_indeterminate_generates_warning_and_preserves_r
 
     # High indeterminate rate warning generated
     assert any("High indeterminate rate: over 50%" in w for w in state.warnings)
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "fetched_pubs,expected_indeterminate_count,expect_warning",
+    [
+        # Scenario A: 0 results
+        ([], 0, False),
+        # Scenario B: 2 fetched, 0 indeterminate (0%)
+        (
+            [
+                _publication("crossref", "10.1000/b1", "Lean Management and Energy Efficiency in Manufacturing 1"),
+                _publication("crossref", "10.1000/b2", "Lean Management and Energy Efficiency in Manufacturing 2"),
+            ],
+            0,
+            False,
+        ),
+        # Scenario C: 2 fetched, 1 indeterminate (exactly 50%) -> rate == 50% => NO WARNING
+        (
+            [
+                _publication("crossref", "10.1000/c1", "Lean Management and Energy Efficiency in Manufacturing"),
+                _publication("crossref", "10.1000/c2", "Lean Management only", abstract=None),
+            ],
+            1,
+            False,
+        ),
+        # Scenario D: 3 fetched, 2 indeterminate (66.7% > 50%) -> WARNING EXACTLY ONCE
+        (
+            [
+                _publication("crossref", "10.1000/d1", "Lean Management and Energy Efficiency in Manufacturing"),
+                _publication("crossref", "10.1000/d2", "Lean Management only", abstract=None),
+                _publication("crossref", "10.1000/d3", "Continuous Improvement only", abstract=None),
+            ],
+            2,
+            True,
+        ),
+    ],
+)
+async def test_wp5_indeterminate_warning_threshold_semantics(
+    tmp_path: Path,
+    fetched_pubs: list[Publication],
+    expected_indeterminate_count: int,
+    expect_warning: bool,
+) -> None:
+    db_path = tmp_path / "threshold_test.db"
+    snapshot_repo = SqliteSearchResultSnapshotRepository(db_path)
+    checkpoint_repo = SqliteSearchRunCheckpointRepository(db_path)
+
+    pages = {"*": (fetched_pubs, None)}
+    provider = ScriptedProvider("crossref", pages)
+    service = FetchAllSearchService(
+        provider_factory=lambda strategy, client: [provider],
+        snapshot_repository=snapshot_repo,
+        checkpoint_repository=checkpoint_repo,
+    )
+
+    strat = _strategy(["crossref"])
+    start = service.start("proj_threshold", strat)
+    job = await service.wait(start.job_id)
+
+    assert job.status == "completed"
+    state = job.providers[0]
+    assert state.fetched_count == len(fetched_pubs)
+    assert state.canonical_indeterminate_count == expected_indeterminate_count
+
+    high_warnings = [w for w in state.warnings if "High indeterminate rate: over 50%" in w]
+    if expect_warning:
+        assert len(high_warnings) == 1
+    else:
+        assert len(high_warnings) == 0
+
+
+@pytest.mark.anyio
+async def test_wp5_pagination_reconciles_transient_high_indeterminate_to_no_warning(tmp_path: Path) -> None:
+    """Scenario E: Page 1 has 100% indeterminate, Page 2 brings 8 matches -> final rate 20% <= 50%."""
+    db_path = tmp_path / "pagination_transient.db"
+    snapshot_repo = SqliteSearchResultSnapshotRepository(db_path)
+    checkpoint_repo = SqliteSearchRunCheckpointRepository(db_path)
+
+    # Page 1: 2 indeterminate records
+    page1_pubs = [
+        _publication("crossref", "10.1000/e1", "Lean Management 1", abstract=None),
+        _publication("crossref", "10.1000/e2", "Lean Management 2", abstract=None),
+    ]
+    # Page 2: 8 matching records
+    page2_pubs = [
+        _publication("crossref", f"10.1000/p2_{i}", f"Lean Management and Energy Efficiency in Manufacturing {i}")
+        for i in range(8)
+    ]
+
+    pages = {
+        "*": (page1_pubs, "cur_page_2"),
+        "cur_page_2": (page2_pubs, None),
+    }
+    provider = ScriptedProvider("crossref", pages)
+    service = FetchAllSearchService(
+        provider_factory=lambda strategy, client: [provider],
+        snapshot_repository=snapshot_repo,
+        checkpoint_repository=checkpoint_repo,
+        max_pages_per_provider=5,
+    )
+
+    strat = _strategy(["crossref"])
+    start = service.start("proj_pag_transient", strat)
+    job = await service.wait(start.job_id)
+
+    assert job.status == "completed"
+    state = job.providers[0]
+    assert state.fetched_count == 10
+    assert state.canonical_indeterminate_count == 2
+    assert state.canonical_accepted_count == 8
+
+    # 1. State warnings: NO high indeterminate warning
+    assert not any("High indeterminate rate: over 50%" in w for w in state.warnings)
+
+    # 2. Final result warnings: NO high indeterminate warning
+    assert job.result is not None
+    provider_query = job.result.provider_queries[0]
+    assert not any("High indeterminate rate: over 50%" in w for w in provider_query.warnings)
+
+    # 3. Audit table: NO high indeterminate warning
+    import sqlite3
+    with sqlite3.connect(db_path) as conn:
+        row = conn.execute(
+            "SELECT retrieved_count, canonical_indeterminate_count, translation_warnings FROM search_run_audits WHERE project_id = 'proj_pag_transient'"
+        ).fetchone()
+        assert row is not None
+        assert row[0] == 10
+        assert row[1] == 2
+        audit_warnings = json.loads(row[2])
+        assert not any("High indeterminate rate: over 50%" in w for w in audit_warnings)
+
+    # 4. Final checkpoint: NO active high indeterminate warning
+    checkpoints = checkpoint_repo.get_checkpoints_for_job(UUID(start.job_id))
+    assert len(checkpoints) == 1
+    assert not any("High indeterminate rate: over 50%" in w for w in checkpoints[0].warnings)
+
+
+@pytest.mark.anyio
+async def test_wp5_pagination_low_to_high_indeterminate_warning(tmp_path: Path) -> None:
+    """Scenario F: Page 1 has 0% indeterminate, Page 2 brings 3 indeterminate -> final rate 3/4 = 75%."""
+    db_path = tmp_path / "pagination_low_to_high.db"
+    snapshot_repo = SqliteSearchResultSnapshotRepository(db_path)
+    checkpoint_repo = SqliteSearchRunCheckpointRepository(db_path)
+
+    # Page 1: 1 match
+    page1_pubs = [
+        _publication("crossref", "10.1000/f1", "Lean Management and Energy Efficiency in Manufacturing"),
+    ]
+    # Page 2: 3 indeterminate records
+    page2_pubs = [
+        _publication("crossref", "10.1000/f2", "Lean Management A", abstract=None),
+        _publication("crossref", "10.1000/f3", "Lean Management B", abstract=None),
+        _publication("crossref", "10.1000/f4", "Lean Management C", abstract=None),
+    ]
+
+    pages = {
+        "*": (page1_pubs, "cur_page_2"),
+        "cur_page_2": (page2_pubs, None),
+    }
+    provider = ScriptedProvider("crossref", pages)
+    service = FetchAllSearchService(
+        provider_factory=lambda strategy, client: [provider],
+        snapshot_repository=snapshot_repo,
+        checkpoint_repository=checkpoint_repo,
+        max_pages_per_provider=5,
+    )
+
+    strat = _strategy(["crossref"])
+    start = service.start("proj_low_to_high", strat)
+    job = await service.wait(start.job_id)
+
+    assert job.status == "completed"
+    state = job.providers[0]
+    assert state.fetched_count == 4
+    assert state.canonical_indeterminate_count == 3
+
+    # Warning present exactly once
+    high_warnings = [w for w in state.warnings if "High indeterminate rate: over 50%" in w]
+    assert len(high_warnings) == 1
+
+
+@pytest.mark.anyio
+async def test_wp5_resume_reconciles_inherited_warning_when_final_rate_drops(tmp_path: Path) -> None:
+    """Scenario G: Session 1 stops with rate > 50% (checkpoint contains warning).
+
+    Resume in Session 2 brings enough MATCH records so final rate <= 50% -> warning removed.
+    """
+    db_path = tmp_path / "resume_warning_drop.db"
+    snapshot_repo = SqliteSearchResultSnapshotRepository(db_path)
+    checkpoint_repo = SqliteSearchRunCheckpointRepository(db_path)
+
+    # Page 1: 2 indeterminate records (100% > 50%)
+    page1_pubs = [
+        _publication("crossref", "10.1000/g1", "Lean Management 1", abstract=None),
+        _publication("crossref", "10.1000/g2", "Lean Management 2", abstract=None),
+    ]
+    # Page 2: 8 matches
+    page2_pubs = [
+        _publication("crossref", f"10.1000/g_{i}", f"Lean Management and Energy Efficiency in Manufacturing {i}")
+        for i in range(8)
+    ]
+
+    pages = {
+        "*": (page1_pubs, "cur_page_2"),
+        "cur_page_2": (page2_pubs, None),
+    }
+    provider = ScriptedProvider("crossref", pages)
+
+    # Session 1: max_pages=1 -> stops after page 1 with partial status and warning in checkpoint
+    service1 = FetchAllSearchService(
+        provider_factory=lambda strategy, client: [provider],
+        snapshot_repository=snapshot_repo,
+        checkpoint_repository=checkpoint_repo,
+        max_pages_per_provider=1,
+    )
+    strat = _strategy(["crossref"])
+    start1 = service1.start("proj_resume_drop", strat)
+    job1 = await service1.wait(start1.job_id)
+    assert job1.status == "completed"  # provider is partial
+    assert job1.providers[0].status == "partial"
+    assert job1.providers[0].fetched_count == 2
+    assert job1.providers[0].canonical_indeterminate_count == 2
+
+    # Checkpoint 1 contains warning
+    cps1 = checkpoint_repo.get_checkpoints_for_job(UUID(start1.job_id))
+    assert len(cps1) == 1
+    assert any("High indeterminate rate: over 50%" in w for w in cps1[0].warnings)
+
+    # Session 2: Resume
+    service2 = FetchAllSearchService(
+        provider_factory=lambda strategy, client: [provider],
+        snapshot_repository=snapshot_repo,
+        checkpoint_repository=checkpoint_repo,
+        max_pages_per_provider=5,
+    )
+    start2 = service2.start_resume_job("proj_resume_drop", start1.job_id)
+    job2 = await service2.wait(start2.job_id)
+
+    assert job2.status == "completed"
+    state2 = job2.providers[0]
+    assert state2.fetched_count == 10
+    assert state2.canonical_indeterminate_count == 2
+    assert state2.canonical_accepted_count == 8
+
+    # 1. State warnings: high indeterminate warning was reconciled and REMOVED
+    assert not any("High indeterminate rate: over 50%" in w for w in state2.warnings)
+
+    # 2. Result warnings: NO high indeterminate warning
+    assert job2.result is not None
+    assert not any("High indeterminate rate: over 50%" in w for w in job2.result.provider_queries[0].warnings)
+
+    # 3. Audit: NO high indeterminate warning
+    import sqlite3
+    with sqlite3.connect(db_path) as conn:
+        row = conn.execute(
+            "SELECT retrieved_count, canonical_indeterminate_count, translation_warnings FROM search_run_audits WHERE project_id = 'proj_resume_drop'"
+        ).fetchone()
+        assert row is not None
+        assert row[0] == 10
+        assert row[1] == 2
+        audit_warnings = json.loads(row[2])
+        assert not any("High indeterminate rate: over 50%" in w for w in audit_warnings)
+
+    # 4. Checkpoint 2: NO active high indeterminate warning
+    cps2 = checkpoint_repo.get_checkpoints_for_job(UUID(start2.job_id))
+    assert len(cps2) == 1
+    assert not any("High indeterminate rate: over 50%" in w for w in cps2[0].warnings)
+
+
+@pytest.mark.anyio
+async def test_wp5_resume_still_high_indeterminate_no_duplicates(tmp_path: Path) -> None:
+    """Scenario H: Session 1 has rate > 50%. Session 2 finishes and final rate is still > 50% -> warning present exactly once."""
+    db_path = tmp_path / "resume_still_high.db"
+    snapshot_repo = SqliteSearchResultSnapshotRepository(db_path)
+    checkpoint_repo = SqliteSearchRunCheckpointRepository(db_path)
+
+    # Page 1: 2 indeterminate records
+    page1_pubs = [
+        _publication("crossref", "10.1000/h1", "Lean Management 1", abstract=None),
+        _publication("crossref", "10.1000/h2", "Lean Management 2", abstract=None),
+    ]
+    # Page 2: 2 indeterminate records, 1 match (total 4 indet / 5 fetched = 80%)
+    page2_pubs = [
+        _publication("crossref", "10.1000/h3", "Lean Management 3", abstract=None),
+        _publication("crossref", "10.1000/h4", "Lean Management 4", abstract=None),
+        _publication("crossref", "10.1000/h_match", "Lean Management and Energy Efficiency in Manufacturing"),
+    ]
+
+    pages = {
+        "*": (page1_pubs, "cur_page_2"),
+        "cur_page_2": (page2_pubs, None),
+    }
+    provider = ScriptedProvider("crossref", pages)
+
+    # Session 1: max_pages=1
+    service1 = FetchAllSearchService(
+        provider_factory=lambda strategy, client: [provider],
+        snapshot_repository=snapshot_repo,
+        checkpoint_repository=checkpoint_repo,
+        max_pages_per_provider=1,
+    )
+    strat = _strategy(["crossref"])
+    start1 = service1.start("proj_resume_high", strat)
+    await service1.wait(start1.job_id)
+
+    # Session 2: Resume
+    service2 = FetchAllSearchService(
+        provider_factory=lambda strategy, client: [provider],
+        snapshot_repository=snapshot_repo,
+        checkpoint_repository=checkpoint_repo,
+        max_pages_per_provider=5,
+    )
+    start2 = service2.start_resume_job("proj_resume_high", start1.job_id)
+    job2 = await service2.wait(start2.job_id)
+
+    assert job2.status == "completed"
+    state2 = job2.providers[0]
+    assert state2.fetched_count == 5
+    assert state2.canonical_indeterminate_count == 4
+
+    # Warning present EXACTLY ONCE across state, result, audit, checkpoint
+    high_warnings = [w for w in state2.warnings if "High indeterminate rate: over 50%" in w]
+    assert len(high_warnings) == 1
+
+    assert job2.result is not None
+    res_high_warnings = [w for w in job2.result.provider_queries[0].warnings if "High indeterminate rate: over 50%" in w]
+    assert len(res_high_warnings) == 1
+
+    import sqlite3
+    with sqlite3.connect(db_path) as conn:
+        row = conn.execute(
+            "SELECT translation_warnings FROM search_run_audits WHERE project_id = 'proj_resume_high'"
+        ).fetchone()
+        assert row is not None
+        audit_warnings = json.loads(row[0])
+        audit_high_warnings = [w for w in audit_warnings if "High indeterminate rate: over 50%" in w]
+        assert len(audit_high_warnings) == 1
+
+    cps2 = checkpoint_repo.get_checkpoints_for_job(UUID(start2.job_id))
+    assert len(cps2) == 1
+    cp_high_warnings = [w for w in cps2[0].warnings if "High indeterminate rate: over 50%" in w]
+    assert len(cp_high_warnings) == 1

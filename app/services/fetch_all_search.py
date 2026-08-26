@@ -131,6 +131,33 @@ ProviderFactory = Callable[
     list[SearchProvider],
 ]
 
+HIGH_INDETERMINATE_RATE_WARNING = (
+    "High indeterminate rate: over 50% of candidates could not be fully evaluated because "
+    "abstract or scoped fields were missing (commonly observed with Crossref); "
+    "records were retained to protect recall."
+)
+
+
+def _reconcile_indeterminate_warning(state: FetchAllProviderState) -> None:
+    """Ensure high-indeterminate warning strictly reflects the current counters."""
+    is_high = (
+        state.fetched_count > 0
+        and (state.canonical_indeterminate_count / state.fetched_count) > 0.5
+    )
+    if is_high:
+        if HIGH_INDETERMINATE_RATE_WARNING not in state.warnings:
+            state.warnings.append(HIGH_INDETERMINATE_RATE_WARNING)
+        elif state.warnings.count(HIGH_INDETERMINATE_RATE_WARNING) > 1:
+            first_idx = state.warnings.index(HIGH_INDETERMINATE_RATE_WARNING)
+            state.warnings = [
+                w
+                for idx, w in enumerate(state.warnings)
+                if w != HIGH_INDETERMINATE_RATE_WARNING or idx == first_idx
+            ]
+    else:
+        if HIGH_INDETERMINATE_RATE_WARNING in state.warnings:
+            state.warnings = [w for w in state.warnings if w != HIGH_INDETERMINATE_RATE_WARNING]
+
 
 @dataclass
 class FetchAllProviderState:
@@ -473,6 +500,7 @@ class FetchAllSearchService:
         if state.search_run_id is None:
             state.search_run_id = self._run_id_factory()
         state.resumable = resumable
+        _reconcile_indeterminate_warning(state)
 
         plan_meta: dict[str, Any] = {"strategy": job.strategy.model_dump(mode="json")}
         if job.resumed_from_job_id:
@@ -551,6 +579,7 @@ class FetchAllSearchService:
                             cursor=cp.cursor,
                             kept_records=prev_records,
                         )
+                        _reconcile_indeterminate_warning(state)
                     elif cp is not None:
                         prev_records = []
                         if callable(get_snapshots):
@@ -576,6 +605,7 @@ class FetchAllSearchService:
                             plan_metadata=cp.plan_metadata,
                             kept_records=prev_records,
                         )
+                        _reconcile_indeterminate_warning(state)
                     else:
                         state = FetchAllProviderState(name=p.name)
                     job.providers.append(state)
@@ -718,12 +748,7 @@ class FetchAllSearchService:
                     state.kept_records.append(enriched)
                     state.kept_count += 1
 
-            if state.fetched_count > 0 and state.canonical_indeterminate_count / state.fetched_count > 0.5:
-                high_indeterminate_warning = (
-                    "High indeterminate rate: over 50% of candidates could not be fully evaluated because abstract or scoped fields were missing (commonly observed with Crossref); records were retained to protect recall."
-                )
-                if high_indeterminate_warning not in state.warnings:
-                    state.warnings.append(high_indeterminate_warning)
+            _reconcile_indeterminate_warning(state)
 
             next_cursor = output.next_cursor
             state.cursor = next_cursor
@@ -795,6 +820,7 @@ class FetchAllSearchService:
             job.message = "Fetch-all finished with incomplete provider coverage; see per-provider statuses."
         for state in job.providers:
             state.deduplicated_count = 0
+            _reconcile_indeterminate_warning(state)
         all_records = [(publication, state) for state in job.providers for publication in state.kept_records]
         seen_dois: set[str] = set()
         for publication, state in all_records:
