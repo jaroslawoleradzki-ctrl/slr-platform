@@ -6,7 +6,7 @@ from app.core.version import get_app_version
 
 
 def test_application_version_is_synchronized() -> None:
-    expected_version = "0.6.6"
+    expected_version = "0.6.7"
 
     assert get_app_version() == expected_version
     assert Path("VERSION").read_text(encoding="utf-8").strip() == expected_version

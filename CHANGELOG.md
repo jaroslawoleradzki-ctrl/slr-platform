@@ -1,5 +1,36 @@
 # Changelog
 
+## [0.6.7] — 2026-08-26
+
+### Added
+
+- **Search Correctness & 3-Valued Canonical Query Validation**:
+  - Implemented 3-valued canonical validation (Kleene logic: `MATCH`, `NON_MATCH`, `INDETERMINATE`) preserving recall when candidate metadata (such as abstracts or scoped fields) is missing.
+  - Multi-block candidate search planning and candidate retrieval for Crossref.
+  - Informational high-indeterminate rate warning (`> 50%` missing abstracts/fields) with dynamic reconciliation across pagination and resume.
+  - Full post-merge canonical validation ensuring merged multi-provider publications strictly adhere to canonical search constraints.
+
+- **Durable Search Resume**:
+  - Added persistent search run checkpoints stored in SQLite via `search_run_checkpoints` table (`migrations/0029_search_run_checkpoints.sql`).
+  - Checkpoint tracking records `cursor`, `fetched_count`, `canonical_accepted_count`, `canonical_rejected_count`, `canonical_indeterminate_count`, `deduplicated_count`, `plan_metadata`, and provider progress.
+  - `FetchAllSearchService.start_resume_job` allows restarting interrupted or partial searches from persisted checkpoints with validated strategy matching and snapshot loading.
+
+- **Search Run Audit & Reproducibility**:
+  - Added persistent search run audit logging via `search_run_audits` table (`migrations/0028_search_run_audits.sql`).
+  - Audits record canonical query ID, version, hash, physical provider endpoint, rendered physical query, lossless adaptation flag, translation warnings, and final candidate/accepted/rejected/indeterminate counts with timestamps.
+
+### Changed
+
+- **Search Execution & Merger Semantics**:
+  - `merged_result_count` semantics restored to represent pre-canonical-validation count.
+  - Provider renderers updated for OpenAlex, Crossref, and Semantic Scholar with strict lossy/lossless tracking and provenance preservation.
+
+### Fixed
+
+- Dynamic reconciliation of the high-indeterminate rate warning: transient warnings triggered on earlier pages are automatically removed when subsequent pages or resume sessions lower the indeterminate rate to `<= 50%`.
+- Provider pagination robustness: safe handling of cursor loops, empty page responses, and provider retrieval caps.
+- Strategy validation on resume: explicit error messages and rejection when resume is attempted with mismatched strategy parameters.
+
 ## [0.6.6] — 2026-08-26
 
 ### Changed
