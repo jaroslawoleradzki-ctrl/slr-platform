@@ -158,18 +158,27 @@ def test_crossref_uses_bounded_lossy_candidate_plan_not_flattened_query() -> Non
     rendered = CrossrefQueryRenderer().render(canonical_regression_query())
     assert rendered.is_lossless is False
     assert rendered.metadata["candidate_queries"] == [
-        '"Lean Management"',
-        '"Lean Manufacturing"',
-        '"Lean Production"',
-        '"Kaizen"',
-        '"Continuous Improvement"',
+        '"Lean Management" "Energy Efficiency" "Manufacturing"',
+        '"Lean Manufacturing" "Energy Consumption" "Production"',
+        '"Lean Production" "Energy Performance" "Industrial"',
+        '"Kaizen" "Energy Saving" "Factory"',
+        '"Continuous Improvement" "Energy Savings" "Factories"',
+        '"Lean Management" "Energy Management" "Manufacturing Industry"',
     ]
-    assert "Energy Efficiency" not in rendered.query_string
+    assert len(rendered.metadata["candidate_queries"]) == 6
+    assert all(
+        "Energy" in query
+        and any(
+            term in query
+            for term in ("Manufact", "Production", "Industrial", "Factor")
+        )
+        for query in rendered.metadata["candidate_queries"]
+    )
     assert "candidate" in " ".join(rendered.warnings).casefold()
 
 
 @pytest.mark.anyio
-async def test_crossref_provider_executes_five_query_plan_without_cartesian_product() -> None:
+async def test_crossref_provider_executes_bounded_composite_plan_without_cartesian_product() -> None:
     canonical = canonical_regression_query()
     rendered = CrossrefQueryRenderer().render(canonical)
     requested_queries: list[str] = []
@@ -205,10 +214,65 @@ async def test_crossref_provider_executes_five_query_plan_without_cartesian_prod
         )
 
     assert requested_queries == rendered.metadata["candidate_queries"]
-    assert len(requested_queries) == 5
+    assert len(requested_queries) == 6
     assert output.total_count is None
     assert output.is_lossless is False
     assert output.next_cursor is None
+
+
+@pytest.mark.anyio
+async def test_crossref_composite_retrieval_keeps_known_positive_and_excludes_medical_management_noise() -> None:
+    canonical = canonical_regression_query()
+    rendered = CrossrefQueryRenderer().render(canonical)
+    medical_titles = {
+        "Management of side effects and complications in medical abortion",
+        "Endovascular management of arterial intimal defects",
+        "Optimizing the management of blunt splenic injury",
+    }
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        physical_query = request.url.params["query"]
+        # The fixture emulates Crossref's physical matching: broad medical
+        # 'management' records never match a query retaining all AND anchors.
+        assert "Energy" in physical_query
+        assert any(
+            term in physical_query
+            for term in ("Manufact", "Production", "Industrial", "Factor")
+        )
+        items = (
+            [
+                {
+                    "DOI": "10.1000/known-positive",
+                    "title": ["Kaizen principles for improving energy efficiency in industrial plants"],
+                }
+            ]
+            if physical_query == rendered.metadata["candidate_queries"][3]
+            else []
+        )
+        return httpx.Response(
+            200,
+            json={"message": {"total-results": len(items), "next-cursor": None, "items": items}},
+            request=request,
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        provider = CrossrefProvider(
+            client=CrossrefClient(http_client=client, requests_per_second=None), paginate=True
+        )
+        output = await provider.search_with_raw(
+            search_run=SearchRun(
+                query_id=canonical.query_id,
+                query_version=canonical.version,
+                provider="crossref",
+                rendered_query=rendered.query_string,
+            ),
+            search_query=canonical,
+        )
+
+    assert [publication.title for publication in output.publications] == [
+        "Kaizen principles for improving energy efficiency in industrial plants"
+    ]
+    assert not medical_titles.intersection(publication.title for publication in output.publications)
 
 
 def test_semantic_scholar_regression_query_uses_bulk_boolean_operators() -> None:
