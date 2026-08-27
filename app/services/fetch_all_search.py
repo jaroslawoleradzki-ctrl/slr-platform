@@ -351,37 +351,55 @@ class FetchAllSearchService:
     def list_resumable_jobs(self, project_id: str) -> list[ResumableSearchJobSummaryResponse]:
         """List past fetch-all search jobs that have resumable checkpoints for the project."""
         checkpoints = self._checkpoint_repo().get_resumable_checkpoints(project_id)
-        # Deduplicate/group by job_id, keeping the latest checkpoint metadata per job
-        summaries: list[ResumableSearchJobSummaryResponse] = []
-        seen_job_ids: set[str] = set()
-
+        # Group checkpoints by job_id to build accurate multi-provider job summaries
+        jobs_map: dict[str, list[SearchRunCheckpoint]] = {}
         for cp in checkpoints:
             job_str = str(cp.job_id)
-            if job_str in seen_job_ids:
-                continue
-            seen_job_ids.add(job_str)
+            if job_str not in jobs_map:
+                jobs_map[job_str] = []
+            jobs_map[job_str].append(cp)
 
-            msg = None
-            if cp.warnings:
-                msg = cp.warnings[0]
+        summaries: list[ResumableSearchJobSummaryResponse] = []
+        for job_str, cps in jobs_map.items():
+            # Extract provider names (in alphabetical or appearance order)
+            prov_names = sorted({c.provider for c in cps})
+            primary_provider = prov_names[0] if len(prov_names) == 1 else ", ".join(prov_names)
+
+            # Combined status: if any failed -> failed, if any partial -> partial, else pending/running
+            if any(c.status == "failed" for c in cps):
+                combined_status: Literal["pending", "running", "complete", "partial", "cancelled", "failed"] = "failed"
+            elif any(c.status == "partial" for c in cps):
+                combined_status = "partial"
+            elif any(c.status == "cancelled" for c in cps):
+                combined_status = "cancelled"
+            else:
+                combined_status = cast(
+                    Literal["pending", "running", "complete", "partial", "cancelled", "failed"],
+                    cps[0].status,
+                )
+
+            # Warnings / messages
+            all_warnings: list[str] = []
+            for c in cps:
+                if c.warnings:
+                    all_warnings.extend(c.warnings)
+            msg = "; ".join(all_warnings) if all_warnings else None
 
             summaries.append(
                 ResumableSearchJobSummaryResponse(
                     job_id=job_str,
-                    project_id=cp.project_id,
-                    provider=cp.provider,
-                    status=cast(
-                        Literal["pending", "running", "complete", "partial", "cancelled", "failed"],
-                        cp.status,
-                    ),
-                    fetched_count=cp.fetched_count,
-                    canonical_accepted_count=cp.canonical_accepted_count,
-                    canonical_rejected_count=cp.canonical_rejected_count,
-                    canonical_indeterminate_count=cp.canonical_indeterminate_count,
-                    pages_fetched=cp.pages_fetched,
-                    created_at=cp.created_at,
-                    updated_at=cp.updated_at,
-                    resumable=cp.resumable,
+                    project_id=cps[0].project_id,
+                    provider=primary_provider,
+                    providers=prov_names,
+                    status=combined_status,
+                    fetched_count=sum(c.fetched_count for c in cps),
+                    canonical_accepted_count=sum(c.canonical_accepted_count for c in cps),
+                    canonical_rejected_count=sum(c.canonical_rejected_count for c in cps),
+                    canonical_indeterminate_count=sum(c.canonical_indeterminate_count for c in cps),
+                    pages_fetched=sum(c.pages_fetched for c in cps),
+                    created_at=min(c.created_at for c in cps),
+                    updated_at=max(c.updated_at for c in cps),
+                    resumable=any(c.resumable for c in cps),
                     message=msg,
                 )
             )

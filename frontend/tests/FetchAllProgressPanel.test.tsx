@@ -105,4 +105,67 @@ describe('FetchAllProgressPanel — provider status rows', () => {
     render(<FetchAllProgressPanel progress={null} starting />);
     expect(screen.getByRole('status')).toHaveTextContent('Rozpoczynanie pobierania');
   });
+
+  it('renders historical resumable jobs and triggers onResumeJob with exact job_id', () => {
+    const onResumeJob = vi.fn();
+    const job = buildJob('completed', [provider('openalex', 'complete')]);
+    const resumables = [
+      {
+        job_id: 'job-A-123',
+        project_id: 'p1',
+        provider: 'openalex',
+        providers: ['openalex'],
+        status: 'partial' as const,
+        fetched_count: 2400,
+        canonical_accepted_count: 404,
+        canonical_rejected_count: 1996,
+        canonical_indeterminate_count: 0,
+        pages_fetched: 24,
+        created_at: '2026-08-25T10:00:00Z',
+        updated_at: '2026-08-25T10:05:00Z',
+        resumable: true,
+        message: 'HTTP 429 Too Many Requests',
+      },
+      {
+        job_id: 'job-B-456',
+        project_id: 'p1',
+        provider: 'crossref',
+        providers: ['crossref', 'semantic_scholar'],
+        status: 'partial' as const,
+        fetched_count: 800,
+        canonical_accepted_count: 150,
+        canonical_rejected_count: 650,
+        canonical_indeterminate_count: 0,
+        pages_fetched: 15,
+        created_at: '2026-08-25T11:00:00Z',
+        updated_at: '2026-08-25T11:10:00Z',
+        resumable: true,
+        message: 'Connection timeout',
+      },
+    ];
+
+    render(
+      <FetchAllProgressPanel
+        progress={job}
+        starting={false}
+        resumableJobs={resumables}
+        onResumeJob={onResumeJob}
+      />
+    );
+
+    expect(screen.getByTestId('historical-resumable-jobs-section')).toBeInTheDocument();
+    expect(screen.getByTestId('resumable-job-row-job-A-123')).toHaveTextContent('OpenAlex');
+    expect(screen.getByTestId('resumable-job-row-job-A-123')).toHaveTextContent(/Pobrano:\s*2\s*400/u);
+    expect(screen.getByTestId('resumable-job-row-job-B-456')).toHaveTextContent('Crossref, Semantic Scholar');
+
+    // Click resume for Job A
+    const resumeBtnA = screen.getByTestId('resume-job-btn-job-A-123');
+    resumeBtnA.click();
+    expect(onResumeJob).toHaveBeenCalledWith('job-A-123');
+
+    // Click resume for Job B
+    const resumeBtnB = screen.getByTestId('resume-job-btn-job-B-456');
+    resumeBtnB.click();
+    expect(onResumeJob).toHaveBeenCalledWith('job-B-456');
+  });
 });

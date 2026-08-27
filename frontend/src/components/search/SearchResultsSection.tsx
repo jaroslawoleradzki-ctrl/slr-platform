@@ -36,11 +36,13 @@ interface Props {
   paginationError?: string | null;
   onLoadMore?: () => void;
   fetchAllJob?: FetchAllStatusResult | null;
+  resumableJobs?: import('../../types').ResumableSearchJobSummary[];
   fetchAllStarting?: boolean;
   fetchAllError?: string | null;
   onFetchAll?: () => void;
   onCancelFetchAll?: () => void;
   onResumeFetchAll?: () => void;
+  onResumeFetchAllJob?: (jobId: string) => void;
 }
 
 /** Collapsible query definition: canonical query stays visible in one line,
@@ -197,11 +199,13 @@ export const SearchResultsSection: React.FC<Props> = ({
   paginationError = null,
   onLoadMore,
   fetchAllJob = null,
+  resumableJobs = [],
   fetchAllStarting = false,
   fetchAllError = null,
   onFetchAll,
   onCancelFetchAll,
   onResumeFetchAll,
+  onResumeFetchAllJob,
 }) => {
 
   const [currentPage, setCurrentPage] = React.useState(1);
@@ -293,12 +297,14 @@ export const SearchResultsSection: React.FC<Props> = ({
         </div>
       )}
 
-      {(onFetchAll || fetchAllJob) && (
+      {(onFetchAll || fetchAllJob || resumableJobs.length > 0) && (
         <FetchAllProgressPanel
           progress={fetchAllJob}
           starting={fetchAllStarting}
+          resumableJobs={resumableJobs}
           onCancel={onCancelFetchAll}
           onResume={onResumeFetchAll}
+          onResumeJob={onResumeFetchAllJob}
         />
       )}
 

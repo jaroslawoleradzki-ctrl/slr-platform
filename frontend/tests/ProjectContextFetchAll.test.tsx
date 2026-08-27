@@ -385,4 +385,130 @@ describe('ProjectContext fetch-all results', () => {
     });
     expect(screen.getByTestId('final-status')).toHaveTextContent('completed');
   });
+
+  it('preserves multiple historical resumable jobs and allows selecting and resuming older job A instead of only latest B', async () => {
+    const jobA = {
+      job_id: 'job-A-openalex',
+      project_id: 'lean_energy',
+      provider: 'openalex',
+      providers: ['openalex'],
+      status: 'partial' as const,
+      fetched_count: 2400,
+      canonical_accepted_count: 404,
+      canonical_rejected_count: 1996,
+      canonical_indeterminate_count: 0,
+      pages_fetched: 24,
+      created_at: '2026-08-25T10:00:00Z',
+      updated_at: '2026-08-25T10:05:00Z',
+      resumable: true,
+      message: 'HTTP 429 Too Many Requests',
+    };
+
+    const jobB = {
+      job_id: 'job-B-crossref',
+      project_id: 'lean_energy',
+      provider: 'crossref',
+      providers: ['crossref'],
+      status: 'partial' as const,
+      fetched_count: 500,
+      canonical_accepted_count: 120,
+      canonical_rejected_count: 380,
+      canonical_indeterminate_count: 0,
+      pages_fetched: 10,
+      created_at: '2026-08-25T11:00:00Z',
+      updated_at: '2026-08-25T11:10:00Z',
+      resumable: true,
+      message: 'Connection timeout',
+    };
+
+    vi.spyOn(projectApiService, 'getResumableFetchAllSearches').mockResolvedValue([jobB, jobA]);
+
+    const resumeSpy = vi
+      .spyOn(projectApiService, 'resumeFetchAllSearch')
+      .mockResolvedValue({ job_id: 'job-resumed-A', project_id: 'lean_energy', status: 'running' });
+
+    vi.spyOn(projectApiService, 'getFetchAllSearchStatus').mockResolvedValue({
+      job_id: 'job-resumed-A',
+      project_id: 'lean_energy',
+      status: 'completed',
+      started_at: '2026-08-25T10:00:00Z',
+      finished_at: '2026-08-25T10:15:00Z',
+      providers: [
+        {
+          provider: 'openalex',
+          status: 'complete',
+          fetched_count: 2500,
+          kept_count: 500,
+          pages_fetched: 26,
+          total_reported: 27021,
+          limit_reached: false,
+          message: null,
+        },
+      ],
+      fetched_total: 2500,
+      kept_total: 500,
+      message: null,
+      result: page([record('r-A', 'W-A')], null, false),
+    });
+
+    const MultiJobHarness = () => {
+      const project = useProject();
+      return (
+        <>
+          <div data-testid="resumable-jobs-count">{project.resumableJobs.length}</div>
+          <div data-testid="active-job-id">{project.fetchAllJob?.job_id || ''}</div>
+          <button
+            type="button"
+            data-testid="select-job-A-btn"
+            onClick={() => project.selectResumableJob('job-A-openalex')}
+          >
+            select-A
+          </button>
+          <button
+            type="button"
+            data-testid="resume-job-A-btn"
+            onClick={() => void project.resumeFetchAllResults('job-A-openalex')}
+          >
+            resume-A
+          </button>
+          <button
+            type="button"
+            data-testid="resume-job-B-btn"
+            onClick={() => void project.resumeFetchAllResults('job-B-crossref')}
+          >
+            resume-B
+          </button>
+        </>
+      );
+    };
+
+    render(<ProjectProvider><MultiJobHarness /></ProjectProvider>);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(50);
+    });
+
+    // Both jobs exist in state
+    expect(screen.getByTestId('resumable-jobs-count')).toHaveTextContent('2');
+
+    // Initial default active job is latest (B)
+    expect(screen.getByTestId('active-job-id')).toHaveTextContent('job-B-crossref');
+
+    // Select job A
+    fireEvent.click(screen.getByTestId('select-job-A-btn'));
+    expect(screen.getByTestId('active-job-id')).toHaveTextContent('job-A-openalex');
+
+    // Resume job A specifically
+    fireEvent.click(screen.getByTestId('resume-job-A-btn'));
+    expect(resumeSpy).toHaveBeenCalledWith('lean_energy', 'job-A-openalex');
+
+    // Advance poll timer to complete job A
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1500);
+    });
+
+    // Resume job B specifically
+    fireEvent.click(screen.getByTestId('resume-job-B-btn'));
+    expect(resumeSpy).toHaveBeenCalledWith('lean_energy', 'job-B-crossref');
+  });
 });

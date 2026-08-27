@@ -369,6 +369,8 @@ interface ProjectContextType {
   cancelFetchAllResults: () => Promise<void>;
 
   fetchAllJob: FetchAllStatusResult | null;
+  resumableJobs: ResumableSearchJobSummary[];
+  selectResumableJob: (jobId: string) => void;
   fetchAllStarting: boolean;
   fetchAllError: string | null;
   importSelectedSearchResults: () => Promise<SearchResultsImportResponse | null>;
@@ -412,6 +414,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   // Fetch-all (v0.6.5): background job polling state.
   const [fetchAllJob, setFetchAllJob] = useState<FetchAllStatusResult | null>(null);
+  const [resumableJobs, setResumableJobs] = useState<ResumableSearchJobSummary[]>([]);
   const [fetchAllStarting, setFetchAllStarting] = useState(false);
   const [fetchAllError, setFetchAllError] = useState<string | null>(null);
   const fetchAllJobIdRef = useRef<string | null>(null);
@@ -456,19 +459,24 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
     if (activeProjectIdRef.current !== targetProjectId) return;
 
-    if (resumableSearchRes.status === 'fulfilled' && resumableSearchRes.value.length > 0) {
-      const latestResumable = resumableSearchRes.value[0];
-      if (fetchAllJobIdRef.current === null) {
+    if (resumableSearchRes.status === 'fulfilled') {
+      const resumableList = resumableSearchRes.value;
+      setResumableJobs(resumableList);
+      if (resumableList.length > 0 && fetchAllJobIdRef.current === null) {
+        const latestResumable = resumableList[0];
         setFetchAllJob((prev) => {
           if (prev && prev.status === 'running') return prev;
+          const providerList = latestResumable.providers && latestResumable.providers.length > 0
+            ? latestResumable.providers
+            : [latestResumable.provider];
           return {
             job_id: latestResumable.job_id,
             project_id: latestResumable.project_id,
             status: latestResumable.status === 'cancelled' ? 'cancelled' : (latestResumable.status === 'failed' ? 'failed' : 'completed'),
             started_at: latestResumable.created_at,
             finished_at: latestResumable.updated_at,
-            providers: [{
-              provider: latestResumable.provider,
+            providers: providerList.map((p) => ({
+              provider: p,
               status: latestResumable.status,
               fetched_count: latestResumable.fetched_count,
               kept_count: latestResumable.canonical_accepted_count,
@@ -480,7 +488,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
               limit_reached: false,
               resumable: latestResumable.resumable,
               message: latestResumable.message || null,
-            }],
+            })),
             fetched_total: latestResumable.fetched_count,
             kept_total: latestResumable.canonical_accepted_count,
             canonical_accepted_total: latestResumable.canonical_accepted_count,
@@ -492,6 +500,8 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
           };
         });
       }
+    } else {
+      setResumableJobs([]);
     }
 
     const searchStrategy = searchRes.status === 'fulfilled' ? searchRes.value : null;
@@ -998,6 +1008,41 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   };
 
+  const selectResumableJob = useCallback((jobId: string) => {
+    const found = resumableJobs.find((j) => j.job_id === jobId);
+    if (!found) return;
+    const providerList = found.providers && found.providers.length > 0 ? found.providers : [found.provider];
+    setFetchAllJob({
+      job_id: found.job_id,
+      project_id: found.project_id,
+      status: found.status === 'cancelled' ? 'cancelled' : (found.status === 'failed' ? 'failed' : 'completed'),
+      started_at: found.created_at,
+      finished_at: found.updated_at,
+      providers: providerList.map((p) => ({
+        provider: p,
+        status: found.status,
+        fetched_count: found.fetched_count,
+        kept_count: found.canonical_accepted_count,
+        canonical_accepted_count: found.canonical_accepted_count,
+        canonical_rejected_count: found.canonical_rejected_count,
+        canonical_indeterminate_count: found.canonical_indeterminate_count,
+        pages_fetched: found.pages_fetched,
+        total_reported: null,
+        limit_reached: false,
+        resumable: found.resumable,
+        message: found.message || null,
+      })),
+      fetched_total: found.fetched_count,
+      kept_total: found.canonical_accepted_count,
+      canonical_accepted_total: found.canonical_accepted_count,
+      canonical_rejected_total: found.canonical_rejected_count,
+      canonical_indeterminate_total: found.canonical_indeterminate_count,
+      resumable: found.resumable,
+      message: found.message || null,
+      result: null,
+    });
+  }, [resumableJobs]);
+
   const cancelFetchAllResults = async (): Promise<void> => {
     const targetProjectId = activeProjectIdRef.current;
     const jobId = fetchAllJobIdRef.current;
@@ -1185,7 +1230,8 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
         resumeFetchAllResults,
         cancelFetchAllResults,
         fetchAllJob,
-
+        resumableJobs,
+        selectResumableJob,
         fetchAllStarting,
         fetchAllError,
         importSelectedSearchResults,

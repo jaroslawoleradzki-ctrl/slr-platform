@@ -941,13 +941,14 @@ def test_resumable_executions_api_endpoint(tmp_path: Path) -> None:
     strategy_repository = SqliteSearchStrategyRepository(database)
     checkpoint_repository = SqliteSearchRunCheckpointRepository(database)
 
-    job_id = uuid4()
-    cp = SearchRunCheckpoint(
+    # 1. First checkpoint: Job 1 (OpenAlex)
+    job1_id = uuid4()
+    cp1 = SearchRunCheckpoint(
         search_run_id=uuid4(),
         project_id="lean_energy",
-        job_id=job_id,
+        job_id=job1_id,
         provider="openalex",
-        cursor="cursor_test",
+        cursor="cursor_test1",
         pages_fetched=1,
         fetched_count=100,
         canonical_accepted_count=20,
@@ -961,7 +962,50 @@ def test_resumable_executions_api_endpoint(tmp_path: Path) -> None:
         created_at=datetime.now(timezone.utc),
         updated_at=datetime.now(timezone.utc),
     )
-    checkpoint_repository.save_checkpoint(cp)
+    checkpoint_repository.save_checkpoint(cp1)
+
+    # 2. Second & Third checkpoints: Job 2 with MULTIPLE providers (Crossref + Semantic Scholar)
+    job2_id = uuid4()
+    cp2_cr = SearchRunCheckpoint(
+        search_run_id=uuid4(),
+        project_id="lean_energy",
+        job_id=job2_id,
+        provider="crossref",
+        cursor="cursor_cr",
+        pages_fetched=2,
+        fetched_count=200,
+        canonical_accepted_count=40,
+        canonical_rejected_count=100,
+        canonical_indeterminate_count=60,
+        deduplicated_count=0,
+        status="partial",
+        resumable=True,
+        plan_metadata={"strategy": {"publication_year_from": 2020, "providers": ["crossref", "semantic_scholar"], "concept_groups": [{"id": "g1", "name": "Lean", "terms": ["Lean"]}]}},
+        warnings=("Crossref timeout",),
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
+    )
+    cp2_ss = SearchRunCheckpoint(
+        search_run_id=uuid4(),
+        project_id="lean_energy",
+        job_id=job2_id,
+        provider="semantic_scholar",
+        cursor="cursor_ss",
+        pages_fetched=1,
+        fetched_count=50,
+        canonical_accepted_count=10,
+        canonical_rejected_count=30,
+        canonical_indeterminate_count=10,
+        deduplicated_count=0,
+        status="complete",
+        resumable=False,
+        plan_metadata={"strategy": {"publication_year_from": 2020, "providers": ["crossref", "semantic_scholar"], "concept_groups": [{"id": "g1", "name": "Lean", "terms": ["Lean"]}]}},
+        warnings=(),
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
+    )
+    checkpoint_repository.save_checkpoint(cp2_cr)
+    checkpoint_repository.save_checkpoint(cp2_ss)
 
     fetch_all_service = FetchAllSearchService(checkpoint_repository=checkpoint_repository)
 
@@ -980,10 +1024,20 @@ def test_resumable_executions_api_endpoint(tmp_path: Path) -> None:
     res = client.get("/api/v1/projects/lean_energy/search-strategy/executions/resumable")
     assert res.status_code == 200
     data = res.json()
-    assert len(data) == 1
-    assert data[0]["job_id"] == str(job_id)
-    assert data[0]["provider"] == "openalex"
-    assert data[0]["fetched_count"] == 100
-    assert data[0]["canonical_accepted_count"] == 20
-    assert data[0]["resumable"] is True
-    assert data[0]["message"] == "Rate limit reached"
+    assert len(data) == 2  # Exactly two distinct jobs
+
+    # Verify Job 2 aggregated multi-provider summary
+    j2 = next(item for item in data if item["job_id"] == str(job2_id))
+    assert set(j2["providers"]) == {"crossref", "semantic_scholar"}
+    assert j2["fetched_count"] == 250  # 200 + 50
+    assert j2["canonical_accepted_count"] == 50  # 40 + 10
+    assert j2["resumable"] is True
+    assert "Crossref timeout" in j2["message"]
+
+    # Verify Job 1 single-provider summary
+    j1 = next(item for item in data if item["job_id"] == str(job1_id))
+    assert j1["providers"] == ["openalex"]
+    assert j1["fetched_count"] == 100
+    assert j1["canonical_accepted_count"] == 20
+    assert j1["resumable"] is True
+    assert j1["message"] == "Rate limit reached"

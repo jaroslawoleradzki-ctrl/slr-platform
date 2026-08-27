@@ -221,6 +221,7 @@ export interface ResumableSearchJobSummary {
   job_id: string;
   project_id: string;
   provider: string;
+  providers?: string[];
   status: FetchAllProviderStatus;
   fetched_count: number;
   canonical_accepted_count: number;

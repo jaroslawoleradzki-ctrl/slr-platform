@@ -218,9 +218,12 @@ class SqliteSearchRunCheckpointRepository:
                       deduplicated_count, status, resumable, plan_metadata,
                       warnings, created_at, updated_at
                FROM search_run_checkpoints
-               WHERE project_id = ? AND resumable = 1 AND status IN ('pending', 'running', 'partial', 'cancelled', 'failed')
+               WHERE project_id = ? AND job_id IN (
+                   SELECT DISTINCT job_id FROM search_run_checkpoints
+                   WHERE project_id = ? AND resumable = 1 AND status IN ('pending', 'running', 'partial', 'cancelled', 'failed')
+               )
                ORDER BY updated_at DESC, provider ASC""",
-            (project_id,),
+            (project_id, project_id),
         )
         return [self._map_row(row) for row in cursor.fetchall()]
 
