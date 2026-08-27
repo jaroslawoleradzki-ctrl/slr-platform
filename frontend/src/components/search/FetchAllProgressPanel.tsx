@@ -147,31 +147,33 @@ export const FetchAllProgressPanel: React.FC<Props> = ({
         </div>
       </div>
 
-      <div style={{ marginTop: 10, overflowX: 'auto' }}>
-        <div style={{ minWidth: 520 }}>
-          {/* Header row */}
-          <div
-            style={{
-              ...gridStyle,
-              padding: '4px 10px',
-              fontSize: '0.68rem',
-              textTransform: 'uppercase',
-              letterSpacing: '0.05em',
-              fontWeight: 700,
-              color: 'var(--text-muted)',
-            }}
-          >
-            <span>Provider</span>
-            <span>Status</span>
-            <span style={{ textAlign: 'right' }}>Pobrano</span>
-            <span style={{ textAlign: 'right' }}>Zgłoszono</span>
-          </div>
+      {progress.providers.length > 0 && (
+        <div style={{ marginTop: 10, overflowX: 'auto' }}>
+          <div style={{ minWidth: 520 }}>
+            {/* Header row */}
+            <div
+              style={{
+                ...gridStyle,
+                padding: '4px 10px',
+                fontSize: '0.68rem',
+                textTransform: 'uppercase',
+                letterSpacing: '0.05em',
+                fontWeight: 700,
+                color: 'var(--text-muted)',
+              }}
+            >
+              <span>Provider</span>
+              <span>Status</span>
+              <span style={{ textAlign: 'right' }}>Pobrano</span>
+              <span style={{ textAlign: 'right' }}>Zgłoszono</span>
+            </div>
 
-          {progress.providers.map((provider) => (
-            <ProviderRow key={provider.provider} provider={provider} running={running} />
-          ))}
+            {progress.providers.map((provider) => (
+              <ProviderRow key={provider.provider} provider={provider} running={running} />
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
       <div style={{ marginTop: 8, fontSize: '0.85rem', fontWeight: 600 }}>
         Łącznie pobrano: {formatNumber(progress.fetched_total)} · Po lokalnych

@@ -469,26 +469,29 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
           const providerList = latestResumable.providers && latestResumable.providers.length > 0
             ? latestResumable.providers
             : [latestResumable.provider];
+          // For single-provider jobs, counters map 1:1 to that provider.
+          // For multi-provider jobs, avoid fabricating duplicate aggregate counters in each provider row.
+          const providerRows: FetchAllProviderProgress[] = providerList.length === 1 ? [{
+            provider: providerList[0],
+            status: latestResumable.status,
+            fetched_count: latestResumable.fetched_count,
+            kept_count: latestResumable.canonical_accepted_count,
+            canonical_accepted_count: latestResumable.canonical_accepted_count,
+            canonical_rejected_count: latestResumable.canonical_rejected_count,
+            canonical_indeterminate_count: latestResumable.canonical_indeterminate_count,
+            pages_fetched: latestResumable.pages_fetched,
+            total_reported: null,
+            limit_reached: false,
+            resumable: latestResumable.resumable,
+            message: latestResumable.message || null,
+          }] : [];
           return {
             job_id: latestResumable.job_id,
             project_id: latestResumable.project_id,
             status: latestResumable.status === 'cancelled' ? 'cancelled' : (latestResumable.status === 'failed' ? 'failed' : 'completed'),
             started_at: latestResumable.created_at,
             finished_at: latestResumable.updated_at,
-            providers: providerList.map((p) => ({
-              provider: p,
-              status: latestResumable.status,
-              fetched_count: latestResumable.fetched_count,
-              kept_count: latestResumable.canonical_accepted_count,
-              canonical_accepted_count: latestResumable.canonical_accepted_count,
-              canonical_rejected_count: latestResumable.canonical_rejected_count,
-              canonical_indeterminate_count: latestResumable.canonical_indeterminate_count,
-              pages_fetched: latestResumable.pages_fetched,
-              total_reported: null,
-              limit_reached: false,
-              resumable: latestResumable.resumable,
-              message: latestResumable.message || null,
-            })),
+            providers: providerRows,
             fetched_total: latestResumable.fetched_count,
             kept_total: latestResumable.canonical_accepted_count,
             canonical_accepted_total: latestResumable.canonical_accepted_count,
@@ -1012,26 +1015,27 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const found = resumableJobs.find((j) => j.job_id === jobId);
     if (!found) return;
     const providerList = found.providers && found.providers.length > 0 ? found.providers : [found.provider];
+    const providerRows: FetchAllProviderProgress[] = providerList.length === 1 ? [{
+      provider: providerList[0],
+      status: found.status,
+      fetched_count: found.fetched_count,
+      kept_count: found.canonical_accepted_count,
+      canonical_accepted_count: found.canonical_accepted_count,
+      canonical_rejected_count: found.canonical_rejected_count,
+      canonical_indeterminate_count: found.canonical_indeterminate_count,
+      pages_fetched: found.pages_fetched,
+      total_reported: null,
+      limit_reached: false,
+      resumable: found.resumable,
+      message: found.message || null,
+    }] : [];
     setFetchAllJob({
       job_id: found.job_id,
       project_id: found.project_id,
       status: found.status === 'cancelled' ? 'cancelled' : (found.status === 'failed' ? 'failed' : 'completed'),
       started_at: found.created_at,
       finished_at: found.updated_at,
-      providers: providerList.map((p) => ({
-        provider: p,
-        status: found.status,
-        fetched_count: found.fetched_count,
-        kept_count: found.canonical_accepted_count,
-        canonical_accepted_count: found.canonical_accepted_count,
-        canonical_rejected_count: found.canonical_rejected_count,
-        canonical_indeterminate_count: found.canonical_indeterminate_count,
-        pages_fetched: found.pages_fetched,
-        total_reported: null,
-        limit_reached: false,
-        resumable: found.resumable,
-        message: found.message || null,
-      })),
+      providers: providerRows,
       fetched_total: found.fetched_count,
       kept_total: found.canonical_accepted_count,
       canonical_accepted_total: found.canonical_accepted_count,

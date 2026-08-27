@@ -511,4 +511,55 @@ describe('ProjectContext fetch-all results', () => {
     fireEvent.click(screen.getByTestId('resume-job-B-btn'));
     expect(resumeSpy).toHaveBeenCalledWith('lean_energy', 'job-B-crossref');
   });
+
+  it('does NOT fabricate duplicated aggregate counters across provider rows for a multi-provider historical job', async () => {
+    // OpenAlex actual fetched: 2400, Crossref actual fetched: 500 -> aggregate: 2900
+    const multiProviderJob = {
+      job_id: 'job-multi-123',
+      project_id: 'lean_energy',
+      provider: 'crossref, openalex',
+      providers: ['crossref', 'openalex'],
+      status: 'partial' as const,
+      fetched_count: 2900,
+      canonical_accepted_count: 524,
+      canonical_rejected_count: 2376,
+      canonical_indeterminate_count: 0,
+      pages_fetched: 34,
+      created_at: '2026-08-25T10:00:00Z',
+      updated_at: '2026-08-25T10:15:00Z',
+      resumable: true,
+      message: 'Rate limit on OpenAlex',
+    };
+
+    vi.spyOn(projectApiService, 'getResumableFetchAllSearches').mockResolvedValue([multiProviderJob]);
+
+    const MultiProviderCheckHarness = () => {
+      const project = useProject();
+      return (
+        <>
+          <div data-testid="job-fetched-total">{project.fetchAllJob?.fetched_total ?? -1}</div>
+          <div data-testid="provider-rows-count">{project.fetchAllJob?.providers.length ?? -1}</div>
+          {project.fetchAllJob?.providers.map((p) => (
+            <div key={p.provider} data-testid={`provider-fetched-${p.provider}`}>
+              {p.fetched_count}
+            </div>
+          ))}
+        </>
+      );
+    };
+
+    render(<ProjectProvider><MultiProviderCheckHarness /></ProjectProvider>);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(50);
+    });
+
+    // Total aggregate count is preserved accurately
+    expect(screen.getByTestId('job-fetched-total')).toHaveTextContent('2900');
+
+    // UI does NOT fabricate duplicate 2900 provider rows
+    expect(screen.getByTestId('provider-rows-count')).toHaveTextContent('0');
+    expect(screen.queryByTestId('provider-fetched-openalex')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('provider-fetched-crossref')).not.toBeInTheDocument();
+  });
 });
