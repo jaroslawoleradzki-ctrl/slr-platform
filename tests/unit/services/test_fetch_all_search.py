@@ -191,6 +191,8 @@ def test_openalex_multi_page_fetch_all_retrieves_every_available_page() -> None:
     state = status_response.providers[0]
     assert state.status == "complete"
     assert state.fetched_count == 3
+    assert state.raw_count == 3
+    assert state.mapped_count == 3
     assert state.kept_count == 3
     assert status_response.fetched_total == 3
     result = status_response.result

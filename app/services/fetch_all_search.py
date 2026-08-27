@@ -818,8 +818,14 @@ class FetchAllSearchService:
             if warning not in state.warnings:
                 state.warnings.append(warning)
         state.skipped_malformed_count += output.skipped_malformed_count
-        state.raw_count += output.raw_count
-        state.mapped_count += output.mapped_count
+        has_explicit_mapping_counts = any(
+            (output.raw_count, output.mapped_count, output.skipped_malformed_count)
+        )
+        # Older/non-Crossref providers do not yet expose record mapping
+        # counters.  Their returned publications are necessarily mapped, so
+        # retain meaningful progress counters without changing their contract.
+        state.raw_count += output.raw_count if has_explicit_mapping_counts else len(output.publications)
+        state.mapped_count += output.mapped_count if has_explicit_mapping_counts else len(output.publications)
         if output.is_lossless is False:
             state.lossless = False
         if output.total_count is not None:
