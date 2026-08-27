@@ -6,12 +6,14 @@ import {
   CircleDashed,
   Loader2,
   OctagonX,
+  RotateCw,
 } from 'lucide-react';
 import {
   FetchAllProviderProgress,
   FetchAllProviderStatus,
   FetchAllStatusResult,
 } from '../../types';
+import { Button } from '../common/Button';
 
 const PROVIDER_LABELS: Record<string, string> = {
   openalex: 'OpenAlex',
@@ -97,7 +99,8 @@ export const FetchAllProgressPanel: React.FC<Props> = ({
   const incompleteProviders = progress.providers.filter(
     (p) => p.status === 'partial' || p.status === 'failed'
   );
-  const canResume = !running && Boolean(progress.resumable || incompleteProviders.some(p => p.resumable));
+  const isJobFullyComplete = progress.status === 'completed' && incompleteProviders.length === 0;
+  const canResume = !running && !isJobFullyComplete && Boolean(progress.resumable || incompleteProviders.some(p => p.resumable));
 
   return (
     <div
@@ -130,14 +133,29 @@ export const FetchAllProgressPanel: React.FC<Props> = ({
         </strong>
         <div style={{ display: 'flex', gap: 8 }}>
           {onCancel && running && (
-            <button type="button" onClick={onCancel} style={{ ...ghostButtonStyle }}>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              icon={<Ban size={13} />}
+              onClick={onCancel}
+              data-testid="cancel-fetch-all-btn"
+            >
               Anuluj pobieranie
-            </button>
+            </Button>
           )}
           {onResume && canResume && (
-            <button type="button" onClick={onResume} className="btn-primary" data-testid="resume-fetch-all-btn">
-              Wznów pobieranie (Resume)
-            </button>
+            <Button
+              type="button"
+              variant="primary"
+              size="sm"
+              icon={<RotateCw size={13} />}
+              onClick={onResume}
+              data-testid="resume-fetch-all-btn"
+              aria-label="Wznów pobieranie"
+            >
+              Wznów pobieranie
+            </Button>
           )}
         </div>
       </div>
