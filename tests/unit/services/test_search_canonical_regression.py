@@ -157,15 +157,9 @@ async def test_openalex_request_contains_full_canonical_boolean_in_search() -> N
 def test_crossref_uses_bounded_lossy_candidate_plan_not_flattened_query() -> None:
     rendered = CrossrefQueryRenderer().render(canonical_regression_query())
     assert rendered.is_lossless is False
-    assert rendered.metadata["candidate_queries"] == [
-        '"Lean Management" "Energy Efficiency" "Manufacturing"',
-        '"Lean Manufacturing" "Energy Consumption" "Production"',
-        '"Lean Production" "Energy Performance" "Industrial"',
-        '"Kaizen" "Energy Saving" "Factory"',
-        '"Continuous Improvement" "Energy Savings" "Factories"',
-        '"Lean Management" "Energy Management" "Manufacturing Industry"',
-    ]
     assert len(rendered.metadata["candidate_queries"]) == 6
+    assert rendered.metadata["possible_candidate_combinations"] == 245
+    assert rendered.metadata["planned_candidate_combinations"] == 6
     assert all(
         "Energy" in query
         and any(
@@ -175,6 +169,25 @@ def test_crossref_uses_bounded_lossy_candidate_plan_not_flattened_query() -> Non
         for query in rendered.metadata["candidate_queries"]
     )
     assert "candidate" in " ".join(rendered.warnings).casefold()
+
+
+def test_crossref_bounded_plan_has_fixed_cross_index_positive_paths() -> None:
+    expression = SearchGroup(
+        operator=BooleanOperator.AND,
+        children=[
+            SearchGroup(operator=BooleanOperator.OR, children=[SearchTerm(value="A1"), SearchTerm(value="A2")]),
+            SearchGroup(operator=BooleanOperator.OR, children=[SearchTerm(value="B1"), SearchTerm(value="B2")]),
+            SearchGroup(operator=BooleanOperator.OR, children=[SearchTerm(value="C1"), SearchTerm(value="C2")]),
+        ],
+    )
+    query = SearchQuery(name="Cross-index coverage", expression=expression)
+    rendered = CrossrefQueryRenderer().render(query)
+    known_cross_index_positives = {"A1 B1 C2", "A1 B2 C1", "A2 B1 C1", "A2 B1 C2", "A2 B2 C1"}
+
+    assert known_cross_index_positives.issubset(set(rendered.metadata["candidate_queries"]))
+    assert rendered.metadata["possible_candidate_combinations"] == 8
+    assert rendered.metadata["planned_candidate_combinations"] == 6
+    assert validate_canonical_query(query, Publication(title="A1 B2 C1")).status is CanonicalMatchStatus.MATCH
 
 
 @pytest.mark.anyio
@@ -246,7 +259,7 @@ async def test_crossref_composite_retrieval_keeps_known_positive_and_excludes_me
                     "title": ["Kaizen principles for improving energy efficiency in industrial plants"],
                 }
             ]
-            if physical_query == rendered.metadata["candidate_queries"][3]
+            if physical_query == '"Lean Management" "Energy Management" "Manufacturing Industry"'
             else []
         )
         return httpx.Response(

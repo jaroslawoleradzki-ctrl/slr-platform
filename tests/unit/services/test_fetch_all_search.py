@@ -118,6 +118,7 @@ def _out(
     warnings: tuple[str, ...] = (),
     is_lossless: bool | None = None,
     raw_count: int = 0,
+    mapped_count: int = 0,
     skipped_malformed_count: int = 0,
 ) -> ProviderSearchOutput:
     return ProviderSearchOutput(
@@ -129,6 +130,7 @@ def _out(
         warnings=warnings,
         is_lossless=is_lossless,
         raw_count=raw_count,
+        mapped_count=mapped_count,
         skipped_malformed_count=skipped_malformed_count,
     )
 
@@ -222,7 +224,7 @@ def test_fetch_all_continues_after_a_page_containing_only_malformed_crossref_rec
         "crossref",
         [
             _out([], "cx-1", raw_count=1, skipped_malformed_count=1, warnings=(warning,)),
-            _out([_publication("C1", provider="crossref", source_id="10.1/a")]),
+            _out([_publication("C1", provider="crossref", source_id="10.1/a")], raw_count=1, mapped_count=1),
         ],
     )
 
@@ -232,6 +234,8 @@ def test_fetch_all_continues_after_a_page_containing_only_malformed_crossref_rec
     state = status_response.providers[0]
     assert state.status == "complete"
     assert state.fetched_count == 1
+    assert state.raw_count == 2
+    assert state.mapped_count == 1
     assert state.skipped_malformed_count == 1
 
 

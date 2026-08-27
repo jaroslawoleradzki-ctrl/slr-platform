@@ -165,7 +165,12 @@ class FetchAllProviderState:
 
     name: str
     status: str = "pending"
+    # ``fetched_count`` remains the backwards-compatible number of unique,
+    # successfully mapped records admitted to canonical validation.  Raw and
+    # mapped counters expose all provider records independently.
     fetched_count: int = 0
+    raw_count: int = 0
+    mapped_count: int = 0
     kept_count: int = 0
     canonical_accepted_count: int = 0
     canonical_rejected_count: int = 0
@@ -193,6 +198,8 @@ class FetchAllProviderState:
                 self.status,
             ),
             fetched_count=self.fetched_count,
+            raw_count=self.raw_count,
+            mapped_count=self.mapped_count,
             kept_count=self.kept_count,
             canonical_accepted_count=self.canonical_accepted_count,
             canonical_rejected_count=self.canonical_rejected_count,
@@ -368,6 +375,8 @@ class FetchAllSearchService:
                         cp.status,
                     ),
                     fetched_count=cp.fetched_count,
+                    raw_count=int((cp.plan_metadata or {}).get("raw_count", cp.fetched_count)),
+                    mapped_count=int((cp.plan_metadata or {}).get("mapped_count", cp.fetched_count)),
                     kept_count=cp.canonical_accepted_count,
                     canonical_accepted_count=cp.canonical_accepted_count,
                     canonical_rejected_count=cp.canonical_rejected_count,
@@ -511,6 +520,8 @@ class FetchAllSearchService:
         if state.plan_metadata:
             plan_meta.update(state.plan_metadata)
         plan_meta["skipped_malformed_count"] = state.skipped_malformed_count
+        plan_meta["raw_count"] = state.raw_count
+        plan_meta["mapped_count"] = state.mapped_count
         if cursor and cursor.startswith("crossref-plan:"):
             from app.providers.search.crossref import CrossrefProvider
             try:
@@ -571,6 +582,8 @@ class FetchAllSearchService:
                             name=p.name,
                             status="complete",
                             fetched_count=cp.fetched_count,
+                            raw_count=int((cp.plan_metadata or {}).get("raw_count", cp.fetched_count)),
+                            mapped_count=int((cp.plan_metadata or {}).get("mapped_count", cp.fetched_count)),
                             kept_count=cp.canonical_accepted_count,
                             canonical_accepted_count=cp.canonical_accepted_count,
                             canonical_rejected_count=cp.canonical_rejected_count,
@@ -597,6 +610,8 @@ class FetchAllSearchService:
                             name=p.name,
                             status="pending",
                             fetched_count=cp.fetched_count,
+                            raw_count=int((cp.plan_metadata or {}).get("raw_count", cp.fetched_count)),
+                            mapped_count=int((cp.plan_metadata or {}).get("mapped_count", cp.fetched_count)),
                             kept_count=cp.canonical_accepted_count,
                             canonical_accepted_count=cp.canonical_accepted_count,
                             canonical_rejected_count=cp.canonical_rejected_count,
@@ -803,6 +818,8 @@ class FetchAllSearchService:
             if warning not in state.warnings:
                 state.warnings.append(warning)
         state.skipped_malformed_count += output.skipped_malformed_count
+        state.raw_count += output.raw_count
+        state.mapped_count += output.mapped_count
         if output.is_lossless is False:
             state.lossless = False
         if output.total_count is not None:
