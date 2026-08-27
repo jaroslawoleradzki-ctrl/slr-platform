@@ -5,6 +5,8 @@ import {
   SearchExecutionResult,
   SearchResultsImportResponse,
   FetchAllStatusResult,
+  FetchAllProviderProgress,
+  ResumableSearchJobSummary,
   SLRProject,
   NormalizationResponse,
   WorkflowNavigationStatus,
