@@ -166,12 +166,18 @@ class FetchAllProviderState:
 
     name: str
     status: str = "pending"
+    # ``fetched_count`` remains the backwards-compatible number of unique,
+    # successfully mapped records admitted to canonical validation.  Raw and
+    # mapped counters expose all provider records independently.
     fetched_count: int = 0
+    raw_count: int = 0
+    mapped_count: int = 0
     kept_count: int = 0
     canonical_accepted_count: int = 0
     canonical_rejected_count: int = 0
     canonical_indeterminate_count: int = 0
     deduplicated_count: int = 0
+    skipped_malformed_count: int = 0
     pages_fetched: int = 0
     total_reported: int | None = None
     limit_reached: bool = False
@@ -193,11 +199,14 @@ class FetchAllProviderState:
                 self.status,
             ),
             fetched_count=self.fetched_count,
+            raw_count=self.raw_count,
+            mapped_count=self.mapped_count,
             kept_count=self.kept_count,
             canonical_accepted_count=self.canonical_accepted_count,
             canonical_rejected_count=self.canonical_rejected_count,
             canonical_indeterminate_count=self.canonical_indeterminate_count,
             deduplicated_count=self.deduplicated_count,
+            skipped_malformed_count=self.skipped_malformed_count,
             pages_fetched=self.pages_fetched,
             total_reported=self.total_reported,
             limit_reached=self.limit_reached,
@@ -424,11 +433,14 @@ class FetchAllSearchService:
                         cp.status,
                     ),
                     fetched_count=cp.fetched_count,
+                    raw_count=int((cp.plan_metadata or {}).get("raw_count", cp.fetched_count)),
+                    mapped_count=int((cp.plan_metadata or {}).get("mapped_count", cp.fetched_count)),
                     kept_count=cp.canonical_accepted_count,
                     canonical_accepted_count=cp.canonical_accepted_count,
                     canonical_rejected_count=cp.canonical_rejected_count,
                     canonical_indeterminate_count=cp.canonical_indeterminate_count,
-                    deduplicated_count=cp.deduplicated_count,
+                            deduplicated_count=cp.deduplicated_count,
+                            skipped_malformed_count=int((cp.plan_metadata or {}).get("skipped_malformed_count", 0)),
                     pages_fetched=cp.pages_fetched,
                     total_reported=None,
                     limit_reached=False,
@@ -565,6 +577,9 @@ class FetchAllSearchService:
             plan_meta["resumed_from_job_id"] = job.resumed_from_job_id
         if state.plan_metadata:
             plan_meta.update(state.plan_metadata)
+        plan_meta["skipped_malformed_count"] = state.skipped_malformed_count
+        plan_meta["raw_count"] = state.raw_count
+        plan_meta["mapped_count"] = state.mapped_count
         if cursor and cursor.startswith("crossref-plan:"):
             from app.providers.search.crossref import CrossrefProvider
             try:
@@ -625,11 +640,14 @@ class FetchAllSearchService:
                             name=p.name,
                             status="complete",
                             fetched_count=cp.fetched_count,
+                            raw_count=int((cp.plan_metadata or {}).get("raw_count", cp.fetched_count)),
+                            mapped_count=int((cp.plan_metadata or {}).get("mapped_count", cp.fetched_count)),
                             kept_count=cp.canonical_accepted_count,
                             canonical_accepted_count=cp.canonical_accepted_count,
                             canonical_rejected_count=cp.canonical_rejected_count,
                             canonical_indeterminate_count=cp.canonical_indeterminate_count,
-                            deduplicated_count=cp.deduplicated_count,
+                    deduplicated_count=cp.deduplicated_count,
+                    skipped_malformed_count=int((cp.plan_metadata or {}).get("skipped_malformed_count", 0)),
                             pages_fetched=cp.pages_fetched,
                             resumable=False,
                             warnings=list(cp.warnings),
@@ -650,11 +668,14 @@ class FetchAllSearchService:
                             name=p.name,
                             status="pending",
                             fetched_count=cp.fetched_count,
+                            raw_count=int((cp.plan_metadata or {}).get("raw_count", cp.fetched_count)),
+                            mapped_count=int((cp.plan_metadata or {}).get("mapped_count", cp.fetched_count)),
                             kept_count=cp.canonical_accepted_count,
                             canonical_accepted_count=cp.canonical_accepted_count,
                             canonical_rejected_count=cp.canonical_rejected_count,
                             canonical_indeterminate_count=cp.canonical_indeterminate_count,
                             deduplicated_count=cp.deduplicated_count,
+                            skipped_malformed_count=int((cp.plan_metadata or {}).get("skipped_malformed_count", 0)),
                             pages_fetched=cp.pages_fetched,
                             resumable=cp.resumable,
                             warnings=list(cp.warnings),
@@ -823,7 +844,7 @@ class FetchAllSearchService:
                     )
                 self._save_checkpoint(job, state, None, resumable=False)
                 break
-            if not output.publications:
+            if not output.publications and output.raw_count == 0:
                 state.status = "partial"
                 state.limit_reached = True
                 state.resumable = True
@@ -854,6 +875,15 @@ class FetchAllSearchService:
         for warning in output.warnings:
             if warning not in state.warnings:
                 state.warnings.append(warning)
+        state.skipped_malformed_count += output.skipped_malformed_count
+        has_explicit_mapping_counts = any(
+            (output.raw_count, output.mapped_count, output.skipped_malformed_count)
+        )
+        # Older/non-Crossref providers do not yet expose record mapping
+        # counters.  Their returned publications are necessarily mapped, so
+        # retain meaningful progress counters without changing their contract.
+        state.raw_count += output.raw_count if has_explicit_mapping_counts else len(output.publications)
+        state.mapped_count += output.mapped_count if has_explicit_mapping_counts else len(output.publications)
         if output.is_lossless is False:
             state.lossless = False
         if output.total_count is not None:

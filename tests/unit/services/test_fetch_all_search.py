@@ -117,6 +117,9 @@ def _out(
     total_count: int | None = None,
     warnings: tuple[str, ...] = (),
     is_lossless: bool | None = None,
+    raw_count: int = 0,
+    mapped_count: int = 0,
+    skipped_malformed_count: int = 0,
 ) -> ProviderSearchOutput:
     return ProviderSearchOutput(
         publications=list(publications),
@@ -126,6 +129,9 @@ def _out(
         has_more=next_cursor is not None,
         warnings=warnings,
         is_lossless=is_lossless,
+        raw_count=raw_count,
+        mapped_count=mapped_count,
+        skipped_malformed_count=skipped_malformed_count,
     )
 
 
@@ -185,6 +191,8 @@ def test_openalex_multi_page_fetch_all_retrieves_every_available_page() -> None:
     state = status_response.providers[0]
     assert state.status == "complete"
     assert state.fetched_count == 3
+    assert state.raw_count == 3
+    assert state.mapped_count == 3
     assert state.kept_count == 3
     assert status_response.fetched_total == 3
     result = status_response.result
@@ -210,6 +218,27 @@ def test_crossref_multi_page_fetch_all_retrieves_every_available_page() -> None:
     assert state.status == "complete"
     assert state.fetched_count == 2
     assert state.kept_count == 2
+
+
+def test_fetch_all_continues_after_a_page_containing_only_malformed_crossref_records() -> None:
+    warning = "1 Crossref record(s) skipped due to missing/malformed title or metadata validation."
+    provider = FakeProvider(
+        "crossref",
+        [
+            _out([], "cx-1", raw_count=1, skipped_malformed_count=1, warnings=(warning,)),
+            _out([_publication("C1", provider="crossref", source_id="10.1/a")], raw_count=1, mapped_count=1),
+        ],
+    )
+
+    _, _, status_response = run_fetch_all([provider], _strategy(providers=["crossref"]))
+
+    assert provider.cursors == ["*", "cx-1"]
+    state = status_response.providers[0]
+    assert state.status == "complete"
+    assert state.fetched_count == 1
+    assert state.raw_count == 2
+    assert state.mapped_count == 1
+    assert state.skipped_malformed_count == 1
 
 
 def test_semantic_scholar_offset_cursor_pagination_is_followed() -> None:

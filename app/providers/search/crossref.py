@@ -41,6 +41,10 @@ _TYPE_MAP = {
 }
 
 
+class MalformedCrossrefRecordError(ValueError):
+    """A record-local Crossref metadata error that can safely be skipped."""
+
+
 def _utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -178,6 +182,9 @@ class CrossrefProvider:
         next_cursor: str | None = None
         candidate_total = 0
         has_candidate_total = False
+        raw_count = 0
+        mapped_count = 0
+        skipped_malformed_count = 0
 
         while (
             query_index < len(candidate_queries)
@@ -204,14 +211,20 @@ class CrossrefProvider:
                 has_candidate_total = True
             message = payload["message"]
             items = message["items"]
+            raw_count += len(items)
             retrieved_at = self._retrieval_clock()
             for work in items:
-                publication = self._map_work_with_provenance(
-                    work,
-                    search_run=search_run,
-                    search_query=search_query,
-                    retrieved_at=retrieved_at,
-                )
+                try:
+                    publication = self._map_record_or_raise_malformed(
+                        work,
+                        search_run=search_run,
+                        search_query=search_query,
+                        retrieved_at=retrieved_at,
+                    )
+                except MalformedCrossrefRecordError:
+                    skipped_malformed_count += 1
+                    continue
+                mapped_count += 1
                 source_id = publication.provenance[0].source_record_id
                 if source_id not in seen_source_ids:
                     seen_source_ids.add(source_id)
@@ -243,6 +256,10 @@ class CrossrefProvider:
             plan_warnings.append(
                 "Crossref candidate-plan request bound was reached; continue with the returned opaque cursor."
             )
+        if skipped_malformed_count:
+            plan_warnings.append(
+                f"{skipped_malformed_count} Crossref record(s) skipped due to missing/malformed title or metadata validation."
+            )
         return ProviderSearchOutput(
             publications=publications,
             raw_responses=raw_responses,
@@ -257,6 +274,9 @@ class CrossrefProvider:
             has_more=next_cursor is not None,
             warnings=tuple([*filter_warnings, *plan_warnings]),
             is_lossless=False,
+            raw_count=raw_count,
+            mapped_count=mapped_count,
+            skipped_malformed_count=skipped_malformed_count,
         )
 
     @staticmethod
@@ -377,7 +397,7 @@ class CrossrefProvider:
 
         title_list = work.get("title")
         if not isinstance(title_list, list):
-            raise ValueError("Crossref work title is missing or not a list")
+            raise MalformedCrossrefRecordError("Crossref work title is missing or not a list")
         title = None
         for t in title_list:
             if isinstance(t, str):
@@ -386,7 +406,7 @@ class CrossrefProvider:
                     title = s_title
                     break
         if title is None:
-            raise ValueError("Crossref work must have a non-blank title")
+            raise MalformedCrossrefRecordError("Crossref work must have a non-blank title")
 
         identifiers = []
         doi = normalize_doi(work.get("DOI"))
@@ -544,6 +564,23 @@ class CrossrefProvider:
                 ),
                 "provenance": [provenance],
             }
+        )
+
+    def _map_record_or_raise_malformed(
+        self,
+        work: Any,
+        *,
+        search_run: SearchRun,
+        search_query: SearchQuery,
+        retrieved_at: datetime,
+    ) -> Publication:
+        if not isinstance(work, dict):
+            raise MalformedCrossrefRecordError("Crossref work must be a JSON object")
+        return self._map_work_with_provenance(
+            work,
+            search_run=search_run,
+            search_query=search_query,
+            retrieved_at=retrieved_at,
         )
 
     def _require_client(self) -> CrossrefClient:
