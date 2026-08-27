@@ -247,6 +247,27 @@ class FetchAllStatusResponse(BaseModel):
     result: SearchStrategyExecutionResponse | None = None
 
 
+class ResumableSearchJobSummaryResponse(BaseModel):
+    """Summary of a past fetch-all search job that can be resumed."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    job_id: str
+    project_id: str
+    provider: str
+    providers: list[str] = Field(default_factory=list)
+    status: Literal["pending", "running", "complete", "partial", "cancelled", "failed"]
+    fetched_count: int = Field(default=0, ge=0)
+    canonical_accepted_count: int = Field(default=0, ge=0)
+    canonical_rejected_count: int = Field(default=0, ge=0)
+    canonical_indeterminate_count: int = Field(default=0, ge=0)
+    pages_fetched: int = Field(default=0, ge=0)
+    created_at: datetime
+    updated_at: datetime
+    resumable: bool = True
+    message: str | None = None
+
+
 
 class SearchResultsImportRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)

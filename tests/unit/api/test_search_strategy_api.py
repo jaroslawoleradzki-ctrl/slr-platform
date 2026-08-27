@@ -922,3 +922,122 @@ def test_real_browser_flow_lean_energy_strategy_execution_and_import(tmp_path: P
     assert imported_pub.abstract == "This paper presents a comprehensive study on lean energy optimization."
     assert imported_pub.abstract is not None
     assert len(imported_pub.abstract) > 0
+
+
+def test_resumable_executions_api_endpoint(tmp_path: Path) -> None:
+    """Verify GET /api/v1/projects/{project_id}/search-strategy/executions/resumable endpoint."""
+    from uuid import uuid4
+
+    from app.api.routers.search_strategy import get_fetch_all_search_service
+    from app.repositories.search_run_checkpoint_repository import (
+        SearchRunCheckpoint,
+        SqliteSearchRunCheckpointRepository,
+    )
+    from app.services.fetch_all_search import FetchAllSearchService
+
+    database = tmp_path / "resumable_api.db"
+    project_repository = SqliteProjectRepository(database)
+    publication_repository = SqliteProjectPublicationRepository(database)
+    strategy_repository = SqliteSearchStrategyRepository(database)
+    checkpoint_repository = SqliteSearchRunCheckpointRepository(database)
+
+    # 1. First checkpoint: Job 1 (OpenAlex)
+    job1_id = uuid4()
+    cp1 = SearchRunCheckpoint(
+        search_run_id=uuid4(),
+        project_id="lean_energy",
+        job_id=job1_id,
+        provider="openalex",
+        cursor="cursor_test1",
+        pages_fetched=1,
+        fetched_count=100,
+        canonical_accepted_count=20,
+        canonical_rejected_count=50,
+        canonical_indeterminate_count=30,
+        deduplicated_count=0,
+        status="partial",
+        resumable=True,
+        plan_metadata={"strategy": {"publication_year_from": 2020, "providers": ["openalex"], "concept_groups": [{"id": "g1", "name": "Lean", "terms": ["Lean"]}]}},
+        warnings=("Rate limit reached",),
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
+    )
+    checkpoint_repository.save_checkpoint(cp1)
+
+    # 2. Second & Third checkpoints: Job 2 with MULTIPLE providers (Crossref + Semantic Scholar)
+    job2_id = uuid4()
+    cp2_cr = SearchRunCheckpoint(
+        search_run_id=uuid4(),
+        project_id="lean_energy",
+        job_id=job2_id,
+        provider="crossref",
+        cursor="cursor_cr",
+        pages_fetched=2,
+        fetched_count=200,
+        canonical_accepted_count=40,
+        canonical_rejected_count=100,
+        canonical_indeterminate_count=60,
+        deduplicated_count=0,
+        status="partial",
+        resumable=True,
+        plan_metadata={"strategy": {"publication_year_from": 2020, "providers": ["crossref", "semantic_scholar"], "concept_groups": [{"id": "g1", "name": "Lean", "terms": ["Lean"]}]}},
+        warnings=("Crossref timeout",),
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
+    )
+    cp2_ss = SearchRunCheckpoint(
+        search_run_id=uuid4(),
+        project_id="lean_energy",
+        job_id=job2_id,
+        provider="semantic_scholar",
+        cursor="cursor_ss",
+        pages_fetched=1,
+        fetched_count=50,
+        canonical_accepted_count=10,
+        canonical_rejected_count=30,
+        canonical_indeterminate_count=10,
+        deduplicated_count=0,
+        status="complete",
+        resumable=False,
+        plan_metadata={"strategy": {"publication_year_from": 2020, "providers": ["crossref", "semantic_scholar"], "concept_groups": [{"id": "g1", "name": "Lean", "terms": ["Lean"]}]}},
+        warnings=(),
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
+    )
+    checkpoint_repository.save_checkpoint(cp2_cr)
+    checkpoint_repository.save_checkpoint(cp2_ss)
+
+    fetch_all_service = FetchAllSearchService(checkpoint_repository=checkpoint_repository)
+
+    app.dependency_overrides[get_project_repository] = lambda: project_repository
+    app.dependency_overrides[get_project_publication_repository] = lambda: publication_repository
+    app.dependency_overrides[get_search_strategy_repository] = lambda: strategy_repository
+    app.dependency_overrides[get_fetch_all_search_service] = lambda: fetch_all_service
+    client = TestClient(app)
+
+    # Create project
+    client.post(
+        "/api/v1/projects",
+        json={"title": "lean_energy", "description": "Lean Energy Project", "protocol_version": "1.0"},
+    )
+
+    res = client.get("/api/v1/projects/lean_energy/search-strategy/executions/resumable")
+    assert res.status_code == 200
+    data = res.json()
+    assert len(data) == 2  # Exactly two distinct jobs
+
+    # Verify Job 2 aggregated multi-provider summary
+    j2 = next(item for item in data if item["job_id"] == str(job2_id))
+    assert set(j2["providers"]) == {"crossref", "semantic_scholar"}
+    assert j2["fetched_count"] == 250  # 200 + 50
+    assert j2["canonical_accepted_count"] == 50  # 40 + 10
+    assert j2["resumable"] is True
+    assert "Crossref timeout" in j2["message"]
+
+    # Verify Job 1 single-provider summary
+    j1 = next(item for item in data if item["job_id"] == str(job1_id))
+    assert j1["providers"] == ["openalex"]
+    assert j1["fetched_count"] == 100
+    assert j1["canonical_accepted_count"] == 20
+    assert j1["resumable"] is True
+    assert j1["message"] == "Rate limit reached"
