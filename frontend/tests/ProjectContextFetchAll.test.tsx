@@ -274,4 +274,115 @@ describe('ProjectContext fetch-all results', () => {
     });
     expect(cancelSpy).toHaveBeenCalledWith('lean_energy', 'job-1');
   });
+
+  it('restores resumable job status from API discovery and executes resume with specific job_id', async () => {
+    vi.spyOn(projectApiService, 'getResumableFetchAllSearches').mockResolvedValue([
+      {
+        job_id: 'job-resumable-429',
+        project_id: 'lean_energy',
+        provider: 'openalex',
+        status: 'partial',
+        fetched_count: 2400,
+        canonical_accepted_count: 404,
+        canonical_rejected_count: 1996,
+        canonical_indeterminate_count: 0,
+        pages_fetched: 24,
+        created_at: '2026-08-25T10:00:00Z',
+        updated_at: '2026-08-25T10:05:00Z',
+        resumable: true,
+        message: 'HTTP 429 Too Many Requests',
+      },
+    ]);
+
+    const resumeSpy = vi
+      .spyOn(projectApiService, 'resumeFetchAllSearch')
+      .mockResolvedValue({ job_id: 'job-resumed-new', project_id: 'lean_energy', status: 'running' });
+
+    vi.spyOn(projectApiService, 'getFetchAllSearchStatus')
+      .mockResolvedValueOnce({
+        job_id: 'job-resumed-new',
+        project_id: 'lean_energy',
+        status: 'running',
+        started_at: '2026-08-25T10:00:00Z',
+        finished_at: null,
+        providers: [
+          {
+            provider: 'openalex',
+            status: 'running',
+            fetched_count: 2401,
+            kept_count: 405,
+            pages_fetched: 25,
+            total_reported: 27021,
+            limit_reached: false,
+            message: null,
+          },
+        ],
+        fetched_total: 2401,
+        kept_total: 405,
+        message: null,
+        result: null,
+      })
+      .mockResolvedValueOnce({
+        job_id: 'job-resumed-new',
+        project_id: 'lean_energy',
+        status: 'completed',
+        started_at: '2026-08-25T10:00:00Z',
+        finished_at: '2026-08-25T10:10:00Z',
+        providers: [
+          {
+            provider: 'openalex',
+            status: 'complete',
+            fetched_count: 2500,
+            kept_count: 500,
+            pages_fetched: 26,
+            total_reported: 27021,
+            limit_reached: false,
+            message: null,
+          },
+        ],
+        fetched_total: 2500,
+        kept_total: 500,
+        message: null,
+        result: page([record('r-new', 'W-new')], null, false),
+      });
+
+    const ResumeHarness = () => {
+      const project = useProject();
+      return (
+        <>
+          <div data-testid="resumable-job-id">{project.fetchAllJob?.job_id || ''}</div>
+          <div data-testid="resumable-job-status">{project.fetchAllJob?.status || ''}</div>
+          <button type="button" onClick={() => void project.resumeFetchAllResults('job-resumable-429')}>
+            resume-button
+          </button>
+          <div data-testid="final-status">{project.fetchAllJob?.status || ''}</div>
+        </>
+      );
+    };
+
+    render(<ProjectProvider><ResumeHarness /></ProjectProvider>);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(50);
+    });
+
+    // Verification: discovery restored the resumable job
+    expect(screen.getByTestId('resumable-job-id')).toHaveTextContent('job-resumable-429');
+
+    // Click resume
+    fireEvent.click(screen.getByRole('button', { name: 'resume-button' }));
+    expect(resumeSpy).toHaveBeenCalledWith('lean_energy', 'job-resumable-429');
+
+    // Advance to running poll
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(500);
+    });
+    expect(screen.getByTestId('final-status')).toHaveTextContent('running');
+
+    // Advance to completed poll
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1500);
+    });
+    expect(screen.getByTestId('final-status')).toHaveTextContent('completed');
+  });
 });

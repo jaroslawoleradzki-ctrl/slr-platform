@@ -365,7 +365,7 @@ interface ProjectContextType {
   searchLoadingMore: boolean;
   searchPaginationError: string | null;
   startFetchAllResults: () => Promise<FetchAllStatusResult | null>;
-  resumeFetchAllResults: () => Promise<FetchAllStatusResult | null>;
+  resumeFetchAllResults: (jobId?: string) => Promise<FetchAllStatusResult | null>;
   cancelFetchAllResults: () => Promise<void>;
 
   fetchAllJob: FetchAllStatusResult | null;
@@ -440,6 +440,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
       qaRes,
       extractionProgressRes,
       prismaMetricsRes,
+      resumableSearchRes,
     ] = await Promise.allSettled([
       projectApiService.getSearchStrategy(targetProjectId),
       projectApiService.getBibliographicImports(targetProjectId),
@@ -450,9 +451,48 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
       qualityAssessmentApi.getOverview(targetProjectId, reviewer),
       extractionApi.getExtractionProgress(targetProjectId, reviewer),
       projectApiService.getPrismaMetrics(targetProjectId, reviewer),
+      projectApiService.getResumableFetchAllSearches(targetProjectId),
     ]);
 
     if (activeProjectIdRef.current !== targetProjectId) return;
+
+    if (resumableSearchRes.status === 'fulfilled' && resumableSearchRes.value.length > 0) {
+      const latestResumable = resumableSearchRes.value[0];
+      if (fetchAllJobIdRef.current === null) {
+        setFetchAllJob((prev) => {
+          if (prev && prev.status === 'running') return prev;
+          return {
+            job_id: latestResumable.job_id,
+            project_id: latestResumable.project_id,
+            status: latestResumable.status === 'cancelled' ? 'cancelled' : (latestResumable.status === 'failed' ? 'failed' : 'completed'),
+            started_at: latestResumable.created_at,
+            finished_at: latestResumable.updated_at,
+            providers: [{
+              provider: latestResumable.provider,
+              status: latestResumable.status,
+              fetched_count: latestResumable.fetched_count,
+              kept_count: latestResumable.canonical_accepted_count,
+              canonical_accepted_count: latestResumable.canonical_accepted_count,
+              canonical_rejected_count: latestResumable.canonical_rejected_count,
+              canonical_indeterminate_count: latestResumable.canonical_indeterminate_count,
+              pages_fetched: latestResumable.pages_fetched,
+              total_reported: null,
+              limit_reached: false,
+              resumable: latestResumable.resumable,
+              message: latestResumable.message || null,
+            }],
+            fetched_total: latestResumable.fetched_count,
+            kept_total: latestResumable.canonical_accepted_count,
+            canonical_accepted_total: latestResumable.canonical_accepted_count,
+            canonical_rejected_total: latestResumable.canonical_rejected_count,
+            canonical_indeterminate_total: latestResumable.canonical_indeterminate_count,
+            resumable: latestResumable.resumable,
+            message: latestResumable.message || null,
+            result: null,
+          };
+        });
+      }
+    }
 
     const searchStrategy = searchRes.status === 'fulfilled' ? searchRes.value : null;
     const imports = importsRes.status === 'fulfilled' ? importsRes.value : null;
@@ -872,7 +912,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   };
 
-  const resumeFetchAllResults = async (): Promise<FetchAllStatusResult | null> => {
+  const resumeFetchAllResults = async (targetJobId?: string): Promise<FetchAllStatusResult | null> => {
     const targetProjectId = activeProjectIdRef.current;
     if (fetchAllJobIdRef.current !== null || fetchAllStarting) return null;
     if (searchLoadingMoreRef.current) return null;
@@ -927,7 +967,8 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
     };
 
     try {
-      const started = await projectApiService.resumeFetchAllSearch(targetProjectId, fetchAllJob?.job_id);
+      const resumeId = targetJobId || fetchAllJob?.job_id;
+      const started = await projectApiService.resumeFetchAllSearch(targetProjectId, resumeId);
       if (
         activeProjectIdRef.current !== targetProjectId ||
         searchExecutionVersionRef.current !== currentVersion

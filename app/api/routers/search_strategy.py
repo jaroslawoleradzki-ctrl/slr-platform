@@ -13,6 +13,7 @@ from app.api.dto.search_strategy import (
     FetchAllStatusResponse,
     ManualSourceDatabase,
     ProviderQueryResponse,
+    ResumableSearchJobSummaryResponse,
     SearchProviderErrorResponse,
     SearchResultRecordResponse,
     SearchResultsImportRequest,
@@ -498,6 +499,29 @@ async def resume_fetch_all_search(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(exc),
         ) from exc
+
+
+@router.get(
+    "/{project_id}/search-strategy/executions/resumable",
+    response_model=list[ResumableSearchJobSummaryResponse],
+    status_code=status.HTTP_200_OK,
+)
+def list_resumable_fetch_all_searches(
+    project_id: str,
+    project_repository: ProjectPublicationRepository = Depends(get_project_publication_repository),
+    fetch_all: FetchAllSearchService = Depends(get_fetch_all_search_service),
+) -> list[ResumableSearchJobSummaryResponse]:
+    """List past fetch-all search jobs that have resumable checkpoints."""
+
+    try:
+        project_repository.get_publications(project_id)
+    except ProjectNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+
+    return fetch_all.list_resumable_jobs(project_id)
 
 
 @router.post(

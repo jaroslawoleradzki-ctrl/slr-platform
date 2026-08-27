@@ -51,6 +51,10 @@ class SearchRunCheckpointRepository(Protocol):
         self, project_id: str, *, connection: sqlite3.Connection | None = None
     ) -> list[SearchRunCheckpoint]: ...
 
+    def get_resumable_checkpoints(
+        self, project_id: str, *, connection: sqlite3.Connection | None = None
+    ) -> list[SearchRunCheckpoint]: ...
+
     def delete_for_project(
         self, project_id: str, *, connection: sqlite3.Connection | None = None
     ) -> None: ...
@@ -195,6 +199,30 @@ class SqliteSearchRunCheckpointRepository:
             return []
         latest_job_id = UUID(row[0])
         return self._get_checkpoints_for_job_with_conn(conn, latest_job_id)
+
+    def get_resumable_checkpoints(
+        self, project_id: str, *, connection: sqlite3.Connection | None = None
+    ) -> list[SearchRunCheckpoint]:
+        if connection is not None:
+            return self._get_resumable_checkpoints_with_conn(connection, project_id)
+        with sqlite3.connect(self._database_path) as conn:
+            return self._get_resumable_checkpoints_with_conn(conn, project_id)
+
+    def _get_resumable_checkpoints_with_conn(
+        self, conn: sqlite3.Connection, project_id: str
+    ) -> list[SearchRunCheckpoint]:
+        cursor = conn.execute(
+            """SELECT search_run_id, project_id, job_id, provider, cursor,
+                      pages_fetched, fetched_count, canonical_accepted_count,
+                      canonical_rejected_count, canonical_indeterminate_count,
+                      deduplicated_count, status, resumable, plan_metadata,
+                      warnings, created_at, updated_at
+               FROM search_run_checkpoints
+               WHERE project_id = ? AND resumable = 1 AND status IN ('pending', 'running', 'partial', 'cancelled', 'failed')
+               ORDER BY updated_at DESC, provider ASC""",
+            (project_id,),
+        )
+        return [self._map_row(row) for row in cursor.fetchall()]
 
     def delete_for_project(
         self, project_id: str, *, connection: sqlite3.Connection | None = None

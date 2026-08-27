@@ -922,3 +922,68 @@ def test_real_browser_flow_lean_energy_strategy_execution_and_import(tmp_path: P
     assert imported_pub.abstract == "This paper presents a comprehensive study on lean energy optimization."
     assert imported_pub.abstract is not None
     assert len(imported_pub.abstract) > 0
+
+
+def test_resumable_executions_api_endpoint(tmp_path: Path) -> None:
+    """Verify GET /api/v1/projects/{project_id}/search-strategy/executions/resumable endpoint."""
+    from uuid import uuid4
+
+    from app.api.routers.search_strategy import get_fetch_all_search_service
+    from app.repositories.search_run_checkpoint_repository import (
+        SearchRunCheckpoint,
+        SqliteSearchRunCheckpointRepository,
+    )
+    from app.services.fetch_all_search import FetchAllSearchService
+
+    database = tmp_path / "resumable_api.db"
+    project_repository = SqliteProjectRepository(database)
+    publication_repository = SqliteProjectPublicationRepository(database)
+    strategy_repository = SqliteSearchStrategyRepository(database)
+    checkpoint_repository = SqliteSearchRunCheckpointRepository(database)
+
+    job_id = uuid4()
+    cp = SearchRunCheckpoint(
+        search_run_id=uuid4(),
+        project_id="lean_energy",
+        job_id=job_id,
+        provider="openalex",
+        cursor="cursor_test",
+        pages_fetched=1,
+        fetched_count=100,
+        canonical_accepted_count=20,
+        canonical_rejected_count=50,
+        canonical_indeterminate_count=30,
+        deduplicated_count=0,
+        status="partial",
+        resumable=True,
+        plan_metadata={"strategy": {"publication_year_from": 2020, "providers": ["openalex"], "concept_groups": [{"id": "g1", "name": "Lean", "terms": ["Lean"]}]}},
+        warnings=("Rate limit reached",),
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
+    )
+    checkpoint_repository.save_checkpoint(cp)
+
+    fetch_all_service = FetchAllSearchService(checkpoint_repository=checkpoint_repository)
+
+    app.dependency_overrides[get_project_repository] = lambda: project_repository
+    app.dependency_overrides[get_project_publication_repository] = lambda: publication_repository
+    app.dependency_overrides[get_search_strategy_repository] = lambda: strategy_repository
+    app.dependency_overrides[get_fetch_all_search_service] = lambda: fetch_all_service
+    client = TestClient(app)
+
+    # Create project
+    client.post(
+        "/api/v1/projects",
+        json={"title": "lean_energy", "description": "Lean Energy Project", "protocol_version": "1.0"},
+    )
+
+    res = client.get("/api/v1/projects/lean_energy/search-strategy/executions/resumable")
+    assert res.status_code == 200
+    data = res.json()
+    assert len(data) == 1
+    assert data[0]["job_id"] == str(job_id)
+    assert data[0]["provider"] == "openalex"
+    assert data[0]["fetched_count"] == 100
+    assert data[0]["canonical_accepted_count"] == 20
+    assert data[0]["resumable"] is True
+    assert data[0]["message"] == "Rate limit reached"

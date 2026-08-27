@@ -64,6 +64,7 @@ from app.api.dto.search_strategy import (
     FetchAllStartResponse,
     FetchAllStatusResponse,
     ProviderQueryResponse,
+    ResumableSearchJobSummaryResponse,
     SearchProviderErrorResponse,
     SearchStrategyExecutionRequest,
     SearchStrategyExecutionResponse,
@@ -346,6 +347,45 @@ class FetchAllSearchService:
         self._active_by_project[project_id] = job.job_id
         job.task = asyncio.create_task(self._run(job, resume_checkpoints=checkpoints))
         return FetchAllStartResponse(job_id=job.job_id, project_id=project_id)
+
+    def list_resumable_jobs(self, project_id: str) -> list[ResumableSearchJobSummaryResponse]:
+        """List past fetch-all search jobs that have resumable checkpoints for the project."""
+        checkpoints = self._checkpoint_repo().get_resumable_checkpoints(project_id)
+        # Deduplicate/group by job_id, keeping the latest checkpoint metadata per job
+        summaries: list[ResumableSearchJobSummaryResponse] = []
+        seen_job_ids: set[str] = set()
+
+        for cp in checkpoints:
+            job_str = str(cp.job_id)
+            if job_str in seen_job_ids:
+                continue
+            seen_job_ids.add(job_str)
+
+            msg = None
+            if cp.warnings:
+                msg = cp.warnings[0]
+
+            summaries.append(
+                ResumableSearchJobSummaryResponse(
+                    job_id=job_str,
+                    project_id=cp.project_id,
+                    provider=cp.provider,
+                    status=cast(
+                        Literal["pending", "running", "complete", "partial", "cancelled", "failed"],
+                        cp.status,
+                    ),
+                    fetched_count=cp.fetched_count,
+                    canonical_accepted_count=cp.canonical_accepted_count,
+                    canonical_rejected_count=cp.canonical_rejected_count,
+                    canonical_indeterminate_count=cp.canonical_indeterminate_count,
+                    pages_fetched=cp.pages_fetched,
+                    created_at=cp.created_at,
+                    updated_at=cp.updated_at,
+                    resumable=cp.resumable,
+                    message=msg,
+                )
+            )
+        return summaries
 
     def get_status(self, job_id: str) -> FetchAllStatusResponse:
         job = self._jobs.get(job_id)
