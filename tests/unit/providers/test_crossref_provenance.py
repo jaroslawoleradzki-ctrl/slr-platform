@@ -115,6 +115,69 @@ async def test_search_with_raw_reuses_single_payload() -> None:
 
 
 @pytest.mark.anyio
+async def test_search_skips_malformed_records_and_continues_to_next_cursor_page() -> None:
+    requested_cursors: list[str] = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        cursor = request.url.params["cursor"]
+        requested_cursors.append(cursor)
+        if cursor == "*":
+            items = [
+                {"DOI": "10.1000/valid-one", "title": ["Valid one"]},
+                {"DOI": "10.1000/missing-title"},
+            ]
+            next_cursor = "page-two"
+        else:
+            items = [{"DOI": "10.1000/valid-two", "title": ["Valid two"]}]
+            next_cursor = None
+        return httpx.Response(
+            200,
+            json={"message": {"total-results": 3, "items": items, "next-cursor": next_cursor}},
+            request=request,
+        )
+
+    search_run, search_query = _search_context()
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client:
+        provider = CrossrefProvider(
+            client=CrossrefClient(http_client=http_client),
+            paginate=True,
+            max_results=10,
+        )
+        output = await provider.search_with_raw(search_run=search_run, search_query=search_query)
+
+    assert requested_cursors == ["*", "page-two"]
+    assert [publication.title for publication in output.publications] == ["Valid one", "Valid two"]
+    assert output.raw_count == 3
+    assert output.mapped_count == 2
+    assert output.skipped_malformed_count == 1
+    assert output.next_cursor is None
+    assert output.has_more is False
+    assert output.warnings[-1] == (
+        "1 Crossref record(s) skipped due to missing/malformed title or metadata validation."
+    )
+
+
+@pytest.mark.anyio
+async def test_search_does_not_swallow_programming_errors_during_mapping() -> None:
+    class BrokenProvider(CrossrefProvider):
+        def _map_work_with_provenance(self, *args: object, **kwargs: object):  # type: ignore[override]
+            raise RuntimeError("mapper bug")
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={"message": {"items": [{"title": ["Valid"]}]}},
+            request=request,
+        )
+
+    search_run, search_query = _search_context()
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client:
+        provider = BrokenProvider(client=CrossrefClient(http_client=http_client))
+        with pytest.raises(RuntimeError, match="mapper bug"):
+            await provider.search_with_raw(search_run=search_run, search_query=search_query)
+
+
+@pytest.mark.anyio
 async def test_live_provider_mode_collects_cursor_pages_with_a_bound() -> None:
     search_run, search_query = _search_context()
     requested_cursors: list[str] = []

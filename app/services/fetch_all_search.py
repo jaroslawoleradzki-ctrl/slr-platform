@@ -171,6 +171,7 @@ class FetchAllProviderState:
     canonical_rejected_count: int = 0
     canonical_indeterminate_count: int = 0
     deduplicated_count: int = 0
+    skipped_malformed_count: int = 0
     pages_fetched: int = 0
     total_reported: int | None = None
     limit_reached: bool = False
@@ -197,6 +198,7 @@ class FetchAllProviderState:
             canonical_rejected_count=self.canonical_rejected_count,
             canonical_indeterminate_count=self.canonical_indeterminate_count,
             deduplicated_count=self.deduplicated_count,
+            skipped_malformed_count=self.skipped_malformed_count,
             pages_fetched=self.pages_fetched,
             total_reported=self.total_reported,
             limit_reached=self.limit_reached,
@@ -370,7 +372,8 @@ class FetchAllSearchService:
                     canonical_accepted_count=cp.canonical_accepted_count,
                     canonical_rejected_count=cp.canonical_rejected_count,
                     canonical_indeterminate_count=cp.canonical_indeterminate_count,
-                    deduplicated_count=cp.deduplicated_count,
+                            deduplicated_count=cp.deduplicated_count,
+                            skipped_malformed_count=int((cp.plan_metadata or {}).get("skipped_malformed_count", 0)),
                     pages_fetched=cp.pages_fetched,
                     total_reported=None,
                     limit_reached=False,
@@ -507,6 +510,7 @@ class FetchAllSearchService:
             plan_meta["resumed_from_job_id"] = job.resumed_from_job_id
         if state.plan_metadata:
             plan_meta.update(state.plan_metadata)
+        plan_meta["skipped_malformed_count"] = state.skipped_malformed_count
         if cursor and cursor.startswith("crossref-plan:"):
             from app.providers.search.crossref import CrossrefProvider
             try:
@@ -571,7 +575,8 @@ class FetchAllSearchService:
                             canonical_accepted_count=cp.canonical_accepted_count,
                             canonical_rejected_count=cp.canonical_rejected_count,
                             canonical_indeterminate_count=cp.canonical_indeterminate_count,
-                            deduplicated_count=cp.deduplicated_count,
+                    deduplicated_count=cp.deduplicated_count,
+                    skipped_malformed_count=int((cp.plan_metadata or {}).get("skipped_malformed_count", 0)),
                             pages_fetched=cp.pages_fetched,
                             resumable=False,
                             warnings=list(cp.warnings),
@@ -597,6 +602,7 @@ class FetchAllSearchService:
                             canonical_rejected_count=cp.canonical_rejected_count,
                             canonical_indeterminate_count=cp.canonical_indeterminate_count,
                             deduplicated_count=cp.deduplicated_count,
+                            skipped_malformed_count=int((cp.plan_metadata or {}).get("skipped_malformed_count", 0)),
                             pages_fetched=cp.pages_fetched,
                             resumable=cp.resumable,
                             warnings=list(cp.warnings),
@@ -765,7 +771,7 @@ class FetchAllSearchService:
                     )
                 self._save_checkpoint(job, state, None, resumable=False)
                 break
-            if not output.publications:
+            if not output.publications and output.raw_count == 0:
                 state.status = "partial"
                 state.limit_reached = True
                 state.resumable = True
@@ -796,6 +802,7 @@ class FetchAllSearchService:
         for warning in output.warnings:
             if warning not in state.warnings:
                 state.warnings.append(warning)
+        state.skipped_malformed_count += output.skipped_malformed_count
         if output.is_lossless is False:
             state.lossless = False
         if output.total_count is not None:

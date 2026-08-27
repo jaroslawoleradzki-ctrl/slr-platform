@@ -27,3 +27,6 @@ class ProviderSearchOutput:
     has_more: bool = False
     warnings: tuple[str, ...] = ()
     is_lossless: bool | None = None
+    raw_count: int = 0
+    mapped_count: int = 0
+    skipped_malformed_count: int = 0
