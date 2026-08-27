@@ -83,6 +83,9 @@ class MetadataEnrichmentService:
                 return publication.model_copy(update={"abstract": cached_abstract, "provenance": provenance}), True
 
         # Phase 2: External DOI lookup
+        if self._openalex_client is None and self._semantic_scholar_client is None:
+            return publication, False
+
         if self._lookups_performed >= self._max_lookups:
             return publication, False
 

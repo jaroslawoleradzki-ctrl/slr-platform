@@ -98,7 +98,7 @@ class LiveSearchService:
         self._repository.get_publications(project_id)
         async with httpx.AsyncClient(timeout=30.0) as http_client:
             providers = self._build_providers(strategy, http_client)
-            enricher = self._build_enricher(http_client)
+            enricher = self._build_enricher(http_client, enable_external_lookups=False)
             engine = SearchEngine(
                 providers=providers,
                 raw_response_archive=_InMemoryRawResponseArchive(),
@@ -110,7 +110,13 @@ class LiveSearchService:
             )
 
     @staticmethod
-    def _build_enricher(http_client: httpx.AsyncClient) -> MetadataEnrichmentService:
+    def _build_enricher(
+        http_client: httpx.AsyncClient | None = None,
+        *,
+        enable_external_lookups: bool = False,
+    ) -> MetadataEnrichmentService:
+        if not enable_external_lookups or http_client is None:
+            return MetadataEnrichmentService()
         openalex_email = (
             (os.getenv("OPENALEX_EMAIL") or "").strip() or (os.getenv("CROSSREF_EMAIL") or "").strip() or None
         )
