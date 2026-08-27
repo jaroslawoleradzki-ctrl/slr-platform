@@ -306,8 +306,10 @@ export const FetchAllProgressPanel: React.FC<Props> = ({
                     )}
                   </div>
                   <div style={{ display: 'flex', gap: 6 }}>
-                    <button
+                    <Button
                       type="button"
+                      variant="outline"
+                      size="sm"
                       data-testid={`resume-job-btn-${rj.job_id}`}
                       onClick={() => {
                         if (onResumeJob) {
@@ -316,10 +318,10 @@ export const FetchAllProgressPanel: React.FC<Props> = ({
                           onResume();
                         }
                       }}
-                      style={{ ...ghostButtonStyle, padding: '3px 8px', fontSize: '0.75rem' }}
+                      aria-label={`Wznów zadanie: ${rjProviders}`}
                     >
                       Wznów to zadanie
-                    </button>
+                    </Button>
                   </div>
                 </div>
               );
