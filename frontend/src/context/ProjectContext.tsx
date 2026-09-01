@@ -5,6 +5,8 @@ import {
   SearchExecutionResult,
   SearchResultsImportResponse,
   FetchAllStatusResult,
+  FetchAllProviderProgress,
+  ResumableSearchJobSummary,
   SLRProject,
   NormalizationResponse,
   WorkflowNavigationStatus,
@@ -365,10 +367,12 @@ interface ProjectContextType {
   searchLoadingMore: boolean;
   searchPaginationError: string | null;
   startFetchAllResults: () => Promise<FetchAllStatusResult | null>;
-  resumeFetchAllResults: () => Promise<FetchAllStatusResult | null>;
+  resumeFetchAllResults: (jobId?: string) => Promise<FetchAllStatusResult | null>;
   cancelFetchAllResults: () => Promise<void>;
 
   fetchAllJob: FetchAllStatusResult | null;
+  resumableJobs: ResumableSearchJobSummary[];
+  selectResumableJob: (jobId: string) => void;
   fetchAllStarting: boolean;
   fetchAllError: string | null;
   importSelectedSearchResults: () => Promise<SearchResultsImportResponse | null>;
@@ -412,6 +416,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   // Fetch-all (v0.6.5): background job polling state.
   const [fetchAllJob, setFetchAllJob] = useState<FetchAllStatusResult | null>(null);
+  const [resumableJobs, setResumableJobs] = useState<ResumableSearchJobSummary[]>([]);
   const [fetchAllStarting, setFetchAllStarting] = useState(false);
   const [fetchAllError, setFetchAllError] = useState<string | null>(null);
   const fetchAllJobIdRef = useRef<string | null>(null);
@@ -440,6 +445,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
       qaRes,
       extractionProgressRes,
       prismaMetricsRes,
+      resumableSearchRes,
     ] = await Promise.allSettled([
       projectApiService.getSearchStrategy(targetProjectId),
       projectApiService.getBibliographicImports(targetProjectId),
@@ -450,9 +456,58 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
       qualityAssessmentApi.getOverview(targetProjectId, reviewer),
       extractionApi.getExtractionProgress(targetProjectId, reviewer),
       projectApiService.getPrismaMetrics(targetProjectId, reviewer),
+      projectApiService.getResumableFetchAllSearches(targetProjectId),
     ]);
 
     if (activeProjectIdRef.current !== targetProjectId) return;
+
+    if (resumableSearchRes.status === 'fulfilled') {
+      const resumableList = resumableSearchRes.value;
+      setResumableJobs(resumableList);
+      if (resumableList.length > 0 && fetchAllJobIdRef.current === null) {
+        const latestResumable = resumableList[0];
+        setFetchAllJob((prev) => {
+          if (prev && prev.status === 'running') return prev;
+          const providerList = latestResumable.providers && latestResumable.providers.length > 0
+            ? latestResumable.providers
+            : [latestResumable.provider];
+          // For single-provider jobs, counters map 1:1 to that provider.
+          // For multi-provider jobs, avoid fabricating duplicate aggregate counters in each provider row.
+          const providerRows: FetchAllProviderProgress[] = providerList.length === 1 ? [{
+            provider: providerList[0],
+            status: latestResumable.status,
+            fetched_count: latestResumable.fetched_count,
+            kept_count: latestResumable.canonical_accepted_count,
+            canonical_accepted_count: latestResumable.canonical_accepted_count,
+            canonical_rejected_count: latestResumable.canonical_rejected_count,
+            canonical_indeterminate_count: latestResumable.canonical_indeterminate_count,
+            pages_fetched: latestResumable.pages_fetched,
+            total_reported: null,
+            limit_reached: false,
+            resumable: latestResumable.resumable,
+            message: latestResumable.message || null,
+          }] : [];
+          return {
+            job_id: latestResumable.job_id,
+            project_id: latestResumable.project_id,
+            status: latestResumable.status === 'cancelled' ? 'cancelled' : (latestResumable.status === 'failed' ? 'failed' : 'completed'),
+            started_at: latestResumable.created_at,
+            finished_at: latestResumable.updated_at,
+            providers: providerRows,
+            fetched_total: latestResumable.fetched_count,
+            kept_total: latestResumable.canonical_accepted_count,
+            canonical_accepted_total: latestResumable.canonical_accepted_count,
+            canonical_rejected_total: latestResumable.canonical_rejected_count,
+            canonical_indeterminate_total: latestResumable.canonical_indeterminate_count,
+            resumable: latestResumable.resumable,
+            message: latestResumable.message || null,
+            result: null,
+          };
+        });
+      }
+    } else {
+      setResumableJobs([]);
+    }
 
     const searchStrategy = searchRes.status === 'fulfilled' ? searchRes.value : null;
     const imports = importsRes.status === 'fulfilled' ? importsRes.value : null;
@@ -872,7 +927,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   };
 
-  const resumeFetchAllResults = async (): Promise<FetchAllStatusResult | null> => {
+  const resumeFetchAllResults = async (targetJobId?: string): Promise<FetchAllStatusResult | null> => {
     const targetProjectId = activeProjectIdRef.current;
     if (fetchAllJobIdRef.current !== null || fetchAllStarting) return null;
     if (searchLoadingMoreRef.current) return null;
@@ -927,7 +982,8 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
     };
 
     try {
-      const started = await projectApiService.resumeFetchAllSearch(targetProjectId, fetchAllJob?.job_id);
+      const resumeId = targetJobId || fetchAllJob?.job_id;
+      const started = await projectApiService.resumeFetchAllSearch(targetProjectId, resumeId);
       if (
         activeProjectIdRef.current !== targetProjectId ||
         searchExecutionVersionRef.current !== currentVersion
@@ -956,6 +1012,42 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
       }
     }
   };
+
+  const selectResumableJob = useCallback((jobId: string) => {
+    const found = resumableJobs.find((j) => j.job_id === jobId);
+    if (!found) return;
+    const providerList = found.providers && found.providers.length > 0 ? found.providers : [found.provider];
+    const providerRows: FetchAllProviderProgress[] = providerList.length === 1 ? [{
+      provider: providerList[0],
+      status: found.status,
+      fetched_count: found.fetched_count,
+      kept_count: found.canonical_accepted_count,
+      canonical_accepted_count: found.canonical_accepted_count,
+      canonical_rejected_count: found.canonical_rejected_count,
+      canonical_indeterminate_count: found.canonical_indeterminate_count,
+      pages_fetched: found.pages_fetched,
+      total_reported: null,
+      limit_reached: false,
+      resumable: found.resumable,
+      message: found.message || null,
+    }] : [];
+    setFetchAllJob({
+      job_id: found.job_id,
+      project_id: found.project_id,
+      status: found.status === 'cancelled' ? 'cancelled' : (found.status === 'failed' ? 'failed' : 'completed'),
+      started_at: found.created_at,
+      finished_at: found.updated_at,
+      providers: providerRows,
+      fetched_total: found.fetched_count,
+      kept_total: found.canonical_accepted_count,
+      canonical_accepted_total: found.canonical_accepted_count,
+      canonical_rejected_total: found.canonical_rejected_count,
+      canonical_indeterminate_total: found.canonical_indeterminate_count,
+      resumable: found.resumable,
+      message: found.message || null,
+      result: null,
+    });
+  }, [resumableJobs]);
 
   const cancelFetchAllResults = async (): Promise<void> => {
     const targetProjectId = activeProjectIdRef.current;
@@ -1144,7 +1236,8 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
         resumeFetchAllResults,
         cancelFetchAllResults,
         fetchAllJob,
-
+        resumableJobs,
+        selectResumableJob,
         fetchAllStarting,
         fetchAllError,
         importSelectedSearchResults,

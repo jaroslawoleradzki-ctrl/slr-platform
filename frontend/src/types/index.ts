@@ -217,6 +217,23 @@ export interface FetchAllStartResult {
   status: 'running';
 }
 
+export interface ResumableSearchJobSummary {
+  job_id: string;
+  project_id: string;
+  provider: string;
+  providers?: string[];
+  status: FetchAllProviderStatus;
+  fetched_count: number;
+  canonical_accepted_count: number;
+  canonical_rejected_count: number;
+  canonical_indeterminate_count: number;
+  pages_fetched: number;
+  created_at: string;
+  updated_at: string;
+  resumable: boolean;
+  message?: string | null;
+}
+
 export interface SearchResultsImportResponse {
   project_id: string;
   imported_count: number;

@@ -208,11 +208,14 @@ class FetchAllProviderProgressResponse(BaseModel):
     provider: str
     status: Literal["pending", "running", "complete", "partial", "cancelled", "failed"]
     fetched_count: int = Field(default=0, ge=0)
+    raw_count: int = Field(default=0, ge=0)
+    mapped_count: int = Field(default=0, ge=0)
     kept_count: int = Field(default=0, ge=0)
     canonical_accepted_count: int = Field(default=0, ge=0)
     canonical_rejected_count: int = Field(default=0, ge=0)
     canonical_indeterminate_count: int = Field(default=0, ge=0)
     deduplicated_count: int = Field(default=0, ge=0)
+    skipped_malformed_count: int = Field(default=0, ge=0)
     pages_fetched: int = Field(default=0, ge=0)
     total_reported: int | None = Field(default=None, ge=0)
     limit_reached: bool = False
@@ -245,6 +248,27 @@ class FetchAllStatusResponse(BaseModel):
     resumable: bool = False
     message: str | None = None
     result: SearchStrategyExecutionResponse | None = None
+
+
+class ResumableSearchJobSummaryResponse(BaseModel):
+    """Summary of a past fetch-all search job that can be resumed."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    job_id: str
+    project_id: str
+    provider: str
+    providers: list[str] = Field(default_factory=list)
+    status: Literal["pending", "running", "complete", "partial", "cancelled", "failed"]
+    fetched_count: int = Field(default=0, ge=0)
+    canonical_accepted_count: int = Field(default=0, ge=0)
+    canonical_rejected_count: int = Field(default=0, ge=0)
+    canonical_indeterminate_count: int = Field(default=0, ge=0)
+    pages_fetched: int = Field(default=0, ge=0)
+    created_at: datetime
+    updated_at: datetime
+    resumable: bool = True
+    message: str | None = None
 
 
 

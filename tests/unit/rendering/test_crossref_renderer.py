@@ -1,5 +1,5 @@
 from app.domain.search import BooleanOperator, SearchGroup, SearchQuery, SearchTerm
-from app.rendering.crossref import CrossrefQueryRenderer
+from app.rendering.crossref import CrossrefQueryRenderer, build_crossref_candidate_queries
 
 
 def test_crossref_renderer_single_term() -> None:
@@ -39,8 +39,8 @@ def test_crossref_renderer_and_terms() -> None:
     )
     query = SearchQuery(name="AND Query", expression=expression)
     rendered = renderer.render(query)
-    assert rendered.query_string == '"lean management"'
-    assert rendered.metadata["candidate_queries"] == ['"lean management"']
+    assert rendered.query_string == '"lean management" "energy efficiency"'
+    assert rendered.metadata["candidate_queries"] == ['"lean management" "energy efficiency"']
     assert rendered.is_lossless is False
 
 
@@ -130,15 +130,73 @@ def test_crossref_renderer_complex_boolean_query_with_or_and_not() -> None:
     rendered = renderer.render(query)
 
     assert rendered.provider == "crossref"
-    assert rendered.query_string == '"lean manufacturing" || "lean production"'
+    assert rendered.query_string == (
+        '"lean manufacturing" "energy efficiency" || '
+        '"lean manufacturing" "energy consumption" || '
+        '"lean production" "energy efficiency" || '
+        '"lean production" "energy consumption"'
+    )
     assert rendered.is_lossless is False
     assert len(rendered.warnings) == 2
     assert rendered.metadata["candidate_queries"] == [
-        '"lean manufacturing"',
-        '"lean production"',
+        '"lean manufacturing" "energy efficiency"',
+        '"lean manufacturing" "energy consumption"',
+        '"lean production" "energy efficiency"',
+        '"lean production" "energy consumption"',
     ]
     assert rendered.metadata["canonical_query"] == (
         '(("lean manufacturing" OR "lean production") AND '
         '("energy efficiency" OR "energy consumption") AND '
         'NOT ("building"))'
     )
+
+
+def test_crossref_renderer_three_required_groups_use_composite_anchors() -> None:
+    expression = SearchGroup(
+        operator=BooleanOperator.AND,
+        children=[
+            SearchGroup(operator=BooleanOperator.OR, children=[SearchTerm(value="lean"), SearchTerm(value="kaizen")]),
+            SearchGroup(operator=BooleanOperator.OR, children=[SearchTerm(value="energy"), SearchTerm(value="power")]),
+            SearchGroup(operator=BooleanOperator.OR, children=[SearchTerm(value="manufacturing"), SearchTerm(value="factory")]),
+        ],
+    )
+
+    # Eight logical combinations exceed the six-query bound.  The systematic
+    # sample deliberately includes cross-index combinations, not a diagonal.
+    assert build_crossref_candidate_queries(expression) == [
+        "lean energy manufacturing",
+        "lean energy factory",
+        "lean power manufacturing",
+        "kaizen energy manufacturing",
+        "kaizen energy factory",
+        "kaizen power manufacturing",
+    ]
+
+
+def test_crossref_renderer_composite_plan_is_bounded_and_deterministic() -> None:
+    expression = SearchGroup(
+        operator=BooleanOperator.AND,
+        children=[
+            SearchGroup(operator=BooleanOperator.OR, children=[SearchTerm(value=f"a{index}") for index in range(20)]),
+            SearchGroup(operator=BooleanOperator.OR, children=[SearchTerm(value=f"b{index}") for index in range(20)]),
+            SearchGroup(operator=BooleanOperator.OR, children=[SearchTerm(value=f"c{index}") for index in range(20)]),
+        ],
+    )
+
+    first = build_crossref_candidate_queries(expression)
+    assert first == build_crossref_candidate_queries(expression)
+    assert len(first) == 6
+    assert first[0] == "a0 b0 c0"
+    assert first[-1] == "a16 b13 c6"
+
+
+def test_crossref_renderer_full_product_is_used_when_it_fits_the_bound() -> None:
+    expression = SearchGroup(
+        operator=BooleanOperator.AND,
+        children=[
+            SearchGroup(operator=BooleanOperator.OR, children=[SearchTerm(value="a1"), SearchTerm(value="a2")]),
+            SearchGroup(operator=BooleanOperator.OR, children=[SearchTerm(value="b1"), SearchTerm(value="b2")]),
+        ],
+    )
+
+    assert build_crossref_candidate_queries(expression) == ["a1 b1", "a1 b2", "a2 b1", "a2 b2"]

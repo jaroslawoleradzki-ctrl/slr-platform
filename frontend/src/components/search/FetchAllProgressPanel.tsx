@@ -6,12 +6,15 @@ import {
   CircleDashed,
   Loader2,
   OctagonX,
+  RotateCw,
 } from 'lucide-react';
 import {
   FetchAllProviderProgress,
   FetchAllProviderStatus,
   FetchAllStatusResult,
+  ResumableSearchJobSummary,
 } from '../../types';
+import { Button } from '../common/Button';
 
 const PROVIDER_LABELS: Record<string, string> = {
   openalex: 'OpenAlex',
@@ -61,15 +64,19 @@ const gridStyle: React.CSSProperties = {
 interface Props {
   progress: FetchAllStatusResult | null;
   starting: boolean;
+  resumableJobs?: ResumableSearchJobSummary[];
   onCancel?: () => void;
   onResume?: () => void;
+  onResumeJob?: (jobId: string) => void;
 }
 
 export const FetchAllProgressPanel: React.FC<Props> = ({
   progress,
   starting,
+  resumableJobs = [],
   onCancel,
   onResume,
+  onResumeJob,
 }) => {
   if (!progress) {
     if (!starting) return null;
@@ -97,7 +104,8 @@ export const FetchAllProgressPanel: React.FC<Props> = ({
   const incompleteProviders = progress.providers.filter(
     (p) => p.status === 'partial' || p.status === 'failed'
   );
-  const canResume = !running && Boolean(progress.resumable || incompleteProviders.some(p => p.resumable));
+  const isJobFullyComplete = progress.status === 'completed' && incompleteProviders.length === 0;
+  const canResume = !running && !isJobFullyComplete && Boolean(progress.resumable || incompleteProviders.some(p => p.resumable));
 
   return (
     <div
@@ -130,43 +138,60 @@ export const FetchAllProgressPanel: React.FC<Props> = ({
         </strong>
         <div style={{ display: 'flex', gap: 8 }}>
           {onCancel && running && (
-            <button type="button" onClick={onCancel} style={{ ...ghostButtonStyle }}>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              icon={<Ban size={13} />}
+              onClick={onCancel}
+              data-testid="cancel-fetch-all-btn"
+            >
               Anuluj pobieranie
-            </button>
+            </Button>
           )}
           {onResume && canResume && (
-            <button type="button" onClick={onResume} className="btn-primary" data-testid="resume-fetch-all-btn">
-              Wznów pobieranie (Resume)
-            </button>
+            <Button
+              type="button"
+              variant="primary"
+              size="sm"
+              icon={<RotateCw size={13} />}
+              onClick={onResume}
+              data-testid="resume-fetch-all-btn"
+              aria-label="Wznów pobieranie"
+            >
+              Wznów pobieranie
+            </Button>
           )}
         </div>
       </div>
 
-      <div style={{ marginTop: 10, overflowX: 'auto' }}>
-        <div style={{ minWidth: 520 }}>
-          {/* Header row */}
-          <div
-            style={{
-              ...gridStyle,
-              padding: '4px 10px',
-              fontSize: '0.68rem',
-              textTransform: 'uppercase',
-              letterSpacing: '0.05em',
-              fontWeight: 700,
-              color: 'var(--text-muted)',
-            }}
-          >
-            <span>Provider</span>
-            <span>Status</span>
-            <span style={{ textAlign: 'right' }}>Pobrano</span>
-            <span style={{ textAlign: 'right' }}>Zgłoszono</span>
-          </div>
+      {progress.providers.length > 0 && (
+        <div style={{ marginTop: 10, overflowX: 'auto' }}>
+          <div style={{ minWidth: 520 }}>
+            {/* Header row */}
+            <div
+              style={{
+                ...gridStyle,
+                padding: '4px 10px',
+                fontSize: '0.68rem',
+                textTransform: 'uppercase',
+                letterSpacing: '0.05em',
+                fontWeight: 700,
+                color: 'var(--text-muted)',
+              }}
+            >
+              <span>Provider</span>
+              <span>Status</span>
+              <span style={{ textAlign: 'right' }}>Pobrano</span>
+              <span style={{ textAlign: 'right' }}>Zgłoszono</span>
+            </div>
 
-          {progress.providers.map((provider) => (
-            <ProviderRow key={provider.provider} provider={provider} running={running} />
-          ))}
+            {progress.providers.map((provider) => (
+              <ProviderRow key={provider.provider} provider={provider} running={running} />
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
       <div style={{ marginTop: 8, fontSize: '0.85rem', fontWeight: 600 }}>
         Łącznie pobrano: {formatNumber(progress.fetched_total)} · Po lokalnych
@@ -221,6 +246,89 @@ export const FetchAllProgressPanel: React.FC<Props> = ({
             <span>Wszyscy wybrani providerzy przekazali pełen zakres wyników.</span>
           </div>
         )}
+
+      {/* ── Historical Resumable Jobs Section ──────────────────────────────── */}
+      {!running && resumableJobs.length > 0 && (
+        <div
+          data-testid="historical-resumable-jobs-section"
+          style={{
+            marginTop: 12,
+            paddingTop: 10,
+            borderTop: '1px solid var(--border-subtle)',
+          }}
+        >
+          <div
+            style={{
+              fontSize: '0.75rem',
+              fontWeight: 700,
+              textTransform: 'uppercase',
+              letterSpacing: '0.05em',
+              color: 'var(--text-muted)',
+              marginBottom: 6,
+            }}
+          >
+            Wznawialne zadania historyczne ({resumableJobs.length})
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {resumableJobs.map((rj) => {
+              const rjProviders = rj.providers && rj.providers.length > 0
+                ? rj.providers.map((p) => PROVIDER_LABELS[p] ?? p).join(', ')
+                : PROVIDER_LABELS[rj.provider] ?? rj.provider;
+              const dateStr = new Date(rj.updated_at).toLocaleString('pl-PL');
+              const isCurrent = progress.job_id === rj.job_id;
+
+              return (
+                <div
+                  key={rj.job_id}
+                  data-testid={`resumable-job-row-${rj.job_id}`}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: 8,
+                    padding: '6px 10px',
+                    borderRadius: 'var(--radius-sm)',
+                    backgroundColor: isCurrent ? 'var(--bg-surface)' : 'transparent',
+                    border: '1px solid var(--border-subtle)',
+                    fontSize: '0.8rem',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    <strong style={{ color: 'var(--text-primary)' }}>{rjProviders}</strong>
+                    <span style={{ color: 'var(--text-muted)' }}>({dateStr})</span>
+                    <span style={{ color: 'var(--text-secondary)' }}>
+                      Pobrano: {formatNumber(rj.fetched_count)} · Zaakceptowano: {formatNumber(rj.canonical_accepted_count)}
+                    </span>
+                    {rj.message && (
+                      <span style={{ color: 'var(--status-warning-text)', fontSize: '0.75rem' }}>
+                        [{rj.message}]
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      data-testid={`resume-job-btn-${rj.job_id}`}
+                      onClick={() => {
+                        if (onResumeJob) {
+                          onResumeJob(rj.job_id);
+                        } else if (onResume) {
+                          onResume();
+                        }
+                      }}
+                      aria-label={`Wznów zadanie: ${rjProviders}`}
+                    >
+                      Wznów to zadanie
+                    </Button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

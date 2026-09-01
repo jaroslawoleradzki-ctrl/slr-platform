@@ -157,19 +157,41 @@ async def test_openalex_request_contains_full_canonical_boolean_in_search() -> N
 def test_crossref_uses_bounded_lossy_candidate_plan_not_flattened_query() -> None:
     rendered = CrossrefQueryRenderer().render(canonical_regression_query())
     assert rendered.is_lossless is False
-    assert rendered.metadata["candidate_queries"] == [
-        '"Lean Management"',
-        '"Lean Manufacturing"',
-        '"Lean Production"',
-        '"Kaizen"',
-        '"Continuous Improvement"',
-    ]
-    assert "Energy Efficiency" not in rendered.query_string
+    assert len(rendered.metadata["candidate_queries"]) == 6
+    assert rendered.metadata["possible_candidate_combinations"] == 245
+    assert rendered.metadata["planned_candidate_combinations"] == 6
+    assert all(
+        "Energy" in query
+        and any(
+            term in query
+            for term in ("Manufact", "Production", "Industrial", "Factor")
+        )
+        for query in rendered.metadata["candidate_queries"]
+    )
     assert "candidate" in " ".join(rendered.warnings).casefold()
 
 
+def test_crossref_bounded_plan_has_fixed_cross_index_positive_paths() -> None:
+    expression = SearchGroup(
+        operator=BooleanOperator.AND,
+        children=[
+            SearchGroup(operator=BooleanOperator.OR, children=[SearchTerm(value="A1"), SearchTerm(value="A2")]),
+            SearchGroup(operator=BooleanOperator.OR, children=[SearchTerm(value="B1"), SearchTerm(value="B2")]),
+            SearchGroup(operator=BooleanOperator.OR, children=[SearchTerm(value="C1"), SearchTerm(value="C2")]),
+        ],
+    )
+    query = SearchQuery(name="Cross-index coverage", expression=expression)
+    rendered = CrossrefQueryRenderer().render(query)
+    known_cross_index_positives = {"A1 B1 C2", "A1 B2 C1", "A2 B1 C1", "A2 B1 C2", "A2 B2 C1"}
+
+    assert known_cross_index_positives.issubset(set(rendered.metadata["candidate_queries"]))
+    assert rendered.metadata["possible_candidate_combinations"] == 8
+    assert rendered.metadata["planned_candidate_combinations"] == 6
+    assert validate_canonical_query(query, Publication(title="A1 B2 C1")).status is CanonicalMatchStatus.MATCH
+
+
 @pytest.mark.anyio
-async def test_crossref_provider_executes_five_query_plan_without_cartesian_product() -> None:
+async def test_crossref_provider_executes_bounded_composite_plan_without_cartesian_product() -> None:
     canonical = canonical_regression_query()
     rendered = CrossrefQueryRenderer().render(canonical)
     requested_queries: list[str] = []
@@ -205,10 +227,65 @@ async def test_crossref_provider_executes_five_query_plan_without_cartesian_prod
         )
 
     assert requested_queries == rendered.metadata["candidate_queries"]
-    assert len(requested_queries) == 5
+    assert len(requested_queries) == 6
     assert output.total_count is None
     assert output.is_lossless is False
     assert output.next_cursor is None
+
+
+@pytest.mark.anyio
+async def test_crossref_composite_retrieval_keeps_known_positive_and_excludes_medical_management_noise() -> None:
+    canonical = canonical_regression_query()
+    rendered = CrossrefQueryRenderer().render(canonical)
+    medical_titles = {
+        "Management of side effects and complications in medical abortion",
+        "Endovascular management of arterial intimal defects",
+        "Optimizing the management of blunt splenic injury",
+    }
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        physical_query = request.url.params["query"]
+        # The fixture emulates Crossref's physical matching: broad medical
+        # 'management' records never match a query retaining all AND anchors.
+        assert "Energy" in physical_query
+        assert any(
+            term in physical_query
+            for term in ("Manufact", "Production", "Industrial", "Factor")
+        )
+        items = (
+            [
+                {
+                    "DOI": "10.1000/known-positive",
+                    "title": ["Kaizen principles for improving energy efficiency in industrial plants"],
+                }
+            ]
+            if physical_query == '"Lean Management" "Energy Management" "Manufacturing Industry"'
+            else []
+        )
+        return httpx.Response(
+            200,
+            json={"message": {"total-results": len(items), "next-cursor": None, "items": items}},
+            request=request,
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        provider = CrossrefProvider(
+            client=CrossrefClient(http_client=client, requests_per_second=None), paginate=True
+        )
+        output = await provider.search_with_raw(
+            search_run=SearchRun(
+                query_id=canonical.query_id,
+                query_version=canonical.version,
+                provider="crossref",
+                rendered_query=rendered.query_string,
+            ),
+            search_query=canonical,
+        )
+
+    assert [publication.title for publication in output.publications] == [
+        "Kaizen principles for improving energy efficiency in industrial plants"
+    ]
+    assert not medical_titles.intersection(publication.title for publication in output.publications)
 
 
 def test_semantic_scholar_regression_query_uses_bulk_boolean_operators() -> None:

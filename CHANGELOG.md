@@ -1,5 +1,30 @@
 # Changelog
 
+## [0.6.8] — 2026-09-01
+
+### Added
+
+- **Durable Fetch-All Resume**:
+  - Persistent fetch-all checkpoints with resumable historical jobs, exact `job_id` selection, continuation state, counters, and provenance preserved across refresh or restart.
+  - Multi-provider historical jobs retain independent provider progress and resumability.
+- **Resume UX**:
+  - Shared `Button` actions for the primary `Wznów pobieranie` control and secondary historical `Wznów to zadanie` actions, with clearer hierarchy and accessibility semantics.
+- **Crossref Retrieval Correctness**:
+  - Canonical `AND`/`OR` queries translate into deterministic physical candidate plans with complete Cartesian coverage when the logical space fits the six-query bound.
+  - Larger spaces use distributed bounded coverage with explicit query-plan and coverage metadata.
+- **Crossref Malformed Record Resilience**:
+  - Individual malformed records are skipped without aborting a page or fetch; pagination continues with raw, mapped, and skipped-malformed accounting.
+
+### Changed
+
+- **Integration and Reliability**:
+  - Crossref physical-plan metadata is preserved across checkpoint/resume.
+  - OpenAlex checkpoint/resume and Semantic Scholar generic fetch-all regression coverage were strengthened.
+
+### Known limitations
+
+- Crossref candidate retrieval uses a bounded number of physical queries. When a canonical synonym-combination space exceeds that bound, retrieval provides deterministic partial coverage rather than guaranteed exhaustive candidate recall. Canonical validation remains exact for candidates that were retrieved.
+
 ## [0.6.7] — 2026-08-26
 
 ### Added

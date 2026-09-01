@@ -8,6 +8,7 @@ import {
   SearchExecutionResult,
   FetchAllStartResult,
   FetchAllStatusResult,
+  ResumableSearchJobSummary,
   BibliographicImportResponse,
   BibliographicImportHistoryRecord,
   SourcesSummaryResponse,
@@ -102,6 +103,9 @@ export interface ProjectApiService {
     projectId: string,
     jobId?: string,
   ): Promise<FetchAllStartResult>;
+  getResumableFetchAllSearches(
+    projectId: string
+  ): Promise<ResumableSearchJobSummary[]>;
   getFetchAllSearchStatus(projectId: string, jobId: string): Promise<FetchAllStatusResult>;
   cancelFetchAllSearch(projectId: string, jobId: string): Promise<FetchAllStatusResult>;
   getSearchStrategy(projectId: string): Promise<SearchStrategy | null>;
@@ -482,6 +486,24 @@ class MixedProjectApiService implements ProjectApiService {
       throw new Error(await formatFastApiError(response, 'wznowić pobieranie'));
     }
     return response.json() as Promise<FetchAllStartResult>;
+  }
+
+  async getResumableFetchAllSearches(
+    projectId: string
+  ): Promise<ResumableSearchJobSummary[]> {
+    let response: Response;
+    try {
+      response = await fetch(
+        `${API_BASE_URL}/projects/${projectId}/search-strategy/executions/resumable`,
+        { headers: { Accept: 'application/json' } }
+      );
+    } catch {
+      throw new Error('Nie udało się połączyć z backendem. Sprawdź połączenie i spróbuj ponownie.');
+    }
+    if (!response.ok) {
+      throw new Error(await formatFastApiError(response, 'pobrać wznawialne zadania'));
+    }
+    return response.json() as Promise<ResumableSearchJobSummary[]>;
   }
 
   async getFetchAllSearchStatus(

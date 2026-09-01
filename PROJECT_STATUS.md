@@ -14,11 +14,11 @@ development
 
 Current version:
 
-v0.6.7
+v0.6.8
 
 Current release:
 
-v0.6.7 — Search Correctness, Durable Search Resume & Audit Hardening (2026-08-26)
+v0.6.8 — Durable Fetch-All Resume, Crossref Correctness & Resilience (2026-09-01)
 
 Current release status:
 
