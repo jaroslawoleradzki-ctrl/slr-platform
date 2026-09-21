@@ -273,6 +273,19 @@ class FetchAllSearchService:
         self._jobs: dict[str, FetchAllJob] = {}
         self._active_by_project: dict[str, str] = {}
 
+    def _checkpoint_kept_count(self, checkpoint: SearchRunCheckpoint) -> int:
+        """Read the persisted count; recover older finalized jobs from durable snapshots."""
+        metadata = checkpoint.plan_metadata or {}
+        if "kept_count" in metadata:
+            return int(metadata["kept_count"])
+        get_snapshots = getattr(self._snapshot_repo(), "get_for_search_run", None)
+        if callable(get_snapshots):
+            snapshots = get_snapshots(checkpoint.project_id, checkpoint.search_run_id)
+            retained = sum(s.provider.casefold() == checkpoint.provider.casefold() for s in snapshots)
+            if retained:
+                return retained
+        return checkpoint.canonical_accepted_count
+
     # ------------------------------------------------------------------ API
 
     def start(
@@ -402,6 +415,7 @@ class FetchAllSearchService:
                     providers=prov_names,
                     status=combined_status,
                     fetched_count=sum(c.fetched_count for c in cps),
+                    kept_count=sum(self._checkpoint_kept_count(c) for c in cps),
                     canonical_accepted_count=sum(c.canonical_accepted_count for c in cps),
                     canonical_rejected_count=sum(c.canonical_rejected_count for c in cps),
                     canonical_indeterminate_count=sum(c.canonical_indeterminate_count for c in cps),
@@ -435,7 +449,7 @@ class FetchAllSearchService:
                     fetched_count=cp.fetched_count,
                     raw_count=int((cp.plan_metadata or {}).get("raw_count", cp.fetched_count)),
                     mapped_count=int((cp.plan_metadata or {}).get("mapped_count", cp.fetched_count)),
-                    kept_count=cp.canonical_accepted_count,
+                    kept_count=self._checkpoint_kept_count(cp),
                     canonical_accepted_count=cp.canonical_accepted_count,
                     canonical_rejected_count=cp.canonical_rejected_count,
                     canonical_indeterminate_count=cp.canonical_indeterminate_count,
@@ -464,7 +478,7 @@ class FetchAllSearchService:
                 finished_at=max(cp.updated_at for cp in checkpoints),
                 providers=providers,
                 fetched_total=sum(cp.fetched_count for cp in checkpoints),
-                kept_total=sum(cp.canonical_accepted_count for cp in checkpoints),
+                kept_total=sum(self._checkpoint_kept_count(cp) for cp in checkpoints),
                 canonical_accepted_total=sum(cp.canonical_accepted_count for cp in checkpoints),
                 canonical_rejected_total=sum(cp.canonical_rejected_count for cp in checkpoints),
                 canonical_indeterminate_total=sum(cp.canonical_indeterminate_count for cp in checkpoints),
@@ -580,6 +594,7 @@ class FetchAllSearchService:
         plan_meta["skipped_malformed_count"] = state.skipped_malformed_count
         plan_meta["raw_count"] = state.raw_count
         plan_meta["mapped_count"] = state.mapped_count
+        plan_meta["kept_count"] = state.kept_count
         if cursor and cursor.startswith("crossref-plan:"):
             from app.providers.search.crossref import CrossrefProvider
             try:
@@ -642,7 +657,7 @@ class FetchAllSearchService:
                             fetched_count=cp.fetched_count,
                             raw_count=int((cp.plan_metadata or {}).get("raw_count", cp.fetched_count)),
                             mapped_count=int((cp.plan_metadata or {}).get("mapped_count", cp.fetched_count)),
-                            kept_count=cp.canonical_accepted_count,
+                            kept_count=self._checkpoint_kept_count(cp),
                             canonical_accepted_count=cp.canonical_accepted_count,
                             canonical_rejected_count=cp.canonical_rejected_count,
                             canonical_indeterminate_count=cp.canonical_indeterminate_count,
@@ -670,7 +685,7 @@ class FetchAllSearchService:
                             fetched_count=cp.fetched_count,
                             raw_count=int((cp.plan_metadata or {}).get("raw_count", cp.fetched_count)),
                             mapped_count=int((cp.plan_metadata or {}).get("mapped_count", cp.fetched_count)),
-                            kept_count=cp.canonical_accepted_count,
+                            kept_count=self._checkpoint_kept_count(cp),
                             canonical_accepted_count=cp.canonical_accepted_count,
                             canonical_rejected_count=cp.canonical_rejected_count,
                             canonical_indeterminate_count=cp.canonical_indeterminate_count,
