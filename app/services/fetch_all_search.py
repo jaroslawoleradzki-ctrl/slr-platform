@@ -69,6 +69,17 @@ from app.api.dto.search_strategy import (
     SearchStrategyExecutionRequest,
     SearchStrategyExecutionResponse,
 )
+from app.domain.crossref_diagnostics import (
+    CrossrefMetadataCompleteness,
+    CrossrefRecordDiagnostic,
+    RetentionOutcome,
+    build_crossref_replay_dataset,
+    group_evidence_for,
+    merge_retrieval_entries,
+    retrieval_entries_from,
+    retrieval_paths_from,
+    sort_replay_rows,
+)
 from app.domain.publication import Publication
 from app.domain.search import SearchQuery, SearchRun, SearchRunStatus
 from app.normalization import normalize_publication
@@ -139,6 +150,26 @@ HIGH_INDETERMINATE_RATE_WARNING = (
 )
 
 
+def _restore_record_diagnostics(checkpoint: SearchRunCheckpoint) -> list[CrossrefRecordDiagnostic]:
+    """Rebuild WP2 diagnostics from a checkpoint payload, skipping corrupt rows.
+
+    Diagnostics are advisory observability: an unreadable row must not break
+    Resume. Counters and kept records are restored independently.
+    """
+    raw = (checkpoint.plan_metadata or {}).get("record_diagnostics")
+    if not isinstance(raw, list):
+        return []
+    diagnostics: list[CrossrefRecordDiagnostic] = []
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        try:
+            diagnostics.append(CrossrefRecordDiagnostic.model_validate(item))
+        except ValidationError:
+            continue
+    return diagnostics
+
+
 def _reconcile_indeterminate_warning(state: FetchAllProviderState) -> None:
     """Ensure high-indeterminate warning strictly reflects the current counters."""
     is_high = (
@@ -190,6 +221,9 @@ class FetchAllProviderState:
     cursor: str | None = None
     plan_metadata: dict[str, Any] | None = None
     kept_records: list[Publication] = field(default_factory=list)
+    # WP2 per-record Crossref diagnostics (populated for crossref only).
+    # Counters and retention semantics are unchanged; this is observability.
+    record_diagnostics: list[CrossrefRecordDiagnostic] = field(default_factory=list)
 
     def to_response(self) -> FetchAllProviderProgressResponse:
         return FetchAllProviderProgressResponse(
@@ -511,6 +545,75 @@ class FetchAllSearchService:
             result=job.result,
         )
 
+    def _merge_crossref_duplicate_paths(
+        self,
+        state: FetchAllProviderState,
+        kept_index: dict[str, int],
+        diagnostic_index: dict[str, int],
+        source_id: str,
+        publication: Publication,
+    ) -> None:
+        """Fold a repeated retrieval into the surviving record and diagnostic.
+
+        Counters are untouched: the candidate was already counted at first
+        sight. Only additional retrieval paths are preserved.
+        """
+        entries = retrieval_entries_from(publication)
+        paths = retrieval_paths_from(publication)
+        if not entries and not paths:
+            return
+        position = diagnostic_index.get(source_id)
+        if position is not None:
+            diagnostic = state.record_diagnostics[position]
+            for path in paths:
+                diagnostic = diagnostic.with_retrieval_path(path)
+            state.record_diagnostics[position] = diagnostic
+        kept_position = kept_index.get(source_id)
+        if kept_position is not None:
+            kept = state.kept_records[kept_position]
+            merged = merge_retrieval_entries(kept.provenance, entries)
+            if len(merged) > len(kept.provenance):
+                state.kept_records[kept_position] = kept.model_copy(update={"provenance": merged})
+
+    def get_crossref_replay_dataset(self, job_id: str) -> list[dict[str, Any]]:
+        """Reconstruct the deterministic WP2 replay dataset for one job.
+
+        Live in-memory diagnostics are used when the job is known to this
+        service instance; otherwise the durable checkpoint payload is used, so
+        restarted processes and completed historical jobs keep working.
+        """
+        rows: list[dict[str, Any]] = []
+        job = self._jobs.get(job_id)
+        if job is not None:
+            for state in job.providers:
+                if state.name.casefold() != "crossref":
+                    continue
+                rows.extend(
+                    build_crossref_replay_dataset(
+                        list(state.record_diagnostics),
+                        job_id=job.job_id,
+                        search_run_id=state.search_run_id,
+                    )
+                )
+        else:
+            try:
+                checkpoints = self._checkpoint_repo().get_checkpoints_for_job(UUID(job_id))
+            except Exception:
+                checkpoints = []
+            if not checkpoints:
+                raise UnknownFetchAllJobError(job_id)
+            for checkpoint in checkpoints:
+                if checkpoint.provider.casefold() != "crossref":
+                    continue
+                rows.extend(
+                    build_crossref_replay_dataset(
+                        _restore_record_diagnostics(checkpoint),
+                        job_id=str(checkpoint.job_id),
+                        search_run_id=checkpoint.search_run_id,
+                    )
+                )
+        return sort_replay_rows(rows)
+
     def request_cancel(self, job_id: str) -> FetchAllStatusResponse:
         job = self._jobs.get(job_id)
         if job is not None and job.status == "running":
@@ -595,6 +698,10 @@ class FetchAllSearchService:
         plan_meta["raw_count"] = state.raw_count
         plan_meta["mapped_count"] = state.mapped_count
         plan_meta["kept_count"] = state.kept_count
+        if state.record_diagnostics:
+            plan_meta["record_diagnostics"] = [
+                diagnostic.model_dump(mode="json") for diagnostic in state.record_diagnostics
+            ]
         if cursor and cursor.startswith("crossref-plan:"):
             from app.providers.search.crossref import CrossrefProvider
             try:
@@ -669,6 +776,7 @@ class FetchAllSearchService:
                             search_run_id=cp.search_run_id,
                             cursor=cp.cursor,
                             kept_records=prev_records,
+                            record_diagnostics=_restore_record_diagnostics(cp),
                         )
                         _reconcile_indeterminate_warning(state)
                     elif cp is not None:
@@ -698,6 +806,7 @@ class FetchAllSearchService:
                             cursor=cp.cursor,
                             plan_metadata=cp.plan_metadata,
                             kept_records=prev_records,
+                            record_diagnostics=_restore_record_diagnostics(cp),
                         )
                         _reconcile_indeterminate_warning(state)
                     else:
@@ -771,6 +880,13 @@ class FetchAllSearchService:
         seen_cursors: set[str] = set()
         cursor = initial_checkpoint.cursor if initial_checkpoint is not None and initial_checkpoint.cursor else "*"
         state.cursor = cursor
+        # WP2 transient lookup indexes (rebuilt on Resume; never persisted).
+        diagnostic_index: dict[str, int] = {
+            diagnostic.source_record_id: position for position, diagnostic in enumerate(state.record_diagnostics)
+        }
+        kept_index: dict[str, int] = {
+            publication_source_id(record): position for position, record in enumerate(state.kept_records)
+        }
 
         # Save initial running checkpoint
         self._save_checkpoint(job, state, cursor, resumable=True)
@@ -813,6 +929,10 @@ class FetchAllSearchService:
                 normalized = normalize_publication(publication)
                 source_id = publication_source_id(normalized)
                 if source_id in seen_source_ids:
+                    if state.name.casefold() == "crossref":
+                        self._merge_crossref_duplicate_paths(
+                            state, kept_index, diagnostic_index, source_id, publication
+                        )
                     continue
                 seen_source_ids.add(source_id)
                 state.fetched_count += 1
@@ -828,19 +948,40 @@ class FetchAllSearchService:
                     enriched = normalized
 
                 validation = validate_canonical_query(job.query, enriched)
+                outcome: RetentionOutcome | None = None
                 if validation.status is CanonicalMatchStatus.NON_MATCH:
                     state.canonical_rejected_count += 1
-                    continue
-                if validation.status is CanonicalMatchStatus.INDETERMINATE:
-                    state.canonical_indeterminate_count += 1
-                    warning = "A candidate had a missing canonically scoped field and was retained to protect recall."
-                    if warning not in state.warnings:
-                        state.warnings.append(warning)
+                    outcome = RetentionOutcome.REJECTED_CANONICAL
                 else:
-                    state.canonical_accepted_count += 1
-                if matches_execution_constraints(enriched, job.strategy):
-                    state.kept_records.append(enriched)
-                    state.kept_count += 1
+                    if validation.status is CanonicalMatchStatus.INDETERMINATE:
+                        state.canonical_indeterminate_count += 1
+                        warning = "A candidate had a missing canonically scoped field and was retained to protect recall."
+                        if warning not in state.warnings:
+                            state.warnings.append(warning)
+                    else:
+                        state.canonical_accepted_count += 1
+                    if matches_execution_constraints(enriched, job.strategy):
+                        state.kept_records.append(enriched)
+                        kept_index[source_id] = len(state.kept_records) - 1
+                        state.kept_count += 1
+                        outcome = RetentionOutcome.RETAINED
+                    else:
+                        outcome = RetentionOutcome.REJECTED_CONSTRAINTS
+                if state.name.casefold() == "crossref" and outcome is not None:
+                    diagnostic_index[source_id] = len(state.record_diagnostics)
+                    state.record_diagnostics.append(
+                        CrossrefRecordDiagnostic(
+                            source_record_id=source_id,
+                            doi=publication_doi(enriched),
+                            title=enriched.title,
+                            search_run_id=state.search_run_id,
+                            retrieval_paths=tuple(retrieval_paths_from(publication)),
+                            completeness=CrossrefMetadataCompleteness.for_publication(normalized),
+                            canonical_status=validation.status,
+                            group_evidence=group_evidence_for(job.query, enriched),
+                            retention_outcome=outcome,
+                        )
+                    )
 
             _reconcile_indeterminate_warning(state)
 

@@ -1,4 +1,11 @@
 from app.domain.author import Affiliation, Author
+from app.domain.crossref_diagnostics import (
+    CanonicalGroupEvidence,
+    CrossrefMetadataCompleteness,
+    CrossrefRecordDiagnostic,
+    CrossrefRetrievalPath,
+    RetentionOutcome,
+)
 from app.domain.deduplication import (
     DuplicateDecision,
     DuplicateDecisionType,
@@ -69,8 +76,12 @@ __all__ = [
     "Affiliation",
     "Author",
     "BooleanOperator",
+    "CanonicalGroupEvidence",
     "CriterionAssessment",
     "CriterionAssessmentValue",
+    "CrossrefMetadataCompleteness",
+    "CrossrefRecordDiagnostic",
+    "CrossrefRetrievalPath",
     "DocumentType",
     "DuplicateDecision",
     "DuplicateDecisionType",
@@ -108,6 +119,7 @@ __all__ = [
     "ProvenanceEntry",
     "Publication",
     "QuantitativeValue",
+    "RetentionOutcome",
     "ScreeningCriterion",
     "ScreeningCriterionStage",
     "ScreeningCriterionType",

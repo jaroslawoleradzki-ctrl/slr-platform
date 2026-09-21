@@ -3,12 +3,14 @@ from __future__ import annotations
 import base64
 import html
 import json
+import math
 import re
 from collections.abc import AsyncIterator, Callable
 from datetime import date, datetime, timezone
 from typing import Any, cast
 
 from app.domain import Affiliation, Author, Identifier, IdentifierType, Venue
+from app.domain.crossref_diagnostics import merge_retrieval_entries
 from app.domain.provenance import ProvenanceEntry
 from app.domain.publication import DocumentType, Publication
 from app.domain.search import SearchQuery, SearchRun
@@ -47,6 +49,17 @@ class MalformedCrossrefRecordError(ValueError):
 
 def _utc_now() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _read_crossref_score(work: Any) -> float | None:
+    """Return the provider relevance score when the API supplied a number."""
+    if not isinstance(work, dict):
+        return None
+    score = work.get("score")
+    if isinstance(score, bool) or not isinstance(score, (int, float)):
+        return None
+    value = float(score)
+    return value if math.isfinite(value) else None
 
 
 def _clean_abstract(abstract: str) -> str | None:
@@ -177,7 +190,7 @@ class CrossrefProvider:
         target = self._max_results if self._paginate else rows
         publications: list[Publication] = []
         raw_responses: list[JsonObject] = []
-        seen_source_ids: set[str] = set()
+        seen_source_ids: dict[str, int] = {}
         seen_positions: set[tuple[int, str]] = set()
         next_cursor: str | None = None
         candidate_total = 0
@@ -213,22 +226,36 @@ class CrossrefProvider:
             items = message["items"]
             raw_count += len(items)
             retrieved_at = self._retrieval_clock()
-            for work in items:
+            for result_rank, work in enumerate(items):
                 try:
                     publication = self._map_record_or_raise_malformed(
                         work,
                         search_run=search_run,
                         search_query=search_query,
                         retrieved_at=retrieved_at,
+                        physical_query=candidate_queries[query_index],
+                        physical_query_index=query_index,
+                        result_rank=result_rank,
+                        provider_score=_read_crossref_score(work),
+                        physical_cursor=physical_cursor,
                     )
                 except MalformedCrossrefRecordError:
                     skipped_malformed_count += 1
                     continue
                 mapped_count += 1
                 source_id = publication.provenance[0].source_record_id
-                if source_id not in seen_source_ids:
-                    seen_source_ids.add(source_id)
+                existing_position = seen_source_ids.get(source_id)
+                if existing_position is None:
+                    seen_source_ids[source_id] = len(publications)
                     publications.append(publication)
+                else:
+                    # The same record was returned by another physical query:
+                    # preserve the additional retrieval path instead of
+                    # silently dropping it.
+                    first = publications[existing_position]
+                    merged = merge_retrieval_entries(first.provenance, publication.provenance)
+                    if len(merged) > len(first.provenance):
+                        publications[existing_position] = first.model_copy(update={"provenance": merged})
 
             raw_next = self._read_next_cursor(payload)
             query_complete = not items or raw_next is None or raw_next == physical_cursor
@@ -535,6 +562,11 @@ class CrossrefProvider:
         search_run: SearchRun,
         search_query: SearchQuery,
         retrieved_at: datetime,
+        physical_query: str | None = None,
+        physical_query_index: int | None = None,
+        result_rank: int | None = None,
+        provider_score: float | None = None,
+        physical_cursor: str | None = None,
     ) -> Publication:
         doi = normalize_doi(work.get("DOI"))
         publication = self.map_work(work)
@@ -552,6 +584,11 @@ class CrossrefProvider:
             query_id=search_query.query_id,
             run_id=search_run.run_id,
             rendered_query=search_run.rendered_query,
+            physical_query=physical_query,
+            physical_query_index=physical_query_index,
+            result_rank=result_rank,
+            provider_score=provider_score,
+            physical_cursor=physical_cursor,
         )
         return publication.model_copy(
             update={
@@ -573,6 +610,11 @@ class CrossrefProvider:
         search_run: SearchRun,
         search_query: SearchQuery,
         retrieved_at: datetime,
+        physical_query: str | None = None,
+        physical_query_index: int | None = None,
+        result_rank: int | None = None,
+        provider_score: float | None = None,
+        physical_cursor: str | None = None,
     ) -> Publication:
         if not isinstance(work, dict):
             raise MalformedCrossrefRecordError("Crossref work must be a JSON object")
@@ -581,6 +623,11 @@ class CrossrefProvider:
             search_run=search_run,
             search_query=search_query,
             retrieved_at=retrieved_at,
+            physical_query=physical_query,
+            physical_query_index=physical_query_index,
+            result_rank=result_rank,
+            provider_score=provider_score,
+            physical_cursor=physical_cursor,
         )
 
     def _require_client(self) -> CrossrefClient:
