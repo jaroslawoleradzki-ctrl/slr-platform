@@ -21,6 +21,7 @@ from app.domain.search import (
 )
 from app.providers.search.base import ProviderSearchOutput
 from app.providers.search.crossref import CrossrefProvider
+from app.rendering.crossref import build_crossref_candidate_queries
 from app.repositories.search_result_snapshot_repository import (
     SqliteSearchResultSnapshotRepository,
 )
@@ -28,6 +29,7 @@ from app.repositories.search_run_checkpoint_repository import (
     SqliteSearchRunCheckpointRepository,
 )
 from app.services.fetch_all_search import FetchAllSearchService
+from app.services.live_search import build_search_query
 
 
 def _strategy(providers: list[str] | None = None) -> SearchStrategyExecutionRequest:
@@ -136,14 +138,19 @@ async def test_wp5_crossref_physical_query_audit_and_metadata(tmp_path: Path) ->
     start_resp = service.start("proj_audit_crossref", strat)
     await service.wait(start_resp.job_id)
 
-    # Check that checkpoint records candidate queries and current query index
+    # Check that checkpoint records candidate queries and current query index.
+    # The strategy spans 3 concept groups (2x2x2 = 8 combinations), so the
+    # bounded deterministic plan stores 6 physical queries, not just the first
+    # group's terms.
     checkpoints = checkpoint_repo.get_checkpoints_for_job(UUID(start_resp.job_id))
     assert len(checkpoints) == 1
     cp = checkpoints[0]
     assert cp.provider == "crossref"
     assert cp.plan_metadata is not None
     assert "candidate_queries" in cp.plan_metadata
-    assert cp.plan_metadata["candidate_queries"] == ['"Lean Management"', '"Lean Manufacturing"']
+    expected_queries = build_crossref_candidate_queries(build_search_query(strat).expression)
+    assert len(expected_queries) == 6
+    assert cp.plan_metadata["candidate_queries"] == expected_queries
     assert cp.plan_metadata.get("current_query_index") == 1
     assert cp.plan_metadata.get("current_physical_cursor") == "page2"
 

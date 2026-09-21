@@ -14,6 +14,7 @@ from app.domain.provenance import ProvenanceEntry
 from app.domain.publication import DocumentType, Publication
 from app.domain.search import BooleanOperator, SearchGroup, SearchQuery, SearchTerm
 from app.providers.search.base import ProviderSearchOutput
+from app.rendering.crossref import build_crossref_candidate_queries
 from app.repositories.project_publication_repository import default_project_publication_repository
 from app.services.canonical_query_validator import CanonicalMatchStatus, validate_canonical_query
 from app.services.fetch_all_search import FetchAllSearchService
@@ -139,9 +140,14 @@ async def test_live_search_crossref_without_abstract_issues_zero_external_enrich
     with patch("httpx.AsyncClient", side_effect=mock_async_client):
         execution = await service.execute("lean_energy", strategy)
 
-    # 1. Assert exactly Crossref was called and 0 OpenAlex / Semantic Scholar calls were made
-    assert len(http_calls) == 1
-    assert "api.crossref.org" in http_calls[0]
+    # 1. Assert only Crossref was called and 0 OpenAlex / Semantic Scholar calls
+    # were made. The strategy yields two deterministic physical queries (2 Lean
+    # terms x 1 Energy term), so exactly two Crossref requests are expected.
+    expected_queries = build_crossref_candidate_queries(build_search_query(strategy).expression)
+    assert len(expected_queries) == 2
+    assert len(http_calls) == len(expected_queries)
+    assert all("api.crossref.org" in url for url in http_calls)
+    assert {httpx.URL(url).params["query"] for url in http_calls} == set(expected_queries)
     assert not any("openalex" in url for url in http_calls)
     assert not any("semanticscholar" in url for url in http_calls)
 
