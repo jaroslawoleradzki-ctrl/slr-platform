@@ -1,5 +1,44 @@
 # Changelog
 
+## [0.6.9] — 2026-09-22
+
+### Added
+
+- **Crossref Diagnostic Retrieval Provenance**:
+  - Every mapped publication carries provenance with `physical_query`, `physical_query_index`, `physical_cursor`, `result_rank`, and non-null `provider_score`.
+  - Retrieval paths are preserved across physical queries, duplicates, and resume boundaries.
+- **Balanced Bounded Crossref Candidate Planning**:
+  - Canonical queries translate into deterministic structured physical-query plans with bounded per-axis coverage (`min(6, L_j)` per axis).
+  - Plan identity is deterministic and pinned; candidate queries are preserved intact through checkpoint/resume.
+- **Uncertainty-Policy Experimental/Replay Support (experimental, production-isolated)**:
+  - New uncertainty experiment service with `CURRENT_RECALL_FIRST`, `SEPARATE_ALL_UNCERTAIN`, and `EVIDENCE_TIERED_UNCERTAIN` policies.
+  - Replay adapter reconciles durable checkpoint retrieval paths into uncertainty candidates without inflating population cardinality.
+  - Experimental code is imported only by experimental services and tests; production retention outcomes are computed independently.
+
+### Fixed
+
+- **Corrected Resume Accounting/Identity**:
+  - Provenance resume identity corrected so resumed plans execute the exact pinned query and cursor.
+  - Balanced-planner resume contract hardened; resume query identity hardened against adversarial cursors.
+- **Safe Incompatible-Plan Resume Failure Before HTTP**:
+  - Legacy cursors, unpinned cursors, malformed `candidate_queries`, out-of-bounds indices, and cross-application plans fail with `IncompatibleCrossrefPlanError` and 0 HTTP requests.
+  - `FetchAllSearchService` marks checkpoint jobs with corrupted plan metadata as failed and non-resumable without issuing requests.
+- **Canonical JSON Plan Fingerprinting**:
+  - Plan fingerprint serialization uses canonical JSON array encoding, so ambiguous plans (e.g. `["a\nb", "c"]` vs `["a", "b\nc"]`) produce distinct fingerprints.
+- **Literal Query Delimiter Preservation**:
+  - Structured `candidate_queries` are never split on `" || "`; legitimate terms such as `alpha || beta` issue one intact physical request.
+- **Corrected NOT Positive-Group Semantics**:
+  - `_positive_groups` filters top-level `NOT` exclusions; `AND(Alpha, Gamma, NOT(Beta))` yields exactly 2 positive groups and pure `NOT(Beta)` yields 0.
+- **Duplicate DOI Accounting Across Physical Queries and Resume**:
+  - Retained, canonical-rejected, and constraint-rejected duplicates are counted exactly once each; retrieval paths from all occurrences are preserved across restart boundaries.
+- **Durable Checkpoint -> Replay -> Uncertainty Reconciliation**:
+  - Verified end-to-end: 12 retrieval paths from a 6-query SQLite checkpoint restore produce 12 replay rows and 5 uncertainty candidates with exact policy reconciliation.
+
+### Known limitations
+
+- Whole-payload checkpoint serialization scales quadratically with page count; bounded by existing limits (pre-existing technical debt, not a release blocker).
+- Uncertainty policies are experimental and isolated from production retention behavior.
+
 ## [0.6.8] — 2026-09-01
 
 ### Added

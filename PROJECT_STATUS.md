@@ -14,11 +14,11 @@ development
 
 Current version:
 
-v0.6.8
+v0.6.9
 
 Current release:
 
-v0.6.8 — Durable Fetch-All Resume, Crossref Correctness & Resilience (2026-09-01)
+v0.6.9 — Crossref Provenance, Balanced Planning & Uncertainty Experiment (2026-09-22)
 
 Current release status:
 
