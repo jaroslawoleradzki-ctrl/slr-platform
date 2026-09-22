@@ -1,9 +1,8 @@
 from pathlib import Path
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 import pytest
 
-from app.domain.duplicate_review import DuplicateDecision, DuplicateGroupReviewDecision
 from app.domain.pre_screening import (
     PreScreeningRemovalReason,
     PreScreeningStatus,
