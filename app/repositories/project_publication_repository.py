@@ -49,9 +49,43 @@ class ProjectPublicationRepository(Protocol):
     def get_all_publications(
         self, project_id: str, *, connection: sqlite3.Connection | None = None
     ) -> list[Publication]: ...
+    def get_screening_corpus_publications(
+        self, project_id: str, *, connection: sqlite3.Connection | None = None
+    ) -> list[Publication]: ...
     def get_active_publications(self, project_id: str) -> list[Publication]: ...
     def get_active_publications_with_position(self, project_id: str) -> list[tuple[int | None, Publication]]: ...
     def count_active_by_project(self, project_id: str) -> int: ...
+    def count_pre_screening_removed(self, project_id: str, *, connection: sqlite3.Connection | None = None) -> int: ...
+    def update_pre_screening_status(
+        self, project_id: str, record_id: UUID, status: str, *, connection: sqlite3.Connection | None = None
+    ) -> None: ...
+    def get_import_publications(
+        self,
+        project_id: str,
+        import_id: UUID,
+        *,
+        search: str | None = None,
+        status_filter: str | None = None,
+        offset: int = 0,
+        limit: int = 50,
+        connection: sqlite3.Connection | None = None,
+    ) -> list[tuple[Publication, str]]: ...
+    def count_import_publications(
+        self,
+        project_id: str,
+        import_id: UUID,
+        *,
+        search: str | None = None,
+        status_filter: str | None = None,
+        connection: sqlite3.Connection | None = None,
+    ) -> int: ...
+    def get_import_counts(
+        self,
+        project_id: str,
+        import_id: UUID,
+        *,
+        connection: sqlite3.Connection | None = None,
+    ) -> tuple[int, int, int]: ...
     def update_publication(
         self, project_id: str, publication: Publication, *, connection: sqlite3.Connection | None = None
     ) -> None: ...
@@ -79,6 +113,9 @@ class ProjectPublicationRepository(Protocol):
         self,
         project_id: str,
         publications: list[Publication],
+        *,
+        import_id: UUID | None = None,
+        connection: sqlite3.Connection | None = None,
     ) -> PublicationImportResult:
         """Atomically import publications unique by provider and source id within a project."""
         ...
@@ -173,6 +210,8 @@ class DemoProjectPublicationRepository:
             ],
             "ai_architecture": [],
         }
+        self._import_ids: dict[tuple[str, UUID], UUID] = {}
+        self._pre_screening_statuses: dict[tuple[str, UUID], str] = {}
 
     def get_publications(self, project_id: str) -> list[Publication]:
         if project_id not in self._projects_data:
@@ -185,12 +224,114 @@ class DemoProjectPublicationRepository:
         return len(self._projects_data[project_id])
 
     get_all_publications = get_publications
-    get_active_publications = get_publications
-    count_active_by_project = count_by_project
+
+    def get_screening_corpus_publications(self, project_id: str) -> list[Publication]:
+        return self.get_active_publications(project_id)
+
+    def get_active_publications(self, project_id: str) -> list[Publication]:
+        all_pubs = self.get_publications(project_id)
+        return [
+            p
+            for p in all_pubs
+            if self._pre_screening_statuses.get((project_id, p.record_id), "retained") == "retained"
+        ]
+
+    def count_active_by_project(self, project_id: str) -> int:
+        return len(self.get_active_publications(project_id))
 
     def get_active_publications_with_position(self, project_id: str) -> list[tuple[int | None, Publication]]:
-        """Demo adapter: returns publications without fabricating synthetic positions."""
-        return [(None, publication) for publication in self.get_publications(project_id)]
+        """Demo adapter: returns active publications without fabricating synthetic positions."""
+        return [(None, publication) for publication in self.get_active_publications(project_id)]
+
+    def count_pre_screening_removed(self, project_id: str, **_: object) -> int:
+        all_pubs = self.get_publications(project_id)
+        return sum(
+            1
+            for p in all_pubs
+            if self._pre_screening_statuses.get((project_id, p.record_id), "retained") == "removed"
+        )
+
+    def update_pre_screening_status(self, project_id: str, record_id: UUID, status: str, **_: object) -> None:
+        pubs = self.get_publications(project_id)
+        if not any(p.record_id == record_id for p in pubs):
+            raise ValueError(f"Publication '{record_id}' was not found in project '{project_id}'.")
+        self._pre_screening_statuses[(project_id, record_id)] = status
+
+    def get_import_publications(
+        self,
+        project_id: str,
+        import_id: UUID,
+        *,
+        search: str | None = None,
+        status_filter: str | None = None,
+        offset: int = 0,
+        limit: int = 50,
+        **_: object,
+    ) -> list[tuple[Publication, str]]:
+        all_pubs = self.get_publications(project_id)
+        matching: list[tuple[Publication, str]] = []
+        for p in all_pubs:
+            assigned_import = self._import_ids.get((project_id, p.record_id))
+            if assigned_import is not None and assigned_import != import_id:
+                continue
+            status = self._pre_screening_statuses.get((project_id, p.record_id), "retained")
+            if status_filter and status != status_filter:
+                continue
+            if search and search.strip():
+                term = search.strip().casefold()
+                text = f"{p.title} {' '.join(a.display_name for a in p.authors)} {p.venue.name if p.venue else ''}".casefold()
+                if term not in text:
+                    continue
+            matching.append((p, status))
+        return matching[offset : offset + limit]
+
+    def count_import_publications(
+        self,
+        project_id: str,
+        import_id: UUID,
+        *,
+        search: str | None = None,
+        status_filter: str | None = None,
+        **_: object,
+    ) -> int:
+        all_pubs = self.get_publications(project_id)
+        count = 0
+        for p in all_pubs:
+            assigned_import = self._import_ids.get((project_id, p.record_id))
+            if assigned_import is not None and assigned_import != import_id:
+                continue
+            status = self._pre_screening_statuses.get((project_id, p.record_id), "retained")
+            if status_filter and status != status_filter:
+                continue
+            if search and search.strip():
+                term = search.strip().casefold()
+                text = f"{p.title} {' '.join(a.display_name for a in p.authors)} {p.venue.name if p.venue else ''}".casefold()
+                if term not in text:
+                    continue
+            count += 1
+        return count
+
+    def get_import_counts(
+        self,
+        project_id: str,
+        import_id: UUID,
+        **_: object,
+    ) -> tuple[int, int, int]:
+        all_pubs = self.get_publications(project_id)
+        total = 0
+        retained = 0
+        removed = 0
+        for p in all_pubs:
+            assigned_import = self._import_ids.get((project_id, p.record_id))
+            if assigned_import is not None and assigned_import != import_id:
+                continue
+            total += 1
+            status = self._pre_screening_statuses.get((project_id, p.record_id), "retained")
+            if status == "removed":
+                removed += 1
+            else:
+                retained += 1
+        return total, retained, removed
 
     def update_publication(self, project_id: str, publication: Publication, **_: object) -> None:
         records = self._projects_data[project_id]
@@ -219,6 +360,9 @@ class DemoProjectPublicationRepository:
         self,
         project_id: str,
         publications: list[Publication],
+        *,
+        import_id: UUID | None = None,
+        **_: object,
     ) -> PublicationImportResult:
         if project_id not in self._projects_data:
             raise ProjectNotFoundError(project_id)
@@ -235,6 +379,9 @@ class DemoProjectPublicationRepository:
                 continue
             existing_keys.add(key)
             new_publications.append(publication)
+            if import_id is not None:
+                self._import_ids[(project_id, publication.record_id)] = import_id
+            self._pre_screening_statuses[(project_id, publication.record_id)] = "retained"
 
         self._projects_data[project_id].extend(new_publications)
         return PublicationImportResult(
@@ -293,6 +440,25 @@ class SqliteProjectPublicationRepository:
     ) -> list[Publication]:
         return self.get_publications(project_id, connection=connection)
 
+    def get_screening_corpus_publications(
+        self, project_id: str, *, connection: sqlite3.Connection | None = None
+    ) -> list[Publication]:
+        self._ensure_project(project_id, connection=connection)
+
+        def query(conn: sqlite3.Connection) -> list[Publication]:
+            rows = conn.execute(
+                """
+                SELECT document FROM project_publications
+                WHERE project_id = ?
+                  AND (pre_screening_status IS NULL OR pre_screening_status = 'retained')
+                ORDER BY position ASC, rowid ASC
+                """,
+                (project_id,),
+            ).fetchall()
+            return [Publication.model_validate(json.loads(row[0])) for row in rows]
+
+        return query(connection) if connection is not None else self._with_connection(query)
+
     def get_active_publications(
         self, project_id: str, *, connection: sqlite3.Connection | None = None
     ) -> list[Publication]:
@@ -300,7 +466,12 @@ class SqliteProjectPublicationRepository:
 
         def query(conn: sqlite3.Connection) -> list[Publication]:
             rows = conn.execute(
-                "SELECT document FROM project_publications WHERE project_id = ? AND superseded_by IS NULL ORDER BY position ASC, rowid ASC",
+                """
+                SELECT document FROM project_publications
+                WHERE project_id = ? AND superseded_by IS NULL
+                  AND (pre_screening_status IS NULL OR pre_screening_status = 'retained')
+                ORDER BY position ASC, rowid ASC
+                """,
                 (project_id,),
             ).fetchall()
             return [Publication.model_validate(json.loads(row[0])) for row in rows]
@@ -319,7 +490,12 @@ class SqliteProjectPublicationRepository:
 
         def query(conn: sqlite3.Connection) -> list[tuple[int | None, Publication]]:
             rows = conn.execute(
-                "SELECT position, document FROM project_publications WHERE project_id = ? AND superseded_by IS NULL ORDER BY position ASC, rowid ASC",
+                """
+                SELECT position, document FROM project_publications
+                WHERE project_id = ? AND superseded_by IS NULL
+                  AND (pre_screening_status IS NULL OR pre_screening_status = 'retained')
+                ORDER BY position ASC, rowid ASC
+                """,
                 (project_id,),
             ).fetchall()
             return [
@@ -361,10 +537,219 @@ class SqliteProjectPublicationRepository:
         def query(conn: sqlite3.Connection) -> int:
             return int(
                 conn.execute(
-                    "SELECT COUNT(*) FROM project_publications WHERE project_id = ? AND superseded_by IS NULL",
+                    """
+                    SELECT COUNT(*) FROM project_publications
+                    WHERE project_id = ? AND superseded_by IS NULL
+                      AND (pre_screening_status IS NULL OR pre_screening_status = 'retained')
+                    """,
                     (project_id,),
                 ).fetchone()[0]
             )
+
+        return query(connection) if connection is not None else self._with_connection(query)
+
+    def count_pre_screening_removed(
+        self, project_id: str, *, connection: sqlite3.Connection | None = None
+    ) -> int:
+        self._ensure_project(project_id, connection=connection)
+
+        def query(conn: sqlite3.Connection) -> int:
+            row = conn.execute(
+                "SELECT COUNT(*) FROM project_publications WHERE project_id = ? AND pre_screening_status = 'removed'",
+                (project_id,),
+            ).fetchone()
+            return int(row[0])
+
+        return query(connection) if connection is not None else self._with_connection(query)
+
+    def update_pre_screening_status(
+        self,
+        project_id: str,
+        record_id: UUID,
+        status: str,
+        *,
+        connection: sqlite3.Connection | None = None,
+    ) -> None:
+        self._ensure_project(project_id, connection=connection)
+
+        def update(conn: sqlite3.Connection) -> None:
+            cursor = conn.execute(
+                "UPDATE project_publications SET pre_screening_status = ? WHERE project_id = ? AND record_id = ?",
+                (status, project_id, str(record_id)),
+            )
+            if cursor.rowcount != 1:
+                raise ValueError(
+                    f"Publication '{record_id}' was not found in project '{project_id}'."
+                )
+
+        if connection is not None:
+            update(connection)
+        else:
+            self._with_connection(update)
+
+    def _ensure_import_linked_with_conn(
+        self, connection: sqlite3.Connection, project_id: str, import_id: UUID
+    ) -> None:
+        """Link legacy publications with import_id if not already linked."""
+        row = connection.execute(
+            "SELECT COUNT(*) FROM project_publications WHERE project_id = ? AND import_id = ?",
+            (project_id, str(import_id)),
+        ).fetchone()
+        if int(row[0]) > 0:
+            return
+
+        hist_row = connection.execute(
+            "SELECT source_type, provider, format, source_database FROM import_history WHERE project_id = ? AND import_id = ?",
+            (project_id, str(import_id)),
+        ).fetchone()
+        if hist_row is None:
+            return
+
+        source_type, provider, file_format, source_database = hist_row
+        if source_type == "provider" and provider:
+            connection.execute(
+                """
+                UPDATE project_publications
+                SET import_id = ?
+                WHERE project_id = ? AND import_id IS NULL
+                  AND (provenance LIKE ? OR provenance LIKE ?)
+                """,
+                (
+                    str(import_id),
+                    project_id,
+                    f'%"source": "{provider}"%',
+                    f'%"source": "{provider.lower()}"%',
+                ),
+            )
+        elif source_type == "file":
+            if source_database:
+                connection.execute(
+                    """
+                    UPDATE project_publications
+                    SET import_id = ?
+                    WHERE project_id = ? AND import_id IS NULL
+                      AND (provenance LIKE ? OR provenance LIKE ?)
+                    """,
+                    (
+                        str(import_id),
+                        project_id,
+                        f'%"source": "{source_database}"%',
+                        f'%"source": "{source_database.lower()}"%',
+                    ),
+                )
+            else:
+                connection.execute(
+                    """
+                    UPDATE project_publications
+                    SET import_id = ?
+                    WHERE project_id = ? AND import_id IS NULL
+                      AND (provenance LIKE '%"source": "ris"%' OR provenance LIKE '%"source": "bibtex"%')
+                    """,
+                    (str(import_id), project_id),
+                )
+
+    def get_import_publications(
+        self,
+        project_id: str,
+        import_id: UUID,
+        *,
+        search: str | None = None,
+        status_filter: str | None = None,
+        offset: int = 0,
+        limit: int = 50,
+        connection: sqlite3.Connection | None = None,
+    ) -> list[tuple[Publication, str]]:
+        self._ensure_project(project_id, connection=connection)
+
+        def query(conn: sqlite3.Connection) -> list[tuple[Publication, str]]:
+            self._ensure_import_linked_with_conn(conn, project_id, import_id)
+            params: list[object] = [project_id, str(import_id)]
+            where_clauses = ["project_id = ?", "import_id = ?"]
+
+            if status_filter:
+                where_clauses.append("pre_screening_status = ?")
+                params.append(status_filter)
+
+            if search and search.strip():
+                term = f"%{search.strip().casefold()}%"
+                where_clauses.append(
+                    "(LOWER(title) LIKE ? OR LOWER(authors) LIKE ? OR LOWER(identifiers) LIKE ? OR LOWER(document) LIKE ?)"
+                )
+                params.extend([term, term, term, term])
+
+            sql = f"""
+                SELECT document, COALESCE(pre_screening_status, 'retained')
+                FROM project_publications
+                WHERE {" AND ".join(where_clauses)}
+                ORDER BY position ASC, rowid ASC
+                LIMIT ? OFFSET ?
+            """
+            params.extend([limit, offset])
+            rows = conn.execute(sql, params).fetchall()
+            return [(Publication.model_validate(json.loads(row[0])), str(row[1])) for row in rows]
+
+        return query(connection) if connection is not None else self._with_connection(query)
+
+    def count_import_publications(
+        self,
+        project_id: str,
+        import_id: UUID,
+        *,
+        search: str | None = None,
+        status_filter: str | None = None,
+        connection: sqlite3.Connection | None = None,
+    ) -> int:
+        self._ensure_project(project_id, connection=connection)
+
+        def query(conn: sqlite3.Connection) -> int:
+            self._ensure_import_linked_with_conn(conn, project_id, import_id)
+            params: list[object] = [project_id, str(import_id)]
+            where_clauses = ["project_id = ?", "import_id = ?"]
+
+            if status_filter:
+                where_clauses.append("pre_screening_status = ?")
+                params.append(status_filter)
+
+            if search and search.strip():
+                term = f"%{search.strip().casefold()}%"
+                where_clauses.append(
+                    "(LOWER(title) LIKE ? OR LOWER(authors) LIKE ? OR LOWER(identifiers) LIKE ? OR LOWER(document) LIKE ?)"
+                )
+                params.extend([term, term, term, term])
+
+            sql = f"""
+                SELECT COUNT(*)
+                FROM project_publications
+                WHERE {" AND ".join(where_clauses)}
+            """
+            row = conn.execute(sql, params).fetchone()
+            return int(row[0])
+
+        return query(connection) if connection is not None else self._with_connection(query)
+
+    def get_import_counts(
+        self,
+        project_id: str,
+        import_id: UUID,
+        *,
+        connection: sqlite3.Connection | None = None,
+    ) -> tuple[int, int, int]:
+        self._ensure_project(project_id, connection=connection)
+
+        def query(conn: sqlite3.Connection) -> tuple[int, int, int]:
+            self._ensure_import_linked_with_conn(conn, project_id, import_id)
+            row = conn.execute(
+                """
+                SELECT
+                    COUNT(*),
+                    COALESCE(SUM(CASE WHEN pre_screening_status = 'retained' OR pre_screening_status IS NULL THEN 1 ELSE 0 END), 0),
+                    COALESCE(SUM(CASE WHEN pre_screening_status = 'removed' THEN 1 ELSE 0 END), 0)
+                FROM project_publications
+                WHERE project_id = ? AND import_id = ?
+                """,
+                (project_id, str(import_id)),
+            ).fetchone()
+            return int(row[0]), int(row[1]), int(row[2])
 
         return query(connection) if connection is not None else self._with_connection(query)
 
@@ -460,6 +845,7 @@ class SqliteProjectPublicationRepository:
         project_id: str,
         publications: list[Publication],
         *,
+        import_id: UUID | None = None,
         connection: sqlite3.Connection | None = None,
     ) -> PublicationImportResult:
         self._ensure_project(project_id, connection=connection)
@@ -476,13 +862,17 @@ class SqliteProjectPublicationRepository:
         if connection is not None:
             next_position = self._next_position(connection, project_id)
             for offset, publication in enumerate(new_publications):
-                self._insert_or_replace(connection, project_id, publication, next_position + offset)
+                self._insert_or_replace(
+                    connection, project_id, publication, next_position + offset, import_id=import_id
+                )
             working_count = len(self._get_publications_with_conn(connection, project_id))
         else:
             with self._connect() as conn:
                 next_position = self._next_position(conn, project_id)
                 for offset, publication in enumerate(new_publications):
-                    self._insert_or_replace(conn, project_id, publication, next_position + offset)
+                    self._insert_or_replace(
+                        conn, project_id, publication, next_position + offset, import_id=import_id
+                    )
                 working_count = len(self._get_publications_with_conn(conn, project_id))
 
         return PublicationImportResult(
@@ -511,20 +901,20 @@ class SqliteProjectPublicationRepository:
         project_id: str,
         publications: list[Publication],
     ) -> None:
-        # Replacement is used by normalization.  It is allowed to refresh a
+        # Replacement is used by normalization. It is allowed to refresh a
         # document, but it must never reactivate an already superseded source
-        # record.  Capture the durable relationship before recreating rows and
-        # restore it for every retained record afterwards.
-        supersession = {
-            str(row[0]): row[1]
+        # record, and must preserve pre_screening_status and import_id.
+        existing_meta = {
+            str(row[0]): (row[1], row[2], row[3])
             for row in connection.execute(
-                "SELECT record_id, superseded_by FROM project_publications WHERE project_id = ?",
+                "SELECT record_id, superseded_by, import_id, pre_screening_status FROM project_publications WHERE project_id = ?",
                 (project_id,),
             ).fetchall()
-            if row[1] is not None
         }
         replacement_ids = {str(publication.record_id) for publication in publications}
-        missing_superseded = sorted(set(supersession) - replacement_ids)
+        missing_superseded = sorted(
+            rec_id for rec_id, (sup, _, _) in existing_meta.items() if sup is not None and rec_id not in replacement_ids
+        )
         if missing_superseded:
             raise ValueError(
                 "replace_publications cannot remove superseded source records; "
@@ -535,12 +925,19 @@ class SqliteProjectPublicationRepository:
             (project_id,),
         )
         for position, publication in enumerate(publications):
-            self._insert_or_replace(connection, project_id, publication, position)
-        for record_id, canonical_record_id in supersession.items():
-            connection.execute(
-                "UPDATE project_publications SET superseded_by = ? WHERE project_id = ? AND record_id = ?",
-                (canonical_record_id, project_id, record_id),
+            rec_id_str = str(publication.record_id)
+            meta = existing_meta.get(rec_id_str)
+            imp_id = UUID(meta[1]) if meta and meta[1] else None
+            status = meta[2] if meta and meta[2] else "retained"
+            self._insert_or_replace(
+                connection, project_id, publication, position, import_id=imp_id, pre_screening_status=status
             )
+        for record_id, (canonical_record_id, _, _) in existing_meta.items():
+            if canonical_record_id is not None:
+                connection.execute(
+                    "UPDATE project_publications SET superseded_by = ? WHERE project_id = ? AND record_id = ?",
+                    (canonical_record_id, project_id, record_id),
+                )
 
     def delete_for_project(self, project_id: str, *, connection: sqlite3.Connection | None = None) -> None:
         if connection is not None:
@@ -590,6 +987,8 @@ class SqliteProjectPublicationRepository:
         project_id: str,
         publication: Publication,
         position: int,
+        import_id: UUID | None = None,
+        pre_screening_status: str | None = None,
     ) -> None:
         document = publication.model_dump(mode="json")
         connection.execute(
@@ -597,8 +996,8 @@ class SqliteProjectPublicationRepository:
             INSERT INTO project_publications (
                 project_id, record_id, position, title, title_normalized,
                 publication_year, authors, identifiers, provenance, created_at,
-                document
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                document, import_id, pre_screening_status
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(project_id, record_id) DO UPDATE SET
                 position = excluded.position,
                 title = excluded.title,
@@ -608,7 +1007,9 @@ class SqliteProjectPublicationRepository:
                 identifiers = excluded.identifiers,
                 provenance = excluded.provenance,
                 created_at = excluded.created_at,
-                document = excluded.document
+                document = excluded.document,
+                import_id = COALESCE(project_publications.import_id, excluded.import_id),
+                pre_screening_status = COALESCE(project_publications.pre_screening_status, excluded.pre_screening_status)
             """,
             (
                 project_id,
@@ -622,6 +1023,8 @@ class SqliteProjectPublicationRepository:
                 json.dumps(document["provenance"], ensure_ascii=False),
                 publication.created_at.isoformat(),
                 json.dumps(document, ensure_ascii=False),
+                str(import_id) if import_id is not None else None,
+                pre_screening_status or "retained",
             ),
         )
 

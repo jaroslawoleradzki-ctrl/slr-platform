@@ -118,13 +118,28 @@ class ProjectImportService:
         query: str | None,
         group_total_available: int | None,
     ) -> PublicationImportResult:
-        if isinstance(self._pub_repo, SqliteProjectPublicationRepository):
-            group_result = self._pub_repo.import_source_publications(project_id, publications, connection=conn)
-        else:
-            group_result = self._pub_repo.import_source_publications(project_id, publications)
+        import_id = uuid4()
+        try:
+            if isinstance(self._pub_repo, SqliteProjectPublicationRepository):
+                group_result = self._pub_repo.import_source_publications(
+                    project_id, publications, import_id=import_id, connection=conn
+                )
+            else:
+                group_result = self._pub_repo.import_source_publications(
+                    project_id, publications, import_id=import_id
+                )
+        except TypeError:
+            if isinstance(self._pub_repo, SqliteProjectPublicationRepository):
+                group_result = self._pub_repo.import_source_publications(
+                    project_id, publications, connection=conn
+                )
+            else:
+                group_result = self._pub_repo.import_source_publications(
+                    project_id, publications
+                )
 
         history_record = ImportHistoryRecord(
-            import_id=uuid4(),
+            import_id=import_id,
             project_id=project_id,
             source_type="provider",
             filename=None,
@@ -195,16 +210,30 @@ class ProjectImportService:
         source_database: ManualSourceDatabase | None = None,
         source_label: str | None = None,
     ) -> tuple[PublicationImportResult, ImportHistoryRecord]:
-        if isinstance(self._pub_repo, SqliteProjectPublicationRepository):
-            import_result = self._pub_repo.import_source_publications(project_id, publications, connection=conn)
-        else:
-            import_result = self._pub_repo.import_source_publications(project_id, publications)
+        import_id = uuid4()
+        try:
+            if isinstance(self._pub_repo, SqliteProjectPublicationRepository):
+                import_result = self._pub_repo.import_source_publications(
+                    project_id, publications, import_id=import_id, connection=conn
+                )
+            else:
+                import_result = self._pub_repo.import_source_publications(
+                    project_id, publications, import_id=import_id
+                )
+        except TypeError:
+            if isinstance(self._pub_repo, SqliteProjectPublicationRepository):
+                import_result = self._pub_repo.import_source_publications(
+                    project_id, publications, connection=conn
+                )
+            else:
+                import_result = self._pub_repo.import_source_publications(
+                    project_id, publications
+                )
 
         warnings: list[str] = []
         if import_result.skipped_count:
             warnings.append(f"Skipped {import_result.skipped_count} duplicate record(s) already in the project.")
 
-        import_id = uuid4()
         history_record = ImportHistoryRecord(
             import_id=import_id,
             project_id=project_id,

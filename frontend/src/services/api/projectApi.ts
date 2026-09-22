@@ -29,6 +29,9 @@ import {
   PrismaMetricsResponse,
   PrismaFunnelMetrics,
   ManualSourceDatabase,
+  ImportedRecord,
+  ImportedRecordsPageResponse,
+  PreScreeningRemovalReason,
 } from '../../types';
 import { API_BASE_URL } from '../../config/api';
 
@@ -125,6 +128,34 @@ export interface ProjectApiService {
   getBibliographicImports(
     projectId: string,
   ): Promise<BibliographicImportHistoryRecord[]>;
+  getImportedRecords(
+    projectId: string,
+    importId: string,
+    params?: {
+      search?: string;
+      status_filter?: string;
+      offset?: number;
+      limit?: number;
+    },
+  ): Promise<ImportedRecordsPageResponse>;
+  removeImportedRecord(
+    projectId: string,
+    importId: string,
+    recordId: string,
+    payload: {
+      reason: PreScreeningRemovalReason;
+      notes?: string;
+      reviewer_id?: string;
+    },
+  ): Promise<ImportedRecord>;
+  restoreImportedRecord(
+    projectId: string,
+    importId: string,
+    recordId: string,
+    payload?: {
+      reviewer_id?: string;
+    },
+  ): Promise<ImportedRecord>;
   getSourcesSummary(projectId: string): Promise<SourcesSummaryResponse>;
   getNormalization(projectId: string): Promise<NormalizationResponse | null>;
   runNormalization(projectId: string): Promise<NormalizationResponse>;
@@ -594,6 +625,97 @@ class MixedProjectApiService implements ProjectApiService {
       throw new Error(await formatFastApiError(response, 'pobrać historii importów'));
     }
     return response.json() as Promise<BibliographicImportHistoryRecord[]>;
+  }
+
+  async getImportedRecords(
+    projectId: string,
+    importId: string,
+    params?: {
+      search?: string;
+      status_filter?: string;
+      offset?: number;
+      limit?: number;
+    },
+  ): Promise<ImportedRecordsPageResponse> {
+    const searchParams = new URLSearchParams();
+    if (params?.search) searchParams.set('search', params.search);
+    if (params?.status_filter && params.status_filter !== 'all') {
+      searchParams.set('status_filter', params.status_filter);
+    }
+    if (typeof params?.offset === 'number') searchParams.set('offset', String(params.offset));
+    if (typeof params?.limit === 'number') searchParams.set('limit', String(params.limit));
+
+    const url = `${API_BASE_URL}/projects/${projectId}/imports/${importId}/records?${searchParams.toString()}`;
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        headers: { Accept: 'application/json' },
+      });
+    } catch {
+      throw new Error('Nie udało się połączyć z serwerem podczas pobierania zaimportowanych rekordów.');
+    }
+    if (!response.ok) {
+      throw new Error(await formatFastApiError(response, 'pobrać zaimportowanych rekordów'));
+    }
+    return response.json() as Promise<ImportedRecordsPageResponse>;
+  }
+
+  async removeImportedRecord(
+    projectId: string,
+    importId: string,
+    recordId: string,
+    payload: {
+      reason: PreScreeningRemovalReason;
+      notes?: string;
+      reviewer_id?: string;
+    },
+  ): Promise<ImportedRecord> {
+    const url = `${API_BASE_URL}/projects/${projectId}/imports/${importId}/records/${recordId}/remove`;
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+    } catch {
+      throw new Error('Nie udało się połączyć z serwerem podczas usuwania rekordu.');
+    }
+    if (!response.ok) {
+      throw new Error(await formatFastApiError(response, 'usunąć rekordu z pre-screeningu'));
+    }
+    return response.json() as Promise<ImportedRecord>;
+  }
+
+  async restoreImportedRecord(
+    projectId: string,
+    importId: string,
+    recordId: string,
+    payload?: {
+      reviewer_id?: string;
+    },
+  ): Promise<ImportedRecord> {
+    const url = `${API_BASE_URL}/projects/${projectId}/imports/${importId}/records/${recordId}/restore`;
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify(payload || {}),
+      });
+    } catch {
+      throw new Error('Nie udało się połączyć z serwerem podczas przywracania rekordu.');
+    }
+    if (!response.ok) {
+      throw new Error(await formatFastApiError(response, 'przywrócić rekordu'));
+    }
+    return response.json() as Promise<ImportedRecord>;
   }
 
   async getSourcesSummary(projectId: string): Promise<SourcesSummaryResponse> {

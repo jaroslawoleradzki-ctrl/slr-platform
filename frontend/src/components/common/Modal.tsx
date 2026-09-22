@@ -6,9 +6,10 @@ interface ModalProps {
   onClose: () => void;
   title: string;
   children: React.ReactNode;
+  maxWidth?: string;
 }
 
-export const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children }) => {
+export const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children, maxWidth = '560px' }) => {
   if (!isOpen) return null;
 
   return (
@@ -32,7 +33,7 @@ export const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children }
           borderRadius: 'var(--radius-lg)',
           border: '1px solid var(--border-strong)',
           width: '100%',
-          maxWidth: '560px',
+          maxWidth,
           boxShadow: 'var(--shadow-lg)',
           overflow: 'hidden',
         }}

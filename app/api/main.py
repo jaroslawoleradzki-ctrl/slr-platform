@@ -12,6 +12,7 @@ from app.api.routers import (
     extraction,
     full_text_screening,
     normalization,
+    pre_screening,
     projects,
     quality_assessment,
     screening,
@@ -63,6 +64,7 @@ app.include_router(projects.router, prefix=API_V1_PREFIX)
 app.include_router(deduplication.router, prefix=API_V1_PREFIX)
 app.include_router(search_strategy.router, prefix=API_V1_PREFIX)
 app.include_router(normalization.router, prefix=API_V1_PREFIX)
+app.include_router(pre_screening.router, prefix=API_V1_PREFIX)
 app.include_router(screening.router, prefix=API_V1_PREFIX)
 app.include_router(full_text_screening.router, prefix=API_V1_PREFIX)
 app.include_router(quality_assessment.router, prefix=API_V1_PREFIX)

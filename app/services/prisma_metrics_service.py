@@ -83,6 +83,7 @@ class PrismaMetrics:
     manual_source_breakdown: dict[str, int]
     records_excluded_title_abstract: int = 0
     records_excluded_full_text: int = 0
+    records_removed_prescreening: int = 0
 
 
 class PrismaMetricsService:
@@ -133,6 +134,12 @@ class PrismaMetricsService:
             1 for group in groups if str(group.group_id) not in decisions
         )
 
+        prescreening_removed = (
+            self._publications.count_pre_screening_removed(project_id)
+            if hasattr(self._publications, "count_pre_screening_removed")
+            else 0
+        )
+
         workflow = self._workflow_status.get_status(project_id, reviewer_id=reviewer_id)
         ta_excluded, ft_excluded = self._workflow_status.get_excluded_counts(
             project_id, reviewer_id=reviewer_id
@@ -153,6 +160,7 @@ class PrismaMetricsService:
             manual_source_breakdown=manual_breakdown,
             records_excluded_title_abstract=ta_excluded,
             records_excluded_full_text=ft_excluded,
+            records_removed_prescreening=prescreening_removed,
         )
 
     def to_response(self, metrics: PrismaMetrics) -> PrismaMetricsResponse:
@@ -171,6 +179,7 @@ class PrismaMetricsService:
             manual_source_breakdown=metrics.manual_source_breakdown,
             records_excluded_title_abstract=metrics.records_excluded_title_abstract,
             records_excluded_full_text=metrics.records_excluded_full_text,
+            records_removed_prescreening=metrics.records_removed_prescreening,
         )
 
 

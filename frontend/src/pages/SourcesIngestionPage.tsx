@@ -104,6 +104,8 @@ export const SourcesIngestionPage: React.FC = () => {
       <FileDropzone
         imports={importFileRecords}
         onFileSelect={handleFileSelect}
+        projectId={activeProject.id}
+        onRefresh={fetchSummary}
       />
     </div>
   );

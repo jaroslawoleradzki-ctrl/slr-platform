@@ -43,6 +43,7 @@ def build_flow_model(
 
     removed = {
         "duplicates_removed": duplicates_removed,
+        "records_removed_prescreening": metrics.records_removed_prescreening,
         "excluded_title_abstract": excluded_title_abstract,
         "excluded_full_text": excluded_full_text,
     }
@@ -151,6 +152,7 @@ def build_flow_model(
         "total_identified": metrics.total_identified,
         "records_after_normalization": metrics.records_after_normalization,
         "records_before_dedup": metrics.records_before_dedup,
+        "records_removed_prescreening": metrics.records_removed_prescreening,
         "records_after_technical_merger": metrics.records_after_technical_merger,
         "duplicate_groups_pending_review": metrics.duplicate_groups_pending_review,
         "records_screened_title_abstract": metrics.records_screened_title_abstract,

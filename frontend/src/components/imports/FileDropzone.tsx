@@ -1,15 +1,22 @@
 import React, { useRef, useState } from 'react';
-import { Upload, FileText, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { Upload, FileText, CheckCircle2, AlertTriangle, Eye } from 'lucide-react';
 import { ImportFileRecord, ManualSourceDatabase, MANUAL_SOURCE_DATABASE_LABELS } from '../../types';
+import { useProject } from '../../context/ProjectContext';
 import { Card } from '../common/Card';
 import { Badge } from '../common/Badge';
+import { ImportedRecordsModal } from './ImportedRecordsModal';
 
 interface FileDropzoneProps {
   onFileSelect?: (file: File, sourceDatabase?: ManualSourceDatabase, sourceLabel?: string) => Promise<unknown> | unknown;
   imports: ImportFileRecord[];
+  projectId?: string;
+  onRefresh?: () => void;
 }
 
-export const FileDropzone: React.FC<FileDropzoneProps> = ({ onFileSelect, imports }) => {
+export const FileDropzone: React.FC<FileDropzoneProps> = ({ onFileSelect, imports, projectId, onRefresh }) => {
+  const { activeProject } = useProject();
+  const effectiveProjectId = projectId || activeProject?.id;
+  const [selectedImportForReview, setSelectedImportForReview] = useState<ImportFileRecord | null>(null);
   const [dragActive, setDragActive] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -260,12 +267,50 @@ export const FileDropzone: React.FC<FileDropzoneProps> = ({ onFileSelect, import
                   ) : (
                     <Badge variant="pending_action" icon={<AlertTriangle size={12} />}>Ostrzeżenie</Badge>
                   )}
+                  {effectiveProjectId && (
+                    <button
+                      type="button"
+                      onClick={() => setSelectedImportForReview(item)}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        padding: '6px 12px',
+                        borderRadius: 'var(--radius-md)',
+                        backgroundColor: 'var(--bg-surface-elevated)',
+                        border: '1px solid var(--border-strong)',
+                        color: 'var(--text-primary)',
+                        fontSize: '0.8rem',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                      }}
+                      title="Otwórz podgląd rekordów i usuwanie z pre-screeningu"
+                    >
+                      <Eye size={14} style={{ color: 'var(--accent-primary)' }} />
+                      <span>Przeglądaj rekordy</span>
+                    </button>
+                  )}
                 </div>
               </div>
             ))}
           </div>
         )}
       </Card>
+
+      {selectedImportForReview && effectiveProjectId && (
+        <ImportedRecordsModal
+          isOpen={true}
+          onClose={() => setSelectedImportForReview(null)}
+          projectId={effectiveProjectId}
+          importId={selectedImportForReview.id}
+          importTitle={
+            selectedImportForReview.sourceType === 'provider'
+              ? `${selectedImportForReview.provider ?? 'Provider'}${selectedImportForReview.query ? ` (${selectedImportForReview.query})` : ''}`
+              : selectedImportForReview.filename ?? 'Plik'
+          }
+          onCountsUpdated={onRefresh}
+        />
+      )}
     </div>
   );
 };

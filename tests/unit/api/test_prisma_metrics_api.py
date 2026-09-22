@@ -103,6 +103,7 @@ def test_prisma_metrics_empty_project_returns_zeros(environment) -> None:
         "total_identified": 0,
         "records_after_normalization": 0,
         "records_before_dedup": 0,
+        "records_removed_prescreening": 0,
         "records_after_technical_merger": 0,
         "duplicate_groups_pending_review": 0,
         "records_screened_title_abstract": 0,

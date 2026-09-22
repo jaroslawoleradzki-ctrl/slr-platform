@@ -24,6 +24,10 @@ from app.repositories.normalization_execution_repository import (
     NormalizationExecutionRepository,
     default_normalization_execution_repository,
 )
+from app.repositories.pre_screening_decision_repository import (
+    PreScreeningDecisionRepository,
+    default_pre_screening_decision_repository,
+)
 from app.repositories.project_publication_repository import (
     ProjectPublicationRepository,
     default_project_publication_repository,
@@ -113,12 +117,16 @@ class SqliteProjectDeletionService:
         context_repo: SqliteSynthesisContextRepository | None = None,
         gap_repo: SqliteSynthesisGapRepository | None = None,
         snapshot_repo: SqliteSynthesisSnapshotRepository | None = None,
+        pre_screening_decision_repo: PreScreeningDecisionRepository | None = None,
         tx_manager: SqliteTransactionManager | None = None,
     ) -> None:
         self._project_repo = project_repo or default_project_repository()
         self._import_history_repo = import_history_repo or default_import_history_repository()
         self._normalization_repo = normalization_repo or default_normalization_execution_repository()
         self._publication_repo = publication_repo or default_project_publication_repository()
+        self._pre_screening_decision_repo = (
+            pre_screening_decision_repo or default_pre_screening_decision_repository()
+        )
         self._duplicate_review_repo = duplicate_review_repo or default_duplicate_review_decision_repository()
         self._duplicate_merge_repo = duplicate_merge_repo or default_duplicate_merge_repository()
         self._screening_decision_repo = screening_decision_repo or default_screening_decision_repository()
@@ -155,6 +163,7 @@ class SqliteProjectDeletionService:
             self._normalization_repo.delete_for_project(project_id, connection=conn)
             self._duplicate_review_repo.delete_for_project(project_id, connection=conn)
             self._duplicate_merge_repo.delete_for_project(project_id, connection=conn)
+            self._pre_screening_decision_repo.delete_for_project(project_id, connection=conn)
             self._publication_repo.delete_for_project(project_id, connection=conn)
             self._conflict_resolution_repo.delete_for_project(project_id, connection=conn)
             self._extraction_repo.delete_for_project(project_id, connection=conn)

@@ -671,12 +671,59 @@ export interface PrismaMetricsResponse {
   total_identified: number;
   records_after_normalization: number;
   records_before_dedup: number;
+  records_removed_prescreening?: number;
   records_after_technical_merger: number;
   duplicate_groups_pending_review: number;
   records_screened_title_abstract: number;
   records_screened_full_text: number;
   studies_included_synthesis: number;
   manual_source_breakdown: Record<string, number>;
+}
+
+export type PreScreeningStatus = 'retained' | 'removed';
+
+export type PreScreeningRemovalReason =
+  | 'clearly_outside_scope'
+  | 'retrieval_artefact'
+  | 'incomplete_record'
+  | 'other';
+
+export const PRE_SCREENING_REMOVAL_REASON_LABELS: Record<PreScreeningRemovalReason, string> = {
+  clearly_outside_scope: 'Clearly outside retrieval scope',
+  retrieval_artefact: 'Retrieval/import artefact',
+  incomplete_record: 'Invalid/incomplete bibliographic record',
+  other: 'Other',
+};
+
+export interface ImportedRecord {
+  record_id: string;
+  project_id: string;
+  import_id: string | null;
+  title: string;
+  authors: string[];
+  publication_year: number | null;
+  venue_name: string | null;
+  doi: string | null;
+  abstract: string | null;
+  provider: string;
+  source_record_id: string;
+  pre_screening_status: PreScreeningStatus;
+  removal_reason: PreScreeningRemovalReason | null;
+  removal_notes: string | null;
+  decided_at: string | null;
+  reviewer_id: string | null;
+}
+
+export interface ImportedRecordsPageResponse {
+  project_id: string;
+  import_id: string;
+  total: number;
+  offset: number;
+  limit: number;
+  total_imported: number;
+  retained_count: number;
+  removed_count: number;
+  items: ImportedRecord[];
 }
 
 export interface ApiProjectWorkflowStatusResponse {
