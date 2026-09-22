@@ -261,6 +261,7 @@ class ResumableSearchJobSummaryResponse(BaseModel):
     providers: list[str] = Field(default_factory=list)
     status: Literal["pending", "running", "complete", "partial", "cancelled", "failed"]
     fetched_count: int = Field(default=0, ge=0)
+    kept_count: int = Field(default=0, ge=0)
     canonical_accepted_count: int = Field(default=0, ge=0)
     canonical_rejected_count: int = Field(default=0, ge=0)
     canonical_indeterminate_count: int = Field(default=0, ge=0)

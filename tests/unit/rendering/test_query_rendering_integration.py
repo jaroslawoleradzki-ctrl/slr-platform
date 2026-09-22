@@ -5,6 +5,7 @@ import pytest
 from app.domain.publication import Publication
 from app.domain.search import BooleanOperator, SearchGroup, SearchQuery, SearchTerm
 from app.providers.search.base import ProviderSearchOutput
+from app.rendering.crossref import build_crossref_candidate_queries
 from app.services.live_search import _InMemoryRawResponseArchive
 from app.services.search_engine import SearchEngine
 
@@ -75,11 +76,18 @@ async def test_search_engine_provider_specific_rendered_queries() -> None:
     assert openalex_search_run.provider == "openalex"
     assert openalex_search_run.rendered_query == '(("lean management" OR "lean manufacturing") AND sustainability)'
 
-    # Check Crossref executed query
+    # Check Crossref executed query: deterministic candidate-retrieval plan over
+    # the AND product (2 OR alternatives x 1 required term = 2 physical queries).
     crossref_call_kwargs = crossref_provider.search_with_raw.call_args.kwargs
     crossref_search_run = crossref_call_kwargs["search_run"]
     assert crossref_search_run.provider == "crossref"
-    assert crossref_search_run.rendered_query == "sustainability"
+    expected_crossref_queries = build_crossref_candidate_queries(query.expression)
+    assert expected_crossref_queries == [
+        '"lean management" sustainability',
+        '"lean manufacturing" sustainability',
+    ]
+    assert crossref_search_run.rendered_query == " || ".join(expected_crossref_queries)
+    assert crossref_search_run.is_lossless is False
 
     semantic_scholar_call_kwargs = semantic_scholar_provider.search_with_raw.call_args.kwargs
     semantic_scholar_search_run = semantic_scholar_call_kwargs["search_run"]

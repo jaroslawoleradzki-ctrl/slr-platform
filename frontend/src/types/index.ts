@@ -224,6 +224,7 @@ export interface ResumableSearchJobSummary {
   providers?: string[];
   status: FetchAllProviderStatus;
   fetched_count: number;
+  kept_count?: number;
   canonical_accepted_count: number;
   canonical_rejected_count: number;
   canonical_indeterminate_count: number;

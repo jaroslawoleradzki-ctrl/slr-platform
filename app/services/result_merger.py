@@ -2,8 +2,26 @@ from collections.abc import Iterable
 from typing import Any
 
 from app.domain.identifiers import IdentifierType
+from app.domain.provenance import ProvenanceEntry
 from app.domain.publication import Publication
 from app.normalization import normalize_doi
+
+
+def _provenance_merge_key(entry: ProvenanceEntry) -> tuple[Any, ...]:
+    """Identity for provenance merging; retrieval paths stay distinct.
+
+    Entries without WP2 retrieval fields keep the historical key, so merge
+    behavior for all existing providers is unchanged.
+    """
+    return (
+        entry.source.casefold(),
+        entry.source_record_id,
+        entry.run_id,
+        entry.physical_query,
+        entry.physical_query_index,
+        entry.physical_cursor,
+        entry.result_rank,
+    )
 
 
 class ResultMerger:
@@ -107,12 +125,12 @@ class ResultMerger:
 
 
         # 12. Provenance
+        # The key includes the retrieval-path fields so that multiple physical
+        # queries returning the same record keep every path (v0.6.9 WP2).
         provenance = list(canonical.provenance)
-        seen_provenance = {
-            (entry.source.casefold(), entry.source_record_id, entry.run_id) for entry in provenance
-        }
+        seen_provenance = {_provenance_merge_key(entry) for entry in provenance}
         for entry in incoming.provenance:
-            prov_key = (entry.source.casefold(), entry.source_record_id, entry.run_id)
+            prov_key = _provenance_merge_key(entry)
             if prov_key not in seen_provenance:
                 provenance.append(entry)
                 seen_provenance.add(prov_key)

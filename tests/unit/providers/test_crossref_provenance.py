@@ -436,6 +436,7 @@ async def test_search_with_raw_repeating_cursor_returns_has_more_false() -> None
             search_run=search_run,
             search_query=search_query,
             cursor="same-cursor",
+            candidate_queries=['"lean energy"'],
         )
 
     assert output.total_count == 1

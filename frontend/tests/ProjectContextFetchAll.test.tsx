@@ -394,6 +394,7 @@ describe('ProjectContext fetch-all results', () => {
       providers: ['openalex'],
       status: 'partial' as const,
       fetched_count: 2400,
+      kept_count: 420,
       canonical_accepted_count: 404,
       canonical_rejected_count: 1996,
       canonical_indeterminate_count: 0,
@@ -411,6 +412,7 @@ describe('ProjectContext fetch-all results', () => {
       providers: ['crossref'],
       status: 'partial' as const,
       fetched_count: 500,
+      kept_count: 130,
       canonical_accepted_count: 120,
       canonical_rejected_count: 380,
       canonical_indeterminate_count: 0,
@@ -457,6 +459,7 @@ describe('ProjectContext fetch-all results', () => {
         <>
           <div data-testid="resumable-jobs-count">{project.resumableJobs.length}</div>
           <div data-testid="active-job-id">{project.fetchAllJob?.job_id || ''}</div>
+          <div data-testid="active-kept-total">{project.fetchAllJob?.kept_total ?? -1}</div>
           <button
             type="button"
             data-testid="select-job-A-btn"
@@ -493,10 +496,12 @@ describe('ProjectContext fetch-all results', () => {
 
     // Initial default active job is latest (B)
     expect(screen.getByTestId('active-job-id')).toHaveTextContent('job-B-crossref');
+    expect(screen.getByTestId('active-kept-total')).toHaveTextContent('130');
 
     // Select job A
     fireEvent.click(screen.getByTestId('select-job-A-btn'));
     expect(screen.getByTestId('active-job-id')).toHaveTextContent('job-A-openalex');
+    expect(screen.getByTestId('active-kept-total')).toHaveTextContent('420');
 
     // Resume job A specifically
     fireEvent.click(screen.getByTestId('resume-job-A-btn'));

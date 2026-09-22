@@ -16,6 +16,7 @@ from app.providers.semantic_scholar import (
     SemanticScholarClient,
     SemanticScholarSearchFilters,
 )
+from app.rendering.crossref import build_crossref_candidate_queries
 from app.repositories.project_publication_repository import default_project_publication_repository
 from app.services.live_search import LiveSearchService, build_search_query
 
@@ -153,12 +154,15 @@ async def test_live_search_service_executes_crossref_end_to_end() -> None:
         },
     }
 
+    requested_queries: list[str] = []
+
     async def handler(request: httpx.Request) -> httpx.Response:
         assert request.url.host == "api.crossref.org"
         assert request.url.path == "/works"
         assert request.url.params["filter"] == (
             "from-pub-date:2020-01-01,until-pub-date:2025-12-31,type:journal-article"
         )
+        requested_queries.append(request.url.params["query"])
         if request.url.params.get("cursor") == "cursor-page-2":
             return httpx.Response(
                 200,
@@ -191,9 +195,22 @@ async def test_live_search_service_executes_crossref_end_to_end() -> None:
     result = execution.provider_results[0]
     assert result.search_run.provider == "crossref"
     assert result.search_run.records_retrieved == 1
-    assert result.total_count == 42
+    # Multi-query candidate plans overlap, so per-query totals cannot be summed
+    # into a meaningful candidate-set total; the provider reports None.
+    assert result.total_count is None
     assert result.next_cursor is None
     assert result.has_more is False
+
+    # The strategy yields two deterministic physical queries (2 Lean terms x 1
+    # Energy term); every physical request carries one of them.
+    expected_queries = build_crossref_candidate_queries(build_search_query(strategy).expression)
+    assert expected_queries == [
+        '"lean production" "energy efficiency"',
+        '"lean manufacturing" "energy efficiency"',
+    ]
+    assert result.search_run.rendered_query == " || ".join(expected_queries)
+    assert requested_queries
+    assert set(requested_queries) == set(expected_queries)
 
     # Warnings from unsupported filters plus the explicit lossy candidate plan.
     warnings = result.search_run.warnings

@@ -18,6 +18,21 @@ class ProvenanceEntry(BaseModel):
     raw_file: str | None = None
     payload_hash: str | None = None
     transformation: str | None = None
+    # --- Retrieval-path diagnostics (v0.6.9 WP2) ---
+    # Exact physical subquery that returned this record. ``rendered_query``
+    # keeps the combined plan string; ``physical_query`` identifies one of the
+    # bounded candidate queries (e.g. one of the six Crossref queries).
+    physical_query: str | None = None
+    # Zero-based index of the physical query within the deterministic plan.
+    physical_query_index: int | None = Field(default=None, ge=0)
+    # Zero-based position of the record within its physical query page.
+    # Together with ``physical_cursor`` it forms a deterministic position.
+    result_rank: int | None = Field(default=None, ge=0)
+    # Provider-supplied relevance score (Crossref ``score``), when present.
+    provider_score: float | None = None
+    # Physical cursor value used for the request that returned this record
+    # (``"*"`` for the first page); identifies the page within the query.
+    physical_cursor: str | None = None
 
     @field_validator(
         "source",
@@ -26,6 +41,8 @@ class ProvenanceEntry(BaseModel):
         "raw_file",
         "payload_hash",
         "transformation",
+        "physical_query",
+        "physical_cursor",
     )
     @classmethod
     def strip_text(cls, value: str | None) -> str | None:

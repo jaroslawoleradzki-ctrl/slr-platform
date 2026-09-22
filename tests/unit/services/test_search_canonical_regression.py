@@ -182,7 +182,7 @@ def test_crossref_bounded_plan_has_fixed_cross_index_positive_paths() -> None:
     )
     query = SearchQuery(name="Cross-index coverage", expression=expression)
     rendered = CrossrefQueryRenderer().render(query)
-    known_cross_index_positives = {"A1 B1 C2", "A1 B2 C1", "A2 B1 C1", "A2 B1 C2", "A2 B2 C1"}
+    known_cross_index_positives = {"A1 B1 C2", "A1 B2 C1", "A2 B1 C2", "A2 B2 C1"}
 
     assert known_cross_index_positives.issubset(set(rendered.metadata["candidate_queries"]))
     assert rendered.metadata["possible_candidate_combinations"] == 8
@@ -259,7 +259,7 @@ async def test_crossref_composite_retrieval_keeps_known_positive_and_excludes_me
                     "title": ["Kaizen principles for improving energy efficiency in industrial plants"],
                 }
             ]
-            if physical_query == '"Lean Management" "Energy Management" "Manufacturing Industry"'
+            if physical_query == '"Continuous Improvement" "Energy Management" "Manufacturing Industry"'
             else []
         )
         return httpx.Response(

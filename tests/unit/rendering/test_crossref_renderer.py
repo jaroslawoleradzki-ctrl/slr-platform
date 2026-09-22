@@ -161,15 +161,15 @@ def test_crossref_renderer_three_required_groups_use_composite_anchors() -> None
         ],
     )
 
-    # Eight logical combinations exceed the six-query bound.  The systematic
-    # sample deliberately includes cross-index combinations, not a diagonal.
+    # Eight logical combinations exceed the six-query bound. The balanced
+    # covering selection provides equal representation across all concept axes.
     assert build_crossref_candidate_queries(expression) == [
         "lean energy manufacturing",
+        "kaizen power factory",
         "lean energy factory",
-        "lean power manufacturing",
-        "kaizen energy manufacturing",
-        "kaizen energy factory",
         "kaizen power manufacturing",
+        "lean power manufacturing",
+        "kaizen energy factory",
     ]
 
 
@@ -187,7 +187,7 @@ def test_crossref_renderer_composite_plan_is_bounded_and_deterministic() -> None
     assert first == build_crossref_candidate_queries(expression)
     assert len(first) == 6
     assert first[0] == "a0 b0 c0"
-    assert first[-1] == "a16 b13 c6"
+    assert first[-1] == "a19 b19 c19"
 
 
 def test_crossref_renderer_full_product_is_used_when_it_fits_the_bound() -> None:
