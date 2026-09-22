@@ -8,6 +8,7 @@ here once that state is available.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from enum import StrEnum
 from typing import Protocol
 from uuid import UUID
@@ -93,3 +94,29 @@ def count_prepared_corpus(
         pre_screening_removed=removed,
         retained_for_screening=retained,
     )
+
+
+@dataclass(frozen=True, slots=True)
+class CorpusFinalization:
+    """Immutable corpus finalization record locking the population for Screening."""
+
+    finalization_id: UUID
+    project_id: str
+    finalized_by: str
+    created_at: datetime
+    source_records_count: int
+    duplicates_removed_count: int
+    prescreening_removed_count: int
+    retained_count: int
+    status: str = "finalized"
+
+
+@dataclass(frozen=True, slots=True)
+class CorpusFinalizationMember:
+    """Snapshot of a member record at finalization time."""
+
+    finalization_id: UUID
+    record_id: UUID
+    disposition: CorpusRecordDisposition
+    removal_reason: str | None = None
+    admitted_to_screening: bool = False

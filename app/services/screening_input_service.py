@@ -5,6 +5,10 @@ from enum import StrEnum
 
 from app.domain.duplicate_review import DuplicateDecision
 from app.domain.publication import Publication
+from app.repositories.corpus_finalization_repository import (
+    CorpusFinalizationRepository,
+    SqliteCorpusFinalizationRepository,
+)
 from app.repositories.duplicate_merge_repository import (
     DuplicateMergeRepository,
     InMemoryDuplicateMergeRepository,
@@ -47,6 +51,7 @@ class ScreeningInputService:
         decision_repository: DuplicateReviewDecisionRepository | None = None,
         builder: DuplicateGroupBuilder | None = None,
         merge_repository: DuplicateMergeRepository | None = None,
+        finalization_repository: CorpusFinalizationRepository | None = None,
     ) -> None:
         self._publications = publication_repository or default_project_publication_repository()
         self._decisions = decision_repository or default_duplicate_review_decision_repository()
@@ -55,6 +60,11 @@ class ScreeningInputService:
             SqliteDuplicateMergeRepository(self._publications._database_path)
             if hasattr(self._publications, "_database_path")
             else InMemoryDuplicateMergeRepository()
+        )
+        self._finalizations = finalization_repository or (
+            SqliteCorpusFinalizationRepository(self._publications._database_path)
+            if hasattr(self._publications, "_database_path")
+            else None
         )
 
     def get_input_set(self, project_id: str) -> ScreeningInput:
@@ -99,6 +109,12 @@ class ScreeningInputService:
             if hasattr(self._publications, "get_active_publications")
             else publications
         )
+        if self._finalizations is not None:
+            latest_finalization = self._finalizations.get_latest_finalization(project_id)
+            if latest_finalization is not None:
+                admitted_ids = self._finalizations.get_admitted_record_ids(project_id)
+                active = [p for p in active if p.record_id in admitted_ids]
+
         ordered = tuple(sorted(active, key=lambda item: item.record_id))
         return ScreeningInput(
             project_id,

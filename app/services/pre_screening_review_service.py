@@ -12,6 +12,10 @@ from app.domain.pre_screening import (
     PreScreeningStatus,
 )
 from app.domain.publication import Publication
+from app.repositories.corpus_finalization_repository import (
+    CorpusFinalizationRepository,
+    SqliteCorpusFinalizationRepository,
+)
 from app.repositories.pre_screening_decision_repository import (
     PreScreeningDecisionRepository,
     default_pre_screening_decision_repository,
@@ -21,9 +25,25 @@ from app.repositories.project_publication_repository import (
     ProjectPublicationRepository,
     default_project_publication_repository,
 )
+from app.repositories.screening_decision_repository import (
+    ScreeningDecisionRepository,
+    SqliteScreeningDecisionRepository,
+)
 
 
 class PreScreeningRecordNotFoundError(LookupError):
+    pass
+
+
+class CorpusFinalizedError(RuntimeError):
+    """Raised when attempting pre-screening modifications after corpus finalization."""
+
+    pass
+
+
+class RecordAlreadyScreenedError(RuntimeError):
+    """Raised when attempting pre-screening modifications on a record with formal screening decisions."""
+
     pass
 
 
@@ -34,9 +54,38 @@ class PreScreeningReviewService:
         self,
         publication_repository: ProjectPublicationRepository | None = None,
         decision_repository: PreScreeningDecisionRepository | None = None,
+        finalization_repository: CorpusFinalizationRepository | None = None,
+        screening_decision_repository: ScreeningDecisionRepository | None = None,
     ) -> None:
         self._pub_repo = publication_repository or default_project_publication_repository()
         self._decision_repo = decision_repository or default_pre_screening_decision_repository()
+        self._finalization_repo = finalization_repository or (
+            SqliteCorpusFinalizationRepository(self._pub_repo._database_path)
+            if hasattr(self._pub_repo, "_database_path")
+            else None
+        )
+        self._screening_decision_repo = screening_decision_repository or (
+            SqliteScreeningDecisionRepository(self._pub_repo._database_path)
+            if hasattr(self._pub_repo, "_database_path")
+            else None
+        )
+
+    def _ensure_modifiable(self, project_id: str, record_id: UUID) -> None:
+        if self._finalization_repo is not None:
+            finalization = self._finalization_repo.get_latest_finalization(project_id)
+            if finalization is not None:
+                raise CorpusFinalizedError(
+                    f"Corpus for project '{project_id}' is finalized; pre-screening modifications are locked."
+                )
+        if self._screening_decision_repo is not None:
+            from app.domain.screening import ScreeningStage
+
+            for stage in (ScreeningStage.TITLE_ABSTRACT, ScreeningStage.FULL_TEXT):
+                history = self._screening_decision_repo.list_history(project_id, record_id, stage)
+                if history:
+                    raise RecordAlreadyScreenedError(
+                        f"Record '{record_id}' already has formal {stage.value} screening decisions; cannot modify pre-screening state."
+                    )
 
     def list_imported_records(
         self,
@@ -54,9 +103,7 @@ class PreScreeningReviewService:
         if offset < 0:
             raise ValueError("offset must not be negative")
 
-        total_imported, retained_count, removed_count = self._pub_repo.get_import_counts(
-            project_id, import_id
-        )
+        total_imported, retained_count, removed_count = self._pub_repo.get_import_counts(project_id, import_id)
 
         filtered_count = self._pub_repo.count_import_publications(
             project_id,
@@ -113,6 +160,7 @@ class PreScreeningReviewService:
         reviewer_id: str = "default_reviewer",
     ) -> ImportedRecordResponse:
         self._ensure_project(project_id)
+        self._ensure_modifiable(project_id, record_id)
         pub = self._find_record(project_id, record_id)
 
         decision = PreScreeningDecision(
@@ -145,6 +193,7 @@ class PreScreeningReviewService:
         reviewer_id: str = "default_reviewer",
     ) -> ImportedRecordResponse:
         self._ensure_project(project_id)
+        self._ensure_modifiable(project_id, record_id)
         pub = self._find_record(project_id, record_id)
 
         decision = PreScreeningDecision(
@@ -166,9 +215,7 @@ class PreScreeningReviewService:
             latest_decision=decision,
         )
 
-    def get_import_counts(
-        self, project_id: str, import_id: UUID
-    ) -> tuple[int, int, int]:
+    def get_import_counts(self, project_id: str, import_id: UUID) -> tuple[int, int, int]:
         self._ensure_project(project_id)
         return self._pub_repo.get_import_counts(project_id, import_id)
 
@@ -183,9 +230,7 @@ class PreScreeningReviewService:
         for pub in pubs:
             if pub.record_id == record_id:
                 return pub
-        raise PreScreeningRecordNotFoundError(
-            f"Record '{record_id}' not found in project '{project_id}'."
-        )
+        raise PreScreeningRecordNotFoundError(f"Record '{record_id}' not found in project '{project_id}'.")
 
 
 def default_pre_screening_review_service() -> PreScreeningReviewService:
