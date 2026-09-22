@@ -52,13 +52,19 @@ def _utc_now() -> datetime:
 
 
 def _read_crossref_score(work: Any) -> float | None:
-    """Return the provider relevance score when the API supplied a number."""
+    """Return the provider relevance score when the API supplied a number.
+
+    Malformed or unrepresentable scores become null; retrieval continues.
+    """
     if not isinstance(work, dict):
         return None
     score = work.get("score")
     if isinstance(score, bool) or not isinstance(score, (int, float)):
         return None
-    value = float(score)
+    try:
+        value = float(score)
+    except OverflowError:
+        return None
     return value if math.isfinite(value) else None
 
 

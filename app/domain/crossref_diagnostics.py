@@ -138,16 +138,25 @@ class CrossrefRecordDiagnostic(BaseModel):
         return self.model_copy(update={"retrieval_paths": (*self.retrieval_paths, path)})
 
 
+def _is_exclusion(child: Any) -> bool:
+    """Whether a top-level AND child is a NOT exclusion rather than a positive group."""
+    return isinstance(child, SearchGroup) and child.operator is BooleanOperator.NOT
+
+
 def group_evidence_for(query: SearchQuery, publication: Publication) -> tuple[CanonicalGroupEvidence, ...]:
     """Evaluate each positive top-level concept group with the real validator.
 
     The canonical strategy query is an AND of per-group OR expressions, so
-    each child is evaluated independently.  Non-AND queries are treated as a
-    single group.  No validation logic is duplicated here.
+    each positive child is evaluated independently.  NOT exclusions are not
+    positive evidence groups and are excluded.  A non-AND, non-NOT query is
+    treated as a single group; a pure NOT query yields no positive groups.
+    No validation logic is duplicated here.
     """
     expression = query.expression
     if isinstance(expression, SearchGroup) and expression.operator is BooleanOperator.AND:
-        children = list(expression.children)
+        children = [child for child in expression.children if not _is_exclusion(child)]
+    elif _is_exclusion(expression):
+        children = []
     else:
         children = [expression]
     evidence: list[CanonicalGroupEvidence] = []

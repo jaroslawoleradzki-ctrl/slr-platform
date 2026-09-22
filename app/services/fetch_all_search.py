@@ -876,7 +876,12 @@ class FetchAllSearchService:
         state.search_run_id = search_run.run_id
         state.status = "running"
 
+        # WP2.1: seed duplicate identity from kept records AND restored
+        # diagnostics. Rejected/constraint-rejected candidates are not kept,
+        # so without the diagnostic IDs a repeated DOI after Resume would be
+        # counted as a new candidate with a second diagnostic.
         seen_source_ids: set[str] = {publication_source_id(p) for p in state.kept_records}
+        seen_source_ids.update(diagnostic.source_record_id for diagnostic in state.record_diagnostics)
         seen_cursors: set[str] = set()
         cursor = initial_checkpoint.cursor if initial_checkpoint is not None and initial_checkpoint.cursor else "*"
         state.cursor = cursor
