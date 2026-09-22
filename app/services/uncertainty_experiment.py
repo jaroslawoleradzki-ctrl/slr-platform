@@ -139,11 +139,28 @@ def classify_tier(candidate: UncertaintyCandidate) -> UncertaintyTier:
     return UncertaintyTier.UNCERTAIN_WEAK
 
 
+def _is_exclusion(child: Any) -> bool:
+    """Whether a top-level AND child is a NOT exclusion rather than a positive group.
+
+    Mirrors the canonical positive-group definition in
+    ``app.domain.crossref_diagnostics.group_evidence_for`` without rerunning
+    WP2 persistence logic.
+    """
+    return isinstance(child, SearchGroup) and child.operator is BooleanOperator.NOT
+
+
 def _positive_groups(query: SearchQuery) -> list[Any]:
-    """Split a canonical query into its positive concept groups, generically."""
+    """Split a canonical query into its positive concept groups, generically.
+
+    Consistent with the corrected canonical definition: top-level NOT children
+    of an AND are exclusions, not evidence groups; a pure NOT query yields no
+    positive groups.
+    """
     expression = query.expression
     if isinstance(expression, SearchGroup) and expression.operator is BooleanOperator.AND:
-        return list(expression.children)
+        return [child for child in expression.children if not _is_exclusion(child)]
+    if _is_exclusion(expression):
+        return []
     return [expression]
 
 

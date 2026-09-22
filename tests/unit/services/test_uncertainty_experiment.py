@@ -449,3 +449,133 @@ def test_strategy_built_query_classifies() -> None:
         query, _pub("Alpha Gamma Delta trial", "Alpha Gamma Delta methods.", doi_suffix="live"), candidate_id="live"
     )
     assert classified.tier is UncertaintyTier.MATCH
+
+
+def _and_not_query() -> SearchQuery:
+    return SearchQuery(
+        name="AND with NOT",
+        expression=SearchGroup(
+            operator=BooleanOperator.AND,
+            children=[
+                SearchTerm(value="Alpha", exact_phrase=True),
+                SearchTerm(value="Gamma", exact_phrase=True),
+                SearchGroup(operator=BooleanOperator.NOT, children=[SearchTerm(value="Beta", exact_phrase=True)]),
+            ],
+        ),
+    )
+
+
+def test_direct_and_not_counts_two_positive_groups() -> None:
+    query = _and_not_query()
+    classified = classify_candidate(
+        query,
+        _pub("Alpha Gamma study", "Alpha Gamma methods.", doi_suffix="and-not"),
+        candidate_id="and-not",
+    )
+    assert classified.candidate.positive_group_count == 2
+    assert classified.candidate.evidenced_group_count == 2
+    assert classified.candidate.canonical_status is CanonicalMatchStatus.MATCH
+    assert classified.tier is UncertaintyTier.MATCH
+
+
+def test_direct_pure_not_counts_zero_positive_groups() -> None:
+    query = SearchQuery(
+        name="Pure NOT",
+        expression=SearchGroup(operator=BooleanOperator.NOT, children=[SearchTerm(value="Beta", exact_phrase=True)]),
+    )
+    matched = classify_candidate(
+        query,
+        _pub("Alpha study", "Alpha methods.", doi_suffix="pure-not-match"),
+        candidate_id="pure-not-match",
+    )
+    assert matched.candidate.positive_group_count == 0
+    assert matched.candidate.evidenced_group_count == 0
+    assert matched.candidate.canonical_status is CanonicalMatchStatus.MATCH
+    non_matched = classify_candidate(
+        query,
+        _pub("Beta study", "Beta methods.", doi_suffix="pure-not-nonmatch"),
+        candidate_id="pure-not-nonmatch",
+    )
+    assert non_matched.candidate.positive_group_count == 0
+    assert non_matched.candidate.evidenced_group_count == 0
+    assert non_matched.candidate.canonical_status is CanonicalMatchStatus.NON_MATCH
+
+
+def test_direct_normal_positive_and_unchanged() -> None:
+    classified = classify_candidate(_three_group_query(), _MATCH_PUB, candidate_id="normal-and")
+    assert classified.candidate.positive_group_count == 3
+    assert classified.candidate.evidenced_group_count == 3
+    assert classified.candidate.canonical_status is CanonicalMatchStatus.MATCH
+
+
+def test_direct_nested_not_consistent_with_canonical_definition() -> None:
+    nested = SearchQuery(
+        name="Nested NOT inside OR",
+        expression=SearchGroup(
+            operator=BooleanOperator.AND,
+            children=[
+                SearchTerm(value="Alpha", exact_phrase=True),
+                SearchGroup(
+                    operator=BooleanOperator.OR,
+                    children=[
+                        SearchTerm(value="Gamma", exact_phrase=True),
+                        SearchGroup(
+                            operator=BooleanOperator.NOT,
+                            children=[SearchTerm(value="Beta", exact_phrase=True)],
+                        ),
+                    ],
+                ),
+            ],
+        ),
+    )
+    classified = classify_candidate(
+        nested,
+        _pub("Alpha Gamma study", "Alpha Gamma methods.", doi_suffix="nested-not"),
+        candidate_id="nested-not",
+    )
+    assert classified.candidate.positive_group_count == 2
+    pure_nested = SearchQuery(
+        name="Pure NOT over AND",
+        expression=SearchGroup(
+            operator=BooleanOperator.NOT,
+            children=[
+                SearchGroup(
+                    operator=BooleanOperator.AND,
+                    children=[
+                        SearchTerm(value="Alpha", exact_phrase=True),
+                        SearchTerm(value="Gamma", exact_phrase=True),
+                    ],
+                )
+            ],
+        ),
+    )
+    pure_classified = classify_candidate(
+        pure_nested,
+        _pub("Alpha Gamma study", "Alpha Gamma methods.", doi_suffix="pure-nested"),
+        candidate_id="pure-nested",
+    )
+    assert pure_classified.candidate.positive_group_count == 0
+
+
+def test_direct_zero_evidence_indeterminate_unchanged() -> None:
+    classified = classify_candidate(_three_group_query(), _NO_EVIDENCE_PUB, candidate_id="zero-ev")
+    assert classified.candidate.positive_group_count == 3
+    assert classified.candidate.evidenced_group_count == 0
+    assert classified.candidate.canonical_status is CanonicalMatchStatus.INDETERMINATE
+    assert classified.tier is UncertaintyTier.UNCERTAIN_NO_EVIDENCE
+
+
+def test_direct_and_not_execution_eligibility_unchanged() -> None:
+    classified = classify_candidate(
+        _and_not_query(),
+        _pub("Alpha Gamma study", "Alpha Gamma methods.", doi_suffix="and-not-inelig"),
+        candidate_id="and-not-inelig",
+        execution_eligible=False,
+    )
+    assert classified.candidate.positive_group_count == 2
+    assert classified.candidate.execution_eligible is False
+    result = run_experiment([classified])
+    for evaluation in result.policies.values():
+        assert evaluation.execution_ineligible_count == 1
+        assert evaluation.main_count == 0
+        assert evaluation.discarded_uncertain_count == 0
