@@ -174,6 +174,27 @@ describe('FetchAllProgressPanel — provider status rows', () => {
 });
 
 describe('FetchAllProgressPanel — Resume button UX', () => {
+  it('explains a controlled safety stop and offers Resume only with a valid provider checkpoint', () => {
+    const onResume = vi.fn();
+    const safety = provider('crossref', 'partial', {
+      limit_reached: true,
+      resumable: true,
+      stop_reason: 'safety_limit',
+    });
+    const { rerender } = render(
+      <FetchAllProgressPanel progress={buildJob('completed', [safety], { resumable: true })} starting={false} onResume={onResume} />
+    );
+    expect(screen.getByText(/Pobieranie zatrzymano po osiągnięciu limitu bezpieczeństwa/)).toBeInTheDocument();
+    expect(screen.getByTestId('fetch-all-provider-row-crossref')).toHaveTextContent('limit bezpieczeństwa tej sesji');
+    fireEvent.click(screen.getByRole('button', { name: 'Wznów pobieranie' }));
+    expect(onResume).toHaveBeenCalledOnce();
+
+    rerender(
+      <FetchAllProgressPanel progress={buildJob('completed', [provider('crossref', 'complete')], { resumable: false })} starting={false} onResume={onResume} />
+    );
+    expect(screen.queryByRole('button', { name: 'Wznów pobieranie' })).not.toBeInTheDocument();
+  });
+
   it('renders Resume button when job is resumable (partial + resumable=true)', () => {
     const onResume = vi.fn();
     const job = buildJob('completed', [provider('openalex', 'partial', { resumable: true })], {

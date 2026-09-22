@@ -220,6 +220,7 @@ class FetchAllProviderProgressResponse(BaseModel):
     total_reported: int | None = Field(default=None, ge=0)
     limit_reached: bool = False
     resumable: bool = False
+    stop_reason: Literal["safety_limit", "provider_failure", "pagination_stalled"] | None = None
     message: str | None = None
 
 

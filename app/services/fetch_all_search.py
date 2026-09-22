@@ -214,6 +214,7 @@ class FetchAllProviderState:
     total_reported: int | None = None
     limit_reached: bool = False
     resumable: bool = False
+    stop_reason: Literal["safety_limit", "provider_failure", "pagination_stalled"] | None = None
     message: str | None = None
     rendered_query: str = ""
     warnings: list[str] = field(default_factory=list)
@@ -246,6 +247,7 @@ class FetchAllProviderState:
             total_reported=self.total_reported,
             limit_reached=self.limit_reached,
             resumable=self.resumable,
+            stop_reason=self.stop_reason,
             message=self.message,
         )
 
@@ -366,8 +368,10 @@ class FetchAllSearchService:
 
         # Verify at least one checkpoint is resumable
         has_resumable = any(cp.resumable for cp in checkpoints)
-        if not has_resumable and all(cp.status == "complete" for cp in checkpoints):
-            raise ValueError(f"All search runs for project '{project_id}' are already complete")
+        if not has_resumable:
+            if all(cp.status == "complete" for cp in checkpoints):
+                raise ValueError(f"All search runs for project '{project_id}' are already complete")
+            raise ValueError(f"No resumable search checkpoints found for project '{project_id}'")
 
         # Determine strategy from existing memory job or checkpoint plan_metadata
         strategy: SearchStrategyExecutionRequest | None = None
@@ -494,6 +498,7 @@ class FetchAllSearchService:
                     total_reported=None,
                     limit_reached=False,
                     resumable=cp.resumable,
+                    stop_reason=(cp.plan_metadata or {}).get("stop_reason"),
                     message=None,
                 )
                 for cp in checkpoints
@@ -699,6 +704,7 @@ class FetchAllSearchService:
         plan_meta["raw_count"] = state.raw_count
         plan_meta["mapped_count"] = state.mapped_count
         plan_meta["kept_count"] = state.kept_count
+        plan_meta["stop_reason"] = state.stop_reason
         if state.record_diagnostics:
             plan_meta["record_diagnostics"] = [
                 diagnostic.model_dump(mode="json") for diagnostic in state.record_diagnostics
@@ -753,7 +759,7 @@ class FetchAllSearchService:
                 get_snapshots = getattr(self._snapshot_repo(), "get_for_search_run", None)
                 for p in providers:
                     cp = checkpoints_by_provider.get(p.name)
-                    if cp is not None and cp.status == "complete" and not cp.resumable:
+                    if cp is not None and cp.status in {"complete", "partial", "failed"} and not cp.resumable:
                         prev_records: list[Publication] = []
                         if callable(get_snapshots):
                             prev_records = [
@@ -763,7 +769,7 @@ class FetchAllSearchService:
                             ]
                         state = FetchAllProviderState(
                             name=p.name,
-                            status="complete",
+                            status=cp.status,
                             fetched_count=cp.fetched_count,
                             raw_count=int((cp.plan_metadata or {}).get("raw_count", cp.fetched_count)),
                             mapped_count=int((cp.plan_metadata or {}).get("mapped_count", cp.fetched_count)),
@@ -775,9 +781,11 @@ class FetchAllSearchService:
                     skipped_malformed_count=int((cp.plan_metadata or {}).get("skipped_malformed_count", 0)),
                             pages_fetched=cp.pages_fetched,
                             resumable=False,
+                            stop_reason=(cp.plan_metadata or {}).get("stop_reason"),
                             warnings=list(cp.warnings),
                             search_run_id=cp.search_run_id,
                             cursor=cp.cursor,
+                            plan_metadata=cp.plan_metadata,
                             kept_records=prev_records,
                             record_diagnostics=_restore_record_diagnostics(cp),
                         )
@@ -804,6 +812,7 @@ class FetchAllSearchService:
                             skipped_malformed_count=int((cp.plan_metadata or {}).get("skipped_malformed_count", 0)),
                             pages_fetched=cp.pages_fetched,
                             resumable=cp.resumable,
+                            stop_reason=(cp.plan_metadata or {}).get("stop_reason"),
                             warnings=list(cp.warnings),
                             search_run_id=cp.search_run_id,
                             cursor=cp.cursor,
@@ -825,7 +834,9 @@ class FetchAllSearchService:
                         self._save_checkpoint(job, state, state.cursor or "*", resumable=True)
                         continue
 
-                    if state.status == "complete" and not state.resumable:
+                    if state.status in {"complete", "partial", "failed"} and not state.resumable:
+                        if job.resumed_from_job_id:
+                            self._save_checkpoint(job, state, state.cursor, resumable=False)
                         continue
                     initial_cp = checkpoints_by_provider.get(provider.name)
                     await self._run_single_provider(
@@ -942,6 +953,7 @@ class FetchAllSearchService:
                 state.warnings.append(w)
         state.search_run_id = search_run.run_id
         state.status = "running"
+        state.stop_reason = None
 
         # WP2.1: seed duplicate identity from kept records AND restored
         # diagnostics. Rejected/constraint-rejected candidates are not kept,
@@ -951,6 +963,9 @@ class FetchAllSearchService:
         seen_source_ids.update(diagnostic.source_record_id for diagnostic in state.record_diagnostics)
         seen_cursors: set[str] = set()
         state.cursor = cursor
+        execution_start_cursor = cursor
+        execution_start_pages = state.pages_fetched
+        execution_start_records = state.fetched_count
         # WP2 transient lookup indexes (rebuilt on Resume; never persisted).
         diagnostic_index: dict[str, int] = {
             diagnostic.source_record_id: position for position, diagnostic in enumerate(state.record_diagnostics)
@@ -970,14 +985,21 @@ class FetchAllSearchService:
                 break
             elapsed = self._clock() - started_clock
             if (
-                state.pages_fetched >= self._max_pages_per_provider
-                or state.fetched_count >= self._max_records_per_provider
+                state.pages_fetched - execution_start_pages >= self._max_pages_per_provider
+                or state.fetched_count - execution_start_records >= self._max_records_per_provider
                 or elapsed >= self._max_seconds
             ):
                 state.status = "partial"
                 state.limit_reached = True
+                state.stop_reason = "safety_limit"
                 state.message = "Stopped by the fetch-all safety limit before the provider reported its final page."
-                state.resumable = bool(cursor is not None)
+                state.resumable = bool(
+                    cursor is not None
+                    and (cursor != execution_start_cursor or state.fetched_count > execution_start_records)
+                )
+                if not state.resumable:
+                    state.stop_reason = "pagination_stalled"
+                    state.message = "Fetch-all could not make progress within its execution safety budget."
                 self._save_checkpoint(job, state, cursor, resumable=state.resumable)
                 break
             try:
@@ -1023,12 +1045,14 @@ class FetchAllSearchService:
             except IncompatibleCrossrefPlanError as error:
                 state.message = f"{type(error).__name__}: {error}"
                 state.status = "failed"
+                state.stop_reason = "provider_failure"
                 state.resumable = False
                 self._save_checkpoint(job, state, cursor, resumable=False)
                 break
             except Exception as error:
                 state.message = f"{type(error).__name__}: {error}"
                 state.status = "partial" if state.fetched_count > 0 else "failed"
+                state.stop_reason = "provider_failure"
                 state.resumable = bool(cursor is not None)
                 self._save_checkpoint(job, state, cursor, resumable=state.resumable)
                 break
@@ -1101,6 +1125,7 @@ class FetchAllSearchService:
 
             if next_cursor is None:
                 state.status = "complete"
+                state.stop_reason = None
                 state.resumable = False
                 if state.total_reported is not None and state.fetched_count < state.total_reported:
                     state.limit_reached = True
@@ -1114,7 +1139,8 @@ class FetchAllSearchService:
             if not output.publications and output.raw_count == 0:
                 state.status = "partial"
                 state.limit_reached = True
-                state.resumable = True
+                state.stop_reason = "pagination_stalled"
+                state.resumable = False
                 state.message = (
                     "Provider returned an empty page while claiming more results; pagination could not safely continue."
                 )
@@ -1123,6 +1149,7 @@ class FetchAllSearchService:
             if next_cursor == cursor or next_cursor in seen_cursors:
                 state.status = "partial"
                 state.limit_reached = True
+                state.stop_reason = "pagination_stalled"
                 state.resumable = False
                 state.message = "Provider repeated its pagination cursor; pagination could not safely continue."
                 self._save_checkpoint(job, state, next_cursor, resumable=False)
@@ -1316,7 +1343,9 @@ class FetchAllSearchService:
                     message=(f"Fetch-all stopped early ({state.status}): {state.message}"),
                 )
                 for state in job.providers
-                if state.status in {"failed", "partial"} and state.message is not None
+                if state.status in {"failed", "partial"}
+                and state.stop_reason != "safety_limit"
+                and state.message is not None
             ],
         )
         job.finished_at = finished_at

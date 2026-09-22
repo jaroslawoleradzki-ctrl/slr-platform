@@ -373,7 +373,7 @@ async def test_crossref_real_six_query_plan_resumes_without_replaying_physical_r
             next_cursor = f"query-{index}-page-2"
         else:
             assert cursor == f"query-{index}-page-2"
-            items = [work("10.1000/0-b" if index == 1 else f"10.1000/{index}-b")]
+            items = [work("10.1000/0-b" if index in {1, 5} else f"10.1000/{index}-b")]
             next_cursor = None
         return httpx.Response(
             200,
@@ -394,7 +394,8 @@ async def test_crossref_real_six_query_plan_resumes_without_replaying_physical_r
             provider_factory=provider_factory,
             snapshot_repository=SqliteSearchResultSnapshotRepository(db_path),
             checkpoint_repository=SqliteSearchRunCheckpointRepository(db_path),
-            max_pages_per_provider=3,
+            max_pages_per_provider=20,
+            max_records_per_provider=5,
         )
         started = service.start("six-query-resume", strategy)
         await service.wait(started.job_id)
@@ -403,9 +404,12 @@ async def test_crossref_real_six_query_plan_resumes_without_replaying_physical_r
             (physical_queries[0], "*"),
             (physical_queries[0], "query-0-page-2"),
             (physical_queries[1], "*"),
+            (physical_queries[1], "query-1-page-2"),
+            (physical_queries[2], "*"),
+            (physical_queries[2], "query-2-page-2"),
         ]
         checkpoint = SqliteSearchRunCheckpointRepository(db_path).get_checkpoints_for_job(UUID(started.job_id))[0]
-        assert CrossrefProvider._decode_candidate_cursor(checkpoint.cursor) == (1, "query-1-page-2")
+        assert CrossrefProvider._decode_candidate_cursor(checkpoint.cursor) == (3, "*")
         assert checkpoint.resumable
 
         restarted = FetchAllSearchService(
@@ -413,34 +417,62 @@ async def test_crossref_real_six_query_plan_resumes_without_replaying_physical_r
             snapshot_repository=SqliteSearchResultSnapshotRepository(db_path),
             checkpoint_repository=SqliteSearchRunCheckpointRepository(db_path),
             max_pages_per_provider=20,
+            max_records_per_provider=5,
         )
         resumed = restarted.start_resume_job("six-query-resume", started.job_id)
-        completed = await restarted.wait(resumed.job_id)
+        await restarted.wait(resumed.job_id)
         resumed_requests = requests[len(before_requests):]
         assert not set(before_requests).intersection(resumed_requests)
-        assert len(requests) == len(set(requests)) == 12
-        assert resumed_requests[0] == (physical_queries[1], "query-1-page-2")
-        assert requests[-1] == (physical_queries[5], "query-5-page-2")
+        assert len(resumed_requests) == 5
+        assert resumed_requests[0] == (physical_queries[3], "*")
         status = restarted.get_status(resumed.job_id)
-        assert status.providers[0].status == "complete"
-        assert status.fetched_total == 11
-        assert status.kept_total == 11
-        assert status.canonical_accepted_total == 10
-        assert status.canonical_indeterminate_total == 1
-        assert status.providers[0].skipped_malformed_count == 1
-        assert status.providers[0].raw_count == 13
-        assert status.providers[0].mapped_count == 12
-        assert status.providers[0].pages_fetched == 12
-        assert completed.result is not None
-        assert len(completed.result.results) == 11
-        assert len({result.source_id for result in completed.result.results}) == 11
+        assert status.fetched_total > 5
+        assert status.fetched_total == 10
+        assert status.providers[0].status == "partial"
+        assert status.providers[0].stop_reason == "safety_limit"
+        assert status.resumable
+        assert status.result is not None and status.result.provider_errors == []
+        second_checkpoint = SqliteSearchRunCheckpointRepository(db_path).get_checkpoints_for_job(UUID(resumed.job_id))[0]
+        assert CrossrefProvider._decode_candidate_cursor(second_checkpoint.cursor) == (5, "query-5-page-2")
+
+        third_service = FetchAllSearchService(
+            provider_factory=provider_factory,
+            snapshot_repository=SqliteSearchResultSnapshotRepository(db_path),
+            checkpoint_repository=SqliteSearchRunCheckpointRepository(db_path),
+            max_pages_per_provider=20,
+            max_records_per_provider=5,
+        )
+        third = third_service.start_resume_job("six-query-resume", resumed.job_id)
+        await third_service.wait(third.job_id)
+        final_status = third_service.get_status(third.job_id)
+        assert requests[-1] == (physical_queries[5], "query-5-page-2")
+        assert len(requests) == len(set(requests)) == 12
+        assert final_status.providers[0].status == "complete"
+        assert final_status.fetched_total == 10
+        assert not final_status.resumable
+        assert final_status.kept_total == 10
+        assert final_status.canonical_accepted_total == 9
+        assert final_status.canonical_indeterminate_total == 1
+        assert final_status.providers[0].skipped_malformed_count == 1
+        assert final_status.providers[0].raw_count == 13
+        assert final_status.providers[0].mapped_count == 12
+        assert final_status.providers[0].pages_fetched == 12
+        assert final_status.result is not None
+        assert len(final_status.result.results) == 10
+        assert len({result.source_id for result in final_status.result.results}) == 10
+        duplicate = next(d for d in third_service._jobs[third.job_id].providers[0].record_diagnostics if d.doi == "10.1000/0-b")
+        assert {path.physical_query_index for path in duplicate.retrieval_paths} == {0, 1, 5}
+        replay_before = third_service.get_crossref_replay_dataset(third.job_id)
+        assert replay_before == FetchAllSearchService(
+            checkpoint_repository=SqliteSearchRunCheckpointRepository(db_path),
+        ).get_crossref_replay_dataset(third.job_id)
 
         after_restart = FetchAllSearchService(
             checkpoint_repository=SqliteSearchRunCheckpointRepository(db_path),
-        ).get_status(resumed.job_id)
-        assert after_restart.fetched_total == status.fetched_total
-        assert after_restart.kept_total == status.kept_total
-        assert after_restart.canonical_accepted_total == status.canonical_accepted_total
+        ).get_status(third.job_id)
+        assert after_restart.fetched_total == final_status.fetched_total
+        assert after_restart.kept_total == final_status.kept_total
+        assert after_restart.canonical_accepted_total == final_status.canonical_accepted_total
         assert after_restart.providers[0].skipped_malformed_count == 1
 
 
@@ -954,13 +986,13 @@ async def test_wp4_multi_step_resume_across_three_sessions(tmp_path: Path) -> No
     assert len(j1.result.results) == 1
     assert [r.source_id for r in j1.result.results] == ["W1"]
 
-    # Session 2: resume with max_pages_per_provider=2 (fetches page 2, still partial)
+    # Session 2: a fresh one-page budget fetches page 2, then stops again.
     mock_provider.calls.clear()
     svc2 = FetchAllSearchService(
         provider_factory=lambda s, c: [mock_provider],
         snapshot_repository=snapshot_repo,
         checkpoint_repository=checkpoint_repo,
-        max_pages_per_provider=2,
+        max_pages_per_provider=1,
     )
     s2 = svc2.start_resume_job("proj_multi_step", s1.job_id)
     j2 = await svc2.wait(s2.job_id)
@@ -993,6 +1025,32 @@ async def test_wp4_multi_step_resume_across_three_sessions(tmp_path: Path) -> No
 
 
 @pytest.mark.anyio
+async def test_zero_progress_safety_stop_does_not_advertise_resume(tmp_path: Path) -> None:
+    db_path = tmp_path / "no-progress.db"
+    provider = MockPaginatingProvider(
+        "openalex",
+        {"*": ([_make_publication("openalex", "W1", "Lean Energy Manufacturing")], None)},
+    )
+    service = FetchAllSearchService(
+        provider_factory=lambda strategy, client: [provider],
+        snapshot_repository=SqliteSearchResultSnapshotRepository(db_path),
+        checkpoint_repository=SqliteSearchRunCheckpointRepository(db_path),
+        max_seconds=0,
+    )
+    started = service.start("no-progress", _build_test_strategy(["openalex"]))
+    await service.wait(started.job_id)
+    status = service.get_status(started.job_id)
+    assert provider.calls == []
+    assert status.providers[0].status == "partial"
+    assert status.providers[0].stop_reason == "pagination_stalled"
+    assert not status.resumable
+    assert SqliteSearchRunCheckpointRepository(db_path).get_checkpoints_for_job(UUID(started.job_id))[0].resumable is False
+    assert service.list_resumable_jobs("no-progress") == []
+    with pytest.raises(ValueError, match="No resumable"):
+        service.start_resume_job("no-progress", started.job_id)
+
+
+@pytest.mark.anyio
 async def test_wp4_multi_provider_resume_with_completed_and_resumed_providers(tmp_path: Path) -> None:
     """Multi-provider resume: provider A is complete in session 1, provider B resumes in session 2."""
     db_path = tmp_path / "multi_provider.db"
@@ -1003,9 +1061,14 @@ async def test_wp4_multi_provider_resume_with_completed_and_resumed_providers(tm
     pub_a2 = _make_publication("openalex", "A2", "Lean Energy in Manufacturing A2")
     pub_b1 = _make_publication("semantic_scholar", "B1", "Lean Energy in Manufacturing B1")
     pub_b2 = _make_publication("semantic_scholar", "B2", "Lean Energy in Manufacturing B2")
+    pub_b3 = _make_publication("semantic_scholar", "B3", "Lean Energy in Manufacturing B3")
 
     pages_a = {"*": ([pub_a1, pub_a2], None)}  # OpenAlex completes in 1 page
-    pages_b = {"*": ([pub_b1], "s2_page_2"), "s2_page_2": ([pub_b2], None)}  # S2 has 2 pages
+    pages_b = {
+        "*": ([pub_b1], "s2_page_2"),
+        "s2_page_2": ([pub_b2], "s2_page_3"),
+        "s2_page_3": ([pub_b3], None),
+    }
 
     mock_a = MockPaginatingProvider("openalex", pages_a)
     mock_b = MockPaginatingProvider("semantic_scholar", pages_b)
@@ -1027,28 +1090,43 @@ async def test_wp4_multi_provider_resume_with_completed_and_resumed_providers(tm
     assert len(j1.result.results) == 3
     assert {r.source_id for r in j1.result.results} == {"A1", "A2", "B1"}
 
-    # Session 2: resume -> OpenAlex skipped, Semantic Scholar finishes page 2
+    # Session 2: OpenAlex stays complete; Semantic Scholar consumes its fresh one-page budget.
     mock_a.calls.clear()
     mock_b.calls.clear()
     svc2 = FetchAllSearchService(
         provider_factory=lambda s, c: [mock_a, mock_b],
         snapshot_repository=snapshot_repo,
         checkpoint_repository=checkpoint_repo,
-        max_pages_per_provider=10,
+        max_pages_per_provider=1,
     )
     s2 = svc2.start_resume_job("proj_multi_prov", s1.job_id)
     j2 = await svc2.wait(s2.job_id)
     assert j2.status == "completed"
     st2 = svc2.get_status(s2.job_id)
     assert st2.providers[0].status == "complete"
-    assert st2.providers[1].status == "complete"
+    assert st2.providers[1].status == "partial"
     assert mock_a.calls == []  # OpenAlex was not called
     assert mock_b.calls == ["s2_page_2"]
 
-    # Final result MUST contain all 4 records from both providers across both sessions
-    assert j2.result is not None
-    assert len(j2.result.results) == 4
-    assert {r.source_id for r in j2.result.results} == {"A1", "A2", "B1", "B2"}
+    # A third fresh service must still see both provider checkpoints in the new job.
+    mock_a.calls.clear()
+    mock_b.calls.clear()
+    svc3 = FetchAllSearchService(
+        provider_factory=lambda s, c: [mock_a, mock_b],
+        snapshot_repository=SqliteSearchResultSnapshotRepository(db_path),
+        checkpoint_repository=SqliteSearchRunCheckpointRepository(db_path),
+        max_pages_per_provider=1,
+    )
+    s3 = svc3.start_resume_job("proj_multi_prov", s2.job_id)
+    j3 = await svc3.wait(s3.job_id)
+    assert mock_a.calls == []
+    assert mock_b.calls == ["s2_page_3"]
+    assert [p.status for p in svc3.get_status(s3.job_id).providers] == ["complete", "complete"]
+
+    # Final result MUST contain all 5 records from both providers across three sessions.
+    assert j3.result is not None
+    assert len(j3.result.results) == 5
+    assert {r.source_id for r in j3.result.results} == {"A1", "A2", "B1", "B2", "B3"}
 
 
 @pytest.mark.anyio

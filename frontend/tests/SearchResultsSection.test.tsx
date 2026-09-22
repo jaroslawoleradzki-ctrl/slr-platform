@@ -305,6 +305,30 @@ describe('SearchResultsSection', () => {
     );
   });
 
+  it('does not call a controlled safety stop a provider failure', () => {
+    render(
+      <SearchResultsSection
+        result={{ ...result, provider_errors: [] }}
+        loading={false}
+        selectedIds={[]}
+        onSelectionChange={() => undefined}
+        fetchAllJob={{
+          ...fetchAllRunning,
+          status: 'completed',
+          resumable: true,
+          providers: [{
+            provider: 'crossref', status: 'partial', fetched_count: 5000, kept_count: 4000,
+            pages_fetched: 50, total_reported: 9000, limit_reached: true, resumable: true,
+            stop_reason: 'safety_limit', message: 'Stopped by the fetch-all safety limit.',
+          }],
+        }}
+        onResumeFetchAll={() => undefined}
+      />
+    );
+    expect(screen.queryByText(/Część providerów nie odpowiedziała/)).not.toBeInTheDocument();
+    expect(screen.getByText(/Możesz wznowić pobieranie od zapisanego miejsca/)).toBeInTheDocument();
+  });
+
   it('imports selected records and disables import without a selection', () => {
     const onImport = vi.fn();
     const { rerender } = render(

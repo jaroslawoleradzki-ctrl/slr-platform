@@ -187,6 +187,7 @@ export interface FetchAllProviderProgress {
   total_reported: number | null;
   limit_reached: boolean;
   resumable?: boolean;
+  stop_reason?: 'safety_limit' | 'provider_failure' | 'pagination_stalled' | null;
   message: string | null;
 }
 

@@ -105,7 +105,10 @@ export const FetchAllProgressPanel: React.FC<Props> = ({
     (p) => p.status === 'partial' || p.status === 'failed'
   );
   const isJobFullyComplete = progress.status === 'completed' && incompleteProviders.length === 0;
-  const canResume = !running && !isJobFullyComplete && Boolean(progress.resumable || incompleteProviders.some(p => p.resumable));
+  const canResume = !running && !isJobFullyComplete && progress.providers.some(
+    p => p.resumable === true && p.status !== 'complete'
+  );
+  const safetyStopped = incompleteProviders.some(p => p.stop_reason === 'safety_limit' && p.resumable);
 
   return (
     <div
@@ -215,8 +218,11 @@ export const FetchAllProgressPanel: React.FC<Props> = ({
         >
           <AlertTriangle size={16} />
           <span>
-            Niekompletne dane:{' '}
-            {incompleteProviders
+            {safetyStopped && (
+              <>Pobieranie zatrzymano po osiągnięciu limitu bezpieczeństwa. Możesz wznowić pobieranie od zapisanego miejsca. </>
+            )}
+            {incompleteProviders.some(p => p.stop_reason !== 'safety_limit') && <>Niekompletne dane: </>}
+            {incompleteProviders.filter(p => p.stop_reason !== 'safety_limit')
               .map((p) => {
                 const label = PROVIDER_LABELS[p.provider] ?? p.provider;
                 return `${label} — ${
@@ -362,7 +368,9 @@ const ProviderRow: React.FC<{ provider: FetchAllProviderProgress; running: boole
               color: 'var(--status-warning-text)',
             }}
           >
-            osiągnięto limit możliwy do pobrania z API
+            {provider.stop_reason === 'safety_limit'
+              ? 'osiągnięto limit bezpieczeństwa tej sesji'
+              : 'osiągnięto limit możliwy do pobrania z API'}
           </span>
         )}
       </span>
