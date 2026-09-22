@@ -225,6 +225,37 @@ async def test_current_recall_first_reproduces_retention(tmp_path: Path) -> None
     assert evaluation.discarded_uncertain_count == 0
 
 
+def test_execution_ineligible_match_is_not_in_main_population() -> None:
+    classified = classify_candidate(
+        _three_group_query(),
+        _MATCH_PUB,
+        candidate_id="constraint-match",
+        execution_eligible=False,
+    )
+    assert classified.candidate.canonical_status is CanonicalMatchStatus.MATCH
+    result = run_experiment([classified])
+    for evaluation in result.policies.values():
+        assert evaluation.main_count == 0
+        assert evaluation.execution_ineligible_count == 1
+        assert evaluation.rejected_count == 0
+
+
+def test_execution_ineligible_indeterminate_is_not_silently_discarded() -> None:
+    classified = classify_candidate(
+        _three_group_query(),
+        _NO_EVIDENCE_PUB,
+        candidate_id="constraint-indeterminate",
+        execution_eligible=False,
+    )
+    assert classified.candidate.canonical_status is CanonicalMatchStatus.INDETERMINATE
+    result = run_experiment([classified])
+    for evaluation in result.policies.values():
+        assert evaluation.main_count == 0
+        assert evaluation.uncertainty_count == 0
+        assert evaluation.execution_ineligible_count == 1
+        assert evaluation.discarded_uncertain_count == 0
+
+
 def test_separate_all_uncertain_moves_but_deletes_nothing() -> None:
     query = _three_group_query()
     pubs = [_MATCH_PUB, _NO_EVIDENCE_PUB, _WEAK_PUB, _STRONG_PUB, _NON_MATCH_PUB]

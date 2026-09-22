@@ -8,6 +8,8 @@ candidates into uncertainty tiers and compares alternative treatments of
 * no policy deletes, rejects, or hides any uncertain candidate — the
   ``discarded_uncertain_count`` invariant is computed honestly and every
   built-in policy keeps it at zero;
+* execution eligibility is tracked separately from canonical status and
+  experimental uncertainty policy;
 * production code paths never import this module.
 
 Terminology (kept strictly separate):
@@ -54,6 +56,7 @@ class ScreeningPopulation(StrEnum):
     MAIN = "main"
     UNCERTAINTY = "uncertainty"
     REJECTED = "rejected"
+    EXECUTION_INELIGIBLE = "execution_ineligible"
 
 
 class PolicyScenario(StrEnum):
@@ -85,11 +88,12 @@ class UncertaintyCandidate(BaseModel):
 
     candidate_id: str = Field(min_length=1)
     canonical_status: CanonicalMatchStatus
-    positive_group_count: int = Field(ge=1)
+    positive_group_count: int = Field(ge=0)
     evidenced_group_count: int = Field(ge=0)
     missing_fields: tuple[str, ...] = ()
     abstract_missing: bool = False
     group_statuses: tuple[CanonicalMatchStatus, ...] = ()
+    execution_eligible: bool = True
 
     @model_validator(mode="after")
     def check_evidence_consistency(self) -> "UncertaintyCandidate":
@@ -148,6 +152,7 @@ def classify_candidate(
     publication: Publication,
     *,
     candidate_id: str,
+    execution_eligible: bool = True,
 ) -> ClassifiedCandidate:
     """Validate with the real validator and classify, without duplicating logic."""
     status = validate_canonical_query(query, publication).status
@@ -167,6 +172,7 @@ def classify_candidate(
         missing_fields=tuple(missing),
         abstract_missing=ABSTRACT_FIELD in missing,
         group_statuses=group_statuses,
+        execution_eligible=execution_eligible,
     )
     return ClassifiedCandidate(candidate=candidate, tier=classify_tier(candidate))
 
@@ -204,13 +210,21 @@ def candidate_from_evidence_dict(data: Mapping[str, Any]) -> UncertaintyCandidat
         missing_fields=tuple(str(field) for field in data.get("missing_fields", ())),
         abstract_missing=bool(data.get("abstract_missing", False)),
         group_statuses=group_statuses,
+        execution_eligible=bool(data.get("execution_eligible", True)),
     )
 
 
-def assign_population(tier: UncertaintyTier, scenario: PolicyScenario) -> ScreeningPopulation:
+def assign_population(
+    tier: UncertaintyTier,
+    scenario: PolicyScenario,
+    *,
+    execution_eligible: bool = True,
+) -> ScreeningPopulation:
     """Queue assignment for one tier under one scenario (total function)."""
     if tier is UncertaintyTier.NON_MATCH:
         return ScreeningPopulation.REJECTED
+    if not execution_eligible:
+        return ScreeningPopulation.EXECUTION_INELIGIBLE
     if tier is UncertaintyTier.MATCH:
         return ScreeningPopulation.MAIN
     if scenario is PolicyScenario.CURRENT_RECALL_FIRST:
@@ -240,6 +254,7 @@ class CandidateAssignment(BaseModel):
     evidenced_group_count: int
     missing_fields: tuple[str, ...] = ()
     abstract_missing: bool = False
+    execution_eligible: bool = True
 
 
 class PolicyEvaluation(BaseModel):
@@ -252,6 +267,7 @@ class PolicyEvaluation(BaseModel):
     uncertainty_count: int = Field(ge=0)
     uncertainty_by_tier: dict[str, int] = Field(default_factory=dict)
     rejected_count: int = Field(ge=0)
+    execution_ineligible_count: int = Field(ge=0)
     discarded_uncertain_count: int = Field(ge=0)
     assignments: tuple[CandidateAssignment, ...] = ()
 
@@ -266,16 +282,24 @@ def evaluate_policy(
     main_count = 0
     uncertainty_count = 0
     rejected_count = 0
+    execution_ineligible_count = 0
     discarded = 0
     for item in classified:
-        population = assign_population(item.tier, scenario)
+        population = assign_population(
+            item.tier,
+            scenario,
+            execution_eligible=item.candidate.execution_eligible,
+        )
         if population is ScreeningPopulation.MAIN:
             main_count += 1
         elif population is ScreeningPopulation.UNCERTAINTY:
             uncertainty_count += 1
             uncertainty_by_tier[item.tier.value] = uncertainty_by_tier.get(item.tier.value, 0) + 1
         else:
-            rejected_count += 1
+            if population is ScreeningPopulation.REJECTED:
+                rejected_count += 1
+            else:
+                execution_ineligible_count += 1
         if (
             item.candidate.canonical_status is CanonicalMatchStatus.INDETERMINATE
             and population is ScreeningPopulation.REJECTED
@@ -291,6 +315,7 @@ def evaluate_policy(
                 evidenced_group_count=item.candidate.evidenced_group_count,
                 missing_fields=item.candidate.missing_fields,
                 abstract_missing=item.candidate.abstract_missing,
+                execution_eligible=item.candidate.execution_eligible,
             )
         )
     return PolicyEvaluation(
@@ -299,6 +324,7 @@ def evaluate_policy(
         uncertainty_count=uncertainty_count,
         uncertainty_by_tier=dict(sorted(uncertainty_by_tier.items())),
         rejected_count=rejected_count,
+        execution_ineligible_count=execution_ineligible_count,
         discarded_uncertain_count=discarded,
         assignments=tuple(assignments),
     )
