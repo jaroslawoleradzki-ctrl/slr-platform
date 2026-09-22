@@ -6,6 +6,7 @@ from app.rendering.crossref import (
     CrossrefQueryRenderer,
     build_crossref_candidate_plan,
     build_crossref_candidate_queries,
+    compute_plan_fingerprint,
 )
 
 
@@ -260,3 +261,107 @@ def test_renderer_metadata_reports_audit_coverage() -> None:
     assert coverage[2]["coverage_ratio"] == 1.0
 
     assert metadata["min_axis_coverage_ratio"] == round(6 / 7, 4)
+    assert "plan_fingerprint" in metadata
+    assert len(metadata["plan_fingerprint"]) == 16
+    assert metadata["planner_version"] == "v0.6.9-wp3"
+
+
+def test_counterexample_3x3_option_b_contract() -> None:
+    """Option B contract test: 3x3 has 100% alternative representation, but frequencies 3/2/1 (max diff 2)."""
+    expr = SearchGroup(
+        operator=BooleanOperator.AND,
+        children=[
+            SearchGroup(operator=BooleanOperator.OR, children=[SearchTerm(value=f"a{i}") for i in range(3)]),
+            SearchGroup(operator=BooleanOperator.OR, children=[SearchTerm(value=f"b{i}") for i in range(3)]),
+        ],
+    )
+    plan = build_crossref_candidate_plan(expr)
+    assert plan.possible_combinations == 9
+    assert len(plan.queries) == 6
+    assert len(set(plan.queries)) == 6
+
+    # Both axes have 100% representation: min(6, 3) = 3
+    assert len(plan.axis_coverage) == 2
+    for cov in plan.axis_coverage:
+        assert cov["available_alternatives"] == 3
+        assert cov["represented_alternatives"] == 3
+        assert cov["coverage_ratio"] == 1.0
+
+    # Verify frequency distribution on axis 0: [3, 2, 1]
+    axis0_terms = [q.split()[0] for q in plan.queries]
+    freqs = sorted([axis0_terms.count(f"a{i}") for i in range(3)], reverse=True)
+    assert freqs == [3, 2, 1]
+    assert max(freqs) - min(freqs) == 2  # Proves Option B: frequency diff <= 1 is NOT guaranteed
+
+
+def test_counterexample_3_to_9_option_b_contract() -> None:
+    """Option B contract test on large fallback path (>10,000 combinations): 3^9 = 19683.
+
+    Guarantees 100% alternative representation on all 9 axes, but final axis has frequency 3/2/1.
+    """
+    expr = SearchGroup(
+        operator=BooleanOperator.AND,
+        children=[
+            SearchGroup(operator=BooleanOperator.OR, children=[SearchTerm(value=f"g{j}_{i}") for i in range(3)])
+            for j in range(9)
+        ],
+    )
+    plan = build_crossref_candidate_plan(expr)
+    assert plan.possible_combinations == 3**9  # 19683 > 10000 -> enters fast coordinate fallback
+    assert len(plan.queries) == 6
+    assert len(set(plan.queries)) == 6
+
+    # Every one of the 9 axes has all 3 alternatives represented
+    assert len(plan.axis_coverage) == 9
+    for cov in plan.axis_coverage:
+        assert cov["available_alternatives"] == 3
+        assert cov["represented_alternatives"] == 3
+        assert cov["coverage_ratio"] == 1.0
+
+    # Final axis has frequency 3/2/1
+    axis8_terms = [q.split()[8] for q in plan.queries]
+    freqs = sorted([axis8_terms.count(f"g8_{i}") for i in range(3)], reverse=True)
+    assert freqs == [3, 2, 1]
+    assert max(freqs) - min(freqs) == 2
+
+
+def test_textual_query_deduplication_aligns_with_axis_coverage() -> None:
+    """When child terms produce identical textual queries, axis_coverage matches deduplicated queries."""
+    # Group 0 has duplicate synonym rendered strings
+    expr = SearchGroup(
+        operator=BooleanOperator.AND,
+        children=[
+            SearchGroup(
+                operator=BooleanOperator.OR,
+                children=[SearchTerm(value="robot"), SearchTerm(value="robot")],
+            ),
+            SearchGroup(
+                operator=BooleanOperator.OR,
+                children=[SearchTerm(value="sensor"), SearchTerm(value="camera")],
+            ),
+        ],
+    )
+    plan = build_crossref_candidate_plan(expr)
+    # Cartesian product would be 4, but duplicate "robot" leaves only 2 unique executable queries:
+    # "robot sensor" and "robot camera"
+    assert len(plan.queries) == len(set(plan.queries)) == 2
+    assert plan.queries == ("robot sensor", "robot camera")
+    # Coverage must match the actual deduplicated queries
+    assert plan.axis_coverage[0]["represented_alternatives"] == 1
+    assert plan.axis_coverage[1]["represented_alternatives"] == 2
+
+
+def test_compute_plan_fingerprint_properties() -> None:
+    queries_a = ["lean energy manufacturing", "kaizen consumption production"]
+    queries_b = ["lean energy manufacturing", "kaizen consumption factory"]
+    queries_c = ["kaizen consumption production", "lean energy manufacturing"]
+
+    fp_a1 = compute_plan_fingerprint(queries_a)
+    fp_a2 = compute_plan_fingerprint(tuple(queries_a))
+    fp_b = compute_plan_fingerprint(queries_b)
+    fp_c = compute_plan_fingerprint(queries_c)
+
+    assert len(fp_a1) == 16
+    assert fp_a1 == fp_a2
+    assert fp_a1 != fp_b
+    assert fp_a1 != fp_c  # Order sensitive

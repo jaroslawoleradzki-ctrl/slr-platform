@@ -20,7 +20,10 @@ from app.domain.search import (
 )
 from app.providers.crossref import CrossrefClient
 from app.providers.search.base import ProviderSearchOutput
-from app.providers.search.crossref import CrossrefProvider
+from app.providers.search.crossref import (
+    CrossrefProvider,
+    IncompatibleCrossrefPlanError,
+)
 from app.rendering.crossref import build_crossref_candidate_queries
 from app.repositories.search_result_snapshot_repository import (
     SqliteSearchResultSnapshotRepository,
@@ -439,6 +442,227 @@ async def test_crossref_real_six_query_plan_resumes_without_replaying_physical_r
         assert after_restart.kept_total == status.kept_total
         assert after_restart.canonical_accepted_total == status.canonical_accepted_total
         assert after_restart.providers[0].skipped_malformed_count == 1
+
+
+@pytest.mark.anyio
+async def test_cross_version_checkpoint_resume_pinned_outcome_a(tmp_path: Path) -> None:
+    """Outcome A: Pinned candidate_queries in plan_metadata are reused on resume, isolating from planner."""
+    db_path = tmp_path / "pinned-resume.db"
+    snapshot_repo = SqliteSearchResultSnapshotRepository(db_path)
+    checkpoint_repo = SqliteSearchRunCheckpointRepository(db_path)
+
+    pinned_queries = ["legacy query one", "legacy query two"]
+    cursor = CrossrefProvider._encode_candidate_cursor(1, "legacy-page-2")
+
+    requests_issued: list[tuple[str, str]] = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        q = request.url.params.get("query", "")
+        cur = request.url.params.get("cursor", "")
+        requests_issued.append((q, cur))
+        return httpx.Response(
+            200,
+            json={
+                "message": {
+                    "total-results": 10,
+                    "next-cursor": None,
+                    "items": [
+                        {
+                            "DOI": "10.1000/resumed-1",
+                            "title": ["Lean Energy Manufacturing"],
+                            "type": "journal-article",
+                            "published": {"date-parts": [[2024]]},
+                        }
+                    ],
+                }
+            },
+            request=request,
+        )
+
+    strategy = SearchStrategyExecutionRequest(
+        publication_year_from=2015,
+        publication_year_to=2026,
+        providers=["crossref"],
+        concept_groups=[
+            {"id": "g1", "name": "Lean", "terms": ["Lean", "Kaizen"]},
+            {"id": "g2", "name": "Energy", "terms": ["Energy"]},
+        ],
+    )
+    job_id = uuid4()
+    search_run_id = uuid4()
+
+    # Pre-populate checkpoint with pinned candidate_queries from older plan
+    initial_checkpoint = SearchRunCheckpoint(
+        search_run_id=search_run_id,
+        project_id="pinned-proj",
+        job_id=job_id,
+        provider="crossref",
+        cursor=cursor,
+        pages_fetched=1,
+        fetched_count=1,
+        canonical_accepted_count=1,
+        canonical_rejected_count=0,
+        canonical_indeterminate_count=0,
+        deduplicated_count=0,
+        status="partial",
+        resumable=True,
+        plan_metadata={
+            "strategy": strategy.model_dump(mode="json"),
+            "candidate_queries": pinned_queries,
+            "raw_count": 1,
+            "mapped_count": 1,
+            "kept_count": 1,
+        },
+        warnings=(),
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
+    )
+    checkpoint_repo.save_checkpoint(initial_checkpoint)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client:
+        def provider_factory(strat: SearchStrategyExecutionRequest, client: httpx.AsyncClient) -> list[CrossrefProvider]:
+            return [
+                CrossrefProvider(
+                    client=CrossrefClient(http_client=http_client, requests_per_second=None),
+                    paginate=True,
+                )
+            ]
+
+        service = FetchAllSearchService(
+            provider_factory=provider_factory,
+            snapshot_repository=snapshot_repo,
+            checkpoint_repository=checkpoint_repo,
+        )
+
+        started = service.start_resume_job("pinned-proj", job_id)
+        job = await service.wait(started.job_id)
+
+        assert job.status == "completed"
+        # The request MUST have been issued with the pinned query at index 1 ("legacy query two")
+        # and cursor "legacy-page-2", NOT whatever the new planner would have computed!
+        assert len(requests_issued) == 1
+        assert requests_issued[0] == ("legacy query two", "legacy-page-2")
+
+
+@pytest.mark.anyio
+async def test_cross_version_legacy_in_flight_resume_unpinned_outcome_b(tmp_path: Path) -> None:
+    """Outcome B: Legacy in-flight cursor without pinned plan or fingerprint raises IncompatibleCrossrefPlanError."""
+    db_path = tmp_path / "unpinned-resume.db"
+    snapshot_repo = SqliteSearchResultSnapshotRepository(db_path)
+    checkpoint_repo = SqliteSearchRunCheckpointRepository(db_path)
+
+    requests_issued: list[tuple[str, str]] = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        requests_issued.append((str(request.url), ""))
+        return httpx.Response(200, json={"message": {"items": []}}, request=request)
+
+    strategy = SearchStrategyExecutionRequest(
+        publication_year_from=2015,
+        publication_year_to=2026,
+        providers=["crossref"],
+        concept_groups=[
+            {"id": "g1", "name": "Lean", "terms": ["Lean", "Kaizen"]},
+            {"id": "g2", "name": "Energy", "terms": ["Energy"]},
+        ],
+    )
+    job_id = uuid4()
+    search_run_id = uuid4()
+
+    # Pre-populate checkpoint with an in-flight raw cursor and NO candidate_queries in plan_metadata
+    initial_checkpoint = SearchRunCheckpoint(
+        search_run_id=search_run_id,
+        project_id="unpinned-proj",
+        job_id=job_id,
+        provider="crossref",
+        cursor="legacy-physical-page-cursor",
+        pages_fetched=1,
+        fetched_count=1,
+        canonical_accepted_count=1,
+        canonical_rejected_count=0,
+        canonical_indeterminate_count=0,
+        deduplicated_count=0,
+        status="partial",
+        resumable=True,
+        plan_metadata={
+            "strategy": strategy.model_dump(mode="json"),
+            # No "candidate_queries" stored here
+            "raw_count": 1,
+            "mapped_count": 1,
+            "kept_count": 1,
+        },
+        warnings=(),
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
+    )
+    checkpoint_repo.save_checkpoint(initial_checkpoint)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client:
+        def provider_factory(strat: SearchStrategyExecutionRequest, client: httpx.AsyncClient) -> list[CrossrefProvider]:
+            return [
+                CrossrefProvider(
+                    client=CrossrefClient(http_client=http_client, requests_per_second=None),
+                    paginate=True,
+                )
+            ]
+
+        service = FetchAllSearchService(
+            provider_factory=provider_factory,
+            snapshot_repository=snapshot_repo,
+            checkpoint_repository=checkpoint_repo,
+        )
+
+        started = service.start_resume_job("unpinned-proj", job_id)
+        await service.wait(started.job_id)
+
+        # Zero HTTP requests must have been sent before refusal
+        assert len(requests_issued) == 0
+
+        status = service.get_status(started.job_id)
+        cr_state = status.providers[0]
+        assert cr_state.status == "failed"
+        assert cr_state.resumable is False
+        assert "IncompatibleCrossrefPlanError" in (cr_state.message or "")
+
+        # Durable checkpoint must be marked failed and non-resumable
+        cps = checkpoint_repo.get_checkpoints_for_job(UUID(started.job_id))
+        assert len(cps) == 1
+        assert cps[0].status == "failed"
+        assert cps[0].resumable is False
+
+
+@pytest.mark.anyio
+async def test_crossref_provider_mismatched_plan_fingerprint_raises_error() -> None:
+    """Direct provider test: in-flight cursor with mismatched fingerprint raises IncompatibleCrossrefPlanError."""
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"message": {"items": []}}, request=request)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client:
+        provider = CrossrefProvider(client=CrossrefClient(http_client=http_client))
+        strategy = SearchStrategyExecutionRequest(
+            publication_year_from=2015,
+            publication_year_to=2026,
+            providers=["crossref"],
+            concept_groups=[
+                {"id": "g1", "name": "Lean", "terms": ["Lean", "Kaizen"]},
+                {"id": "g2", "name": "Energy", "terms": ["Energy"]},
+            ],
+        )
+        search_query = build_search_query(strategy)
+        search_run = SearchRun(
+            query_id=search_query.query_id,
+            query_version=1,
+            provider="crossref",
+            rendered_query="unused",
+        )
+        # Encode cursor with mismatched fingerprint
+        bad_cursor = CrossrefProvider._encode_candidate_cursor(1, "page-token", plan_fingerprint="bad_fingerprint_123")
+        with pytest.raises(IncompatibleCrossrefPlanError, match="does not match active plan fingerprint"):
+            await provider.search_with_raw(
+                search_run=search_run,
+                search_query=search_query,
+                cursor=bad_cursor,
+            )
 
 
 @pytest.mark.anyio

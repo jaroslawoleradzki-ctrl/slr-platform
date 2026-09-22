@@ -24,7 +24,10 @@ from app.providers.search.mapping_utils import (
     normalize_issn,
     normalize_url,
 )
-from app.rendering.crossref import build_crossref_candidate_queries
+from app.rendering.crossref import (
+    build_crossref_candidate_queries,
+    compute_plan_fingerprint,
+)
 
 _TYPE_MAP = {
     "journal-article": DocumentType.JOURNAL_ARTICLE,
@@ -45,6 +48,10 @@ _TYPE_MAP = {
 
 class MalformedCrossrefRecordError(ValueError):
     """A record-local Crossref metadata error that can safely be skipped."""
+
+
+class IncompatibleCrossrefPlanError(ValueError):
+    """Raised when a candidate-plan cursor cannot be safely executed against the active plan."""
 
 
 def _utc_now() -> datetime:
@@ -186,13 +193,50 @@ class CrossrefProvider:
         search_query: SearchQuery,
         rows: int = 20,
         cursor: str | None = None,
+        candidate_queries: list[str] | tuple[str, ...] | None = None,
     ) -> ProviderSearchOutput:
         """Execute a bounded multi-query candidate retrieval plan."""
 
         client = self._require_client()
         self._validate_search_context(search_run, search_query)
-        candidate_queries = build_crossref_candidate_queries(search_query.expression)
-        query_index, physical_cursor = self._decode_candidate_cursor(cursor)
+        is_pinned = candidate_queries is not None
+        if candidate_queries is not None:
+            candidate_queries = list(candidate_queries)
+        elif search_run.rendered_query and " || " in search_run.rendered_query:
+            candidate_queries = search_run.rendered_query.split(" || ")
+            is_pinned = True
+        else:
+            candidate_queries = build_crossref_candidate_queries(search_query.expression)
+
+        current_fingerprint = compute_plan_fingerprint(candidate_queries)
+        query_index, physical_cursor, cursor_fingerprint = self._decode_candidate_cursor_payload(cursor)
+
+        is_in_flight = query_index > 0 or (physical_cursor != "*" and cursor is not None)
+        if is_in_flight:
+            if cursor_fingerprint is not None:
+                if cursor_fingerprint != current_fingerprint:
+                    raise IncompatibleCrossrefPlanError(
+                        f"Cursor plan fingerprint '{cursor_fingerprint}' does not match "
+                        f"active plan fingerprint '{current_fingerprint}'"
+                    )
+            else:
+                # Legacy cursor without fingerprint
+                if cursor is not None and cursor.startswith("crossref-plan:"):
+                    if not is_pinned:
+                        raise IncompatibleCrossrefPlanError(
+                            "Cannot resume legacy candidate-plan cursor without pinned candidate queries"
+                        )
+                    if query_index >= len(candidate_queries):
+                        raise IncompatibleCrossrefPlanError(
+                            f"Cursor query index {query_index} exceeds pinned candidate plan length {len(candidate_queries)}"
+                        )
+                else:
+                    # Legacy physical cursor
+                    if len(candidate_queries) > 1:
+                        raise IncompatibleCrossrefPlanError(
+                            "Cannot resume legacy physical cursor against a multi-query candidate plan"
+                        )
+
         target = self._max_results if self._paginate else rows
         publications: list[Publication] = []
         raw_responses: list[JsonObject] = []
@@ -279,7 +323,9 @@ class CrossrefProvider:
             next_cursor = (
                 physical_cursor
                 if len(candidate_queries) == 1
-                else self._encode_candidate_cursor(query_index, physical_cursor)
+                else self._encode_candidate_cursor(
+                    query_index, physical_cursor, plan_fingerprint=current_fingerprint
+                )
             )
         filter_warnings = self._filters.get_warnings() if self._filters else ()
         plan_warnings = [
@@ -313,27 +359,44 @@ class CrossrefProvider:
         )
 
     @staticmethod
-    def _encode_candidate_cursor(query_index: int, physical_cursor: str) -> str:
-        payload = json.dumps([query_index, physical_cursor], separators=(",", ":"))
+    def _encode_candidate_cursor(
+        query_index: int, physical_cursor: str, plan_fingerprint: str | None = None
+    ) -> str:
+        items: list[Any] = [query_index, physical_cursor]
+        if plan_fingerprint is not None:
+            items.append(plan_fingerprint)
+        payload = json.dumps(items, separators=(",", ":"))
         return "crossref-plan:" + base64.urlsafe_b64encode(payload.encode()).decode()
 
     @staticmethod
-    def _decode_candidate_cursor(cursor: str | None) -> tuple[int, str]:
+    def _decode_candidate_cursor_payload(cursor: str | None) -> tuple[int, str, str | None]:
         if cursor is None or cursor == "*":
-            return 0, "*"
+            return 0, "*", None
         prefix = "crossref-plan:"
         if not cursor.startswith(prefix):
             # Backwards-compatible physical cursor supplied by older clients.
-            return 0, cursor
+            return 0, cursor, None
         try:
             decoded = base64.urlsafe_b64decode(cursor[len(prefix) :]).decode()
-            query_index, physical_cursor = json.loads(decoded)
+            payload = json.loads(decoded)
         except (ValueError, TypeError, json.JSONDecodeError) as exc:
             raise ValueError("invalid Crossref candidate-plan cursor") from exc
+        if not isinstance(payload, list) or len(payload) not in (2, 3):
+            raise ValueError("invalid Crossref candidate-plan cursor payload")
+        query_index = payload[0]
+        physical_cursor = payload[1]
+        plan_fingerprint = payload[2] if len(payload) == 3 else None
         if not isinstance(query_index, int) or query_index < 0:
             raise ValueError("invalid Crossref candidate query index")
         if not isinstance(physical_cursor, str) or not physical_cursor:
             raise ValueError("invalid Crossref physical cursor")
+        if plan_fingerprint is not None and (not isinstance(plan_fingerprint, str) or not plan_fingerprint):
+            raise ValueError("invalid Crossref candidate plan fingerprint")
+        return query_index, physical_cursor, plan_fingerprint
+
+    @staticmethod
+    def _decode_candidate_cursor(cursor: str | None) -> tuple[int, str]:
+        query_index, physical_cursor, _ = CrossrefProvider._decode_candidate_cursor_payload(cursor)
         return query_index, physical_cursor
 
     async def _search_paginated_with_raw(

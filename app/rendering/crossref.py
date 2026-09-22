@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import itertools
 from dataclasses import dataclass
 from math import prod
@@ -9,6 +10,12 @@ from app.domain.search import BooleanOperator, SearchExpression, SearchGroup, Se
 from app.rendering.base import RenderedQuery
 
 MAX_CROSSREF_CANDIDATE_QUERIES = 6
+
+
+def compute_plan_fingerprint(candidate_queries: list[str] | tuple[str, ...]) -> str:
+    """Compute a deterministic 16-character SHA-256 fingerprint for candidate queries."""
+    content = "\n".join(candidate_queries).encode("utf-8")
+    return hashlib.sha256(content).hexdigest()[:16]
 
 
 @dataclass(frozen=True, slots=True)
@@ -34,6 +41,7 @@ class CrossrefQueryRenderer:
     def render(self, search_query: SearchQuery) -> RenderedQuery:
         candidate_plan = build_crossref_candidate_plan(search_query.expression)
         candidate_queries = list(candidate_plan.queries)
+        plan_fingerprint = compute_plan_fingerprint(candidate_queries)
         query_string = " || ".join(candidate_queries)
         warnings_list = [
             "Crossref REST free-text search cannot execute the canonical Boolean tree losslessly; physical queries form a candidate retrieval plan and every candidate is validated locally.",
@@ -50,6 +58,8 @@ class CrossrefQueryRenderer:
             "planned_candidate_combinations": len(candidate_queries),
             "axis_coverage": [dict(entry) for entry in candidate_plan.axis_coverage],
             "min_axis_coverage_ratio": candidate_plan.min_axis_coverage_ratio,
+            "plan_fingerprint": plan_fingerprint,
+            "planner_version": "v0.6.9-wp3",
         }
 
         return RenderedQuery(
@@ -114,7 +124,22 @@ def _stratified_indices(total: int, count: int) -> list[int]:
 def _select_balanced_positive_and_plan(
     child_plans: list[list[str]], limit: int
 ) -> tuple[list[str], int, tuple[dict[str, Any], ...]]:
-    """Select up to `limit` combinations from positive AND child axes in a balanced manner."""
+    """Select up to `limit` combinations from positive AND child axes in a balanced manner.
+
+    Guarantees:
+    - Bounded: at most `limit` queries are returned.
+    - Non-empty, zero duplicates: all emitted queries are distinct.
+    - Full Cartesian product when total possible combinations <= `limit`.
+    - Alternative coverage: represents at least min(limit, L_j) distinct alternatives
+      on every axis j, eliminating single-axis collapse.
+    - Deterministic: identical inputs produce identical ordered plans.
+
+    Balancing contract notes (Option B):
+    While greedy pair-scoring and usage-penalties optimize for diversity, balanced repetition
+    frequency (e.g. max frequency difference <= 1) is a heuristic objective, not an invariant
+    guarantee. Adversarial shapes like 3x3 and 3^9 exhibit frequency distribution 3/2/1
+    (difference = 2).
+    """
     k = len(child_plans)
     if k == 0:
         return [], 0, ()
@@ -123,18 +148,29 @@ def _select_balanced_positive_and_plan(
     if possible_combinations <= limit:
         # Full Cartesian product preserved when product fits within the bound
         full_tuples = list(itertools.product(*child_plans))
-        selected_queries = [" ".join(combo) for combo in full_tuples]
+        deduped_tuples: list[tuple[str, ...]] = []
+        deduped_queries: list[str] = []
+        seen_queries: set[str] = set()
+        for combo in full_tuples:
+            q = " ".join(combo)
+            if q not in seen_queries:
+                seen_queries.add(q)
+                deduped_queries.append(q)
+                deduped_tuples.append(combo)
+
         axis_coverage = tuple(
             {
                 "axis_index": j,
                 "group_index": j,
                 "available_alternatives": len(child_plans[j]),
-                "represented_alternatives": len(child_plans[j]),
-                "coverage_ratio": 1.0,
+                "represented_alternatives": len(set(t[j] for t in deduped_tuples)),
+                "coverage_ratio": round(len(set(t[j] for t in deduped_tuples)) / len(child_plans[j]), 4)
+                if child_plans[j]
+                else 1.0,
             }
             for j in range(k)
         )
-        return selected_queries, possible_combinations, axis_coverage
+        return deduped_queries, possible_combinations, axis_coverage
 
     # Stratify axes longer than limit to at most `limit` evenly spaced candidate indices
     candidate_indices_per_axis: list[list[int]] = []
@@ -210,23 +246,30 @@ def _select_balanced_positive_and_plan(
             for j, val in enumerate(cand_tuple):
                 axis_usage[j][val] += 1
 
-    selected_queries = [
-        " ".join(child_plans[j][idx] for j, idx in enumerate(t))
-        for t in selected_tuples
-    ]
+    deduped_selected_tuples: list[tuple[int, ...]] = []
+    seen_queries_large: set[str] = set()
+    deduped_queries_large: list[str] = []
+    for t in selected_tuples:
+        q = " ".join(child_plans[j][idx] for j, idx in enumerate(t))
+        if q not in seen_queries_large:
+            seen_queries_large.add(q)
+            deduped_queries_large.append(q)
+            deduped_selected_tuples.append(t)
 
     axis_coverage = tuple(
         {
             "axis_index": j,
             "group_index": j,
             "available_alternatives": len(child_plans[j]),
-            "represented_alternatives": len(set(t[j] for t in selected_tuples)),
-            "coverage_ratio": round(len(set(t[j] for t in selected_tuples)) / len(child_plans[j]), 4),
+            "represented_alternatives": len(set(t[j] for t in deduped_selected_tuples)),
+            "coverage_ratio": round(len(set(t[j] for t in deduped_selected_tuples)) / len(child_plans[j]), 4)
+            if child_plans[j]
+            else 1.0,
         }
         for j in range(k)
     )
 
-    return list(dict.fromkeys(selected_queries)), possible_combinations, axis_coverage
+    return deduped_queries_large, possible_combinations, axis_coverage
 
 
 def _build_positive_plan(

@@ -84,6 +84,7 @@ from app.domain.publication import Publication
 from app.domain.search import SearchQuery, SearchRun, SearchRunStatus
 from app.normalization import normalize_publication
 from app.providers.search.base import ProviderSearchOutput
+from app.providers.search.crossref import IncompatibleCrossrefPlanError
 from app.rendering import get_query_renderer
 from app.repositories.search_result_snapshot_repository import (
     DuplicateSearchResultSnapshotError,
@@ -705,9 +706,11 @@ class FetchAllSearchService:
         if cursor and cursor.startswith("crossref-plan:"):
             from app.providers.search.crossref import CrossrefProvider
             try:
-                q_idx, phys_cur = CrossrefProvider._decode_candidate_cursor(cursor)
+                q_idx, phys_cur, plan_fp = CrossrefProvider._decode_candidate_cursor_payload(cursor)
                 plan_meta["current_query_index"] = q_idx
                 plan_meta["current_physical_cursor"] = phys_cur
+                if plan_fp is not None:
+                    plan_meta["cursor_plan_fingerprint"] = plan_fp
             except Exception:
                 pass
 
@@ -853,12 +856,29 @@ class FetchAllSearchService:
         renderer = get_query_renderer(provider.name)
         rendered = renderer.render(job.query)
         run_id = initial_checkpoint.search_run_id if initial_checkpoint is not None else self._run_id_factory()
+
+        pinned_candidate_queries: list[str] | None = None
+        if (
+            initial_checkpoint is not None
+            and initial_checkpoint.plan_metadata
+            and "candidate_queries" in initial_checkpoint.plan_metadata
+        ):
+            raw_cands = initial_checkpoint.plan_metadata["candidate_queries"]
+            if isinstance(raw_cands, (list, tuple)) and all(isinstance(q, str) for q in raw_cands):
+                pinned_candidate_queries = list(raw_cands)
+
+        rendered_query_str = (
+            " || ".join(pinned_candidate_queries)
+            if pinned_candidate_queries is not None
+            else rendered.query_string
+        )
+
         search_run = SearchRun(
             run_id=run_id,
             query_id=job.query.query_id,
             query_version=job.query.version,
             provider=provider.name,
-            rendered_query=rendered.query_string,
+            rendered_query=rendered_query_str,
             canonical_hash=job.query.canonical_hash,
             physical_endpoint=rendered.physical_endpoint,
             is_lossless=rendered.is_lossless,
@@ -866,10 +886,15 @@ class FetchAllSearchService:
             status=SearchRunStatus.RUNNING,
             started_at=datetime.now(timezone.utc),
         )
-        state.rendered_query = rendered.query_string
+        state.rendered_query = rendered_query_str
         state.lossless = rendered.is_lossless
         if rendered.metadata:
             state.plan_metadata = {**(state.plan_metadata or {}), **rendered.metadata}
+        if pinned_candidate_queries is not None:
+            state.plan_metadata = {
+                **(state.plan_metadata or {}),
+                "candidate_queries": pinned_candidate_queries,
+            }
         for w in rendered.warnings:
             if w not in state.warnings:
                 state.warnings.append(w)
@@ -915,11 +940,27 @@ class FetchAllSearchService:
                 self._save_checkpoint(job, state, cursor, resumable=state.resumable)
                 break
             try:
-                output = await provider.search_with_raw(
-                    search_run=search_run,
-                    search_query=job.query,
-                    cursor=cursor,
-                )
+                search_kwargs: dict[str, Any] = {
+                    "search_run": search_run,
+                    "search_query": job.query,
+                    "cursor": cursor,
+                }
+                if pinned_candidate_queries is not None and provider.name == "crossref":
+                    try:
+                        sig = inspect.signature(provider.search_with_raw)
+                        if "candidate_queries" in sig.parameters or any(
+                            p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values()
+                        ):
+                            search_kwargs["candidate_queries"] = pinned_candidate_queries
+                    except (ValueError, TypeError):
+                        pass
+                output = await provider.search_with_raw(**search_kwargs)
+            except IncompatibleCrossrefPlanError as error:
+                state.message = f"{type(error).__name__}: {error}"
+                state.status = "failed"
+                state.resumable = False
+                self._save_checkpoint(job, state, cursor, resumable=False)
+                break
             except Exception as error:
                 state.message = f"{type(error).__name__}: {error}"
                 state.status = "partial" if state.fetched_count > 0 else "failed"
