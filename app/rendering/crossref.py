@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import itertools
+import json
 from dataclasses import dataclass
 from math import prod
 from typing import Any
@@ -13,9 +14,14 @@ MAX_CROSSREF_CANDIDATE_QUERIES = 6
 
 
 def compute_plan_fingerprint(candidate_queries: list[str] | tuple[str, ...]) -> str:
-    """Compute a deterministic 16-character SHA-256 fingerprint for candidate queries."""
-    content = "\n".join(candidate_queries).encode("utf-8")
-    return hashlib.sha256(content).hexdigest()[:16]
+    """Compute a deterministic 16-character SHA-256 fingerprint for candidate queries.
+
+    Uses canonical JSON array serialization with explicit stable UTF-8 encoding
+    to ensure an unambiguous, injective representation across all query strings
+    (including queries containing embedded newlines, quotes, or delimiter tokens).
+    """
+    payload = json.dumps(list(candidate_queries), ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()[:16]
 
 
 @dataclass(frozen=True, slots=True)
@@ -126,19 +132,23 @@ def _select_balanced_positive_and_plan(
 ) -> tuple[list[str], int, tuple[dict[str, Any], ...]]:
     """Select up to `limit` combinations from positive AND child axes in a balanced manner.
 
-    Guarantees:
+    Executable contract:
     - Bounded: at most `limit` queries are returned.
-    - Non-empty, zero duplicates: all emitted queries are distinct.
+    - Non-empty, zero duplicates: all emitted physical queries are distinct.
     - Full Cartesian product when total possible combinations <= `limit`.
-    - Alternative coverage: represents at least min(limit, L_j) distinct alternatives
-      on every axis j, eliminating single-axis collapse.
+    - Alternative coverage: represents min(limit, L_j) deduplicated executable alternatives
+      on each axis j, where L_j is defined explicitly as the number of deduplicated executable
+      alternatives remaining after OR textual normalization.
     - Deterministic: identical inputs produce identical ordered plans.
 
-    Balancing contract notes (Option B):
-    While greedy pair-scoring and usage-penalties optimize for diversity, balanced repetition
-    frequency (e.g. max frequency difference <= 1) is a heuristic objective, not an invariant
-    guarantee. Adversarial shapes like 3x3 and 3^9 exhibit frequency distribution 3/2/1
-    (difference = 2).
+    Contract notes:
+    - Universal mathematical coverage guarantees are not claimed for arbitrary unbounded shapes;
+      the contract reflects the executable behavior observed and verified across adversarial
+      sweeps (e.g. 3x3, 3^9, 7x6x4, 10x2, 2x10, 7x7, 2^14, 3^10, 7x2x2).
+    - Frequency balancing: While greedy pair-scoring and usage-penalties optimize for diversity,
+      balanced repetition frequency (e.g. max frequency difference <= 1) is a heuristic goal,
+      not an invariant guarantee. Adversarial shapes like 3x3 and 3^9 exhibit frequency
+      distribution 3/2/1 (difference = 2).
     """
     k = len(child_plans)
     if k == 0:

@@ -857,15 +857,54 @@ class FetchAllSearchService:
         rendered = renderer.render(job.query)
         run_id = initial_checkpoint.search_run_id if initial_checkpoint is not None else self._run_id_factory()
 
+        cursor = initial_checkpoint.cursor if initial_checkpoint is not None and initial_checkpoint.cursor else "*"
+        is_in_flight = bool(initial_checkpoint is not None and initial_checkpoint.cursor and initial_checkpoint.cursor != "*")
+
         pinned_candidate_queries: list[str] | None = None
-        if (
-            initial_checkpoint is not None
-            and initial_checkpoint.plan_metadata
-            and "candidate_queries" in initial_checkpoint.plan_metadata
-        ):
-            raw_cands = initial_checkpoint.plan_metadata["candidate_queries"]
-            if isinstance(raw_cands, (list, tuple)) and all(isinstance(q, str) for q in raw_cands):
-                pinned_candidate_queries = list(raw_cands)
+        pinned_fingerprint: str | None = None
+        pinned_planner_version: str | None = None
+        malformed_plan_metadata = False
+
+        if initial_checkpoint is not None:
+            if initial_checkpoint.plan_metadata is not None:
+                if not isinstance(initial_checkpoint.plan_metadata, dict):
+                    malformed_plan_metadata = True
+                else:
+                    raw_cands = initial_checkpoint.plan_metadata.get("candidate_queries")
+                    if raw_cands is not None:
+                        if (
+                            isinstance(raw_cands, (list, tuple))
+                            and len(raw_cands) > 0
+                            and all(isinstance(q, str) and bool(q.strip()) for q in raw_cands)
+                        ):
+                            pinned_candidate_queries = list(raw_cands)
+                        else:
+                            malformed_plan_metadata = True
+                    raw_fp = initial_checkpoint.plan_metadata.get("plan_fingerprint")
+                    if raw_fp is not None:
+                        if isinstance(raw_fp, str) and bool(raw_fp.strip()):
+                            pinned_fingerprint = raw_fp.strip()
+                        else:
+                            malformed_plan_metadata = True
+                    raw_pv = initial_checkpoint.plan_metadata.get("planner_version")
+                    if raw_pv is not None:
+                        if isinstance(raw_pv, str) and bool(raw_pv.strip()):
+                            pinned_planner_version = raw_pv.strip()
+                        else:
+                            malformed_plan_metadata = True
+            elif is_in_flight:
+                malformed_plan_metadata = True
+
+        if is_in_flight and provider.name == "crossref":
+            if malformed_plan_metadata or pinned_candidate_queries is None:
+                state.message = (
+                    "IncompatibleCrossrefPlanError: Cannot resume in-flight physical cursor "
+                    "without valid saved candidate queries"
+                )
+                state.status = "failed"
+                state.resumable = False
+                self._save_checkpoint(job, state, cursor, resumable=False)
+                return
 
         rendered_query_str = (
             " || ".join(pinned_candidate_queries)
@@ -888,13 +927,16 @@ class FetchAllSearchService:
         )
         state.rendered_query = rendered_query_str
         state.lossless = rendered.is_lossless
+        if state.plan_metadata is None:
+            state.plan_metadata = {}
         if rendered.metadata:
-            state.plan_metadata = {**(state.plan_metadata or {}), **rendered.metadata}
+            state.plan_metadata.update(rendered.metadata)
         if pinned_candidate_queries is not None:
-            state.plan_metadata = {
-                **(state.plan_metadata or {}),
-                "candidate_queries": pinned_candidate_queries,
-            }
+            state.plan_metadata["candidate_queries"] = pinned_candidate_queries
+        if pinned_fingerprint is not None:
+            state.plan_metadata["plan_fingerprint"] = pinned_fingerprint
+        if pinned_planner_version is not None:
+            state.plan_metadata["planner_version"] = pinned_planner_version
         for w in rendered.warnings:
             if w not in state.warnings:
                 state.warnings.append(w)
@@ -908,7 +950,6 @@ class FetchAllSearchService:
         seen_source_ids: set[str] = {publication_source_id(p) for p in state.kept_records}
         seen_source_ids.update(diagnostic.source_record_id for diagnostic in state.record_diagnostics)
         seen_cursors: set[str] = set()
-        cursor = initial_checkpoint.cursor if initial_checkpoint is not None and initial_checkpoint.cursor else "*"
         state.cursor = cursor
         # WP2 transient lookup indexes (rebuilt on Resume; never persisted).
         diagnostic_index: dict[str, int] = {
@@ -945,13 +986,37 @@ class FetchAllSearchService:
                     "search_query": job.query,
                     "cursor": cursor,
                 }
-                if pinned_candidate_queries is not None and provider.name == "crossref":
+                if provider.name == "crossref":
+                    active_candidates: list[str] | None = None
+                    active_fp: str | None = None
+                    active_pv: str | None = None
+                    if pinned_candidate_queries is not None:
+                        active_candidates = pinned_candidate_queries
+                        active_fp = pinned_fingerprint
+                        active_pv = pinned_planner_version
+                    else:
+                        active_candidates = (
+                            list(rendered.metadata["candidate_queries"])
+                            if rendered.metadata and "candidate_queries" in rendered.metadata
+                            else None
+                        )
+                        active_fp = rendered.metadata.get("plan_fingerprint") if rendered.metadata else None
+                        active_pv = rendered.metadata.get("planner_version") if rendered.metadata else None
                     try:
                         sig = inspect.signature(provider.search_with_raw)
-                        if "candidate_queries" in sig.parameters or any(
-                            p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values()
+                        params = sig.parameters
+                        if "candidate_queries" in params or any(
+                            p.kind == inspect.Parameter.VAR_KEYWORD for p in params.values()
                         ):
-                            search_kwargs["candidate_queries"] = pinned_candidate_queries
+                            search_kwargs["candidate_queries"] = active_candidates
+                        if "plan_fingerprint" in params or any(
+                            p.kind == inspect.Parameter.VAR_KEYWORD for p in params.values()
+                        ):
+                            search_kwargs["plan_fingerprint"] = active_fp
+                        if "planner_version" in params or any(
+                            p.kind == inspect.Parameter.VAR_KEYWORD for p in params.values()
+                        ):
+                            search_kwargs["planner_version"] = active_pv
                     except (ValueError, TypeError):
                         pass
                 output = await provider.search_with_raw(**search_kwargs)
