@@ -14,11 +14,11 @@ development
 
 Current version:
 
-v0.6.9
+v0.7.0
 
 Current release:
 
-v0.6.9 — Crossref Provenance, Balanced Planning & Uncertainty Experiment (2026-09-22)
+v0.7.0 — Pre-Screening Review, Corpus Finalization & Resumable Retrieval (2026-09-22)
 
 Current release status:
 

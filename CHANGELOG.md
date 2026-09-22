@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.7.0] — 2026-09-22
+
+### Added
+
+- **Pre-Screening Import Review**: inspect imported records before formal Screening, retain or remove them with controlled auditable reasons, restore removed records, and use server-side pagination/filtering.
+- **Explicit Corpus Finalization**: create an immutable admitted Screening corpus with idempotent retry and a reproducible member set; later imports cannot silently alter historical Screening membership.
+- **PRISMA accounting**: track Pre-Screening removals separately so they never inflate formal Screening counts or exclusions.
+- **Crossref retrieval-quality diagnostics**: classify records as `MATCH`, `NON_MATCH`, or `INDETERMINATE` while retaining missing-abstract records for recall-safe human review.
+- **Fetch All / Resume safety**: renew the per-execution safety budget, preserve cumulative logical counters, resume from exact checkpoints, prevent physical query/cursor replay, and distinguish provider failures from controlled safety stops.
+
+### Fixed
+
+- Preserved DOI deduplication, Crossref provenance, replay determinism, and resume accounting across repeated executions.
+
+### Known limitations
+
+- Crossref metadata frequently lacks abstracts. Recall-safe `INDETERMINATE` records can still contain structural noise and may require auditable Pre-Screening removal.
+
 ## [0.6.9] — 2026-09-22
 
 ### Added
