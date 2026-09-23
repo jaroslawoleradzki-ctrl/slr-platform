@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from app.api.dto.prisma import PrismaMetricsResponse
 from app.repositories.duplicate_review_decision_repository import (
@@ -10,6 +10,10 @@ from app.repositories.duplicate_review_decision_repository import (
 from app.repositories.import_history_repository import (
     ImportHistoryRepository,
     default_import_history_repository,
+)
+from app.repositories.pre_screening_archive_repository import (
+    PreScreeningArchiveRepository,
+    default_pre_screening_archive_repository,
 )
 from app.repositories.project_publication_repository import (
     ProjectPublicationRepository,
@@ -38,16 +42,16 @@ class PrismaMetrics:
     - records_identified_imports: sum of records successfully introduced through
       manual/imported files (`import_history` where source_type == "file").
     - total_identified: records_identified_providers + records_identified_imports.
-    - records_after_normalization: current Working Collection count. Normalization
-      is a 1:1 in-place transform, so this is the authoritative post-normalization
-      canonical record count.
-    - records_before_dedup: records entering the deduplication stage. The
-      deduplication stage operates on the current Working Collection.
-    - records_after_technical_merger: Working Collection count minus the members
-      deterministically merged away by the shared strong-identifier technical merge
-      (one canonical record per candidate duplicate group).
-    - duplicate_groups_pending_review: candidate duplicate groups without a recorded
-      reviewer decision (status PENDING).
+    - records_removed_prescreening: records removed during Import Review / Pre-Screening
+      corpus preparation (sum of `pre_screening_archive` and legacy in-place removed records).
+    - records_after_normalization: active corpus population entering the research pipeline.
+      Normalization is a 1:1 in-place transform on active records, so this equals the
+      authoritative active corpus count before deduplication.
+    - records_before_dedup: active corpus records entering deduplication stage.
+    - records_after_technical_merger: active canonical publications after deduplication merges
+      (Working Collection count where superseded_by IS NULL and pre_screening_status != 'removed').
+    - duplicate_groups_pending_review: candidate duplicate groups constructed strictly within
+      the active corpus without a recorded reviewer decision (status PENDING).
     - records_screened_title_abstract: records with a final Title & Abstract
       screening decision (project outcome in multi-reviewer mode, latest reviewer
       decision otherwise).
@@ -81,6 +85,7 @@ class PrismaMetrics:
     records_screened_full_text: int
     studies_included_synthesis: int
     manual_source_breakdown: dict[str, int]
+    provider_breakdown: dict[str, int] = field(default_factory=dict)
     records_excluded_title_abstract: int = 0
     records_excluded_full_text: int = 0
     records_removed_prescreening: int = 0
@@ -101,43 +106,54 @@ class PrismaMetricsService:
         decision_repository: DuplicateReviewDecisionRepository | None = None,
         workflow_status_service: ProjectWorkflowStatusService | None = None,
         builder: DuplicateGroupBuilder | None = None,
+        archive_repository: PreScreeningArchiveRepository | None = None,
     ) -> None:
         self._publications = publication_repository or default_project_publication_repository()
         self._history = import_history_repository or default_import_history_repository()
         self._decisions = decision_repository or default_duplicate_review_decision_repository()
         self._workflow_status = workflow_status_service or default_project_workflow_status_service()
         self._builder = builder or duplicate_group_builder
+        self._archive_repo = archive_repository or default_pre_screening_archive_repository()
 
     def get_metrics(self, project_id: str, reviewer_id: str = "default_reviewer") -> PrismaMetrics:
-        working_count = self._publications.count_by_project(project_id)
+        total_raw = self._publications.count_by_project(project_id)
+        legacy_removed_count = (
+            self._publications.count_pre_screening_removed(project_id)
+            if hasattr(self._publications, "count_pre_screening_removed")
+            else 0
+        )
+        archived_count = (
+            self._archive_repo.count_archived_for_project(project_id)
+            if self._archive_repo is not None
+            else 0
+        )
+        prescreening_removed = archived_count + legacy_removed_count
+
+        active_before_dedup = max(0, total_raw - legacy_removed_count)
 
         identified_providers = 0
         identified_imports = 0
         manual_breakdown: dict[str, int] = {}
+        provider_breakdown: dict[str, int] = {}
         for record in self._history.list_for_project(project_id):
             if record.status not in _SUCCESS_STATUSES:
                 continue
             if record.source_type == "provider":
                 identified_providers += record.records_count
+                provider_key = record.provider or "unknown"
+                provider_breakdown[provider_key] = provider_breakdown.get(provider_key, 0) + record.records_count
             elif record.source_type == "file":
                 identified_imports += record.records_count
-                # Track manual import source breakdown
                 source_key = record.source_database or "unknown"
                 manual_breakdown[source_key] = manual_breakdown.get(source_key, 0) + record.records_count
 
-        publications = self._publications.get_publications(project_id)
-        groups = self._builder.build(publications)
+        active_publications = self._publications.get_active_publications(project_id)
+        groups = self._builder.build(active_publications)
         decisions = self._decisions.list_decisions_for_project(project_id)
 
         records_after_technical_merger = self._publications.count_active_by_project(project_id)
         duplicate_groups_pending_review = sum(
             1 for group in groups if str(group.group_id) not in decisions
-        )
-
-        prescreening_removed = (
-            self._publications.count_pre_screening_removed(project_id)
-            if hasattr(self._publications, "count_pre_screening_removed")
-            else 0
         )
 
         workflow = self._workflow_status.get_status(project_id, reviewer_id=reviewer_id)
@@ -150,14 +166,15 @@ class PrismaMetricsService:
             records_identified_providers=identified_providers,
             records_identified_imports=identified_imports,
             total_identified=identified_providers + identified_imports,
-            records_after_normalization=working_count,
-            records_before_dedup=working_count,
+            records_after_normalization=active_before_dedup,
+            records_before_dedup=active_before_dedup,
             records_after_technical_merger=records_after_technical_merger,
             duplicate_groups_pending_review=duplicate_groups_pending_review,
             records_screened_title_abstract=workflow.title_abstract_screening.evaluated_count,
             records_screened_full_text=workflow.full_text_screening.evaluated_count,
             studies_included_synthesis=workflow.quality_assessment.eligible_count,
             manual_source_breakdown=manual_breakdown,
+            provider_breakdown=provider_breakdown,
             records_excluded_title_abstract=ta_excluded,
             records_excluded_full_text=ft_excluded,
             records_removed_prescreening=prescreening_removed,
@@ -177,6 +194,7 @@ class PrismaMetricsService:
             records_screened_full_text=metrics.records_screened_full_text,
             studies_included_synthesis=metrics.studies_included_synthesis,
             manual_source_breakdown=metrics.manual_source_breakdown,
+            provider_breakdown=metrics.provider_breakdown,
             records_excluded_title_abstract=metrics.records_excluded_title_abstract,
             records_excluded_full_text=metrics.records_excluded_full_text,
             records_removed_prescreening=metrics.records_removed_prescreening,

@@ -112,31 +112,14 @@ class SqliteImportHistoryRepository:
                 """
                 SELECT import_id, project_id, source_type, filename, format,
                        provider, query, records_count, total_available, status,
-                       warnings, created_at, fingerprint
+                       warnings, created_at, fingerprint, source_database, source_label
                 FROM import_history
                 WHERE project_id = ?
                 ORDER BY created_at DESC, rowid DESC
                 """,
                 (project_id,),
             ).fetchall()
-        return [
-            ImportHistoryRecord(
-                import_id=UUID(row[0]),
-                project_id=row[1],
-                source_type=row[2],
-                filename=row[3],
-                format=row[4],
-                provider=row[5],
-                query=row[6],
-                records_count=row[7],
-                total_available=row[8],
-                status=row[9],
-                warnings=tuple(json.loads(row[10])),
-                created_at=datetime.fromisoformat(row[11]),
-                fingerprint=row[12],
-            )
-            for row in rows
-        ]
+        return [self._record_from_row(row) for row in rows]
 
     def find_by_fingerprint(
         self, project_id: str, fingerprint: str
@@ -146,7 +129,7 @@ class SqliteImportHistoryRepository:
                 """
                 SELECT import_id, project_id, source_type, filename, format,
                        provider, query, records_count, total_available, status,
-                       warnings, created_at, fingerprint
+                       warnings, created_at, fingerprint, source_database, source_label
                 FROM import_history
                 WHERE project_id = ? AND fingerprint = ?
                 """,

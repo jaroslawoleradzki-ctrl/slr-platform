@@ -72,6 +72,8 @@ def make_import_history(
     fingerprint: str | None = None,
     created_at: datetime | None = None,
     import_id: UUID | None = None,
+    source_database: str | None = None,
+    source_label: str | None = None,
 ) -> ImportHistoryRecord:
     """Create a deterministic import history record."""
     return ImportHistoryRecord(
@@ -88,6 +90,8 @@ def make_import_history(
         warnings=(),
         created_at=created_at or DEFAULT_TEST_TIME,
         fingerprint=fingerprint,
+        source_database=source_database,
+        source_label=source_label,
     )
 
 
