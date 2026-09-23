@@ -146,10 +146,12 @@ class ProductionReconciliationService:
                         "Archive snapshot is missing or incomplete.",
                         {"record_id": record_id},
                     )
-            # Derived canonical markers were created over the wrong corpus; clear only this
-            # rebuildable marker, and record the mandatory WP2 rebuild contract in the ledger.
+            # Clear any supersession pointers referencing records about to be deleted
+            # to maintain referential integrity while preserving legitimate active merges.
             conn.execute(
-                "UPDATE project_publications SET superseded_by = NULL WHERE project_id = ?", (request.project_id,)
+                "UPDATE project_publications SET superseded_by = NULL WHERE project_id = ? AND superseded_by IN (%s)"
+                % ",".join("?" * len(request.record_ids)),
+                (request.project_id, *(str(i) for i in request.record_ids)),
             )
             deleted = conn.execute(
                 "DELETE FROM project_publications WHERE project_id = ? AND record_id IN (%s)"
