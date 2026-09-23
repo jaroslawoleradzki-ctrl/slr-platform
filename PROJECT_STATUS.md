@@ -14,11 +14,11 @@ development
 
 Current version:
 
-v0.7.0
+v0.7.1
 
 Current release:
 
-v0.7.0 — Pre-Screening Review, Corpus Finalization & Resumable Retrieval (2026-09-22)
+v0.7.1 — Corpus Pipeline Integrity: Active Corpus, Pre-Screening Archive & PRISMA Separation (2026-09-23)
 
 Current release status:
 
