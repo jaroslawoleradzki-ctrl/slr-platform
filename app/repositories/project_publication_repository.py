@@ -55,6 +55,9 @@ class ProjectPublicationRepository(Protocol):
     def get_active_publications(self, project_id: str) -> list[Publication]: ...
     def get_active_publications_with_position(self, project_id: str) -> list[tuple[int | None, Publication]]: ...
     def count_active_by_project(self, project_id: str) -> int: ...
+    def delete_publication(
+        self, project_id: str, record_id: UUID, *, connection: sqlite3.Connection | None = None
+    ) -> bool: ...
     def count_pre_screening_removed(self, project_id: str, *, connection: sqlite3.Connection | None = None) -> int: ...
     def update_pre_screening_status(
         self, project_id: str, record_id: UUID, status: str, *, connection: sqlite3.Connection | None = None
@@ -238,6 +241,15 @@ class DemoProjectPublicationRepository:
 
     def count_active_by_project(self, project_id: str) -> int:
         return len(self.get_active_publications(project_id))
+
+    def delete_publication(self, project_id: str, record_id: UUID, **_: object) -> bool:
+        if project_id not in self._projects_data:
+            raise ProjectNotFoundError(project_id)
+        original_len = len(self._projects_data[project_id])
+        self._projects_data[project_id] = [p for p in self._projects_data[project_id] if p.record_id != record_id]
+        self._pre_screening_statuses.pop((project_id, record_id), None)
+        self._import_ids.pop((project_id, record_id), None)
+        return len(self._projects_data[project_id]) < original_len
 
     def get_active_publications_with_position(self, project_id: str) -> list[tuple[int | None, Publication]]:
         """Demo adapter: returns active publications without fabricating synthetic positions."""
@@ -547,6 +559,22 @@ class SqliteProjectPublicationRepository:
             )
 
         return query(connection) if connection is not None else self._with_connection(query)
+
+    def delete_publication(
+        self, project_id: str, record_id: UUID, *, connection: sqlite3.Connection | None = None
+    ) -> bool:
+        self._ensure_project(project_id, connection=connection)
+
+        def query(conn: sqlite3.Connection) -> bool:
+            cursor = conn.execute(
+                "DELETE FROM project_publications WHERE project_id = ? AND record_id = ?",
+                (project_id, str(record_id)),
+            )
+            return cursor.rowcount > 0
+
+        if connection is not None:
+            return query(connection)
+        return self._with_connection(query)
 
     def count_pre_screening_removed(
         self, project_id: str, *, connection: sqlite3.Connection | None = None
