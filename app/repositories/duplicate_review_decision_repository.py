@@ -64,6 +64,12 @@ class DuplicateReviewDecisionRepository(Protocol):
         """Delete all decisions for the given project."""
         ...
 
+    def delete_decision(
+        self, project_id: str, group_id: str, *, connection: sqlite3.Connection | None = None
+    ) -> bool:
+        """Delete the decision for a single duplicate group; return True when removed."""
+        ...
+
 
 class InMemoryDuplicateReviewDecisionRepository:
     """In-memory repository for human duplicate review decisions, keyed by composite (project_id, group_id).
@@ -94,6 +100,10 @@ class InMemoryDuplicateReviewDecisionRepository:
             for (p_id, group_id), decision in self._decisions.items()
             if p_id == project_id
         }
+
+    def delete_decision(self, project_id: str, group_id: str, **_: object) -> bool:
+        """Delete the decision for a single duplicate group; return True when removed."""
+        return self._decisions.pop((project_id, group_id), None) is not None
 
     def clear(self) -> None:
         """Helper for resetting state between tests."""
@@ -210,6 +220,23 @@ class SqliteDuplicateReviewDecisionRepository:
                     "DELETE FROM duplicate_review_decisions WHERE project_id = ?",
                     (project_id,),
                 )
+
+    def delete_decision(
+        self, project_id: str, group_id: str, *, connection: sqlite3.Connection | None = None
+    ) -> bool:
+        """Delete the decision for a single duplicate group; return True when removed."""
+
+        def delete(conn: sqlite3.Connection) -> bool:
+            cursor = conn.execute(
+                "DELETE FROM duplicate_review_decisions WHERE project_id = ? AND group_id = ?",
+                (project_id, group_id),
+            )
+            return cursor.rowcount > 0
+
+        if connection is not None:
+            return delete(connection)
+        with self._connect() as conn:
+            return delete(conn)
 
     def _connect(self) -> sqlite3.Connection:
         return sqlite3.connect(self._database_path)

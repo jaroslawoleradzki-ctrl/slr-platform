@@ -23,6 +23,11 @@ class DuplicateMergeRepository(Protocol):
         self, project_id: str, *, connection: sqlite3.Connection | None = None
     ) -> dict[str, DuplicateGroupMergeRecord]: ...
     def delete_for_project(self, project_id: str, *, connection: sqlite3.Connection | None = None) -> None: ...
+    def delete_merge(
+        self, project_id: str, group_id: str, *, connection: sqlite3.Connection | None = None
+    ) -> bool:
+        """Delete a single merge record; return True when a record was removed."""
+        ...
 
 
 class InMemoryDuplicateMergeRepository:
@@ -37,6 +42,10 @@ class InMemoryDuplicateMergeRepository:
 
     def list_merges_for_project(self, project_id: str, **_: object) -> dict[str, DuplicateGroupMergeRecord]:
         return {g: r for (p, g), r in self._records.items() if p == project_id}
+
+    def delete_merge(self, project_id: str, group_id: str, **_: object) -> bool:
+        """Delete a single merge record; return True when a record was removed."""
+        return self._records.pop((project_id, group_id), None) is not None
 
     def delete_for_project(self, project_id: str, **_: object) -> None:
         for key in [key for key in self._records if key[0] == project_id]:
@@ -106,6 +115,23 @@ class SqliteDuplicateMergeRepository:
         else:
             with sqlite3.connect(self._database_path) as conn:
                 conn.execute("DELETE FROM duplicate_group_merges WHERE project_id = ?", (project_id,))
+
+    def delete_merge(
+        self, project_id: str, group_id: str, *, connection: sqlite3.Connection | None = None
+    ) -> bool:
+        """Delete a single merge record; return True when a record was removed."""
+
+        def delete(conn: sqlite3.Connection) -> bool:
+            cursor = conn.execute(
+                "DELETE FROM duplicate_group_merges WHERE project_id = ? AND group_id = ?",
+                (project_id, group_id),
+            )
+            return cursor.rowcount > 0
+
+        if connection is not None:
+            return delete(connection)
+        with sqlite3.connect(self._database_path) as conn:
+            return delete(conn)
 
     @staticmethod
     def _row(project_id: str, group_id: str, row: tuple[object, ...]) -> DuplicateGroupMergeRecord:

@@ -8,6 +8,10 @@ from app.domain.identifiers import IdentifierType
 from app.domain.publication import Publication
 from app.normalization import normalize_publication
 from app.repositories.project_publication_repository import ProjectPublicationRepository
+from app.services.active_publication_filter import (
+    provides_active_corpus,
+    provides_publication_update,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,14 +58,69 @@ def _changed(before: Publication, after: Publication) -> tuple[int, int, int, in
     return doi_changes, author_changes, orcid_changes, title_changes, language_changes
 
 
+def _read_active_corpus(
+    repository: ProjectPublicationRepository,
+    project_id: str,
+) -> list[Publication]:
+    """Return the authoritative Active Project Corpus for normalization input.
+
+    The Active Corpus contract (WP1) excludes ``pre_screening_status='removed'``
+    records, physically archived records, and superseded duplicate members.
+    Provider provenance (Crossref / OpenAlex / Semantic Scholar / file imports)
+    is treated uniformly: no provider-specific filtering is applied here.
+
+    Repositories without the WP1 ``get_active_publications`` accessor expose
+    their whole collection, which is then by definition the active corpus
+    (legacy projects without pre-screening decisions remain compatible).
+    """
+    if provides_active_corpus(repository):
+        get_active = getattr(repository, "get_active_publications")
+        return list(get_active(project_id))
+    return list(repository.get_publications(project_id))
+
+
+def _persist_normalized_corpus(
+    repository: ProjectPublicationRepository,
+    project_id: str,
+    normalized: list[Publication],
+) -> None:
+    """Persist normalized active records without touching non-active rows.
+
+    Per-record ``update_publication`` refreshes only Active Corpus members, so
+    pre-screening removed rows, superseded duplicate members, and their
+    ``import_id`` / ``pre_screening_status`` / ``position`` metadata are never
+    rewritten, resurrected, or deleted by normalization. Repositories without
+    the WP1 accessor (legacy path where the active corpus is the whole
+    collection) keep the previous atomic replace semantics.
+    """
+    if provides_active_corpus(repository):
+        if not provides_publication_update(repository):
+            raise TypeError(
+                "publication repository provides active-corpus reads but no "
+                "per-record update; refusing bulk replace that could delete "
+                "non-active rows"
+            )
+        for publication in normalized:
+            repository.update_publication(project_id, publication)
+        return
+    repository.replace_publications(project_id, normalized)
+
+
 def normalize_project(
     repository: ProjectPublicationRepository,
     project_id: str,
 ) -> NormalizationExecution:
+    """Normalize exactly the authoritative Active Project Corpus (WP2).
+
+    Only active publications enter and leave normalization: removed records
+    are never processed, never rewritten, and a rerun cannot resurrect them.
+    Reported ``processed_records`` / ``clean_records`` describe the records
+    actually processed, not all ``project_publications`` rows.
+    """
     started_at = datetime.now(timezone.utc)
-    publications = repository.get_publications(project_id)
+    publications = _read_active_corpus(repository, project_id)
     normalized = [normalize_publication(publication) for publication in publications]
-    repository.replace_publications(project_id, normalized)
+    _persist_normalized_corpus(repository, project_id, normalized)
 
     counts = [0, 0, 0, 0, 0]
     for before, after in zip(publications, normalized):

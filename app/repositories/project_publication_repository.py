@@ -59,6 +59,9 @@ class ProjectPublicationRepository(Protocol):
         self, project_id: str, record_id: UUID, *, connection: sqlite3.Connection | None = None
     ) -> bool: ...
     def count_pre_screening_removed(self, project_id: str, *, connection: sqlite3.Connection | None = None) -> int: ...
+    def get_pre_screening_removed_record_ids(
+        self, project_id: str, *, connection: sqlite3.Connection | None = None
+    ) -> set[UUID]: ...
     def update_pre_screening_status(
         self, project_id: str, record_id: UUID, status: str, *, connection: sqlite3.Connection | None = None
     ) -> None: ...
@@ -262,6 +265,13 @@ class DemoProjectPublicationRepository:
             for p in all_pubs
             if self._pre_screening_statuses.get((project_id, p.record_id), "retained") == "removed"
         )
+
+    def get_pre_screening_removed_record_ids(self, project_id: str, **_: object) -> set[UUID]:
+        return {
+            record_id
+            for (owner_project_id, record_id), status in self._pre_screening_statuses.items()
+            if owner_project_id == project_id and status == "removed"
+        }
 
     def update_pre_screening_status(self, project_id: str, record_id: UUID, status: str, **_: object) -> None:
         pubs = self.get_publications(project_id)
@@ -587,6 +597,21 @@ class SqliteProjectPublicationRepository:
                 (project_id,),
             ).fetchone()
             return int(row[0])
+
+        return query(connection) if connection is not None else self._with_connection(query)
+
+    def get_pre_screening_removed_record_ids(
+        self, project_id: str, *, connection: sqlite3.Connection | None = None
+    ) -> set[UUID]:
+        """Return record IDs still present but flagged pre-screening removed (WP2/WP3)."""
+        self._ensure_project(project_id, connection=connection)
+
+        def query(conn: sqlite3.Connection) -> set[UUID]:
+            rows = conn.execute(
+                "SELECT record_id FROM project_publications WHERE project_id = ? AND pre_screening_status = 'removed'",
+                (project_id,),
+            ).fetchall()
+            return {UUID(str(row[0])) for row in rows}
 
         return query(connection) if connection is not None else self._with_connection(query)
 

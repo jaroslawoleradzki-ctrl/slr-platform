@@ -30,6 +30,7 @@ from app.repositories.project_publication_repository import (
     ProjectPublicationRepository,
     default_project_publication_repository,
 )
+from app.services.active_publication_filter import provides_active_corpus
 from app.services.duplicate_group_builder import DuplicateGroupBuilder, duplicate_group_builder
 
 
@@ -70,6 +71,7 @@ class ProjectIntegrityAuditService:
         except ProjectNotFoundError:
             publications = []
             project_exists = False
+            active_publications: list = []
             checks.append(
                 IntegrityCheckResult(
                     code="WC_PROJECT_NOT_FOUND",
@@ -80,6 +82,14 @@ class ProjectIntegrityAuditService:
             )
 
         if project_exists:
+            # Authoritative Active Corpus (WP1): normalization and duplicate
+            # candidate checks operate on active records only. Repositories
+            # without the accessor expose their whole collection as active.
+            if provides_active_corpus(self._pub_repo):
+                get_active = getattr(self._pub_repo, "get_active_publications")
+                active_publications = list(get_active(project_id))
+            else:
+                active_publications = list(publications)
             if not publications:
                 checks.append(
                     IntegrityCheckResult(
@@ -240,18 +250,19 @@ class ProjectIntegrityAuditService:
                         },
                     )
                 )
-            elif project_exists and norm_exec.processed_records != len(publications):
+            elif project_exists and norm_exec.processed_records != len(active_publications):
                 checks.append(
                     IntegrityCheckResult(
                         code="NORM_RECORD_COUNT_MISMATCH",
                         level=IntegrityCheckLevel.WARNING,
                         message=(
                             f"Latest normalization processed records count ({norm_exec.processed_records}) "
-                            f"does not match current Working Collection size ({len(publications)})."
+                            f"does not match current Active Corpus size ({len(active_publications)})."
                         ),
                         context={
                             "normalization_processed_records": norm_exec.processed_records,
                             "working_collection_size": len(publications),
+                            "active_corpus_size": len(active_publications),
                             "limitation_note": "NormalizationExecution model stores summary metrics only, no per-publication record references.",
                         },
                     )
@@ -259,8 +270,8 @@ class ProjectIntegrityAuditService:
 
         # 4. Check Deduplication Candidates & Review Decisions
         if project_exists:
-            pub_by_id = {pub.record_id: pub for pub in publications}
-            candidate_groups = self._group_builder.build(publications)
+            pub_by_id = {pub.record_id: pub for pub in active_publications}
+            candidate_groups = self._group_builder.build(active_publications)
             candidate_group_ids = {str(g.group_id) for g in candidate_groups}
 
             if not candidate_groups:
@@ -290,10 +301,16 @@ class ProjectIntegrityAuditService:
                     )
                 )
 
-            # Validate stored review decisions (Check for orphaned decisions)
+            # Validate stored review decisions (Check for orphaned decisions).
+            # Decisions attached to persisted historical merges remain valid
+            # audit records: merged groups intentionally disappear from the
+            # active candidate set once members are superseded.
             stored_decisions = self._decision_repo.list_decisions_for_project(project_id)
+            merged_group_ids = set(self._merge_repo.list_merges_for_project(project_id))
             orphaned_group_ids = [
-                g_id for g_id in stored_decisions if g_id not in candidate_group_ids
+                g_id
+                for g_id in stored_decisions
+                if g_id not in candidate_group_ids and g_id not in merged_group_ids
             ]
 
             if orphaned_group_ids:
@@ -311,14 +328,18 @@ class ProjectIntegrityAuditService:
                 superseded_by = {record_id: None for record_id in pub_by_id}
             else:
                 superseded_by = self._pub_repo.get_superseded_by_map(project_id)
+            # Merge/supersession validation uses the full Working Collection:
+            # legitimate historical merges reference superseded (non-active)
+            # members by design, while candidate groups are active-only.
+            full_by_id = {pub.record_id: pub for pub in publications}
             for merge in self._merge_repo.list_merges_for_project(project_id).values():
                 member_ids = set(merge.merged_publication_ids)
-                missing = sorted(str(record_id) for record_id in member_ids if record_id not in pub_by_id)
+                missing = sorted(str(record_id) for record_id in member_ids if record_id not in full_by_id)
                 if missing:
                     checks.append(IntegrityCheckResult(code="DEDUP_MERGE_MEMBER_MISSING", level=IntegrityCheckLevel.ERROR, message="Merge record references missing publication members.", context={"group_id": merge.group_id, "missing_publication_ids": missing}))
                     continue
                 canonical = merge.canonical_record_id
-                if canonical not in member_ids or canonical not in pub_by_id:
+                if canonical not in member_ids or canonical not in full_by_id:
                     checks.append(IntegrityCheckResult(code="DEDUP_MERGE_CANONICAL_INVALID", level=IntegrityCheckLevel.ERROR, message="Merge canonical record is invalid.", context={"group_id": merge.group_id}))
                     continue
                 if superseded_by.get(canonical) is not None:
@@ -327,7 +348,7 @@ class ProjectIntegrityAuditService:
                 if invalid_members:
                     checks.append(IntegrityCheckResult(code="DEDUP_MERGE_SUPERSESSION_INVALID", level=IntegrityCheckLevel.ERROR, message="Non-canonical merge members must point directly to the canonical record.", context={"group_id": merge.group_id, "member_ids": sorted(invalid_members)}))
 
-            existing_ids = set(pub_by_id)
+            existing_ids = set(full_by_id)
             for record_id, target_id in superseded_by.items():
                 if target_id is None:
                     continue
