@@ -271,10 +271,14 @@ def extract_node_contents(model: PrismaFlowModel) -> dict[str, NodeBoxContent]:
     if "identification.databases" in node_map:
         db_node = node_map["identification.databases"]
         db_count = db_node.values.get("count", 0)
+        db_lines: list[str] = [f"Database records (n = {db_count})"]
+        if db_node.annotations:
+            for k, v in sorted(db_node.annotations.items()):
+                db_lines.append(f"  • {k}: {v}")
         result["identification.databases"] = NodeBoxContent(
             node_id="identification.databases",
             title="Records identified from databases & registers",
-            lines=(f"Database records (n = {db_count})",),
+            lines=tuple(db_lines),
         )
 
     # 2. Other methods
@@ -305,7 +309,13 @@ def extract_node_contents(model: PrismaFlowModel) -> dict[str, NodeBoxContent]:
     if "identification.records_removed" in node_map:
         removed_node = node_map["identification.records_removed"]
         dup_removed = removed_node.values.get("duplicates_removed", model.removed.get("duplicates_removed", 0))
-        removed_lines: list[str] = [f"Technical duplicates merged (n = {dup_removed})"]
+        prescreening_removed = removed_node.values.get(
+            "records_removed_prescreening", model.removed.get("records_removed_prescreening", 0)
+        )
+        removed_lines: list[str] = []
+        if prescreening_removed > 0:
+            removed_lines.append(f"Pre-screening removals (n = {prescreening_removed})")
+        removed_lines.append(f"Technical duplicates merged (n = {dup_removed})")
         if "pending_review" in removed_node.annotations:
             removed_lines.append(f"Candidate groups pending review: {removed_node.annotations['pending_review']}")
         result["identification.records_removed"] = NodeBoxContent(

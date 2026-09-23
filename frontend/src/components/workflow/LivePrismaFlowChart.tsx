@@ -159,6 +159,62 @@ export const LivePrismaFlowChart: React.FC<LivePrismaFlowChartProps> = ({ metric
 
         <ArrowDown size={18} style={{ color: 'var(--accent-primary)' }} />
 
+        {/* Stage 2: Corpus Preparation / Pre-Screening (if removals or active corpus present) */}
+        {(metrics.recordsRemovedPrescreening ?? 0) > 0 && (
+          <>
+            <div
+              style={{
+                width: '100%',
+                display: 'grid',
+                gridTemplateColumns: '1fr 1fr',
+                gap: '16px',
+              }}
+            >
+              <div
+                style={{
+                  padding: '12px 16px',
+                  backgroundColor: 'var(--status-warning-bg)',
+                  borderRadius: 'var(--radius-md)',
+                  border: '1px solid var(--status-warning-border)',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--status-warning-text)', fontSize: '0.75rem', fontWeight: 600 }}>
+                  <Filter size={14} />
+                  <span>CORPUS PREPARATION / PRE-SCREENING</span>
+                </div>
+                <div style={{ fontSize: '1.2rem', fontWeight: 700, color: 'var(--text-primary)', marginTop: '4px' }}>
+                  {(metrics.recordsRemovedPrescreening ?? 0).toLocaleString()} odrzuconych
+                </div>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                  Odrzucone artefakty retrieval (Import Review)
+                </span>
+              </div>
+
+              <div
+                style={{
+                  padding: '12px 16px',
+                  backgroundColor: 'var(--bg-primary)',
+                  borderRadius: 'var(--radius-md)',
+                  border: '1px solid var(--border-strong)',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--status-info-text)', fontSize: '0.75rem', fontWeight: 600 }}>
+                  <CheckCircle2 size={14} />
+                  <span>ACTIVE PROJECT CORPUS</span>
+                </div>
+                <div style={{ fontSize: '1.2rem', fontWeight: 700, color: 'var(--text-primary)', marginTop: '4px' }}>
+                  {metrics.recordsBeforeDedup.toLocaleString()} zakwalifikowanych
+                </div>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                  Wprowadzono do normalizacji i deduplikacji
+                </span>
+              </div>
+            </div>
+
+            <ArrowDown size={18} style={{ color: 'var(--accent-primary)' }} />
+          </>
+        )}
+
         {/* Deduplication Stage */}
         <div
           style={{

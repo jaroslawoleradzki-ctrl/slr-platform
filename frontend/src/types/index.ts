@@ -538,12 +538,16 @@ export interface PrismaFunnelMetrics {
   totalIdentified: number;
   recordsAfterNormalization: number;
   recordsBeforeDedup: number;
+  recordsRemovedPrescreening?: number;
   recordsAfterTechnicalMerger: number;
   duplicateGroupsPendingReview: number;
   recordsScreenedTitleAbstract: number;
+  recordsExcludedTitleAbstract?: number;
   recordsScreenedFullText: number;
+  recordsExcludedFullText?: number;
   studiesIncludedSynthesis: number;
   manualSourceBreakdown: Record<string, number>;
+  providerBreakdown?: Record<string, number>;
 }
 
 export type ProjectStatusType = 'active' | 'archived';
@@ -676,9 +680,12 @@ export interface PrismaMetricsResponse {
   records_after_technical_merger: number;
   duplicate_groups_pending_review: number;
   records_screened_title_abstract: number;
+  records_excluded_title_abstract?: number;
   records_screened_full_text: number;
+  records_excluded_full_text?: number;
   studies_included_synthesis: number;
   manual_source_breakdown: Record<string, number>;
+  provider_breakdown?: Record<string, number>;
 }
 
 export type PreScreeningStatus = 'retained' | 'removed';
