@@ -23,6 +23,11 @@ class DuplicateMergeRepository(Protocol):
         self, project_id: str, *, connection: sqlite3.Connection | None = None
     ) -> dict[str, DuplicateGroupMergeRecord]: ...
     def delete_for_project(self, project_id: str, *, connection: sqlite3.Connection | None = None) -> None: ...
+    def delete_merge(
+        self, project_id: str, group_id: str, *, connection: sqlite3.Connection | None = None
+    ) -> bool:
+        """Delete a single merge record; return True when a record was removed."""
+        ...
 
 
 class InMemoryDuplicateMergeRepository:
@@ -38,6 +43,10 @@ class InMemoryDuplicateMergeRepository:
     def list_merges_for_project(self, project_id: str, **_: object) -> dict[str, DuplicateGroupMergeRecord]:
         return {g: r for (p, g), r in self._records.items() if p == project_id}
 
+    def delete_merge(self, project_id: str, group_id: str, **_: object) -> bool:
+        """Delete a single merge record; return True when a record was removed."""
+        return self._records.pop((project_id, group_id), None) is not None
+
     def delete_for_project(self, project_id: str, **_: object) -> None:
         for key in [key for key in self._records if key[0] == project_id]:
             del self._records[key]
@@ -46,6 +55,8 @@ class InMemoryDuplicateMergeRepository:
 class SqliteDuplicateMergeRepository:
     def __init__(self, database_path: str | Path) -> None:
         self._database_path = Path(database_path)
+        self._database_path.parent.mkdir(parents=True, exist_ok=True)
+        self._apply_migrations()
 
     def save_merge(self, record: DuplicateGroupMergeRecord, *, connection: sqlite3.Connection | None = None) -> None:
         def save(conn: sqlite3.Connection) -> None:
@@ -107,6 +118,23 @@ class SqliteDuplicateMergeRepository:
             with sqlite3.connect(self._database_path) as conn:
                 conn.execute("DELETE FROM duplicate_group_merges WHERE project_id = ?", (project_id,))
 
+    def delete_merge(
+        self, project_id: str, group_id: str, *, connection: sqlite3.Connection | None = None
+    ) -> bool:
+        """Delete a single merge record; return True when a record was removed."""
+
+        def delete(conn: sqlite3.Connection) -> bool:
+            cursor = conn.execute(
+                "DELETE FROM duplicate_group_merges WHERE project_id = ? AND group_id = ?",
+                (project_id, group_id),
+            )
+            return cursor.rowcount > 0
+
+        if connection is not None:
+            return delete(connection)
+        with sqlite3.connect(self._database_path) as conn:
+            return delete(conn)
+
     @staticmethod
     def _row(project_id: str, group_id: str, row: tuple[object, ...]) -> DuplicateGroupMergeRecord:
         return DuplicateGroupMergeRecord(
@@ -121,6 +149,35 @@ class SqliteDuplicateMergeRepository:
                 for value in json.loads(str(row[4]))
             ),
         )
+
+    def _connect(self) -> sqlite3.Connection:
+        return sqlite3.connect(self._database_path)
+
+    def _apply_migrations(self) -> None:
+        migration_directory = Path(__file__).parents[2] / "migrations"
+        with self._connect() as connection:
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS schema_migrations (
+                    version TEXT PRIMARY KEY,
+                    applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )
+                """
+            )
+            applied = {
+                row[0]
+                for row in connection.execute(
+                    "SELECT version FROM schema_migrations"
+                ).fetchall()
+            }
+            for migration in sorted(migration_directory.glob("*.sql")):
+                if migration.name in applied:
+                    continue
+                connection.executescript(migration.read_text(encoding="utf-8"))
+                connection.execute(
+                    "INSERT INTO schema_migrations(version) VALUES (?)",
+                    (migration.name,),
+                )
 
 
 def default_duplicate_merge_repository() -> SqliteDuplicateMergeRepository:

@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from functools import reduce
 from uuid import UUID
 
@@ -33,6 +34,11 @@ from app.repositories.project_publication_repository import (
     default_project_publication_repository,
 )
 from app.repositories.transaction_manager import SqliteTransactionManager
+from app.services.active_publication_filter import (
+    provides_active_corpus,
+    provides_removed_record_listing,
+    repository_provides_method,
+)
 from app.services.duplicate_group_builder import DuplicateGroupBuilder, duplicate_group_builder
 from app.services.publication_merge_policy import publication_merge_policy
 
@@ -71,6 +77,24 @@ def _preview(pub: Publication) -> DuplicateRecordPreviewResponse:
     )
 
 
+@dataclass(frozen=True, slots=True)
+class DuplicateReconciliationReport:
+    """Outcome of reconciling persisted duplicate state with the Active Corpus."""
+
+    project_id: str
+    active_records_count: int
+    removed_merge_group_ids: tuple[str, ...] = ()
+    removed_decision_group_ids: tuple[str, ...] = ()
+
+    @property
+    def removed_merges_count(self) -> int:
+        return len(self.removed_merge_group_ids)
+
+    @property
+    def removed_decisions_count(self) -> int:
+        return len(self.removed_decision_group_ids)
+
+
 class ProjectDuplicateService:
     def __init__(
         self,
@@ -92,7 +116,24 @@ class ProjectDuplicateService:
         )
         self._builder = builder
 
-    def _find_group(self, project_id: str, group_id: str, *, connection=None):
+    def _active_publications(self, project_id: str, *, connection=None) -> list[Publication]:
+        """Return the authoritative Active Project Corpus for deduplication.
+
+        The WP1 Active Corpus excludes ``pre_screening_status='removed'``
+        records, physically archived records, and superseded duplicate members,
+        uniformly across providers (Crossref / OpenAlex / Semantic Scholar).
+        Repositories without the WP1 ``get_active_publications`` accessor fall
+        back to their whole collection (legacy projects without pre-screening
+        decisions remain compatible).
+        """
+        if provides_active_corpus(self._repository):
+            get_active = getattr(self._repository, "get_active_publications")
+            if connection is None:
+                return list(get_active(project_id))
+            try:
+                return list(get_active(project_id, connection=connection))
+            except TypeError:
+                return list(get_active(project_id))
         if connection is None:
             publications = (
                 self._repository.get_all_publications(project_id)
@@ -105,6 +146,10 @@ class ProjectDuplicateService:
                 if hasattr(self._repository, "get_all_publications")
                 else self._repository.get_publications(project_id, connection=connection)
             )
+        return list(publications)
+
+    def _find_group(self, project_id: str, group_id: str, *, connection=None):
+        publications = self._active_publications(project_id, connection=connection)
         group = next((g for g in self._builder.build(publications) if str(g.group_id) == group_id), None)
         if group is None:
             merge = self._merge_repository.get_merge(project_id, group_id, connection=connection)
@@ -119,11 +164,7 @@ class ProjectDuplicateService:
         return publications, group
 
     def get_candidate_duplicate_groups(self, project_id: str) -> DuplicateGroupListResponse:
-        publications = (
-            self._repository.get_all_publications(project_id)
-            if hasattr(self._repository, "get_all_publications")
-            else self._repository.get_publications(project_id)
-        )
+        publications = self._active_publications(project_id)
         by_id = {p.record_id: p for p in publications}
         decisions = self._decision_repository.list_decisions_for_project(project_id)
         merges = self._merge_repository.list_merges_for_project(project_id)
@@ -254,6 +295,88 @@ class ProjectDuplicateService:
             group_id=group_id,
             decision=DuplicateDecisionStatus(record.decision.value) if record else DuplicateDecisionStatus.PENDING,
             rationale=record.rationale if record else None,
+        )
+
+    def reconcile_with_active_corpus(self, project_id: str) -> DuplicateReconciliationReport:
+        """Remove stale duplicate state referencing records outside the Active Corpus.
+
+        Deterministic reconciliation for projects previously deduplicated over
+        the unfiltered population (WP2 D8): any persisted merge or reviewer
+        decision whose group contains a pre-screening removed (or physically
+        absent) publication is deleted. Merges and decisions fully contained in
+        the Active Corpus — including legitimate historical merges whose
+        non-canonical members are superseded by design — are preserved.
+
+        No publication rows, screening decisions, or finalization records are
+        touched. The operation is idempotent: a second run removes nothing.
+        """
+        active = self._active_publications(project_id)
+        active_ids = {publication.record_id for publication in active}
+
+        if hasattr(self._repository, "get_all_publications"):
+            full_population = list(self._repository.get_all_publications(project_id))
+        else:
+            full_population = list(self._repository.get_publications(project_id))
+        present_ids = {publication.record_id for publication in full_population}
+
+        removed_ids: set[UUID] = set()
+        if provides_removed_record_listing(self._repository):
+            removed_ids = set(
+                self._repository.get_pre_screening_removed_record_ids(project_id)  # type: ignore[attr-defined]
+            )
+
+        superseded_by: dict[UUID, UUID | None] = {}
+        has_supersession_map = repository_provides_method(self._repository, "get_superseded_by_map")
+        if has_supersession_map:
+            superseded_by = dict(self._repository.get_superseded_by_map(project_id))
+
+        def is_removed_or_absent(record_id: UUID) -> bool:
+            if record_id in removed_ids:
+                # A superseded-then-removed record is still a removed record:
+                # no derived duplicate state may reference it.
+                return True
+            if record_id in active_ids:
+                return False
+            if record_id not in present_ids:
+                # Physically archived records are absent from every read.
+                return True
+            # Present but inactive: a superseded member is a legitimate merge
+            # product and must be preserved; anything else is inconsistent
+            # state that reconciliation heals toward the Active Corpus.
+            if has_supersession_map:
+                return superseded_by.get(record_id) is None
+            return False
+
+        # Candidate groups rebuilt from the full (unfiltered) population reveal
+        # exactly which historical group identities were tainted by removals.
+        tainted_group_ids = {
+            str(group.group_id)
+            for group in self._builder.build(full_population)
+            if any(is_removed_or_absent(member) for member in group.publication_ids)
+        }
+
+        removed_merges: list[str] = []
+        for group_id, merge in self._merge_repository.list_merges_for_project(project_id).items():
+            if group_id in tainted_group_ids or any(
+                is_removed_or_absent(member) for member in merge.merged_publication_ids
+            ):
+                if self._merge_repository.delete_merge(project_id, group_id):
+                    removed_merges.append(group_id)
+
+        removed_decisions: list[str] = []
+        for group_id in self._decision_repository.list_decisions_for_project(project_id):
+            if group_id in tainted_group_ids:
+                if self._decision_repository.delete_decision(project_id, group_id):
+                    removed_decisions.append(group_id)
+
+        # Physically archived members absent from every collection read never
+        # appear in ``active_ids`` and have no superseded mapping, so the
+        # per-member check above already classifies them as removed-or-absent.
+        return DuplicateReconciliationReport(
+            project_id=project_id,
+            active_records_count=len(active_ids),
+            removed_merge_group_ids=tuple(sorted(removed_merges)),
+            removed_decision_group_ids=tuple(sorted(removed_decisions)),
         )
 
 

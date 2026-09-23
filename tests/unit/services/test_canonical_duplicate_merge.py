@@ -197,6 +197,9 @@ def test_merged_group_history_survives_later_source_metadata_divergence(tmp_path
 
 
 def test_merge_rejects_a_superseded_noncanonical_member_without_writes(tmp_path: Path) -> None:
+    # WP2 active-corpus semantics: a superseded record is outside the Active
+    # Corpus, so it can never re-enter duplicate candidacy. Re-merging is
+    # rejected without any state mutation.
     database = tmp_path / "reject-superseded-member.db"
     service, repository, decisions, merges = _service(database)
     first = _publication(1, abstract="first", source="a")
@@ -214,25 +217,24 @@ def test_merge_rejects_a_superseded_noncanonical_member_without_writes(tmp_path:
     )
     repository.update_publication("lean_energy", updated_superseded)
     repository.add_publications("lean_energy", [active_member])
-    rejected_group = next(
-        group
+    candidate_member_sets = [
+        {record.id for record in group.records}
         for group in service.get_candidate_duplicate_groups("lean_energy").groups
-        if set(record.id for record in group.records) == {str(superseded.record_id), str(active_member.record_id)}
-    )
-    service.record_decision("lean_energy", rejected_group.group_id, "APPROVE")
+        if group.status.value != "MERGED"
+    ]
+    assert {str(superseded.record_id), str(active_member.record_id)} not in candidate_member_sets
 
-    with pytest.raises(ValueError, match="must all be active"):
-        service.merge_group("lean_energy", rejected_group.group_id)
+    with pytest.raises(ValueError, match="already merged"):
+        service.merge_group("lean_energy", original_group)
 
     reopened = SqliteProjectPublicationRepository(database)
-    assert SqliteDuplicateMergeRepository(database).get_merge("lean_energy", rejected_group.group_id) is None
     assert reopened.get_superseded_by_map("lean_energy") == {
         first.record_id: None,
         active_member.record_id: None,
         superseded.record_id: first.record_id,
     }
     assert next(p for p in reopened.get_all_publications("lean_energy") if p.record_id == superseded.record_id).identifiers == updated_superseded.identifiers
-    assert decisions.get_decision("lean_energy", rejected_group.group_id) is not None
+    assert decisions.get_decision("lean_energy", original_group) is not None
     assert merges.get_merge("lean_energy", original_group) is not None
 
 
@@ -254,18 +256,19 @@ def test_merge_rejects_a_superseded_canonical_candidate_without_writes(tmp_path:
     )
     repository.update_publication("lean_energy", updated_superseded)
     repository.add_publications("lean_energy", [active_member])
-    rejected_group = next(
-        group
+    # WP2 active-corpus semantics: the superseded record is outside the Active
+    # Corpus, so no live candidate group may pair it with the fresh import.
+    candidate_member_sets = [
+        {record.id for record in group.records}
         for group in service.get_candidate_duplicate_groups("lean_energy").groups
-        if set(record.id for record in group.records) == {str(superseded_canonical.record_id), str(active_member.record_id)}
-    )
-    service.record_decision("lean_energy", rejected_group.group_id, "APPROVE")
+        if group.status.value != "MERGED"
+    ]
+    assert {str(superseded_canonical.record_id), str(active_member.record_id)} not in candidate_member_sets
 
-    with pytest.raises(ValueError, match="must all be active"):
-        service.merge_group("lean_energy", rejected_group.group_id)
+    with pytest.raises(ValueError, match="already merged"):
+        service.merge_group("lean_energy", original_group)
 
     reopened = SqliteProjectPublicationRepository(database)
-    assert SqliteDuplicateMergeRepository(database).get_merge("lean_energy", rejected_group.group_id) is None
     assert reopened.get_superseded_by_map("lean_energy") == {
         first.record_id: None,
         superseded_canonical.record_id: first.record_id,

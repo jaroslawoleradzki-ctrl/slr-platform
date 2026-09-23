@@ -116,6 +116,7 @@ def _build_prisma_service_for_database(publication_repository, database_path: Pa
     from app.repositories.conflict_resolution_repository import SqliteConflictResolutionRepository
     from app.repositories.duplicate_review_decision_repository import SqliteDuplicateReviewDecisionRepository
     from app.repositories.import_history_repository import SqliteImportHistoryRepository
+    from app.repositories.pre_screening_archive_repository import SqlitePreScreeningArchiveRepository
     from app.repositories.screening_decision_repository import SqliteScreeningDecisionRepository
     from app.repositories.screening_reviewer_assignment_repository import SqliteScreeningReviewerAssignmentRepository
     from app.services.duplicate_group_builder import DuplicateGroupBuilder
@@ -158,6 +159,7 @@ def _build_prisma_service_for_database(publication_repository, database_path: Pa
         decision_repository=duplicate_decisions,
         workflow_status_service=workflow_status,
         builder=DuplicateGroupBuilder(),
+        archive_repository=SqlitePreScreeningArchiveRepository(database_path),
     )
 
 

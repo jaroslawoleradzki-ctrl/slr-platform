@@ -265,12 +265,15 @@ PRISMA_SUMMARY_METRICS = (
     "records_identified_providers",
     "records_identified_imports",
     "total_identified",
+    "records_removed_prescreening",
     "records_after_normalization",
     "records_before_dedup",
     "records_after_technical_merger",
     "duplicate_groups_pending_review",
     "records_screened_title_abstract",
+    "records_excluded_title_abstract",
     "records_screened_full_text",
+    "records_excluded_full_text",
     "studies_included_synthesis",
 )
 

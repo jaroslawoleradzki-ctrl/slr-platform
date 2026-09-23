@@ -51,6 +51,9 @@ def build_flow_model(
     annotations_other: dict[str, str] = {
         k: str(v) for k, v in sorted(metrics.manual_source_breakdown.items())
     }
+    annotations_databases: dict[str, str] = {
+        k: str(v) for k, v in sorted(metrics.provider_breakdown.items())
+    }
 
     annotations_removed: dict[str, str] = {}
     if metrics.duplicate_groups_pending_review > 0:
@@ -63,6 +66,7 @@ def build_flow_model(
             stage="identification",
             label_key="prisma.identification.databases",
             values={"count": metrics.records_identified_providers},
+            annotations=annotations_databases,
         ),
         PrismaFlowNode(
             node_id="identification.other_methods",
@@ -106,13 +110,16 @@ def build_flow_model(
     ]
 
     # Side-box exclusions render only when their denominator > 0 (plan §13)
-    if metrics.records_before_dedup > 0:
+    if metrics.records_before_dedup > 0 or metrics.records_removed_prescreening > 0:
         nodes.append(
             PrismaFlowNode(
                 node_id="identification.records_removed",
                 stage="identification",
                 label_key="prisma.identification.records_removed",
-                values={"duplicates_removed": duplicates_removed},
+                values={
+                    "duplicates_removed": duplicates_removed,
+                    "records_removed_prescreening": metrics.records_removed_prescreening,
+                },
                 annotations=annotations_removed,
             )
         )

@@ -262,12 +262,16 @@ const mapApiProjectToSLRProject = (p: ApiProjectResponse): SLRProject => ({
     totalIdentified: 0,
     recordsAfterNormalization: 0,
     recordsBeforeDedup: 0,
+    recordsRemovedPrescreening: 0,
     recordsAfterTechnicalMerger: 0,
     duplicateGroupsPendingReview: 0,
     recordsScreenedTitleAbstract: 0,
+    recordsExcludedTitleAbstract: 0,
     recordsScreenedFullText: 0,
+    recordsExcludedFullText: 0,
     studiesIncludedSynthesis: 0,
     manualSourceBreakdown: {},
+    providerBreakdown: {},
   },
 });
 
@@ -277,12 +281,16 @@ const mapPrismaMetricsResponseToFunnel = (p: PrismaMetricsResponse): PrismaFunne
   totalIdentified: p.total_identified,
   recordsAfterNormalization: p.records_after_normalization,
   recordsBeforeDedup: p.records_before_dedup,
+  recordsRemovedPrescreening: p.records_removed_prescreening ?? 0,
   recordsAfterTechnicalMerger: p.records_after_technical_merger,
   duplicateGroupsPendingReview: p.duplicate_groups_pending_review,
   recordsScreenedTitleAbstract: p.records_screened_title_abstract,
+  recordsExcludedTitleAbstract: p.records_excluded_title_abstract ?? 0,
   recordsScreenedFullText: p.records_screened_full_text,
+  recordsExcludedFullText: p.records_excluded_full_text ?? 0,
   studiesIncludedSynthesis: p.studies_included_synthesis,
   manualSourceBreakdown: p.manual_source_breakdown ?? {},
+  providerBreakdown: p.provider_breakdown ?? {},
 });
 
 class MixedProjectApiService implements ProjectApiService {

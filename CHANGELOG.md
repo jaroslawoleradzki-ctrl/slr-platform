@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.7.1] — 2026-09-23
+
+### Added
+
+- **Authoritative Active Corpus boundary**: a single source of truth for the project corpus (persisted rows, not superseded, not pre-screening removed, not archived) consumed uniformly by Normalization, Deduplication, screening input, and exports.
+- **Pre-screening archive foundation**: removed retrieval artefacts are preserved with full provenance, identifiers, DOI, and bibliographic snapshot in a durable auditable `pre_screening_archive` registry instead of lingering in the working collection.
+- **Controlled physical reconciliation mechanism**: transactional archive-and-remove service with dry-run preflight assertions, idempotent request fingerprints, and a run ledger — implemented and tested, NOT automatically executed by this release.
+- **Corrected PRISMA accounting separation**: identification (retrieval history), corpus-preparation removals, active pipeline populations, and formal screening are reported as distinct PRISMA stages.
+
+### Fixed
+
+- Normalization no longer processes pre-screening removed records; reruns cannot resurrect them and reported counts describe records actually processed.
+- Deduplication no longer clusters removed records; cross-provider duplicates among retained records are still detected.
+- Stale duplicate merges/decisions referencing removed records have a deterministic, idempotent reconciliation path.
+- A WP2/WP4 integration defect that cleared legitimate duplicate supersession pointers during reconciliation was identified and resolved during final integration review.
+
+### Known limitations
+
+- Production reconciliation for the affected project dataset is a separate controlled operation and is NOT executed by upgrading to this release.
+
 ## [0.7.0] — 2026-09-22
 
 ### Added

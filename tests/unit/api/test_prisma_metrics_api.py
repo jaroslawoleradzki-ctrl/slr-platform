@@ -11,6 +11,7 @@ from app.domain.screening import ScreeningDecision, ScreeningOutcome, ScreeningS
 from app.repositories.conflict_resolution_repository import SqliteConflictResolutionRepository
 from app.repositories.duplicate_review_decision_repository import SqliteDuplicateReviewDecisionRepository
 from app.repositories.import_history_repository import SqliteImportHistoryRepository
+from app.repositories.pre_screening_archive_repository import SqlitePreScreeningArchiveRepository
 from app.repositories.project_publication_repository import SqliteProjectPublicationRepository
 from app.repositories.project_repository import SqliteProjectRepository
 from app.repositories.screening_decision_repository import SqliteScreeningDecisionRepository
@@ -39,6 +40,7 @@ def environment(tmp_path):
     assignments = SqliteScreeningReviewerAssignmentRepository(database)
     resolutions = SqliteConflictResolutionRepository(database)
     reporting = ScreeningReportingRepository(database)
+    archive_repo = SqlitePreScreeningArchiveRepository(database)
     project_repo.create(Project(project_id=PROJECT_ID, title="PRISMA Project"))
 
     input_service = ScreeningInputService(publications, duplicate_decisions)
@@ -70,9 +72,10 @@ def environment(tmp_path):
         decision_repository=duplicate_decisions,
         workflow_status_service=workflow_status,
         builder=DuplicateGroupBuilder(),
+        archive_repository=archive_repo,
     )
     app.dependency_overrides[get_prisma_metrics_service] = lambda: service
-    yield TestClient(app), publications, history, duplicate_decisions, screening_decisions
+    yield TestClient(app), publications, history, duplicate_decisions, screening_decisions, archive_repo
     app.dependency_overrides.clear()
 
 
@@ -112,6 +115,7 @@ def test_prisma_metrics_empty_project_returns_zeros(environment) -> None:
         "records_excluded_full_text": 0,
         "studies_included_synthesis": 0,
         "manual_source_breakdown": {},
+        "provider_breakdown": {},
     }
 
 
@@ -194,7 +198,7 @@ def test_prisma_metrics_resolved_group_no_longer_pending(environment) -> None:
 
 
 def test_prisma_metrics_partial_and_full_screening(environment) -> None:
-    client, publications, _, _, screening_decisions = environment
+    client, publications, _, _, screening_decisions, *_ = environment
     pub1 = make_publication(1)
     pub2 = make_publication(2)
     pub3 = make_publication(3)
@@ -224,7 +228,7 @@ def test_prisma_metrics_partial_and_full_screening(environment) -> None:
 
 
 def test_prisma_metrics_latest_decision_wins(environment) -> None:
-    client, publications, _, _, screening_decisions = environment
+    client, publications, _, _, screening_decisions, *_ = environment
     pub1 = make_publication(1)
     publications.add_publications(PROJECT_ID, [pub1])
 
