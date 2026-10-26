@@ -116,6 +116,20 @@ def test_prisma_metrics_empty_project_returns_zeros(environment) -> None:
         "studies_included_synthesis": 0,
         "manual_source_breakdown": {},
         "provider_breakdown": {},
+        "source_records_identified": 0,
+        "persisted_source_records": 0,
+        "exact_duplicates_linked": 0,
+        "repeated_source_occurrences": 0,
+        "canonical_publications": 0,
+        "canonical_publications_total": 0,
+        "merged_duplicate_groups": 0,
+        "merged_duplicate_records": 0,
+        "recovered_records": 0,
+        "historical_canonical_without_source_records": 0,
+        "prisma_accounting_note": (
+            "Historical project: no source-record rows are available; identified "
+            "records fall back to import history."
+        ),
     }
 
 

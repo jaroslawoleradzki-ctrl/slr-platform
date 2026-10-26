@@ -36,8 +36,19 @@ def build_flow_model(
     project_title = project.title if project is not None else f"Project {metrics.project_id}"
     protocol_version = project.protocol_version if project is not None else None
 
-    # Presentation-level derived figures (plan §12, §13, D7)
-    duplicates_removed = max(0, metrics.records_before_dedup - metrics.records_after_technical_merger)
+    # Presentation-level derived figures (plan §12, §13, D7). Source-aware
+    # projects use the explicit source duplicate accounting; historical metrics
+    # retain the canonical before/after derivation.
+    source_aware_duplicates = (
+        metrics.exact_duplicates_linked
+        + metrics.repeated_source_occurrences
+        + metrics.merged_duplicate_records
+    )
+    duplicates_removed = (
+        source_aware_duplicates
+        if source_aware_duplicates
+        else max(0, metrics.records_before_dedup - metrics.records_after_technical_merger)
+    )
     excluded_title_abstract = metrics.records_excluded_title_abstract
     excluded_full_text = metrics.records_excluded_full_text
 
@@ -167,6 +178,16 @@ def build_flow_model(
         "studies_included_synthesis": metrics.studies_included_synthesis,
         "records_excluded_title_abstract": metrics.records_excluded_title_abstract,
         "records_excluded_full_text": metrics.records_excluded_full_text,
+        "source_records_identified": metrics.source_records_identified,
+        "persisted_source_records": metrics.persisted_source_records,
+        "exact_duplicates_linked": metrics.exact_duplicates_linked,
+        "repeated_source_occurrences": metrics.repeated_source_occurrences,
+        "canonical_publications": metrics.canonical_publications,
+        "canonical_publications_total": metrics.canonical_publications_total,
+        "merged_duplicate_groups": metrics.merged_duplicate_groups,
+        "merged_duplicate_records": metrics.merged_duplicate_records,
+        "recovered_records": metrics.recovered_records,
+        "historical_canonical_without_source_records": metrics.historical_canonical_without_source_records,
     }
 
     metadata = PrismaFlowMetadata(
