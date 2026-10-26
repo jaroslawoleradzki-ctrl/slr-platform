@@ -29,6 +29,10 @@ from app.repositories.duplicate_review_decision_repository import (
     GroupNotFoundError,
     default_duplicate_review_decision_repository,
 )
+from app.repositories.import_source_record_repository import (
+    ImportSourceRecordRepository,
+    SqliteImportSourceRecordRepository,
+)
 from app.repositories.project_publication_repository import (
     ProjectPublicationRepository,
     default_project_publication_repository,
@@ -103,6 +107,7 @@ class ProjectDuplicateService:
         builder: DuplicateGroupBuilder = duplicate_group_builder,
         merge_repository: DuplicateMergeRepository | None = None,
         transaction_manager: SqliteTransactionManager | None = None,
+        source_record_repository: ImportSourceRecordRepository | None = None,
     ) -> None:
         self._repository = repository or default_project_publication_repository()
         self._decision_repository = decision_repository or default_duplicate_review_decision_repository()
@@ -114,6 +119,14 @@ class ProjectDuplicateService:
         self._transaction_manager = transaction_manager or SqliteTransactionManager(
             getattr(self._repository, "_database_path", "data/slr-platform.db")
         )
+        if source_record_repository is not None:
+            self._source_records = source_record_repository
+        elif hasattr(self._repository, "_database_path"):
+            self._source_records = SqliteImportSourceRecordRepository(
+                self._repository._database_path
+            )
+        else:
+            self._source_records = None
         self._builder = builder
 
     def _active_publications(self, project_id: str, *, connection=None) -> list[Publication]:
@@ -196,7 +209,14 @@ class ProjectDuplicateService:
             responses.append(
                 DuplicateGroupResponse(
                     group_id=group_id,
-                    reason=f"Zgodność identyfikatorów ({detail})" if detail else "Identical strong identifier match",
+                    reason=(
+                        group.match_reason
+                        or (
+                            f"Zgodność identyfikatorów ({detail})"
+                            if detail
+                            else "Identical strong identifier match"
+                        )
+                    ),
                     records_count=len(members),
                     status=state,
                     rationale=decision.rationale if decision else None,
@@ -231,6 +251,23 @@ class ProjectDuplicateService:
                     records=[_preview(publication) for publication in members],
                 )
             )
+
+        if self._source_records is not None:
+            self._source_records.clear_candidate_groups(project_id)
+            for response in responses:
+                publication_ids = [record.id for record in response.records]
+                for merged_id in response.merged_publication_ids or []:
+                    if merged_id not in publication_ids:
+                        publication_ids.append(merged_id)
+                live_group = live_groups.get(response.group_id)
+                self._source_records.update_candidate_group(
+                    project_id,
+                    publication_ids,
+                    response.group_id,
+                    match_type=live_group.match_type if live_group else None,
+                    match_reason=live_group.match_reason if live_group else None,
+                )
+
         return DuplicateGroupListResponse(project_id=project_id, total_groups_count=len(responses), groups=responses)
 
     def record_decision(

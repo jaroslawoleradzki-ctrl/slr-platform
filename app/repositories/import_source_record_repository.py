@@ -192,7 +192,15 @@ class ImportSourceRecordRepository(Protocol):
     def find_source_record(self, project_id: str, import_id: UUID, source_record_index: int) -> ImportSourceRecord | None: ...
     def find_source_record_by_id(self, project_id: str, source_record_id: str) -> ImportSourceRecord | None: ...
     def exists_source_record(self, project_id: str, import_id: UUID, source_record_index: int) -> bool: ...
-    def update_candidate_group(self, project_id: str, publication_ids: list[str], group_id: str) -> int: ...
+    def update_candidate_group(
+        self,
+        project_id: str,
+        publication_ids: list[str],
+        group_id: str,
+        *,
+        match_type: str | None = None,
+        match_reason: str | None = None,
+    ) -> int: ...
     def clear_candidate_groups(self, project_id: str) -> None: ...
     def mark_recovered(
         self,
@@ -590,17 +598,40 @@ class SqliteImportSourceRecordRepository:
             ).fetchone()
         return self._source_from_row(row) if row else None
 
-    def update_candidate_group(self, project_id, publication_ids, group_id):
+    def update_candidate_group(
+        self,
+        project_id,
+        publication_ids,
+        group_id,
+        *,
+        match_type=None,
+        match_reason=None,
+    ):
         if not publication_ids:
             return 0
         placeholders = ",".join("?" for _ in publication_ids)
         with self._connect() as conn:
-            cursor = conn.execute(
-                f"""UPDATE import_source_records
-                    SET duplicate_candidate_group_id=?
-                    WHERE project_id=? AND canonical_publication_id IN ({placeholders})""",
-                (group_id, project_id, *publication_ids),
-            )
+            if match_type is not None:
+                cursor = conn.execute(
+                    f"""UPDATE import_source_records
+                        SET duplicate_candidate_group_id=?, duplicate_match_type=?,
+                            duplicate_match_reason=?
+                        WHERE project_id=? AND canonical_publication_id IN ({placeholders})""",
+                    (
+                        group_id,
+                        match_type,
+                        match_reason,
+                        project_id,
+                        *publication_ids,
+                    ),
+                )
+            else:
+                cursor = conn.execute(
+                    f"""UPDATE import_source_records
+                        SET duplicate_candidate_group_id=?
+                        WHERE project_id=? AND canonical_publication_id IN ({placeholders})""",
+                    (group_id, project_id, *publication_ids),
+                )
             conn.commit()
             return cursor.rowcount
 

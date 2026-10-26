@@ -75,10 +75,16 @@ export const SourcesIngestionPage: React.FC = () => {
     status: item.status,
     warnings: item.warnings,
     sourceRecordCount: item.source_record_count,
+    canonicalPublicationCount: item.canonical_publication_count,
     exactDoiMatchCount: item.exact_doi_match_count,
     repeatedSourceCount: item.repeated_source_count,
     titleCandidateCount: item.title_candidate_count,
+    similarTitleCandidateCount: item.similar_title_candidate_count,
+    skippedCanonicalCount: item.skipped_canonical_count,
+    invalidDoiCount: item.invalid_doi_count,
+    validationErrorCount: item.validation_error_count,
     skipAuditAvailable: item.skip_audit_available,
+    auditAvailable: item.audit_available,
     recoveryStatus: item.recovery_status,
   }));
 

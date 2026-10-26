@@ -66,6 +66,8 @@ class DuplicateGroup(BaseModel):
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     decision_history: tuple[DuplicateDecision, ...] = ()
+    match_type: str | None = None
+    match_reason: str | None = None
 
     @field_validator("publication_ids")
     @classmethod

@@ -276,10 +276,16 @@ export interface ImportFileRecord {
   sourceDatabase?: ManualSourceDatabase;
   sourceLabel?: string | null;
   sourceRecordCount?: number | null;
+  canonicalPublicationCount?: number | null;
   exactDoiMatchCount?: number | null;
   repeatedSourceCount?: number | null;
   titleCandidateCount?: number | null;
+  similarTitleCandidateCount?: number | null;
+  skippedCanonicalCount?: number | null;
+  invalidDoiCount?: number | null;
+  validationErrorCount?: number;
   skipAuditAvailable?: boolean;
+  auditAvailable?: boolean;
   recoveryStatus?: string | null;
 }
 
@@ -319,10 +325,16 @@ export interface ImportHistoryItemDTO {
   source_database?: ManualSourceDatabase;
   source_label?: string | null;
   source_record_count?: number | null;
+  canonical_publication_count?: number | null;
   exact_doi_match_count?: number | null;
   repeated_source_count?: number | null;
   title_candidate_count?: number | null;
+  similar_title_candidate_count?: number | null;
+  skipped_canonical_count?: number | null;
+  invalid_doi_count?: number | null;
+  validation_error_count?: number;
   skip_audit_available?: boolean;
+  audit_available?: boolean;
   recovery_status?: string | null;
 }
 

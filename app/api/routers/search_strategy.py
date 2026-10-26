@@ -830,14 +830,18 @@ def list_import_source_records(
                 "source_record_id": r.source_record_id,
                 "source_filename": r.source_filename,
                 "source_file_hash": r.source_file_hash,
+                "record_fingerprint": r.record_fingerprint,
+                "import_format": r.import_format,
                 "source_record_index": r.source_record_index,
                 "title": r.title,
                 "publication_year": r.publication_year,
                 "original_doi": r.original_doi,
                 "normalized_doi": r.normalized_doi,
+                "doi_status": r.doi_status,
                 "canonical_publication_id": r.canonical_publication_id,
                 "duplicate_match_type": r.duplicate_match_type,
                 "duplicate_match_reason": r.duplicate_match_reason,
+                "duplicate_candidate_group_id": r.duplicate_candidate_group_id,
                 "recovery_status": r.recovery_status,
             }
             for r in records
@@ -858,8 +862,11 @@ def list_import_skip_audit(
         "items": [
             {
                 "skip_audit_id": r.skip_audit_id,
+                "source_record_id": r.source_record_id,
                 "source_filename": r.source_filename,
                 "source_file_hash": r.source_file_hash,
+                "record_fingerprint": r.record_fingerprint,
+                "import_format": r.import_format,
                 "source_record_index": r.source_record_index,
                 "source_title": r.source_title,
                 "source_doi": r.source_doi,

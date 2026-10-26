@@ -1,11 +1,27 @@
 from collections.abc import Iterable
 from datetime import datetime, timezone
+from difflib import SequenceMatcher
 from uuid import NAMESPACE_URL, UUID, uuid5
 
 from app.domain.deduplication import DuplicateGroup
 from app.domain.identifiers import Identifier, IdentifierType
 from app.domain.publication import Publication
 from app.normalization.doi import normalize_doi
+from app.normalization.title import normalize_title
+
+_FILE_IMPORT_TRANSFORMATIONS = {"ris_to_publication", "bibtex_to_publication"}
+_FILE_IMPORT_SOURCES = {
+    "ris",
+    "bibtex",
+    "google_scholar",
+    "google_scholar_pop",
+    "scopus",
+    "web_of_science",
+    "pubmed",
+    "ebsco",
+    "proquest",
+}
+_SIMILAR_TITLE_THRESHOLD = 0.92
 
 _STRONG_IDENTIFIER_TYPES = {
     IdentifierType.DOI,
@@ -36,6 +52,67 @@ def _identifier_key(identifier: Identifier) -> tuple[str, str] | None:
 def _group_id(publication_ids: tuple[UUID, ...]) -> UUID:
     member_key = ",".join(str(publication_id) for publication_id in publication_ids)
     return uuid5(NAMESPACE_URL, f"slr-platform:duplicate-group:{member_key}")
+
+
+def _is_file_import(publication: Publication) -> bool:
+    for provenance in publication.provenance:
+        if (provenance.transformation or "") in _FILE_IMPORT_TRANSFORMATIONS:
+            return True
+        if provenance.source.strip().casefold() in _FILE_IMPORT_SOURCES:
+            return True
+    return False
+
+
+def _normalized_title(publication: Publication) -> str | None:
+    return normalize_title(publication.title)
+
+
+def _similarity(first: str, second: str) -> float:
+    return SequenceMatcher(None, first, second).ratio()
+
+
+def _group_evidence(
+    publications: list[Publication],
+    keys_by_publication: dict[UUID, set[tuple[str, str]]],
+) -> tuple[str | None, str | None]:
+    """Return ``(match_type, reason)`` from actual member evidence."""
+
+    shared: set[tuple[str, str]] = set()
+    sets = [keys_by_publication.get(pub.record_id, set()) for pub in publications]
+    for index, keys in enumerate(sets):
+        for other in sets[index + 1 :]:
+            shared.update(keys & other)
+    if shared:
+        types = sorted({identifier_type for identifier_type, _ in shared})
+        if "doi" in types:
+            return "exact_doi", "Exact normalized DOI match"
+        if "pmid" in types:
+            return "shared_identifier", "Shared PMID"
+        if "openalex" in types:
+            return "shared_identifier", "Shared OpenAlex identifier"
+        return "shared_identifier", f"Shared strong identifier ({', '.join(types)})"
+
+    titles = [title for pub in publications if (title := _normalized_title(pub))]
+    if len(titles) >= 2 and len(set(titles)) == 1:
+        any_doi = any(
+            identifier.type is IdentifierType.DOI
+            for pub in publications
+            for identifier in pub.identifiers
+        )
+        if any_doi:
+            return (
+                "conflicting_identifiers",
+                "Identical normalized title with conflicting DOI evidence",
+            )
+        return "identical_title", "Identical normalized title without DOI"
+    for index, first in enumerate(titles):
+        for second in titles[index + 1 :]:
+            if _similarity(first, second) >= _SIMILAR_TITLE_THRESHOLD:
+                return (
+                    "similar_title",
+                    "Similar normalized title; insufficient bibliographic evidence",
+                )
+    return None, None
 
 
 class DuplicateGroupBuilder:
@@ -91,20 +168,41 @@ class DuplicateGroupBuilder:
                 union(owner, publication_id)
 
         if include_title_candidates:
-            # Title-only RIS candidates feed the existing manual duplicate-review
-            # workflow. They are never auto-merged.
-            title_owner: dict[str, UUID] = {}
+            # File-import (RIS/BibTeX) candidates feed the existing manual
+            # duplicate-review workflow.  Exact title grouping includes
+            # DOI-bearing counterparts; similar-title grouping is deliberately
+            # conservative and never auto-merges.
+            title_buckets: dict[str, list[Publication]] = {}
             for publication in publication_list:
-                if keys_by_publication.get(publication.record_id):
+                title_key = _normalized_title(publication)
+                if title_key is None:
                     continue
-                if not any(
-                    provenance.source.strip().casefold() == "ris"
-                    for provenance in publication.provenance
-                ):
+                title_buckets.setdefault(title_key, []).append(publication)
+            for bucket in title_buckets.values():
+                if len(bucket) < 2 or not any(_is_file_import(pub) for pub in bucket):
                     continue
-                key = publication.title.strip().casefold()
-                owner = title_owner.setdefault(key, publication.record_id)
-                union(owner, publication.record_id)
+                owner = bucket[0].record_id
+                for publication in bucket[1:]:
+                    union(owner, publication.record_id)
+
+            file_origin = [
+                publication
+                for publication in publication_list
+                if _is_file_import(publication) and _normalized_title(publication)
+            ]
+            for first in file_origin:
+                first_title = _normalized_title(first)
+                assert first_title is not None  # guarded above
+                for second in publication_list:
+                    if second.record_id == first.record_id:
+                        continue
+                    second_title = _normalized_title(second)
+                    if second_title is None or second_title == first_title:
+                        continue
+                    if abs(len(first_title) - len(second_title)) > 25:
+                        continue
+                    if _similarity(first_title, second_title) >= _SIMILAR_TITLE_THRESHOLD:
+                        union(first.record_id, second.record_id)
 
         members_by_root: dict[UUID, list[UUID]] = {}
         for publication_id in sorted(publication_ids):
@@ -120,12 +218,22 @@ class DuplicateGroupBuilder:
                 if len(publication_ids) >= 2
             )
         ):
+            member_publications = [
+                publication
+                for publication in publication_list
+                if publication.record_id in set(members)
+            ]
+            match_type, match_reason = _group_evidence(
+                member_publications, keys_by_publication
+            )
             groups.append(
                 DuplicateGroup(
                     group_id=_group_id(members),
                     publication_ids=members,
                     created_at=timestamp,
                     updated_at=timestamp,
+                    match_type=match_type,
+                    match_reason=match_reason,
                 )
             )
         return groups

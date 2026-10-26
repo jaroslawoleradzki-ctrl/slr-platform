@@ -74,7 +74,7 @@ class ScreeningInputService:
             publications = self._publications.get_all_publications(project_id)
         else:
             publications = self._publications.get_publications(project_id)
-        groups = self._builder.build(publications)
+        groups = self._builder.build(publications, include_title_candidates=True)
         decisions = self._decisions.list_decisions_for_project(project_id)
         unresolved = [group for group in groups if str(group.group_id) not in decisions]
         if unresolved:

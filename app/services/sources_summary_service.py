@@ -14,6 +14,7 @@ from app.repositories.import_history_repository import (
 )
 from app.repositories.import_source_record_repository import (
     ImportSourceRecordRepository,
+    SqliteImportSourceRecordRepository,
     default_import_source_record_repository,
 )
 from app.repositories.project_publication_repository import (
@@ -33,7 +34,14 @@ class SourcesSummaryService:
     ) -> None:
         self._pub_repo = publication_repository or default_project_publication_repository()
         self._history_repo = import_history_repository or default_import_history_repository()
-        self._source_repo = source_record_repository or default_import_source_record_repository()
+        if source_record_repository is not None:
+            self._source_repo = source_record_repository
+        elif hasattr(self._pub_repo, "_database_path"):
+            self._source_repo = SqliteImportSourceRecordRepository(
+                self._pub_repo._database_path
+            )
+        else:
+            self._source_repo = default_import_source_record_repository()
 
     def get_sources_summary(self, project_id: str) -> SourcesSummaryResponse:
         # 1. Total records in Working Collection directly from publication repository count
@@ -44,23 +52,54 @@ class SourcesSummaryService:
 
         # 3. Transform import history into lightweight DTO list (sorted created_at DESC, import_id DESC)
         import_history_dtos = []
+        approvals = (
+            self._source_repo.list_recovery_approvals(project_id)
+            if hasattr(self._source_repo, "list_recovery_approvals")
+            else []
+        )
+        approvals_by_source = {item.source_record_id: item for item in approvals}
         for rec in sorted(raw_history, key=lambda x: (x.created_at, str(x.import_id)), reverse=True):
             source_records = self._source_repo.list_source_records_for_import(project_id, rec.import_id)
-            skip_records = [
-                r for r in self._source_repo.list_skip_audit(project_id) if r.import_id == rec.import_id
+            skip_records = self._source_repo.list_skip_audit_for_import(project_id, rec.import_id)
+            repeated_source_count = sum(
+                1 for item in skip_records if item.match_type == "repeated_occurrence"
+            )
+            exact_doi_match_count = sum(
+                1 for item in skip_records if item.match_type == "exact_doi"
+            )
+            title_candidate_count = sum(
+                1
+                for item in source_records
+                if item.duplicate_match_type
+                in {"title_candidate", "identical_title", "conflicting_identifiers"}
+            )
+            similar_title_count = sum(
+                1 for item in source_records if item.duplicate_match_type == "similar_title"
+            )
+            invalid_doi_count = sum(
+                1 for item in source_records if item.doi_status == "invalid"
+            )
+            skipped_canonical_count = len(skip_records)
+            source_record_count = len(source_records) + repeated_source_count
+            audit_available = bool(source_records or skip_records)
+            import_approvals = [
+                approvals_by_source[item.source_record_id]
+                for item in source_records
+                if item.source_record_id in approvals_by_source
             ]
-            source_record_count = len(source_records) if source_records else None
-            exact_doi_match_count = (
-                sum(1 for r in skip_records if r.match_type == "exact_doi") if skip_records else None
-            )
-            repeated_source_count = (
-                sum(1 for r in source_records if r.recovery_status == "repeated") if source_records else None
-            )
-            title_candidate_count = (
-                sum(1 for r in source_records if r.duplicate_match_type == "title_candidate")
-                if source_records
-                else None
-            )
+            executed = [
+                item for item in import_approvals if item.recovery_executed_at is not None
+            ]
+            if not audit_available or not source_records:
+                recovery_status = None if not source_records else "not_started"
+            elif executed and len(executed) == len(import_approvals):
+                recovery_status = "recovered"
+            elif executed:
+                recovery_status = "partially_recovered"
+            elif import_approvals:
+                recovery_status = "approved_pending_execution"
+            else:
+                recovery_status = "not_started"
             import_history_dtos.append(
                 ImportHistoryItemDTO(
                     import_id=rec.import_id,
@@ -74,11 +113,17 @@ class SourcesSummaryService:
                     warnings=rec.warnings,
                     created_at=rec.created_at,
                     source_record_count=source_record_count,
+                    canonical_publication_count=rec.records_count,
                     exact_doi_match_count=exact_doi_match_count,
                     repeated_source_count=repeated_source_count,
                     title_candidate_count=title_candidate_count,
-                    skip_audit_available=bool(skip_records),
-                    recovery_status="not_started" if source_records else None,
+                    similar_title_candidate_count=similar_title_count,
+                    skipped_canonical_count=skipped_canonical_count,
+                    invalid_doi_count=invalid_doi_count,
+                    validation_error_count=1 if rec.status == "failed" else 0,
+                    skip_audit_available=audit_available,
+                    audit_available=audit_available,
+                    recovery_status=recovery_status,
                 )
             )
 
