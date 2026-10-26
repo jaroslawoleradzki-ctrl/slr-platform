@@ -203,6 +203,53 @@ def test_doi_url_prefix_matches_canonical_doi(environment) -> None:
     _assert_all_canonical_links_exist(source, pub)
 
 
+def test_provider_import_persists_source_provenance(environment) -> None:
+    _, pub, history, source, db = environment
+    from app.api.dto.search_strategy import SearchResultRecordResponse
+    from app.repositories.normalization_execution_repository import (
+        SqliteNormalizationExecutionRepository,
+    )
+    from app.repositories.transaction_manager import SqliteTransactionManager
+    from app.services.project_import_service import ProjectImportService
+
+    service = ProjectImportService(
+        publication_repository=pub,
+        import_history_repository=history,
+        normalization_repository=SqliteNormalizationExecutionRepository(db),
+        transaction_manager=SqliteTransactionManager(db),
+        source_record_repository=source,
+    )
+    record = SearchResultRecordResponse(
+        id="00000000-0000-0000-0000-000000000911",
+        title="Provider Provenance Record",
+        authors=["Ada Author"],
+        year=2024,
+        provider="openalex",
+        source_id="https://openalex.org/W911",
+        doi="10.1000/provider",
+    )
+    first = service.import_provider_results_group(
+        "p1", "openalex", [record], "provider provenance", 1
+    )
+    assert first.imported_count == 1
+    records = source.list_source_records("p1")
+    assert len(records) == 1
+    assert records[0].import_format == "provider:openalex"
+    assert records[0].provenance.get("source") == "openalex"
+    assert records[0].canonical_publication_id is not None
+
+    second = service.import_provider_results_group(
+        "p1", "openalex", [record], "provider provenance", 1
+    )
+    assert second.imported_count == 0
+    assert len(source.list_source_records("p1")) == 1
+    assert any(
+        item.match_type == "repeated_occurrence"
+        for item in source.list_skip_audit("p1")
+    )
+    assert len(pub.get_publications("p1")) == 1
+
+
 def test_raw_fingerprint_is_stable_across_record_order() -> None:
     one = {"TI": ["A"], "PY": ["2020"]}
     two = {"TI": ["B"], "PY": ["2021"]}

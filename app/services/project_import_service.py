@@ -187,6 +187,15 @@ class ProjectImportService:
                     project_id, publications
                 )
 
+        self._persist_provider_source_records(
+            conn,
+            project_id,
+            provider_name,
+            import_id,
+            publications,
+            group_result,
+        )
+
         history_record = ImportHistoryRecord(
             import_id=import_id,
             project_id=project_id,
@@ -215,6 +224,162 @@ class ProjectImportService:
                 self._norm_repo.delete_for_project(project_id)
 
         return group_result
+
+    def _persist_provider_source_records(
+        self,
+        conn: sqlite3.Connection,
+        project_id: str,
+        provider_name: str,
+        import_id: UUID,
+        publications: list[Publication],
+        group_result: PublicationImportResult,
+    ) -> None:
+        inserted_ids = (
+            {str(record_id) for record_id in group_result.inserted_record_ids}
+            if group_result.inserted_record_ids is not None
+            else set()
+        )
+        try:
+            existing = self._pub_repo.get_publications(project_id, connection=conn)
+        except TypeError:
+            existing = self._pub_repo.get_publications(project_id)
+        by_source_key: dict[tuple[str, str], Publication] = {}
+        by_doi: dict[str, Publication] = {}
+        for publication in [*existing, *[p for p in publications if str(p.record_id) in inserted_ids]]:
+            if publication.provenance:
+                provenance = publication.provenance[0]
+                by_source_key[
+                    (
+                        provenance.source.strip().casefold(),
+                        provenance.source_record_id.strip(),
+                    )
+                ] = publication
+            for identifier in publication.identifiers:
+                if identifier.type is IdentifierType.DOI:
+                    valid_doi = normalize_doi_strict(identifier.value)
+                    if valid_doi:
+                        by_doi.setdefault(valid_doi, publication)
+        ordinals: dict[str, int] = {}
+        filename = f"provider:{provider_name}"
+        for index, publication in enumerate(publications, 1):
+            fingerprint = fingerprint_publication(publication)
+            ordinal = ordinals.get(fingerprint, 0) + 1
+            ordinals[fingerprint] = ordinal
+            source_record_id = source_occurrence_id(
+                project_id=project_id,
+                source_label=provider_name,
+                filename=filename,
+                record_fingerprint=fingerprint,
+                ordinal=ordinal,
+            )
+            existing_source = self._source_repo.find_source_record_by_id(
+                project_id, source_record_id
+            )
+            valid_doi, original_doi, doi_status = _doi_evidence(publication)
+            provenance = publication.provenance[0] if publication.provenance else None
+            key = (
+                provenance.source.strip().casefold(),
+                provenance.source_record_id.strip(),
+            ) if provenance else ("", "")
+            canonical = (
+                str(publication.record_id)
+                if str(publication.record_id) in inserted_ids
+                else str(by_doi[valid_doi].record_id)
+                if valid_doi and valid_doi in by_doi
+                else str(by_source_key[key].record_id)
+                if key in by_source_key
+                else None
+            )
+            if existing_source is not None:
+                self._source_repo.create_skip_audit(
+                    ImportSkipAuditRecord(
+                        skip_audit_id=str(uuid4()),
+                        project_id=project_id,
+                        import_id=import_id,
+                        source_record_id=source_record_id,
+                        source_filename=None,
+                        source_file_hash=None,
+                        record_fingerprint=fingerprint,
+                        import_format=f"provider:{provider_name}",
+                        source_record_index=index,
+                        source_title=publication.title,
+                        source_doi=original_doi,
+                        matched_publication_id=existing_source.canonical_publication_id,
+                        match_type="repeated_occurrence",
+                        match_reason="Provider source occurrence was already imported",
+                        proposed_action="no_op",
+                        review_required=False,
+                        recovery_status="not_needed",
+                    ),
+                    connection=conn,
+                )
+                continue
+            matched = canonical is None or str(publication.record_id) not in inserted_ids
+            match_type = None
+            match_reason = None
+            if matched and valid_doi and valid_doi in by_doi:
+                match_type = "exact_doi"
+                match_reason = "Normalized DOI equals an existing publication"
+            elif matched:
+                match_type = "provider_key_duplicate"
+                match_reason = "Provider source record already exists in the project"
+            recovery_status = "imported" if not matched else "linked"
+            self._source_repo.create_source_record(
+                ImportSourceRecord(
+                    source_record_id=source_record_id,
+                    project_id=project_id,
+                    import_id=import_id,
+                    source_filename=None,
+                    source_file_hash=None,
+                    record_fingerprint=fingerprint,
+                    import_format=f"provider:{provider_name}",
+                    source_record_index=index,
+                    title=publication.title,
+                    publication_year=publication.publication_year,
+                    original_doi=original_doi,
+                    normalized_doi=valid_doi,
+                    doi_status=doi_status,
+                    authors=tuple(a.display_name for a in publication.authors),
+                    document_type=(
+                        publication.document_type.value
+                        if publication.document_type
+                        else None
+                    ),
+                    provenance=(
+                        provenance.model_dump(mode="json")
+                        if provenance is not None
+                        else {}
+                    ),
+                    canonical_publication_id=canonical,
+                    duplicate_match_type=match_type,
+                    duplicate_match_reason=match_reason,
+                    recovery_status=recovery_status,
+                ),
+                connection=conn,
+            )
+            if matched:
+                self._source_repo.create_skip_audit(
+                    ImportSkipAuditRecord(
+                        skip_audit_id=str(uuid4()),
+                        project_id=project_id,
+                        import_id=import_id,
+                        source_record_id=source_record_id,
+                        source_filename=None,
+                        source_file_hash=None,
+                        record_fingerprint=fingerprint,
+                        import_format=f"provider:{provider_name}",
+                        source_record_index=index,
+                        source_title=publication.title,
+                        source_doi=original_doi,
+                        matched_publication_id=canonical,
+                        match_type=match_type or "provider_key_duplicate",
+                        match_reason=match_reason or "Provider source key duplicate",
+                        proposed_action="link_to_existing_canonical",
+                        review_required=False,
+                        recovery_status="not_needed",
+                    ),
+                    connection=conn,
+                )
 
     def import_bibliographic_publications(
         self,

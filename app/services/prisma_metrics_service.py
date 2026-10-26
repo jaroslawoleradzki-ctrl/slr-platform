@@ -177,9 +177,26 @@ class PrismaMetricsService:
             if record.status not in _SUCCESS_STATUSES:
                 continue
             if record.source_type == "provider":
-                identified_providers += record.records_count
                 provider_key = record.provider or "unknown"
-                provider_breakdown[provider_key] = provider_breakdown.get(provider_key, 0) + record.records_count
+                import_count = record.records_count
+                if self._source_records is not None:
+                    source_records = self._source_records.list_source_records_for_import(
+                        project_id, record.import_id
+                    )
+                    skip_records = self._source_records.list_skip_audit_for_import(
+                        project_id, record.import_id
+                    )
+                    repeated = sum(
+                        1
+                        for item in skip_records
+                        if item.match_type == "repeated_occurrence"
+                    )
+                    if source_records or skip_records:
+                        import_count = len(source_records) + repeated
+                identified_providers += import_count
+                provider_breakdown[provider_key] = (
+                    provider_breakdown.get(provider_key, 0) + import_count
+                )
             elif record.source_type == "file":
                 source_key = record.source_database or "unknown"
                 import_count = record.records_count
