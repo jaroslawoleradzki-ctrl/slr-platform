@@ -907,7 +907,18 @@ class SqliteProjectPublicationRepository:
         new_publications: list[Publication] = []
         for publication in publications:
             key = self._source_key(publication)
-            if key in existing_keys:
+            has_doi = any(identifier.type is IdentifierType.DOI for identifier in publication.identifiers)
+            provenance = publication.provenance[0] if publication.provenance else None
+            title_only_ris = (
+                provenance is not None
+                and provenance.source.strip().casefold() == "ris"
+                and not has_doi
+                and provenance.source_record_id.strip() == publication.title.strip()
+            )
+            # Conservative import rule: exact DOI-keyed and provider-keyed source
+            # records are still skipped; title-only RIS records are preserved for
+            # manual review instead of being silently discarded.
+            if key in existing_keys and not title_only_ris:
                 continue
             existing_keys.add(key)
             new_publications.append(publication)
