@@ -61,7 +61,7 @@ jobs:
           # Keep every derived artifact outside the checkout and outside any
           # FINNARO directory. runner.temp is created and cleaned per job.
           SCRATCH="$RUNNER_TEMP/slr-ci-$GITHUB_RUN_ID-backend"
-          mkdir -p "$SCRATCH/tmp"
+          mkdir -p "$SCRATCH"
           {
             echo "SCRATCH=$SCRATCH"
             echo "UV_PROJECT_ENVIRONMENT=$SCRATCH/venv"
@@ -82,9 +82,19 @@ jobs:
       - name: Tests (disposable SQLite database)
         run: |
           set -euo pipefail
-          SCRATCH="$RUNNER_TEMP/slr-ci-$GITHUB_RUN_ID-backend"
-          export SLR_DATABASE_PATH="$SCRATCH/slr-platform-ci.db"
-          export TMPDIR="$SCRATCH/tmp"
+          # This suite is SQLite-heavy. Keep test files on tmpfs when available:
+          # the same suite takes ~13 min on ext4 due to fsync overhead versus
+          # ~1.5 min on tmpfs. The directory is unique per run and disposable.
+          TMP_ROOT=/dev/shm
+          if [ ! -d "$TMP_ROOT" ] || [ ! -w "$TMP_ROOT" ]; then
+            echo "::warning::/dev/shm unavailable; falling back to runner temp"
+            TMP_ROOT="$RUNNER_TEMP"
+          fi
+          TEST_ROOT="$TMP_ROOT/slr-platform-ci-$GITHUB_RUN_ID-$GITHUB_JOB"
+          rm -rf "$TEST_ROOT"
+          mkdir -p "$TEST_ROOT"
+          export TMPDIR="$TEST_ROOT"
+          export SLR_DATABASE_PATH="$TEST_ROOT/slr-platform-ci.db"
           uv run --frozen --no-sync pytest -q -p no:cacheprovider
           # The repository's working database must never be touched by CI.
           if [ -d data ] && find data -maxdepth 1 -name '*.db' -print -quit | grep -q .; then
@@ -92,6 +102,9 @@ jobs:
             find data -maxdepth 1 -name '*.db' -print
             exit 1
           fi
+      - name: Remove isolated test directory
+        if: always()
+        run: rm -rf "/dev/shm/slr-platform-ci-${GITHUB_RUN_ID}-${GITHUB_JOB}"
 
   frontend:
     name: Frontend (Node 22)

@@ -128,9 +128,12 @@ lowercase `linux` matches the runner's built-in `Linux` label.
 - uv cache and downloaded Python interpreters live in the same per-run scratch
   directory.
 - npm uses a per-run `npm_config_cache`; setup-node caching is disabled.
-- Tests receive `SLR_DATABASE_PATH` and `TMPDIR` inside the per-run scratch
-  directory, and the repository's `data/*.db` files are asserted absent after
-  the run. No production database or FINNARO resource is reachable from CI.
+- Tests receive `SLR_DATABASE_PATH` and `TMPDIR` inside a unique per-run
+  directory (`/dev/shm/slr-platform-ci-<run_id>-<job>` on AI-node, with a
+  runner-temp fallback). The SQLite-heavy suite is roughly 9x faster on tmpfs
+  than on ext4; the directory is removed after the job. The repository's
+  `data/*.db` files are asserted absent after the run. No production database
+  or FINNARO resource is reachable from CI.
 - Every job runs in the runner's isolated work folder
   `/home/cloud/actions-runner-slr-platform/_work/slr-platform/slr-platform`.
 
