@@ -33,7 +33,7 @@ interface DuplicateGroupCardPreviewProps {
   index: number;
   projectId?: string;
   onDecisionUpdated?: (groupId: string, status: DuplicateGroupStatus, rationale?: string | null) => void;
-  onMerged?: (groupId: string, result: ApiDuplicateGroupMergeResponse) => void;
+  onMerged?: (groupId: string, result?: ApiDuplicateGroupMergeResponse | null) => void;
 }
 
 type ComparisonFieldState = 'MATCH' | 'DIFFERENT' | 'PARTIAL' | 'UNAVAILABLE';
@@ -161,6 +161,7 @@ export const DuplicateGroupCardPreview: React.FC<DuplicateGroupCardPreviewProps>
   const [saved, setSaved] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [autoMergeFailed, setAutoMergeFailed] = useState<boolean>(initialLifecycleStatus === 'APPROVED');
+  const [lastAttemptedDecision, setLastAttemptedDecision] = useState<DuplicateDecisionType | null>(null);
 
   useEffect(() => {
     const status = ('status' in group && group.status) ? group.status : 'PENDING';
@@ -189,40 +190,43 @@ export const DuplicateGroupCardPreview: React.FC<DuplicateGroupCardPreviewProps>
   }));
 
   const handleDecision = async (decision: DuplicateDecisionType) => {
+    setLastAttemptedDecision(decision);
     setSaving(true);
     setError(null);
     setSaved(false);
     setAutoMergeFailed(false);
     try {
-      const res = await projectApiService.postDuplicateGroupDecision(
-        projectId,
-        groupId,
-        decision,
-        rationale
-      );
-      setRationale(res.rationale || '');
-      setSaved(true);
-      const status: DuplicateGroupStatus = res.decision === 'APPROVE' ? 'APPROVED' : 'REJECTED';
-      setLifecycleStatus(status);
-      if (onDecisionUpdated) {
-        onDecisionUpdated(groupId, status, res.rationale);
-      }
-
       if (decision === 'APPROVE') {
-        try {
-          const mergeResult = await projectApiService.mergeDuplicateGroup(projectId, groupId);
-          setMergeResult(mergeResult);
-          setLifecycleStatus('MERGED');
-          onMerged?.(groupId, mergeResult);
-        } catch (mergeErr: unknown) {
-          setAutoMergeFailed(true);
-          setError(mergeErr instanceof Error ? mergeErr.message : 'Błąd podczas automatycznego scalania duplikatów.');
+        const mergeResult = await projectApiService.mergeDuplicateGroup(projectId, groupId, rationale);
+        setMergeResult(mergeResult);
+        setLifecycleStatus('MERGED');
+        setSaved(true);
+        if (onDecisionUpdated) {
+          onDecisionUpdated(groupId, 'MERGED', rationale);
+        }
+        onMerged?.(groupId, mergeResult);
+      } else {
+        const res = await projectApiService.postDuplicateGroupDecision(
+          projectId,
+          groupId,
+          decision,
+          rationale
+        );
+        setRationale(res.rationale || '');
+        setSaved(true);
+        const status: DuplicateGroupStatus = 'REJECTED';
+        setLifecycleStatus(status);
+        if (onDecisionUpdated) {
+          onDecisionUpdated(groupId, status, res.rationale);
         }
       }
 
       setTimeout(() => setSaved(false), 2500);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Błąd podczas zapisywania decyzji.';
+      if (decision === 'APPROVE') {
+        setAutoMergeFailed(true);
+      }
       setError(msg);
     } finally {
       setSaving(false);
@@ -723,7 +727,7 @@ export const DuplicateGroupCardPreview: React.FC<DuplicateGroupCardPreviewProps>
                   </>
                 )}
 
-                {(lifecycleStatus === 'APPROVED' && !mergeResult) && (
+                {((lifecycleStatus === 'APPROVED' && !mergeResult) || (autoMergeFailed && lifecycleStatus === 'PENDING')) && (
                   <button
                     type="button"
                     onClick={() => void handleRetryMerge()}
@@ -773,7 +777,7 @@ export const DuplicateGroupCardPreview: React.FC<DuplicateGroupCardPreviewProps>
                 <span>Błąd: {error}</span>
                 {(lifecycleStatus === 'PENDING' || lifecycleStatus === 'REJECTED') && (
                   <button
-                    onClick={() => handleDecision(decisionStatus === 'REJECT' ? 'REJECT' : 'APPROVE')}
+                    onClick={() => handleDecision(lastAttemptedDecision ?? (decisionStatus === 'REJECT' ? 'REJECT' : 'APPROVE'))}
                     style={{
                       display: 'inline-flex',
                       alignItems: 'center',

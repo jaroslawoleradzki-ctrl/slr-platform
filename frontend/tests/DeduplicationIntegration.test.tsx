@@ -110,26 +110,9 @@ describe('Deduplication Page Full Integration Workflow & Regression Suite', () =
     vi.spyOn(projectApiService, 'getNormalization').mockResolvedValue(null);
     vi.spyOn(projectApiService, 'getSearchStrategy').mockResolvedValue(null);
 
-    const postDecisionSpy = vi
-      .spyOn(projectApiService, 'postDuplicateGroupDecision')
-      .mockImplementationOnce(async () => {
-        await new Promise(r => setTimeout(r, 10));
-        return {
-          project_id: 'lean_energy',
-          group_id: 'grp-flow-999',
-          decision: 'APPROVE',
-          rationale: 'Zatwierdzono na podstawie zgodności abstraktów',
-        };
-      })
-      .mockImplementationOnce(async () => {
-        await new Promise(r => setTimeout(r, 10));
-        return {
-          project_id: 'lean_energy',
-          group_id: 'grp-flow-999',
-          decision: 'REJECT',
-          rationale: 'Zmieniono decyzję po dodatkowej weryfikacji autorów',
-        };
-      });
+    // postDuplicateGroupDecision is no longer called for APPROVE (transactional merge).
+    // APPROVE is now transactional on the backend; the frontend no longer issues
+    // a separate merge request for a new approval.
     const mergeSpy = vi.spyOn(projectApiService, 'mergeDuplicateGroup').mockImplementation(async () => {
       await new Promise(r => setTimeout(r, 10));
       return {
@@ -180,15 +163,8 @@ describe('Deduplication Page Full Integration Workflow & Regression Suite', () =
     const approveBtn = screen.getByRole('button', { name: /Zatwierdź/i });
     fireEvent.click(approveBtn);
 
-    expect(postDecisionSpy).toHaveBeenNthCalledWith(
-      1,
-      'lean_energy',
-      'grp-flow-999',
-      'APPROVE',
-      'Zatwierdzono na podstawie zgodności abstraktów'
-    );
     expect(await screen.findByText(/Merged/i)).toBeInTheDocument();
-    expect(mergeSpy).toHaveBeenCalledWith('lean_energy', 'grp-flow-999');
+    expect(mergeSpy).toHaveBeenCalledWith('lean_energy', 'grp-flow-999', 'Zatwierdzono na podstawie zgodności abstraktów');
 
     // After auto-merge, group is MERGED and decision cannot be changed (new one-click UX)
     expect(screen.queryByRole('button', { name: /Odrzuć/i })).not.toBeInTheDocument();
@@ -440,11 +416,13 @@ describe('Deduplication Page Full Integration Workflow & Regression Suite', () =
     };
 
     vi.spyOn(projectApiService, 'getDuplicateGroups').mockResolvedValue(mockResponse);
-    vi.spyOn(projectApiService, 'postDuplicateGroupDecision').mockResolvedValue({
+    vi.spyOn(projectApiService, 'mergeDuplicateGroup').mockResolvedValue({
       project_id: 'lean_energy',
       group_id: 'grp-summary-1',
-      decision: 'APPROVE',
-      rationale: 'Approved via GUI test',
+      status: 'MERGED',
+      canonical_record_id: 'r1',
+      merged_publication_ids: ['r1', 'r2'],
+      merged_at: '2026-08-21T10:00:00Z',
     });
 
     render(

@@ -14,7 +14,9 @@ export const DeduplicationSummaryCard: React.FC<DeduplicationSummaryCardProps> =
   if (groups !== undefined) {
     const totalGroups = groups.length;
     const pendingGroups = groups.filter((g) => g.status === 'PENDING').length;
-    const approvedGroups = groups.filter((g) => g.status === 'APPROVED').length;
+    // APPROVED includes groups whose technical merge completed, including
+    // records historically persisted with the MERGED lifecycle status.
+    const approvedGroups = groups.filter((g) => g.status === 'APPROVED' || g.status === 'MERGED').length;
     const rejectedGroups = groups.filter((g) => g.status === 'REJECTED').length;
 
     return (

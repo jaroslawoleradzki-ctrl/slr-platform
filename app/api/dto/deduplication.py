@@ -108,6 +108,17 @@ class DuplicateGroupDecisionResponse(BaseModel):
     rationale: str | None = None
 
 
+class DuplicateGroupMergeRequest(BaseModel):
+    """Optional payload for the canonical merge endpoint.
+
+    The merge always records an ``APPROVE`` reviewer decision; ``rationale`` is
+    optional reviewer context for that decision.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    rationale: str | None = Field(default=None, max_length=1000)
+
+
 class DuplicateGroupMergeResponse(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
     project_id: str
