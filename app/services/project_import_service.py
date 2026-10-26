@@ -93,12 +93,16 @@ class ProjectImportService:
         self._snapshot_repo = snapshot_repository
         if source_record_repository is not None:
             self._source_repo = source_record_repository
-        elif hasattr(self._pub_repo, "_database_path"):
-            self._source_repo = SqliteImportSourceRecordRepository(
-                self._pub_repo._database_path
-            )
         else:
-            self._source_repo = default_import_source_record_repository()
+            database_path = (
+                getattr(self._pub_repo, "_database_path", None)
+                or getattr(self._history_repo, "_database_path", None)
+                or getattr(self._tx_manager, "_database_path", None)
+            )
+            if database_path is not None:
+                self._source_repo = SqliteImportSourceRecordRepository(database_path)
+            else:
+                self._source_repo = default_import_source_record_repository()
 
     def import_provider_results_group(
         self,

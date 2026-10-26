@@ -1,13 +1,12 @@
 from collections.abc import Iterable
 from datetime import datetime, timezone
-from difflib import SequenceMatcher
 from uuid import NAMESPACE_URL, UUID, uuid5
 
 from app.domain.deduplication import DuplicateGroup
 from app.domain.identifiers import Identifier, IdentifierType
 from app.domain.publication import Publication
 from app.normalization.doi import normalize_doi
-from app.normalization.title import normalize_title
+from app.normalization.title import normalize_title, titles_are_similar
 
 _FILE_IMPORT_TRANSFORMATIONS = {"ris_to_publication", "bibtex_to_publication"}
 _FILE_IMPORT_SOURCES = {
@@ -67,8 +66,10 @@ def _normalized_title(publication: Publication) -> str | None:
     return normalize_title(publication.title)
 
 
-def _similarity(first: str, second: str) -> float:
-    return SequenceMatcher(None, first, second).ratio()
+def _similar_title(first: str, second: str) -> bool:
+    return titles_are_similar(
+        first, second, threshold=_SIMILAR_TITLE_THRESHOLD
+    )
 
 
 def _group_evidence(
@@ -107,7 +108,7 @@ def _group_evidence(
         return "identical_title", "Identical normalized title without DOI"
     for index, first in enumerate(titles):
         for second in titles[index + 1 :]:
-            if _similarity(first, second) >= _SIMILAR_TITLE_THRESHOLD:
+            if _similar_title(first, second):
                 return (
                     "similar_title",
                     "Similar normalized title; insufficient bibliographic evidence",
@@ -201,7 +202,7 @@ class DuplicateGroupBuilder:
                         continue
                     if abs(len(first_title) - len(second_title)) > 25:
                         continue
-                    if _similarity(first_title, second_title) >= _SIMILAR_TITLE_THRESHOLD:
+                    if _similar_title(first_title, second_title):
                         union(first.record_id, second.record_id)
 
         members_by_root: dict[UUID, list[UUID]] = {}

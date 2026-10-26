@@ -21,7 +21,7 @@ from app.domain.provenance import ProvenanceEntry
 from app.domain.publication import Publication
 from app.normalization import normalize_publication
 from app.normalization.doi import normalize_doi_strict
-from app.normalization.title import normalize_title
+from app.normalization.title import normalize_title, titles_are_similar
 from app.providers.import_file.ris.mapper import map_ris_record
 from app.providers.import_file.ris.parser import parse_ris
 from app.repositories.import_source_record_repository import (
@@ -227,16 +227,14 @@ def _similar_existing(
     *,
     exclude: set[str],
 ) -> tuple[str, str] | None:
-    from difflib import SequenceMatcher
-
     if not title:
         return None
     for candidate, record_id in title_list:
         if record_id in exclude or candidate == title:
             continue
-        if abs(len(candidate) - len(title)) > 25:
-            continue
-        if SequenceMatcher(None, title, candidate).ratio() >= SIMILAR_TITLE_THRESHOLD:
+        if titles_are_similar(
+            title, candidate, threshold=SIMILAR_TITLE_THRESHOLD
+        ):
             return candidate, record_id
     return None
 
