@@ -237,7 +237,7 @@ class ProjectImportService:
         inserted_ids = (
             {str(record_id) for record_id in group_result.inserted_record_ids}
             if group_result.inserted_record_ids is not None
-            else set()
+            else {str(publication.record_id) for publication in publications}
         )
         try:
             existing = self._pub_repo.get_publications(project_id, connection=conn)

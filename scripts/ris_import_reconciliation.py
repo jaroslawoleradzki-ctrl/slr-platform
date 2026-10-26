@@ -106,6 +106,13 @@ def _read_existing(db_path: str | Path, project_id: str) -> dict[str, Any]:
                WHERE project_id=? AND superseded_by IS NULL""",
             (project_id,),
         ).fetchall()
+        all_canonical_ids = {
+            str(row[0])
+            for row in con.execute(
+                "SELECT record_id FROM project_publications WHERE project_id=?",
+                (project_id,),
+            ).fetchall()
+        }
         try:
             source_rows = con.execute(
                 """SELECT source_record_id, source_filename, source_file_hash,
@@ -202,6 +209,7 @@ def _read_existing(db_path: str | Path, project_id: str) -> dict[str, Any]:
         "title_list": title_list,
         "source_by_id": source_by_id,
         "skip_by_id": skip_by_id,
+        "all_canonical_ids": all_canonical_ids,
     }
 
 
@@ -356,8 +364,18 @@ def build_reconciliation_report(
             if skip_state is None:
                 skip_state = existing["skip_by_id"].get(f"{file_hash}:{index}")
 
-            if source_state is not None:
-                matched_canonical = source_state.get("canonical_publication_id")
+            source_canonical = (
+                source_state.get("canonical_publication_id")
+                if source_state is not None
+                else None
+            )
+            source_is_valid = (
+                source_state is not None
+                and source_canonical is not None
+                and str(source_canonical) in existing["all_canonical_ids"]
+            )
+            if source_is_valid:
+                matched_canonical = str(source_canonical)
                 historical_status = "imported"
                 historical_evidence = "source_record"
                 classification = "confirmed_duplicate_verified"
