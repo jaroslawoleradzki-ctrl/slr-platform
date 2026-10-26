@@ -216,6 +216,11 @@ def test_recovery_requires_confirmation_backup_and_manifest(environment) -> None
         )
 
 
+def test_recovery_without_persisted_approval_is_rejected(environment) -> None:
+    with pytest.raises(ValueError, match="approved recovery"):
+        _execute(environment)
+
+
 def test_recovery_writes_valid_readable_publication_and_audit(environment) -> None:
     distinct = [
         row for row in environment["report"] if row["classification"] == "confirmed_distinct_publication"
