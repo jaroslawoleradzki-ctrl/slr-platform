@@ -19,16 +19,16 @@ from app.repositories.import_history_repository import (
     SqliteImportHistoryRepository,
     default_import_history_repository,
 )
-from app.repositories.normalization_execution_repository import (
-    NormalizationExecutionRepository,
-    SqliteNormalizationExecutionRepository,
-    default_normalization_execution_repository,
-)
 from app.repositories.import_source_record_repository import (
     ImportSkipAuditRecord,
     ImportSourceRecord,
     ImportSourceRecordRepository,
     default_import_source_record_repository,
+)
+from app.repositories.normalization_execution_repository import (
+    NormalizationExecutionRepository,
+    SqliteNormalizationExecutionRepository,
+    default_normalization_execution_repository,
 )
 from app.repositories.project_publication_repository import (
     ProjectPublicationRepository,
@@ -184,6 +184,7 @@ class ProjectImportService:
         publications: list[Publication],
         source_database: ManualSourceDatabase | None = None,
         source_label: str | None = None,
+        source_file_hash: str | None = None,
         *,
         connection: sqlite3.Connection | None = None,
     ) -> tuple[PublicationImportResult, ImportHistoryRecord]:
@@ -196,6 +197,7 @@ class ProjectImportService:
                 publications,
                 source_database,
                 source_label,
+                source_file_hash,
             )
 
         with self._tx_manager.transaction() as conn:
@@ -207,6 +209,7 @@ class ProjectImportService:
                 publications,
                 source_database,
                 source_label,
+                source_file_hash,
             )
 
     def _import_file_with_conn(
@@ -218,6 +221,7 @@ class ProjectImportService:
         publications: list[Publication],
         source_database: ManualSourceDatabase | None = None,
         source_label: str | None = None,
+        source_file_hash: str | None = None,
     ) -> tuple[PublicationImportResult, ImportHistoryRecord]:
         import_id = uuid4()
         try:
@@ -232,6 +236,9 @@ class ProjectImportService:
 
         new_publications: list[Publication] = []
         skipped_count = 0
+        repeated_count = 0
+        doi_duplicate_count = 0
+        title_candidate_count = 0
         for index, publication in enumerate(publications):
             doi = None
             for ident in publication.identifiers:
@@ -240,18 +247,18 @@ class ProjectImportService:
                     break
             normalized_doi = doi.casefold() if doi else None
 
-            fingerprint_payload = "|".join(
-                [
-                    publication.title.strip().casefold(),
-                    ",".join(a.display_name for a in publication.authors),
-                    str(publication.publication_year or ""),
-                    normalized_doi or "",
-                ]
-            )
-            source_record_id = hashlib.sha256(fingerprint_payload.encode("utf-8")).hexdigest()
+            file_hash = source_file_hash
+            if file_hash is None:
+                fallback_payload = "|".join(
+                    f"{p.title.strip().casefold()}::{','.join(a.display_name for a in p.authors)}::{p.publication_year or ''}"
+                    for p in publications
+                )
+                file_hash = hashlib.sha256(f"{filename}|{fallback_payload}".encode("utf-8")).hexdigest()
+            occurrence_payload = f"{project_id}|{file_hash}|{index + 1}"
+            source_record_id = hashlib.sha256(occurrence_payload.encode("utf-8")).hexdigest()
 
-            if self._source_repo.find_source_record_by_id(source_record_id) is not None:
-                skipped_count += 1
+            if self._source_repo.find_source_record_by_id(project_id, source_record_id) is not None:
+                repeated_count += 1
                 continue
 
             matched = existing_by_doi.get(normalized_doi) if normalized_doi else None
@@ -263,7 +270,8 @@ class ProjectImportService:
                         project_id=project_id,
                         import_id=import_id,
                         source_filename=filename,
-                        source_record_index=index,
+                        source_file_hash=file_hash,
+                        source_record_index=index + 1,
                         title=publication.title,
                         publication_year=publication.publication_year,
                         original_doi=doi,
@@ -284,7 +292,8 @@ class ProjectImportService:
                         project_id=project_id,
                         import_id=import_id,
                         source_filename=filename,
-                        source_record_index=index,
+                        source_file_hash=file_hash,
+                        source_record_index=index + 1,
                         source_title=publication.title,
                         source_doi=doi,
                         matched_publication_id=str(matched.record_id),
@@ -296,16 +305,23 @@ class ProjectImportService:
                     connection=conn,
                 )
                 skipped_count += 1
+                doi_duplicate_count += 1
                 continue
 
             new_publications.append(publication)
+            title_match = any(
+                p.title.strip().casefold() == publication.title.strip().casefold() for p in existing_pubs
+            )
+            if title_match and not normalized_doi:
+                title_candidate_count += 1
             self._source_repo.create_source_record(
                 ImportSourceRecord(
                     source_record_id=source_record_id,
                     project_id=project_id,
                     import_id=import_id,
                     source_filename=filename,
-                    source_record_index=index,
+                    source_file_hash=file_hash,
+                    source_record_index=index + 1,
                     title=publication.title,
                     publication_year=publication.publication_year,
                     original_doi=doi,
@@ -314,12 +330,8 @@ class ProjectImportService:
                     document_type=publication.document_type.value if publication.document_type else None,
                     provenance=publication.provenance[0].model_dump(mode="json") if publication.provenance else {},
                     canonical_publication_id=str(publication.record_id),
-                    duplicate_match_type="title_candidate" if any(
-                        p.title.strip().casefold() == publication.title.strip().casefold() for p in existing_pubs
-                    ) else None,
-                    duplicate_match_reason="Same title without DOI requires manual review" if any(
-                        p.title.strip().casefold() == publication.title.strip().casefold() for p in existing_pubs
-                    ) else None,
+                    duplicate_match_type="title_candidate" if title_match and not normalized_doi else None,
+                    duplicate_match_reason="Same title without DOI requires manual review" if title_match and not normalized_doi else None,
                     recovery_status="imported",
                 ),
                 connection=conn,
@@ -344,24 +356,19 @@ class ProjectImportService:
                     project_id, new_publications
                 )
 
-        # Link source records to their inserted canonical publications.
-        for publication in new_publications:
-            doi = None
-            for ident in publication.identifiers:
-                if ident.type is IdentifierType.DOI:
-                    doi = ident.value.strip().casefold()
-                    break
-            pass
-
         warnings: list[str] = []
-        if skipped_count:
-            warnings.append(f"Skipped {skipped_count} exact DOI duplicate record(s) already in the project.")
-        if any(
-            r.duplicate_match_type == "title_candidate"
-            for r in self._source_repo.list_source_records(project_id)
-            if r.import_id == import_id
-        ):
-            warnings.append("Title-only duplicate candidates require manual review.")
+        if doi_duplicate_count:
+            warnings.append(
+                f"Linked {doi_duplicate_count} exact DOI duplicate source record(s) to existing canonical publications."
+            )
+        if repeated_count:
+            warnings.append(
+                f"Skipped {repeated_count} repeated source occurrence(s) from a previously imported file."
+            )
+        if title_candidate_count:
+            warnings.append(
+                f"Imported {title_candidate_count} title-only candidate(s); manual duplicate review is required."
+            )
 
         history_record = ImportHistoryRecord(
             import_id=import_id,

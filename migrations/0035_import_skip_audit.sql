@@ -3,6 +3,7 @@ CREATE TABLE IF NOT EXISTS import_skip_audit (
     project_id TEXT NOT NULL,
     import_id TEXT NOT NULL,
     source_filename TEXT,
+    source_file_hash TEXT,
     source_record_index INTEGER NOT NULL,
     source_title TEXT NOT NULL,
     source_doi TEXT,
@@ -19,6 +20,6 @@ CREATE TABLE IF NOT EXISTS import_skip_audit (
 CREATE INDEX IF NOT EXISTS idx_import_skip_audit_project
     ON import_skip_audit(project_id);
 CREATE INDEX IF NOT EXISTS idx_import_skip_audit_import
-    ON import_skip_audit(import_id);
+    ON import_skip_audit(project_id, import_id);
 CREATE INDEX IF NOT EXISTS idx_import_skip_audit_match
     ON import_skip_audit(project_id, matched_publication_id);

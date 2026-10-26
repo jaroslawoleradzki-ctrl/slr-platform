@@ -34,6 +34,9 @@ from app.repositories.import_history_repository import (
     SqliteImportHistoryRepository,
     default_import_history_repository,
 )
+from app.repositories.import_source_record_repository import (
+    default_import_source_record_repository,
+)
 from app.repositories.normalization_execution_repository import (
     NormalizationExecutionRepository,
     SqliteNormalizationExecutionRepository,
@@ -673,6 +676,9 @@ async def import_bibliographic_file(
         if not raw_content.strip():
             raise ValueError("The uploaded file is empty.")
         content = raw_content.decode("utf-8-sig")
+        import hashlib
+
+        source_file_hash = hashlib.sha256(raw_content).hexdigest()
 
         if suffix == ".ris":
             parsed_ris = parse_ris(content)
@@ -699,6 +705,7 @@ async def import_bibliographic_file(
             publications=publications,
             source_database=source_database,
             source_label=source_label,
+            source_file_hash=source_file_hash,
         )
     except ProjectNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
@@ -786,3 +793,57 @@ def get_sources_summary(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
 
     return service.get_sources_summary(project_id)
+
+
+@router.get("/{project_id}/imports/{import_id}/source-records")
+def list_import_source_records(project_id: str, import_id: str):
+    repo = default_import_source_record_repository()
+    records = repo.list_source_records_for_import(project_id, import_id)
+    return {
+        "project_id": project_id,
+        "import_id": import_id,
+        "items": [
+            {
+                "source_record_id": r.source_record_id,
+                "source_filename": r.source_filename,
+                "source_file_hash": r.source_file_hash,
+                "source_record_index": r.source_record_index,
+                "title": r.title,
+                "publication_year": r.publication_year,
+                "original_doi": r.original_doi,
+                "normalized_doi": r.normalized_doi,
+                "canonical_publication_id": r.canonical_publication_id,
+                "duplicate_match_type": r.duplicate_match_type,
+                "duplicate_match_reason": r.duplicate_match_reason,
+                "recovery_status": r.recovery_status,
+            }
+            for r in records
+        ],
+    }
+
+
+@router.get("/{project_id}/imports/{import_id}/skip-audit")
+def list_import_skip_audit(project_id: str, import_id: str):
+    repo = default_import_source_record_repository()
+    records = [r for r in repo.list_skip_audit(project_id) if str(r.import_id) == import_id]
+    return {
+        "project_id": project_id,
+        "import_id": import_id,
+        "items": [
+            {
+                "skip_audit_id": r.skip_audit_id,
+                "source_filename": r.source_filename,
+                "source_file_hash": r.source_file_hash,
+                "source_record_index": r.source_record_index,
+                "source_title": r.source_title,
+                "source_doi": r.source_doi,
+                "matched_publication_id": r.matched_publication_id,
+                "match_type": r.match_type,
+                "match_reason": r.match_reason,
+                "proposed_action": r.proposed_action,
+                "review_required": r.review_required,
+                "recovery_status": r.recovery_status,
+            }
+            for r in records
+        ],
+    }
