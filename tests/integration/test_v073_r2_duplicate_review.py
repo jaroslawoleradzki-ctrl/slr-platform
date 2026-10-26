@@ -244,6 +244,28 @@ def test_group_changes_are_traceable_and_historical_decision_survives(environmen
     assert any(item["group_id"] == current[0]["group_id"] for item in snapshots)
 
 
+def test_validation_failure_is_visible_in_diagnostics(environment) -> None:
+    client, _, _, _, _, _ = environment
+    invalid = client.post(
+        "/api/v1/projects/p1/imports",
+        files={
+            "file": (
+                "invalid.ris",
+                "TY  - JOUR\nDO  - 10.1000/no-title\nER  - \n",
+                "application/x-research-info-systems",
+            )
+        },
+        data={"source_database": "google_scholar_pop"},
+    )
+    assert invalid.status_code == 422
+    history = client.get("/api/v1/projects/p1/sources-summary").json()["import_history"]
+    failed = [item for item in history if item["filename"] == "invalid.ris"]
+    assert len(failed) == 1
+    assert failed[0]["status"] == "failed"
+    assert failed[0]["validation_error_count"] == 1
+    assert "missing a title" in failed[0]["warnings"][0]
+
+
 def test_source_record_api_exposes_candidate_group(environment) -> None:
     client, _, _, _, _, _ = environment
     _upload(client, "GS01.ris", _ris("API Candidate", 2020))

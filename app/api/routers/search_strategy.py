@@ -30,6 +30,7 @@ from app.providers.import_file.bibtex.parser import parse_bibtex
 from app.providers.import_file.ris.mapper import map_ris_record
 from app.providers.import_file.ris.parser import parse_ris
 from app.repositories.import_history_repository import (
+    ImportHistoryRecord,
     ImportHistoryRepository,
     SqliteImportHistoryRepository,
     default_import_history_repository,
@@ -657,6 +658,41 @@ def import_search_results(
     )
 
 
+def _record_failed_file_import(
+    history_repository: ImportHistoryRepository,
+    *,
+    project_id: str,
+    filename: str | None,
+    file_format: str | None,
+    source_database: ManualSourceDatabase | None,
+    source_label: str | None,
+    error: str,
+) -> None:
+    try:
+        history_repository.create(
+            ImportHistoryRecord(
+                import_id=uuid4(),
+                project_id=project_id,
+                source_type="file",
+                filename=filename,
+                format=file_format,
+                provider=None,
+                query=None,
+                records_count=0,
+                total_available=None,
+                status="failed",
+                warnings=(error,),
+                created_at=datetime.now(timezone.utc),
+                fingerprint=None,
+                source_database=source_database,
+                source_label=source_label,
+            )
+        )
+    except Exception:
+        # A diagnostics write must never hide the original validation error.
+        return
+
+
 @router.post(
     "/{project_id}/imports",
     response_model=BibliographicImportResponse,
@@ -669,6 +705,7 @@ async def import_bibliographic_file(
     source_label: str | None = Form(default=None),
     repository: ProjectPublicationRepository = Depends(get_project_publication_repository),
     import_service: ProjectImportService = Depends(get_project_import_service),
+    history_repository: ImportHistoryRepository = Depends(get_import_history_repository),
 ) -> BibliographicImportResponse:
     """Parse one RIS/BibTeX file and append its publications to a project."""
 
@@ -729,11 +766,30 @@ async def import_bibliographic_file(
     except ProjectNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except UnicodeDecodeError as exc:
+        message = "The uploaded file must be valid UTF-8 text."
+        _record_failed_file_import(
+            history_repository,
+            project_id=project_id,
+            filename=file.filename,
+            file_format="RIS" if suffix == ".ris" else "BibTeX",
+            source_database=source_database,
+            source_label=source_label,
+            error=message,
+        )
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail="The uploaded file must be valid UTF-8 text.",
+            detail=message,
         ) from exc
     except ValueError as exc:
+        _record_failed_file_import(
+            history_repository,
+            project_id=project_id,
+            filename=file.filename,
+            file_format="RIS" if suffix == ".ris" else "BibTeX",
+            source_database=source_database,
+            source_label=source_label,
+            error=str(exc),
+        )
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=str(exc),
