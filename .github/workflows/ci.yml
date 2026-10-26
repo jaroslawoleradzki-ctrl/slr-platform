@@ -48,21 +48,26 @@ jobs:
           test "$(hostname)" = "ai-node"
 
   backend:
-    name: Backend (Python ${{ env.PYTHON_VERSION }})
+    name: Backend (Python 3.12)
     runs-on: [self-hosted, linux, slr-platform]
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     needs: [ci-policy]
     timeout-minutes: 30
-    env:
-      # Keep every derived artifact outside the checkout and outside any FINNARO
-      # directory. runner.temp is created and cleaned up per job by the runner.
-      UV_PROJECT_ENVIRONMENT: ${{ runner.temp }}/slr-ci-${{ github.run_id }}-backend/venv
-      UV_CACHE_DIR: ${{ runner.temp }}/slr-ci-${{ github.run_id }}-backend/uv-cache
-      UV_PYTHON_INSTALL_DIR: ${{ runner.temp }}/slr-ci-${{ github.run_id }}-backend/uv-python
     steps:
       - uses: actions/checkout@v4
       - name: Prepare isolated CI directory
-        run: mkdir -p "$RUNNER_TEMP/slr-ci-$GITHUB_RUN_ID-backend/tmp"
+        run: |
+          set -euo pipefail
+          # Keep every derived artifact outside the checkout and outside any
+          # FINNARO directory. runner.temp is created and cleaned per job.
+          SCRATCH="$RUNNER_TEMP/slr-ci-$GITHUB_RUN_ID-backend"
+          mkdir -p "$SCRATCH/tmp"
+          {
+            echo "SCRATCH=$SCRATCH"
+            echo "UV_PROJECT_ENVIRONMENT=$SCRATCH/venv"
+            echo "UV_CACHE_DIR=$SCRATCH/uv-cache"
+            echo "UV_PYTHON_INSTALL_DIR=$SCRATCH/uv-python"
+          } >> "$GITHUB_ENV"
       - uses: astral-sh/setup-uv@v6
         with:
           version: "0.11.28"
@@ -89,7 +94,7 @@ jobs:
           fi
 
   frontend:
-    name: Frontend (Node ${{ env.NODE_VERSION }})
+    name: Frontend (Node 22)
     runs-on: [self-hosted, linux, slr-platform]
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     needs: [ci-policy]
@@ -99,10 +104,14 @@ jobs:
         working-directory: frontend
     env:
       CI: "true"
-      # Isolated npm cache; never the shared home-directory cache.
-      npm_config_cache: ${{ runner.temp }}/slr-ci-${{ github.run_id }}-frontend/npm-cache
     steps:
       - uses: actions/checkout@v4
+      - name: Prepare isolated npm cache
+        run: |
+          set -euo pipefail
+          CACHE="$RUNNER_TEMP/slr-ci-$GITHUB_RUN_ID-frontend/npm-cache"
+          mkdir -p "$CACHE"
+          echo "npm_config_cache=$CACHE" >> "$GITHUB_ENV"
       # Deliberately no `cache:` input: this runner is dedicated to SLR Platform
       # and must not inherit caches from other workloads on AI-node.
       - uses: actions/setup-node@v4
