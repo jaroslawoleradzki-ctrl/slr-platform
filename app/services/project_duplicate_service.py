@@ -148,9 +148,15 @@ class ProjectDuplicateService:
             )
         return list(publications)
 
+    def _build_groups(self, publications: list[Publication]):
+        return self._builder.build(publications, include_title_candidates=True)
+
     def _find_group(self, project_id: str, group_id: str, *, connection=None):
         publications = self._active_publications(project_id, connection=connection)
-        group = next((g for g in self._builder.build(publications) if str(g.group_id) == group_id), None)
+        group = next(
+            (g for g in self._build_groups(publications) if str(g.group_id) == group_id),
+            None,
+        )
         if group is None:
             merge = self._merge_repository.get_merge(project_id, group_id, connection=connection)
             if merge is None:
@@ -169,7 +175,7 @@ class ProjectDuplicateService:
         decisions = self._decision_repository.list_decisions_for_project(project_id)
         merges = self._merge_repository.list_merges_for_project(project_id)
         responses: list[DuplicateGroupResponse] = []
-        live_groups = {str(group.group_id): group for group in self._builder.build(publications)}
+        live_groups = {str(group.group_id): group for group in self._build_groups(publications)}
         for group_id, group in live_groups.items():
             members = [by_id[i] for i in group.publication_ids]
             decision = decisions.get(group_id)

@@ -275,6 +275,12 @@ export interface ImportFileRecord {
   warnings?: string[];
   sourceDatabase?: ManualSourceDatabase;
   sourceLabel?: string | null;
+  sourceRecordCount?: number | null;
+  exactDoiMatchCount?: number | null;
+  repeatedSourceCount?: number | null;
+  titleCandidateCount?: number | null;
+  skipAuditAvailable?: boolean;
+  recoveryStatus?: string | null;
 }
 
 export interface BibliographicImportResponse {
@@ -312,6 +318,12 @@ export interface ImportHistoryItemDTO {
   created_at: string;
   source_database?: ManualSourceDatabase;
   source_label?: string | null;
+  source_record_count?: number | null;
+  exact_doi_match_count?: number | null;
+  repeated_source_count?: number | null;
+  title_candidate_count?: number | null;
+  skip_audit_available?: boolean;
+  recovery_status?: string | null;
 }
 
 export interface SourcesSummaryResponse {

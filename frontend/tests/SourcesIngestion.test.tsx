@@ -209,3 +209,30 @@ describe('Sources ingestion upload', () => {
     expect(screen.queryByText('500')).not.toBeInTheDocument();
   });
 });
+
+  it('shows structured diagnostics when the warning badge is clicked', async () => {
+    vi.spyOn(projectApiService, 'getSourcesSummary').mockResolvedValue({
+      project_id: 'lean_energy',
+      working_collection: { total_records: 446 },
+      source_summaries: [{
+        source: 'RIS', source_kind: 'file', successful_imports_count: 0, warning_imports_count: 1, failed_imports_count: 0, records_added_count: 378, last_import_at: '2026-10-26T17:39:34Z', last_import_status: 'warning'
+      }],
+      import_history: [{
+        import_id: 'import-gs01', source_type: 'file', filename: 'GS01.ris', format: 'RIS', provider: null, query: null, records_count: 378, status: 'warning', warnings: ['Skipped 2 exact DOI duplicate record(s) already in the project.'], created_at: '2026-10-26T17:39:34Z', source_record_count: 380, exact_doi_match_count: 2, repeated_source_count: 0, title_candidate_count: 1, skip_audit_available: true, recovery_status: 'not_started'
+      }],
+    });
+    render(
+      <ProjectProvider>
+        <SourcesIngestionPage />
+      </ProjectProvider>,
+    );
+
+    const warningBadge = await screen.findByText('Ostrzeżenie');
+    fireEvent.click(warningBadge);
+
+    expect(await screen.findByRole('dialog')).toBeInTheDocument();
+    expect(screen.getByText(/Rekordy źródłowe:/i)).toBeInTheDocument();
+    expect(screen.getByText(/Dokładne duplikaty DOI:/i)).toBeInTheDocument();
+    expect(screen.getByText(/Kandydaci tytułowi:/i)).toBeInTheDocument();
+    expect(screen.getByText(/Skipped 2 exact DOI duplicate/i)).toBeInTheDocument();
+  });

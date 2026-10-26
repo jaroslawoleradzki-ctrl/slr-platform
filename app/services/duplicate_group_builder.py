@@ -46,14 +46,16 @@ class DuplicateGroupBuilder:
         publications: Iterable[Publication],
         *,
         created_at: datetime | None = None,
+        include_title_candidates: bool = False,
     ) -> list[DuplicateGroup]:
         timestamp = created_at if created_at is not None else datetime.now(timezone.utc)
         if timestamp.tzinfo is None or timestamp.utcoffset() is None:
             raise ValueError("created_at must be timezone-aware")
 
+        publication_list = list(publications)
         publication_ids: set[UUID] = set()
         keys_by_publication: dict[UUID, set[tuple[str, str]]] = {}
-        for publication in publications:
+        for publication in publication_list:
             publication_ids.add(publication.record_id)
             # Repeated representations of one record contribute identifier keys
             # only; Phase 5.3 does not select or reconcile their metadata.
@@ -87,6 +89,22 @@ class DuplicateGroupBuilder:
             for key in sorted(keys_by_publication[publication_id]):
                 owner = owner_by_key.setdefault(key, publication_id)
                 union(owner, publication_id)
+
+        if include_title_candidates:
+            # Title-only RIS candidates feed the existing manual duplicate-review
+            # workflow. They are never auto-merged.
+            title_owner: dict[str, UUID] = {}
+            for publication in publication_list:
+                if keys_by_publication.get(publication.record_id):
+                    continue
+                if not any(
+                    provenance.source.strip().casefold() == "ris"
+                    for provenance in publication.provenance
+                ):
+                    continue
+                key = publication.title.strip().casefold()
+                owner = title_owner.setdefault(key, publication.record_id)
+                union(owner, publication.record_id)
 
         members_by_root: dict[UUID, list[UUID]] = {}
         for publication_id in sorted(publication_ids):

@@ -367,8 +367,15 @@ export const FileDropzone: React.FC<FileDropzoneProps> = ({ onFileSelect, import
                 ×
               </button>
             </div>
-            <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-              Status: <strong>{selectedImportForWarnings.status}</strong> · Rekordy zaimportowane: <strong>{selectedImportForWarnings.recordsCount}</strong>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '8px', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+              <div>Status: <strong>{selectedImportForWarnings.status}</strong></div>
+              <div>Rekordy źródłowe: <strong>{selectedImportForWarnings.sourceRecordCount ?? 'brak danych'}</strong></div>
+              <div>Rekordy zaimportowane: <strong>{selectedImportForWarnings.recordsCount}</strong></div>
+              <div>Dokładne duplikaty DOI: <strong>{selectedImportForWarnings.exactDoiMatchCount ?? 'brak danych'}</strong></div>
+              <div>Powtórzone wystąpienia: <strong>{selectedImportForWarnings.repeatedSourceCount ?? 'brak danych'}</strong></div>
+              <div>Kandydaci tytułowi: <strong>{selectedImportForWarnings.titleCandidateCount ?? 'brak danych'}</strong></div>
+              <div>Status odzyskiwania: <strong>{selectedImportForWarnings.recoveryStatus ?? 'brak danych'}</strong></div>
+              <div>Audyt pominięć: <strong>{selectedImportForWarnings.skipAuditAvailable ? 'dostępny' : 'niedostępny'}</strong></div>
             </div>
             {(selectedImportForWarnings.warnings ?? []).length > 0 ? (
               <ul style={{ margin: 0, paddingLeft: '20px', display: 'flex', flexDirection: 'column', gap: '8px' }}>

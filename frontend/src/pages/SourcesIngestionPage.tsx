@@ -74,6 +74,12 @@ export const SourcesIngestionPage: React.FC = () => {
     importedAt: item.created_at,
     status: item.status,
     warnings: item.warnings,
+    sourceRecordCount: item.source_record_count,
+    exactDoiMatchCount: item.exact_doi_match_count,
+    repeatedSourceCount: item.repeated_source_count,
+    titleCandidateCount: item.title_candidate_count,
+    skipAuditAvailable: item.skip_audit_available,
+    recoveryStatus: item.recovery_status,
   }));
 
   if (loading && !sourcesSummary) {

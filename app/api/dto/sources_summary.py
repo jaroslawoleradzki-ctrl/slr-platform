@@ -42,6 +42,12 @@ class ImportHistoryItemDTO(BaseModel):
     status: Literal["success", "warning", "failed"]
     warnings: tuple[str, ...]
     created_at: datetime
+    source_record_count: int | None = None
+    exact_doi_match_count: int | None = None
+    repeated_source_count: int | None = None
+    title_candidate_count: int | None = None
+    skip_audit_available: bool = False
+    recovery_status: str | None = None
 
 
 class SourcesSummaryResponse(BaseModel):
