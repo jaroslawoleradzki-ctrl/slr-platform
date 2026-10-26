@@ -212,6 +212,45 @@ def test_prisma_historical_project_falls_back_transparently(environment) -> None
     assert "Historical project" in body["prisma_accounting_note"]
 
 
+def test_prisma_counts_provider_source_records(environment) -> None:
+    from app.api.dto.search_strategy import SearchResultRecordResponse
+    from app.repositories.normalization_execution_repository import (
+        SqliteNormalizationExecutionRepository,
+    )
+    from app.repositories.transaction_manager import SqliteTransactionManager
+    from app.services.project_import_service import ProjectImportService
+
+    service = ProjectImportService(
+        publication_repository=environment["pub"],
+        import_history_repository=environment["history"],
+        normalization_repository=SqliteNormalizationExecutionRepository(environment["db"]),
+        transaction_manager=SqliteTransactionManager(environment["db"]),
+        source_record_repository=environment["source"],
+    )
+    service.import_provider_results_group(
+        "p1",
+        "openalex",
+        [
+            SearchResultRecordResponse(
+                id="00000000-0000-0000-0000-000000000921",
+                title="Provider PRISMA Record",
+                authors=["Ada Author"],
+                year=2024,
+                provider="openalex",
+                source_id="https://openalex.org/W921",
+                doi="10.1000/provider-prisma",
+            )
+        ],
+        "provider",
+        1,
+    )
+    body = environment["client"].get("/api/v1/projects/p1/prisma/metrics").json()
+    assert body["records_identified_providers"] == 1
+    assert body["persisted_source_records"] == 1
+    assert body["source_records_identified"] == 1
+    assert body["provider_breakdown"] == {"openalex": 1}
+
+
 def test_prisma_counts_recovered_records(environment) -> None:
     import json
     import shutil
