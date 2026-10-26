@@ -5,6 +5,12 @@ import sqlite3
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
+from app.normalization.doi import normalize_doi_strict
+from app.services.import_identity import (
+    fingerprint_publication,
+    source_occurrence_id,
+)
+
 from app.api.dto.search_strategy import (
     ManualSourceDatabase,
     SearchResultRecordResponse,
@@ -23,6 +29,7 @@ from app.repositories.import_source_record_repository import (
     ImportSkipAuditRecord,
     ImportSourceRecord,
     ImportSourceRecordRepository,
+    SqliteImportSourceRecordRepository,
     default_import_source_record_repository,
 )
 from app.repositories.normalization_execution_repository import (
@@ -45,6 +52,28 @@ from app.repositories.transaction_manager import (
 )
 
 
+def _doi_evidence(publication: Publication) -> tuple[str | None, str | None, str]:
+    """Return (valid normalized DOI, original DOI text, DOI status)."""
+
+    original: str | None = None
+    valid: str | None = None
+    for identifier in publication.identifiers:
+        if identifier.type is IdentifierType.DOI:
+            original = identifier.value.strip()
+            valid = normalize_doi_strict(original)
+            if valid is None:
+                return None, original, "invalid"
+        elif identifier.type is IdentifierType.OTHER and identifier.source == "invalid_doi":
+            original = original or identifier.value.strip()
+    if valid is None and original is None:
+        return None, None, "missing"
+    return valid, original, "valid" if valid else "invalid"
+
+
+def _source_label(publication: Publication) -> str:
+    return publication.provenance[0].source if publication.provenance else ""
+
+
 class ProjectImportService:
     """Service orchestrating atomic multi-repository imports under one transaction boundary."""
 
@@ -62,7 +91,14 @@ class ProjectImportService:
         self._norm_repo = normalization_repository or default_normalization_execution_repository()
         self._tx_manager = transaction_manager or default_transaction_manager()
         self._snapshot_repo = snapshot_repository
-        self._source_repo = source_record_repository or default_import_source_record_repository()
+        if source_record_repository is not None:
+            self._source_repo = source_record_repository
+        elif hasattr(self._pub_repo, "_database_path"):
+            self._source_repo = SqliteImportSourceRecordRepository(
+                self._pub_repo._database_path
+            )
+        else:
+            self._source_repo = default_import_source_record_repository()
 
     def import_provider_results_group(
         self,
@@ -185,6 +221,7 @@ class ProjectImportService:
         source_database: ManualSourceDatabase | None = None,
         source_label: str | None = None,
         source_file_hash: str | None = None,
+        record_fingerprints: list[str] | None = None,
         *,
         connection: sqlite3.Connection | None = None,
     ) -> tuple[PublicationImportResult, ImportHistoryRecord]:
@@ -198,6 +235,7 @@ class ProjectImportService:
                 source_database,
                 source_label,
                 source_file_hash,
+                record_fingerprints,
             )
 
         with self._tx_manager.transaction() as conn:
@@ -210,6 +248,7 @@ class ProjectImportService:
                 source_database,
                 source_label,
                 source_file_hash,
+                record_fingerprints,
             )
 
     def _import_file_with_conn(
@@ -222,129 +261,250 @@ class ProjectImportService:
         source_database: ManualSourceDatabase | None = None,
         source_label: str | None = None,
         source_file_hash: str | None = None,
+        record_fingerprints: list[str] | None = None,
     ) -> tuple[PublicationImportResult, ImportHistoryRecord]:
         import_id = uuid4()
         try:
             existing_pubs = self._pub_repo.get_publications(project_id, connection=conn)
         except TypeError:
             existing_pubs = self._pub_repo.get_publications(project_id)
-        existing_by_doi: dict[str, object] = {}
+        existing_ids = {str(pub.record_id) for pub in existing_pubs}
+        existing_by_doi: dict[str, Publication] = {}
         for pub in existing_pubs:
             for ident in pub.identifiers:
                 if ident.type is IdentifierType.DOI:
-                    existing_by_doi.setdefault(ident.value.strip().casefold(), pub)
+                    valid_doi = normalize_doi_strict(ident.value)
+                    if valid_doi:
+                        existing_by_doi.setdefault(valid_doi, pub)
+
+        fingerprints = (
+            list(record_fingerprints)
+            if record_fingerprints is not None
+            else [fingerprint_publication(p) for p in publications]
+        )
+        if len(fingerprints) != len(publications):
+            raise ValueError("record fingerprint count must match publication count")
+
+        file_hash = source_file_hash
+        if file_hash is None:
+            fallback_payload = "|".join(
+                f"{p.title.strip().casefold()}::{','.join(a.display_name for a in p.authors)}::{p.publication_year or ''}"
+                for p in publications
+            )
+            file_hash = hashlib.sha256(
+                f"{filename}|{fallback_payload}".encode("utf-8")
+            ).hexdigest()
+
+        title_counts: dict[str, int] = {}
+        for pub in existing_pubs:
+            key = pub.title.strip().casefold()
+            title_counts[key] = title_counts.get(key, 0) + 1
+        for publication in publications:
+            key = publication.title.strip().casefold()
+            title_counts[key] = title_counts.get(key, 0) + 1
+
+        ordinal_by_fingerprint: dict[str, int] = {}
+        prepared: list[dict] = []
+        for index, publication in enumerate(publications):
+            fingerprint = fingerprints[index]
+            ordinal = ordinal_by_fingerprint.get(fingerprint, 0) + 1
+            ordinal_by_fingerprint[fingerprint] = ordinal
+            valid_doi, original_doi, doi_status = _doi_evidence(publication)
+            prepared.append(
+                {
+                    "index": index,
+                    "publication": publication,
+                    "fingerprint": fingerprint,
+                    "source_record_id": source_occurrence_id(
+                        project_id=project_id,
+                        source_label=_source_label(publication),
+                        filename=filename,
+                        record_fingerprint=fingerprint,
+                        ordinal=ordinal,
+                    ),
+                    "valid_doi": valid_doi,
+                    "original_doi": original_doi,
+                    "doi_status": doi_status,
+                    "source_label": _source_label(publication),
+                }
+            )
 
         new_publications: list[Publication] = []
-        skipped_count = 0
+        planned: list[dict] = []
+        skip_audits: list[ImportSkipAuditRecord] = []
         repeated_count = 0
         doi_duplicate_count = 0
-        title_candidate_count = 0
-        for index, publication in enumerate(publications):
-            doi = None
-            for ident in publication.identifiers:
-                if ident.type is IdentifierType.DOI:
-                    doi = ident.value.strip()
-                    break
-            normalized_doi = doi.casefold() if doi else None
+        skipped_count = 0
+        invalid_doi_count = 0
+        seen_doi: dict[str, str] = {}
 
-            file_hash = source_file_hash
-            if file_hash is None:
-                fallback_payload = "|".join(
-                    f"{p.title.strip().casefold()}::{','.join(a.display_name for a in p.authors)}::{p.publication_year or ''}"
-                    for p in publications
-                )
-                file_hash = hashlib.sha256(f"{filename}|{fallback_payload}".encode("utf-8")).hexdigest()
-            occurrence_payload = f"{project_id}|{file_hash}|{index + 1}"
-            source_record_id = hashlib.sha256(occurrence_payload.encode("utf-8")).hexdigest()
+        for item in prepared:
+            publication: Publication = item["publication"]
+            index: int = item["index"]
+            source_record_id: str = item["source_record_id"]
+            valid_doi: str | None = item["valid_doi"]
+            original_doi: str | None = item["original_doi"]
+            doi_status: str = item["doi_status"]
+            if doi_status == "invalid":
+                invalid_doi_count += 1
 
-            if self._source_repo.find_source_record_by_id(project_id, source_record_id) is not None:
+            existing_source = self._source_repo.find_source_record_by_id(
+                project_id, source_record_id
+            )
+            if existing_source is not None:
                 repeated_count += 1
-                continue
-
-            matched = existing_by_doi.get(normalized_doi) if normalized_doi else None
-            if matched is not None:
-                # Exact DOI duplicate: preserve source record and audit the skip.
-                self._source_repo.create_source_record(
-                    ImportSourceRecord(
-                        source_record_id=source_record_id,
-                        project_id=project_id,
-                        import_id=import_id,
-                        source_filename=filename,
-                        source_file_hash=file_hash,
-                        source_record_index=index + 1,
-                        title=publication.title,
-                        publication_year=publication.publication_year,
-                        original_doi=doi,
-                        normalized_doi=normalized_doi,
-                        authors=tuple(a.display_name for a in publication.authors),
-                        document_type=publication.document_type.value if publication.document_type else None,
-                        provenance=publication.provenance[0].model_dump(mode="json") if publication.provenance else {},
-                        canonical_publication_id=str(matched.record_id),
-                        duplicate_match_type="exact_doi",
-                        duplicate_match_reason="Normalized DOI equals an existing publication",
-                        recovery_status="not_needed",
-                    ),
-                    connection=conn,
-                )
-                self._source_repo.create_skip_audit(
+                skipped_count += 1
+                skip_audits.append(
                     ImportSkipAuditRecord(
                         skip_audit_id=str(uuid4()),
                         project_id=project_id,
                         import_id=import_id,
+                        source_record_id=source_record_id,
                         source_filename=filename,
                         source_file_hash=file_hash,
+                        record_fingerprint=item["fingerprint"],
+                        import_format=file_format,
                         source_record_index=index + 1,
                         source_title=publication.title,
-                        source_doi=doi,
-                        matched_publication_id=str(matched.record_id),
+                        source_doi=original_doi,
+                        matched_publication_id=existing_source.canonical_publication_id,
+                        match_type="repeated_occurrence",
+                        match_reason=(
+                            "Source occurrence was already imported; content fingerprint "
+                            "and file identity are unchanged"
+                        ),
+                        proposed_action="no_op",
+                        review_required=False,
+                        recovery_status="not_needed",
+                    )
+                )
+                continue
+
+            matched_existing = (
+                existing_by_doi.get(valid_doi) if valid_doi is not None else None
+            )
+            if matched_existing is not None:
+                canonical_id = str(matched_existing.record_id)
+                doi_duplicate_count += 1
+                skipped_count += 1
+                planned.append(
+                    {
+                        **item,
+                        "canonical_id": canonical_id,
+                        "status": "linked_exact_doi",
+                        "match_type": "exact_doi",
+                        "match_reason": "Normalized DOI equals an existing publication",
+                        "review_required": False,
+                    }
+                )
+                skip_audits.append(
+                    ImportSkipAuditRecord(
+                        skip_audit_id=str(uuid4()),
+                        project_id=project_id,
+                        import_id=import_id,
+                        source_record_id=source_record_id,
+                        source_filename=filename,
+                        source_file_hash=file_hash,
+                        record_fingerprint=item["fingerprint"],
+                        import_format=file_format,
+                        source_record_index=index + 1,
+                        source_title=publication.title,
+                        source_doi=original_doi,
+                        matched_publication_id=canonical_id,
                         match_type="exact_doi",
                         match_reason="Normalized DOI equals an existing publication",
                         proposed_action="link_to_existing_canonical",
                         review_required=False,
-                    ),
-                    connection=conn,
+                        recovery_status="not_needed",
+                    )
                 )
-                skipped_count += 1
-                doi_duplicate_count += 1
                 continue
 
+            if valid_doi is not None and valid_doi in seen_doi:
+                canonical_id = seen_doi[valid_doi]
+                doi_duplicate_count += 1
+                skipped_count += 1
+                planned.append(
+                    {
+                        **item,
+                        "canonical_id": canonical_id,
+                        "status": "linked_exact_doi",
+                        "match_type": "exact_doi",
+                        "match_reason": (
+                            "Normalized DOI repeats an earlier record in the same import"
+                        ),
+                        "review_required": False,
+                    }
+                )
+                skip_audits.append(
+                    ImportSkipAuditRecord(
+                        skip_audit_id=str(uuid4()),
+                        project_id=project_id,
+                        import_id=import_id,
+                        source_record_id=source_record_id,
+                        source_filename=filename,
+                        source_file_hash=file_hash,
+                        record_fingerprint=item["fingerprint"],
+                        import_format=file_format,
+                        source_record_index=index + 1,
+                        source_title=publication.title,
+                        source_doi=original_doi,
+                        matched_publication_id=canonical_id,
+                        match_type="exact_doi",
+                        match_reason=(
+                            "Normalized DOI repeats an earlier record in the same import"
+                        ),
+                        proposed_action="link_to_existing_canonical",
+                        review_required=False,
+                        recovery_status="not_needed",
+                    )
+                )
+                continue
+
+            if valid_doi is not None:
+                seen_doi[valid_doi] = str(publication.record_id)
+            title_match = title_counts.get(publication.title.strip().casefold(), 0) > 1
+            is_title_candidate = valid_doi is None and title_match
             new_publications.append(publication)
-            title_match = any(
-                p.title.strip().casefold() == publication.title.strip().casefold() for p in existing_pubs
-            )
-            if title_match and not normalized_doi:
-                title_candidate_count += 1
-            self._source_repo.create_source_record(
-                ImportSourceRecord(
-                    source_record_id=source_record_id,
-                    project_id=project_id,
-                    import_id=import_id,
-                    source_filename=filename,
-                    source_file_hash=file_hash,
-                    source_record_index=index + 1,
-                    title=publication.title,
-                    publication_year=publication.publication_year,
-                    original_doi=doi,
-                    normalized_doi=normalized_doi,
-                    authors=tuple(a.display_name for a in publication.authors),
-                    document_type=publication.document_type.value if publication.document_type else None,
-                    provenance=publication.provenance[0].model_dump(mode="json") if publication.provenance else {},
-                    canonical_publication_id=str(publication.record_id),
-                    duplicate_match_type="title_candidate" if title_match and not normalized_doi else None,
-                    duplicate_match_reason="Same title without DOI requires manual review" if title_match and not normalized_doi else None,
-                    recovery_status="imported",
-                ),
-                connection=conn,
+            planned.append(
+                {
+                    **item,
+                    "canonical_id": str(publication.record_id),
+                    "status": "pending_insert",
+                    "match_type": (
+                        "title_candidate"
+                        if is_title_candidate
+                        else "invalid_doi"
+                        if doi_status == "invalid"
+                        else None
+                    ),
+                    "match_reason": (
+                        "Same normalized title without a valid DOI requires manual review"
+                        if is_title_candidate
+                        else "DOI value is not syntactically valid; record preserved for manual review"
+                        if doi_status == "invalid"
+                        else None
+                    ),
+                    "review_required": bool(is_title_candidate or doi_status == "invalid"),
+                    "title_candidate": is_title_candidate,
+                }
             )
 
         try:
             if isinstance(self._pub_repo, SqliteProjectPublicationRepository):
                 import_result = self._pub_repo.import_source_publications(
-                    project_id, new_publications, import_id=import_id, connection=conn
+                    project_id,
+                    new_publications,
+                    import_id=import_id,
+                    connection=conn,
+                    preserve_source_occurrences=True,
                 )
             else:
                 import_result = self._pub_repo.import_source_publications(
-                    project_id, new_publications, import_id=import_id
+                    project_id,
+                    new_publications,
+                    import_id=import_id,
+                    preserve_source_occurrences=True,
                 )
         except TypeError:
             if isinstance(self._pub_repo, SqliteProjectPublicationRepository):
@@ -355,6 +515,122 @@ class ProjectImportService:
                 import_result = self._pub_repo.import_source_publications(
                     project_id, new_publications
                 )
+
+        inserted_ids = (
+            {str(record_id) for record_id in import_result.inserted_record_ids}
+            if import_result.inserted_record_ids is not None
+            else {str(publication.record_id) for publication in new_publications}
+        )
+        known_canonical_ids = existing_ids | inserted_ids
+        title_candidate_count = 0
+        actual_imported_count = 0
+
+        for item in planned:
+            publication = item["publication"]
+            canonical_id = item["canonical_id"]
+            status = item["status"]
+            match_type = item["match_type"]
+            match_reason = item["match_reason"]
+            recovery_status = "linked" if status == "linked_exact_doi" else "imported"
+            if status == "pending_insert" and canonical_id not in inserted_ids:
+                # The repository declined an insert despite the service's plan.
+                # Never claim success: persist an explicit auditable skip.
+                skipped_count += 1
+                canonical_id = ""
+                status = "skipped_repository"
+                recovery_status = "skipped_repository"
+                match_type = "repository_skipped"
+                match_reason = "Canonical repository declined the planned insert"
+                skip_audits.append(
+                    ImportSkipAuditRecord(
+                        skip_audit_id=str(uuid4()),
+                        project_id=project_id,
+                        import_id=import_id,
+                        source_record_id=item["source_record_id"],
+                        source_filename=filename,
+                        source_file_hash=file_hash,
+                        record_fingerprint=item["fingerprint"],
+                        import_format=file_format,
+                        source_record_index=item["index"] + 1,
+                        source_title=publication.title,
+                        source_doi=item["original_doi"],
+                        matched_publication_id=None,
+                        match_type="repository_skipped",
+                        match_reason=match_reason,
+                        proposed_action="manual_review",
+                        review_required=True,
+                        recovery_status="pending_review",
+                    )
+                )
+            if canonical_id and canonical_id not in known_canonical_ids:
+                canonical_id = ""
+                status = "skipped_repository"
+                recovery_status = "skipped_repository"
+                match_type = "repository_skipped"
+                match_reason = "Canonical publication reference could not be verified"
+                skip_audits.append(
+                    ImportSkipAuditRecord(
+                        skip_audit_id=str(uuid4()),
+                        project_id=project_id,
+                        import_id=import_id,
+                        source_record_id=item["source_record_id"],
+                        source_filename=filename,
+                        source_file_hash=file_hash,
+                        record_fingerprint=item["fingerprint"],
+                        import_format=file_format,
+                        source_record_index=item["index"] + 1,
+                        source_title=publication.title,
+                        source_doi=item["original_doi"],
+                        matched_publication_id=None,
+                        match_type="repository_skipped",
+                        match_reason=match_reason,
+                        proposed_action="manual_review",
+                        review_required=True,
+                        recovery_status="pending_review",
+                    )
+                )
+            if status == "pending_insert":
+                status = "imported"
+            if status == "imported":
+                actual_imported_count += 1
+                if item.get("title_candidate"):
+                    title_candidate_count += 1
+            self._source_repo.create_source_record(
+                ImportSourceRecord(
+                    source_record_id=item["source_record_id"],
+                    project_id=project_id,
+                    import_id=import_id,
+                    source_filename=filename,
+                    source_file_hash=file_hash,
+                    record_fingerprint=item["fingerprint"],
+                    import_format=file_format,
+                    source_record_index=item["index"] + 1,
+                    title=publication.title,
+                    publication_year=publication.publication_year,
+                    original_doi=item["original_doi"],
+                    normalized_doi=item["valid_doi"],
+                    doi_status=item["doi_status"],
+                    authors=tuple(a.display_name for a in publication.authors),
+                    document_type=(
+                        publication.document_type.value
+                        if publication.document_type
+                        else None
+                    ),
+                    provenance=(
+                        publication.provenance[0].model_dump(mode="json")
+                        if publication.provenance
+                        else {}
+                    ),
+                    canonical_publication_id=canonical_id or None,
+                    duplicate_match_type=match_type,
+                    duplicate_match_reason=match_reason,
+                    recovery_status=recovery_status,
+                ),
+                connection=conn,
+            )
+
+        for skip_record in skip_audits:
+            self._source_repo.create_skip_audit(skip_record, connection=conn)
 
         warnings: list[str] = []
         if doi_duplicate_count:
@@ -369,6 +645,14 @@ class ProjectImportService:
             warnings.append(
                 f"Imported {title_candidate_count} title-only candidate(s); manual duplicate review is required."
             )
+        if invalid_doi_count:
+            warnings.append(
+                f"Preserved {invalid_doi_count} record(s) with invalid DOI metadata for manual review."
+            )
+        if any(r.match_type == "repository_skipped" for r in skip_audits):
+            warnings.append(
+                "One or more canonical insertions were declined by the repository and require review."
+            )
 
         history_record = ImportHistoryRecord(
             import_id=import_id,
@@ -378,7 +662,7 @@ class ProjectImportService:
             format=file_format,
             provider=None,
             query=None,
-            records_count=import_result.imported_count,
+            records_count=actual_imported_count,
             total_available=None,
             status="warning" if warnings else "success",
             warnings=tuple(warnings),
@@ -393,9 +677,15 @@ class ProjectImportService:
             self._history_repo.create(history_record)
 
         import_result = PublicationImportResult(
-            imported_count=import_result.imported_count,
+            imported_count=actual_imported_count,
             skipped_count=skipped_count + import_result.skipped_count,
             working_collection_count=import_result.working_collection_count,
+            inserted_record_ids=tuple(
+                publication.record_id
+                for item in planned
+                if item["status"] == "imported"
+                for publication in [item["publication"]]
+            ),
         )
 
         if import_result.imported_count > 0:

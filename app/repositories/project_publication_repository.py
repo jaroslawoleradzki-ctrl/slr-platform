@@ -20,6 +20,10 @@ class PublicationImportResult:
     imported_count: int
     skipped_count: int
     working_collection_count: int
+    # ``None`` means the repository implementation does not report identities.
+    # SQLite and demo adapters report the records they actually inserted so the
+    # import service can persist truthful source provenance.
+    inserted_record_ids: tuple[UUID, ...] | None = None
 
 
 class ProjectNotFoundError(Exception):
@@ -122,8 +126,15 @@ class ProjectPublicationRepository(Protocol):
         *,
         import_id: UUID | None = None,
         connection: sqlite3.Connection | None = None,
+        preserve_source_occurrences: bool = False,
     ) -> PublicationImportResult:
-        """Atomically import publications unique by provider and source id within a project."""
+        """Atomically import publications unique by provider and source id within a project.
+
+        File imports set ``preserve_source_occurrences=True`` because the import
+        service has already made the conservative duplicate decision and every
+        planned canonical row must be inserted or explicitly audited.  Provider
+        imports keep the legacy key-based idempotency.
+        """
         ...
 
     def count_by_project(self, project_id: str) -> int:
@@ -384,6 +395,7 @@ class DemoProjectPublicationRepository:
         publications: list[Publication],
         *,
         import_id: UUID | None = None,
+        preserve_source_occurrences: bool = False,
         **_: object,
     ) -> PublicationImportResult:
         if project_id not in self._projects_data:
@@ -396,7 +408,7 @@ class DemoProjectPublicationRepository:
         skipped_count = 0
         for publication in publications:
             key = self._source_key(publication)
-            if key in existing_keys:
+            if key in existing_keys and not preserve_source_occurrences:
                 skipped_count += 1
                 continue
             existing_keys.add(key)
@@ -410,6 +422,7 @@ class DemoProjectPublicationRepository:
             imported_count=len(new_publications),
             skipped_count=skipped_count,
             working_collection_count=len(self._projects_data[project_id]),
+            inserted_record_ids=tuple(p.record_id for p in new_publications),
         )
 
     def replace_publications(
@@ -900,6 +913,7 @@ class SqliteProjectPublicationRepository:
         *,
         import_id: UUID | None = None,
         connection: sqlite3.Connection | None = None,
+        preserve_source_occurrences: bool = False,
     ) -> PublicationImportResult:
         self._ensure_project(project_id, connection=connection)
         existing_pubs = self.get_publications(project_id, connection=connection)
@@ -915,10 +929,10 @@ class SqliteProjectPublicationRepository:
                 and not has_doi
                 and provenance.source_record_id.strip() == publication.title.strip()
             )
-            # Conservative import rule: exact DOI-keyed and provider-keyed source
-            # records are still skipped; title-only RIS records are preserved for
-            # manual review instead of being silently discarded.
-            if key in existing_keys and not title_only_ris:
+            # File imports pass preserve_source_occurrences=True: the service has
+            # already decided which rows are canonical inserts and which are
+            # audited duplicates.  Provider imports retain key-based idempotency.
+            if key in existing_keys and not preserve_source_occurrences and not title_only_ris:
                 continue
             existing_keys.add(key)
             new_publications.append(publication)
@@ -943,6 +957,7 @@ class SqliteProjectPublicationRepository:
             imported_count=len(new_publications),
             skipped_count=len(publications) - len(new_publications),
             working_collection_count=working_count,
+            inserted_record_ids=tuple(p.record_id for p in new_publications),
         )
 
     def replace_publications(

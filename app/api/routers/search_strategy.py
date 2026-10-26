@@ -35,6 +35,8 @@ from app.repositories.import_history_repository import (
     default_import_history_repository,
 )
 from app.repositories.import_source_record_repository import (
+    ImportSourceRecordRepository,
+    SqliteImportSourceRecordRepository,
     default_import_source_record_repository,
 )
 from app.repositories.normalization_execution_repository import (
@@ -72,6 +74,7 @@ from app.services.live_search import (
     LiveSearchExecutor,
     live_search_service,
 )
+from app.services.import_identity import fingerprint_raw_record
 from app.services.project_import_service import ProjectImportService
 from app.services.search_strategy_support import (
     map_search_result_record,
@@ -100,6 +103,18 @@ def get_import_history_repository() -> ImportHistoryRepository:
     return default_import_history_repository()
 
 
+def get_import_source_record_repository() -> ImportSourceRecordRepository:
+    return default_import_source_record_repository()
+
+
+def _source_repo_for_publication_repo(
+    pub_repo: ProjectPublicationRepository,
+) -> ImportSourceRecordRepository | None:
+    if isinstance(pub_repo, SqliteProjectPublicationRepository):
+        return SqliteImportSourceRecordRepository(pub_repo._database_path)
+    return None
+
+
 def get_normalization_execution_repository() -> NormalizationExecutionRepository:
     return default_normalization_execution_repository()
 
@@ -126,6 +141,7 @@ def get_project_import_service(
         import_history_repository=history_repo,
         normalization_repository=norm_repo,
         transaction_manager=tx_manager,
+        source_record_repository=_source_repo_for_publication_repo(pub_repo),
         snapshot_repository=(
             None
             if isinstance(pub_repo, DemoProjectPublicationRepository)
@@ -686,6 +702,7 @@ async def import_bibliographic_file(
                 normalize_publication(map_ris_record(record, source="ris", source_database=source_database or "ris"))
                 for record in parsed_ris
             ]
+            record_fingerprints = [fingerprint_raw_record(record) for record in parsed_ris]
         else:
             parsed_bibtex = parse_bibtex(content)
             publications = [
@@ -694,6 +711,7 @@ async def import_bibliographic_file(
                 )
                 for record in parsed_bibtex
             ]
+            record_fingerprints = [fingerprint_raw_record(record) for record in parsed_bibtex]
 
         if not publications:
             raise ValueError("The uploaded file contains no bibliographic records.")
@@ -706,6 +724,7 @@ async def import_bibliographic_file(
             source_database=source_database,
             source_label=source_label,
             source_file_hash=source_file_hash,
+            record_fingerprints=record_fingerprints,
         )
     except ProjectNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
@@ -772,6 +791,7 @@ def get_sources_summary_service(
     return SourcesSummaryService(
         publication_repository=pub_repo,
         import_history_repository=history_repo,
+        source_record_repository=_source_repo_for_publication_repo(pub_repo),
     )
 
 
@@ -796,8 +816,11 @@ def get_sources_summary(
 
 
 @router.get("/{project_id}/imports/{import_id}/source-records")
-def list_import_source_records(project_id: str, import_id: str):
-    repo = default_import_source_record_repository()
+def list_import_source_records(
+    project_id: str,
+    import_id: str,
+    repo: ImportSourceRecordRepository = Depends(get_import_source_record_repository),
+):
     records = repo.list_source_records_for_import(project_id, import_id)
     return {
         "project_id": project_id,
@@ -823,9 +846,12 @@ def list_import_source_records(project_id: str, import_id: str):
 
 
 @router.get("/{project_id}/imports/{import_id}/skip-audit")
-def list_import_skip_audit(project_id: str, import_id: str):
-    repo = default_import_source_record_repository()
-    records = [r for r in repo.list_skip_audit(project_id) if str(r.import_id) == import_id]
+def list_import_skip_audit(
+    project_id: str,
+    import_id: str,
+    repo: ImportSourceRecordRepository = Depends(get_import_source_record_repository),
+):
+    records = repo.list_skip_audit_for_import(project_id, import_id)
     return {
         "project_id": project_id,
         "import_id": import_id,

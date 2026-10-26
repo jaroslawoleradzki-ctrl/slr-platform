@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from app.domain import Author, Identifier, IdentifierType
 from app.domain.provenance import ProvenanceEntry
 from app.domain.publication import DocumentType, Publication
-from app.normalization import normalize_doi
+from app.normalization import normalize_doi_strict
 
 _TY_TO_DOC_TYPE: dict[str, DocumentType] = {
     "JOUR": DocumentType.JOURNAL_ARTICLE,
@@ -128,14 +128,23 @@ def map_ris_record(
     ty_value = _first_non_blank(record, "TY")
     doc_type: DocumentType = _TY_TO_DOC_TYPE.get(ty_value or "", DocumentType.OTHER)
 
-    # 6. DOI — normalized via the project's existing helper
+    # 6. DOI — only syntactically valid DOIs become matching identifiers.
+    # Invalid DOI text is retained as provenance metadata for manual review.
     identifiers: list[Identifier] = []
     normalized_doi: str | None = None
     raw_doi = _first_non_blank(record, "DO")
     if raw_doi is not None:
-        normalized_doi = normalize_doi(raw_doi)
+        normalized_doi = normalize_doi_strict(raw_doi)
         if normalized_doi:
             identifiers.append(Identifier(type=IdentifierType.DOI, value=normalized_doi))
+        else:
+            identifiers.append(
+                Identifier(
+                    type=IdentifierType.OTHER,
+                    value=raw_doi.strip(),
+                    source="invalid_doi",
+                )
+            )
 
     # 7. Language (LA tag) — passed through to normalization stage
     language = _first_non_blank(record, "LA")

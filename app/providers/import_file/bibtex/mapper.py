@@ -6,7 +6,7 @@ from app.domain import Author, Identifier, IdentifierType
 from app.domain.provenance import ProvenanceEntry
 from app.domain.publication import DocumentType, Publication
 from app.domain.venue import Venue
-from app.normalization import normalize_doi
+from app.normalization import normalize_doi_strict
 from app.providers.import_file.bibtex.parser import BibTeXRecord
 
 _ENTRY_TYPE_TO_DOCUMENT_TYPE: dict[str, DocumentType] = {
@@ -138,12 +138,19 @@ def map_bibtex_record(
     if title is None:
         raise ValueError("BibTeX record is missing a title")
 
-    normalized_doi = normalize_doi(_non_blank(fields, "doi"))
-    identifiers = (
-        [Identifier(type=IdentifierType.DOI, value=normalized_doi)]
-        if normalized_doi is not None
-        else []
-    )
+    raw_doi = _non_blank(fields, "doi")
+    normalized_doi = normalize_doi_strict(raw_doi)
+    identifiers: list[Identifier] = []
+    if normalized_doi is not None:
+        identifiers.append(Identifier(type=IdentifierType.DOI, value=normalized_doi))
+    elif raw_doi is not None:
+        identifiers.append(
+            Identifier(
+                type=IdentifierType.OTHER,
+                value=raw_doi.strip(),
+                source="invalid_doi",
+            )
+        )
 
     citation_key = record["citation_key"].strip()
     source_record_id = normalized_doi or citation_key or title
