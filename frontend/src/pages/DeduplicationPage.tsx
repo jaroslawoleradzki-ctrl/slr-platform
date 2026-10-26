@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useProject } from '../context/ProjectContext';
 import { DuplicateGroupStatus } from '../types';
 import { DeduplicationSummaryCard } from '../components/deduplication/DeduplicationSummaryCard';
@@ -32,6 +32,21 @@ export const DeduplicationPage: React.FC = () => {
   const [isRunning, setIsRunning] = useState(false);
   const [runReport, setRunReport] = useState<DeduplicationRunReport | null>(null);
 
+  useEffect(() => {
+    if (!activeProject) return;
+    try {
+      const raw = localStorage.getItem(`slr.dedup.runReport.${activeProject.id}`);
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as DeduplicationRunReport & { completedAt: string };
+      setRunReport({
+        ...parsed,
+        completedAt: new Date(parsed.completedAt),
+      });
+    } catch {
+      // Ignore malformed persisted state.
+    }
+  }, [activeProject?.id]);
+
   const inputRecords = activeProject?.imports.reduce(
     (total, item) => item.status === 'success' || item.status === 'warning'
       ? total + item.recordsCount
@@ -46,23 +61,31 @@ export const DeduplicationPage: React.FC = () => {
     setRunReport(null);
     try {
       const result = await runDeduplication();
-      setRunReport({
+      const report: DeduplicationRunReport = {
         status: 'success',
         inputRecords: runInputRecords,
         analyzedRecords: runInputRecords,
         groupsFound: result.total_groups_count,
         durationMs: performance.now() - startedAt,
         completedAt: new Date(),
-      });
+      };
+      setRunReport(report);
+      if (activeProject) {
+        localStorage.setItem(`slr.dedup.runReport.${activeProject.id}`, JSON.stringify(report));
+      }
     } catch {
-      setRunReport({
+      const report: DeduplicationRunReport = {
         status: 'error',
         inputRecords: runInputRecords,
         analyzedRecords: 0,
         groupsFound: 0,
         durationMs: performance.now() - startedAt,
         completedAt: new Date(),
-      });
+      };
+      setRunReport(report);
+      if (activeProject) {
+        localStorage.setItem(`slr.dedup.runReport.${activeProject.id}`, JSON.stringify(report));
+      }
     } finally {
       setIsRunning(false);
     }
@@ -141,7 +164,9 @@ export const DeduplicationPage: React.FC = () => {
           </div>
         ) : (
           <div style={{ color: 'var(--text-muted)' }}>
-            Nigdy nie uruchamiano deduplikacji. Wejściowa kolekcja: {inputRecords.toLocaleString('pl-PL')}.
+            {duplicateData
+              ? `Grupy kandydatów załadowane z backendu: ${duplicateData.total_groups_count.toLocaleString('pl-PL')}. Wejściowa kolekcja: ${inputRecords.toLocaleString('pl-PL')}.`
+              : `Nigdy nie uruchamiano deduplikacji. Wejściowa kolekcja: ${inputRecords.toLocaleString('pl-PL')}.`}
           </div>
         )}
       </Card>
@@ -150,7 +175,7 @@ export const DeduplicationPage: React.FC = () => {
       <DeduplicationSummaryCard
         groups={duplicateData ? duplicateData.groups : []}
         summary={activeProject.deduplication}
-        hasRun={runReport?.status === 'success'}
+        hasRun={runReport?.status === 'success' || !!duplicateData}
       />
 
       {/* Main Content Area Handling Loading, Error, Empty & Success States */}

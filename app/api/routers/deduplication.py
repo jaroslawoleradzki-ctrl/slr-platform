@@ -4,6 +4,7 @@ from app.api.dto.deduplication import (
     DuplicateGroupDecisionRequest,
     DuplicateGroupDecisionResponse,
     DuplicateGroupListResponse,
+    DuplicateGroupMergeRequest,
     DuplicateGroupMergeResponse,
 )
 from app.repositories.duplicate_review_decision_repository import GroupNotFoundError
@@ -106,10 +107,15 @@ def record_duplicate_group_decision(
 def merge_duplicate_group(
     project_id: str,
     group_id: str,
+    payload: DuplicateGroupMergeRequest | None = None,
     service: ProjectDuplicateService = Depends(get_duplicate_service),
 ) -> DuplicateGroupMergeResponse:
     try:
-        return service.merge_group(project_id=project_id, group_id=group_id)
+        return service.merge_group(
+            project_id=project_id,
+            group_id=group_id,
+            rationale=payload.rationale if payload is not None else None,
+        )
     except ProjectNotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

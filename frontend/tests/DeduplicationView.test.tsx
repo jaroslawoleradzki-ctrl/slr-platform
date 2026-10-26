@@ -179,8 +179,7 @@ describe('DeduplicationPage Phase 6.5 — Duplicate Comparison & Review UI', () 
     );
 
     expect(await screen.findByText(/Brak grup kandydatów na duplikaty/i)).toBeInTheDocument();
-    expect(screen.getByText(/Nigdy nie uruchamiano deduplikacji/i)).toBeInTheDocument();
-    expect(screen.getByText(/Uruchom deduplikację, aby wyszukać grupy kandydatów/i)).toBeInTheDocument();
+    expect(screen.getByText(/Grupy kandydatów załadowane z backendu: 0/i)).toBeInTheDocument();
     expect(screen.queryByText(/Oceniono wszystkie grupy/i)).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /Uruchom deduplikację/i }));
 
@@ -357,15 +356,6 @@ describe('DeduplicationPage Phase 6.5 — Duplicate Comparison & Review UI', () 
     vi.spyOn(projectApiService, 'getBibliographicImports').mockResolvedValue([]);
     vi.spyOn(projectApiService, 'getNormalization').mockResolvedValue(null);
     vi.spyOn(projectApiService, 'getSearchStrategy').mockResolvedValue(null);
-    const postSpy = vi.spyOn(projectApiService, 'postDuplicateGroupDecision').mockImplementation(async () => {
-      await new Promise(r => setTimeout(r, 50));
-      return {
-        project_id: 'lean_energy',
-        group_id: 'grp-test-303',
-        decision: 'APPROVE',
-        rationale: 'Zweryfikowano zgodność po analizie abstraktów',
-      };
-    });
     const mergeSpy = vi.spyOn(projectApiService, 'mergeDuplicateGroup').mockImplementation(async () => {
       await new Promise(r => setTimeout(r, 50));
       return {
@@ -394,16 +384,14 @@ describe('DeduplicationPage Phase 6.5 — Duplicate Comparison & Review UI', () 
     const approveBtn = screen.getByRole('button', { name: /Zatwierdź/i });
     fireEvent.click(approveBtn);
 
-    expect(postSpy).toHaveBeenCalledWith(
+    expect(mergeSpy).toHaveBeenCalledWith(
       'lean_energy',
       'grp-test-303',
-      'APPROVE',
       'Zweryfikowano zgodność po analizie abstraktów'
     );
     // During auto-merge, "Zapisywanie w API..." is shown (saving=true)
     expect(await screen.findByText(/Zapisywanie w API/i)).toBeInTheDocument();
     expect(await screen.findByText(/Merged/i)).toBeInTheDocument();
-    expect(mergeSpy).toHaveBeenCalledWith('lean_energy', 'grp-test-303');
   });
 
   it('handles reject click, error state, and retry action with rationale', async () => {
@@ -495,12 +483,6 @@ describe('canonical duplicate merge action', () => {
       ],
     };
 
-    const postSpy = vi.spyOn(projectApiService, 'postDuplicateGroupDecision').mockImplementation(async () => {
-      await new Promise(r => setTimeout(r, 50));
-      return {
-        project_id: 'lean_energy', group_id: 'merge-group-2', decision: 'APPROVE', rationale: '',
-      };
-    });
     const mergeSpy = vi.spyOn(projectApiService, 'mergeDuplicateGroup')
       .mockImplementationOnce(async () => {
         await new Promise(r => setTimeout(r, 50));
@@ -519,7 +501,7 @@ describe('canonical duplicate merge action', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /Zatwierdź/i }));
 
-    expect(postSpy).toHaveBeenCalledWith('lean_energy', 'merge-group-2', 'APPROVE', '');
+    expect(mergeSpy).toHaveBeenCalledWith('lean_energy', 'merge-group-2', '');
     // During auto-merge attempt, "Zapisywanie w API..." is shown
     expect(await screen.findByText(/Zapisywanie w API/i)).toBeInTheDocument();
     // After merge fails, error and retry button appear

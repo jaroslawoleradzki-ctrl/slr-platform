@@ -92,7 +92,7 @@ export interface ProjectApiService {
     projectId: string,
     groupId: string
   ): Promise<ApiDuplicateGroupDecisionResponse>;
-  mergeDuplicateGroup(projectId: string, groupId: string): Promise<ApiDuplicateGroupMergeResponse>;
+  mergeDuplicateGroup(projectId: string, groupId: string, rationale?: string | null): Promise<ApiDuplicateGroupMergeResponse>;
   executeSearchStrategy(
     projectId: string,
     strategy: EditableSearchStrategy,
@@ -925,10 +925,16 @@ class MixedProjectApiService implements ProjectApiService {
     return data;
   }
 
-  async mergeDuplicateGroup(projectId: string, groupId: string): Promise<ApiDuplicateGroupMergeResponse> {
+  async mergeDuplicateGroup(projectId: string, groupId: string, rationale?: string | null): Promise<ApiDuplicateGroupMergeResponse> {
+    const headers: Record<string, string> = { Accept: 'application/json' };
+    const init: RequestInit = { method: 'POST', headers };
+    if (rationale) {
+      headers['Content-Type'] = 'application/json';
+      init.body = JSON.stringify({ rationale });
+    }
     const response = await fetch(
       `${API_BASE_URL}/projects/${projectId}/duplicate-groups/${groupId}/merge`,
-      { method: 'POST', headers: { Accept: 'application/json' } },
+      init,
     );
     if (!response.ok) {
       throw new Error(await formatFastApiError(response, 'scalić duplikaty'));

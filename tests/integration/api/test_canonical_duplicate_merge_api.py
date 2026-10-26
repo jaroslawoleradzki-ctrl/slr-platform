@@ -27,8 +27,6 @@ def test_merge_api_has_no_client_canonical_selection_and_reports_lifecycle(tmp_p
     try:
         client = TestClient(app)
         group_id = client.get("/api/v1/projects/lean_energy/duplicate-groups").json()["groups"][0]["group_id"]
-        assert client.post(f"/api/v1/projects/lean_energy/duplicate-groups/{group_id}/merge", json={}).status_code == 422
-        assert client.post(f"/api/v1/projects/lean_energy/duplicate-groups/{group_id}/decision", json={"decision": "APPROVE"}).json()["decision"] == "APPROVE"
         response = client.post(f"/api/v1/projects/lean_energy/duplicate-groups/{group_id}/merge", json={})
         assert response.status_code == 200
         body = response.json()

@@ -113,7 +113,7 @@ export const computeWorkflowStatus = (
   } else if (deduplication) {
     totalGroups = deduplication.total_groups_count;
     pendingGroups = deduplication.groups.filter((g) => g.status === 'PENDING').length;
-    approvedGroups = deduplication.groups.filter((g) => g.status === 'APPROVED').length;
+    approvedGroups = deduplication.groups.filter((g) => g.status === 'APPROVED' || g.status === 'MERGED').length;
     rejectedGroups = deduplication.groups.filter((g) => g.status === 'REJECTED').length;
 
     if (pendingGroups > 0) {
@@ -1146,7 +1146,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
         group.group_id === groupId ? { ...group, status: newStatus } : group
       );
       const pendingGroups = updatedGroups.filter((g) => g.status === 'PENDING').length;
-      const approvedGroups = updatedGroups.filter((g) => g.status === 'APPROVED').length;
+      const approvedGroups = updatedGroups.filter((g) => g.status === 'APPROVED' || g.status === 'MERGED').length;
       const rejectedGroups = updatedGroups.filter((g) => g.status === 'REJECTED').length;
 
       return {
@@ -1174,7 +1174,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
       setDuplicateData(result);
       const pendingGroups = result.groups.filter((g) => g.status === 'PENDING').length;
-      const approvedGroups = result.groups.filter((g) => g.status === 'APPROVED').length;
+      const approvedGroups = result.groups.filter((g) => g.status === 'APPROVED' || g.status === 'MERGED').length;
       const rejectedGroups = result.groups.filter((g) => g.status === 'REJECTED').length;
 
       setWorkflowStatus((current) => current ? {

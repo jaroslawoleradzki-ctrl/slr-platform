@@ -245,40 +245,63 @@ class ProjectDuplicateService:
             rationale=record.rationale,
         )
 
-    def merge_group(self, project_id: str, group_id: str) -> DuplicateGroupMergeResponse:
+    def _merge_group_core(
+        self, project_id: str, group_id: str, publications: list[Publication], group, connection
+    ) -> DuplicateGroupMergeRecord:
+        members = [p for p in publications if p.record_id in group.publication_ids]
+        if len(members) != len(group.publication_ids):
+            raise ValueError("duplicate group members are not all present in project")
+        superseded_by = self._repository.get_superseded_by_map(project_id, connection=connection)
+        inactive_members = [member.record_id for member in members if superseded_by.get(member.record_id) is not None]
+        if inactive_members:
+            raise ValueError("duplicate group members must all be active before merge")
+        canonical_id = min(p.record_id for p in members)
+        if superseded_by.get(canonical_id) is not None:
+            raise ValueError("canonical publication must be active before merge")
+        canonical = reduce(publication_merge_policy.merge, sorted(members, key=lambda p: p.record_id))
+        merge = DuplicateGroupMergeRecord(
+            project_id=project_id,
+            group_id=group_id,
+            canonical_record_id=canonical_id,
+            merged_publication_ids=tuple(sorted(group.publication_ids)),
+            pre_merge_snapshots=tuple(members),
+        )
+        self._merge_repository.save_merge(merge, connection=connection)
+        self._repository.update_publication(project_id, canonical, connection=connection)
+        self._repository.mark_superseded(
+            project_id,
+            [p.record_id for p in members if p.record_id != canonical_id],
+            canonical_id,
+            connection=connection,
+        )
+        return merge
+
+    def merge_group(
+        self, project_id: str, group_id: str, rationale: str | None = None
+    ) -> DuplicateGroupMergeResponse:
         with self._transaction_manager.transaction() as connection:
             publications, group = self._find_group(project_id, group_id, connection=connection)
             if self._merge_repository.get_merge(project_id, group_id, connection=connection):
                 raise ValueError("duplicate group is already merged")
-            decision = self._decision_repository.get_decision(project_id, group_id, connection=connection)
-            if decision is None or decision.decision is not DuplicateDecision.APPROVE:
+            existing_decision = self._decision_repository.get_decision(project_id, group_id, connection=connection)
+            if existing_decision is not None and existing_decision.decision is not DuplicateDecision.APPROVE:
                 raise ValueError("duplicate group must be APPROVE before merge")
-            members = [p for p in publications if p.record_id in group.publication_ids]
-            if len(members) != len(group.publication_ids):
-                raise ValueError("duplicate group members are not all present in project")
-            superseded_by = self._repository.get_superseded_by_map(project_id, connection=connection)
-            inactive_members = [member.record_id for member in members if superseded_by.get(member.record_id) is not None]
-            if inactive_members:
-                raise ValueError("duplicate group members must all be active before merge")
-            canonical_id = min(p.record_id for p in members)
-            if superseded_by.get(canonical_id) is not None:
-                raise ValueError("canonical publication must be active before merge")
-            canonical = reduce(publication_merge_policy.merge, sorted(members, key=lambda p: p.record_id))
-            merge = DuplicateGroupMergeRecord(
-                project_id=project_id,
-                group_id=group_id,
-                canonical_record_id=canonical_id,
-                merged_publication_ids=tuple(sorted(group.publication_ids)),
-                pre_merge_snapshots=tuple(members),
+            # The reviewer decision and the technical merge are persisted in the
+            # same transaction, so a failed merge cannot leave a dangling APPROVE.
+            decision_rationale = rationale if rationale is not None else (
+                existing_decision.rationale if existing_decision is not None else None
             )
-            self._merge_repository.save_merge(merge, connection=connection)
-            self._repository.update_publication(project_id, canonical, connection=connection)
-            self._repository.mark_superseded(
+            self._decision_repository.save_decision(
                 project_id,
-                [p.record_id for p in members if p.record_id != canonical_id],
-                canonical_id,
+                group_id,
+                DuplicateGroupReviewDecision(
+                    decision=DuplicateDecision.APPROVE,
+                    rationale=decision_rationale,
+                ),
                 connection=connection,
             )
+            merge = self._merge_group_core(project_id, group_id, publications, group, connection)
+            canonical_id = merge.canonical_record_id
         return DuplicateGroupMergeResponse(
             project_id=project_id,
             group_id=group_id,
