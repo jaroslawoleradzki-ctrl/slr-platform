@@ -267,6 +267,14 @@ class ProjectDuplicateService:
                     match_type=live_group.match_type if live_group else None,
                     match_reason=live_group.match_reason if live_group else None,
                 )
+                self._source_records.record_candidate_group_snapshot(
+                    project_id,
+                    response.group_id,
+                    publication_ids,
+                    match_type=live_group.match_type if live_group else None,
+                    match_reason=live_group.match_reason if live_group else None,
+                    status=response.status.value,
+                )
 
         return DuplicateGroupListResponse(project_id=project_id, total_groups_count=len(responses), groups=responses)
 

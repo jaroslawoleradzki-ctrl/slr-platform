@@ -135,6 +135,13 @@ def test_similar_title_is_a_candidate_not_a_merge(environment) -> None:
     assert sum(item["similar_title_candidate_count"] or 0 for item in summary) == 2
 
 
+def test_sequential_titles_are_not_similar_title_candidates(environment) -> None:
+    client, _, _, _, _, _ = environment
+    _upload(client, "GS01.ris", _ris("Test Publication Title 201", 2024))
+    _upload(client, "GS2.ris", _ris("Test Publication Title 202", 2024))
+    assert _groups(client) == []
+
+
 def test_reviewer_rejection_and_approval_merge_preserve_canonical_ids(environment) -> None:
     client, pub, _, _, decisions, _ = environment
     _upload(client, "GS01.ris", _ris("Decision Title", 2020))
@@ -215,6 +222,26 @@ def test_diagnostics_match_persisted_state(environment) -> None:
     assert all(item["recovery_status"] in {"not_started", None} for item in history)
     assert all(item["audit_available"] for item in history)
     assert len(all_source) == 6
+
+
+def test_group_changes_are_traceable_and_historical_decision_survives(environment) -> None:
+    client, _, source, _, decisions, _ = environment
+    _upload(client, "GS01.ris", _ris("Historical Decision", 2020))
+    _upload(client, "GS2.ris", _ris("Historical Decision", 2021))
+    first_group = _groups(client)[0]
+    client.post(
+        f"/api/v1/projects/p1/duplicate-groups/{first_group['group_id']}/decision",
+        json={"decision": "REJECT", "rationale": "first review"},
+    )
+    _upload(client, "GS3.ris", _ris("Historical Decision", 2022))
+    groups = _groups(client)
+    current = [item for item in groups if item["status"] == "PENDING"]
+    assert len(current) == 1
+    assert current[0]["group_id"] != first_group["group_id"]
+    assert decisions.get_decision("p1", first_group["group_id"]) is not None
+    snapshots = source.list_candidate_group_snapshots("p1")
+    assert any(item["group_id"] == first_group["group_id"] for item in snapshots)
+    assert any(item["group_id"] == current[0]["group_id"] for item in snapshots)
 
 
 def test_source_record_api_exposes_candidate_group(environment) -> None:

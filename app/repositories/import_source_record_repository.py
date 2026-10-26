@@ -202,6 +202,17 @@ class ImportSourceRecordRepository(Protocol):
         match_reason: str | None = None,
     ) -> int: ...
     def clear_candidate_groups(self, project_id: str) -> None: ...
+    def record_candidate_group_snapshot(
+        self,
+        project_id: str,
+        group_id: str,
+        publication_ids: list[str],
+        *,
+        match_type: str | None,
+        match_reason: str | None,
+        status: str,
+    ) -> None: ...
+    def list_candidate_group_snapshots(self, project_id: str) -> list[dict]: ...
     def mark_recovered(
         self,
         project_id: str,
@@ -213,6 +224,10 @@ class ImportSourceRecordRepository(Protocol):
     def save_recovery_approval(self, approval: RecoveryApproval, *, connection=None) -> RecoveryApproval: ...
     def get_recovery_approval(self, project_id: str, source_record_id: str) -> RecoveryApproval | None: ...
     def list_recovery_approvals(self, project_id: str) -> list[RecoveryApproval]: ...
+    def count_source_records(self, project_id: str) -> int: ...
+    def count_skip_audit(self, project_id: str, match_type: str | None = None) -> int: ...
+    def count_recovered(self, project_id: str) -> int: ...
+    def count_canonical_without_source(self, project_id: str) -> int: ...
     def record_recovery_execution(
         self,
         approval: RecoveryApproval,
@@ -644,6 +659,56 @@ class SqliteImportSourceRecordRepository:
             )
             conn.commit()
 
+    def record_candidate_group_snapshot(
+        self,
+        project_id,
+        group_id,
+        publication_ids,
+        *,
+        match_type,
+        match_reason,
+        status,
+    ):
+        with self._connect() as conn:
+            conn.execute(
+                """INSERT OR IGNORE INTO duplicate_candidate_group_snapshots
+                   (project_id, group_id, publication_ids_json, match_type,
+                    match_reason, status, observed_at)
+                   VALUES (?,?,?,?,?,?,?)""",
+                (
+                    project_id,
+                    group_id,
+                    json.dumps(sorted(publication_ids)),
+                    match_type,
+                    match_reason,
+                    status,
+                    datetime.now(timezone.utc).isoformat(),
+                ),
+            )
+            conn.commit()
+
+    def list_candidate_group_snapshots(self, project_id):
+        with self._connect() as conn:
+            rows = conn.execute(
+                """SELECT project_id, group_id, publication_ids_json, match_type,
+                          match_reason, status, observed_at
+                   FROM duplicate_candidate_group_snapshots
+                   WHERE project_id=? ORDER BY observed_at, group_id""",
+                (project_id,),
+            ).fetchall()
+        return [
+            {
+                "project_id": row[0],
+                "group_id": row[1],
+                "publication_ids": json.loads(row[2]),
+                "match_type": row[3],
+                "match_reason": row[4],
+                "status": row[5],
+                "observed_at": row[6],
+            }
+            for row in rows
+        ]
+
     def mark_recovered(
         self,
         project_id,
@@ -742,6 +807,46 @@ class SqliteImportSourceRecordRepository:
                 (project_id,),
             ).fetchall()
         return [self._approval_from_row(row) for row in rows]
+
+    def count_source_records(self, project_id):
+        with self._connect() as conn:
+            return conn.execute(
+                "SELECT COUNT(*) FROM import_source_records WHERE project_id=?",
+                (project_id,),
+            ).fetchone()[0]
+
+    def count_skip_audit(self, project_id, match_type=None):
+        with self._connect() as conn:
+            if match_type is None:
+                return conn.execute(
+                    "SELECT COUNT(*) FROM import_skip_audit WHERE project_id=?",
+                    (project_id,),
+                ).fetchone()[0]
+            return conn.execute(
+                "SELECT COUNT(*) FROM import_skip_audit WHERE project_id=? AND match_type=?",
+                (project_id, match_type),
+            ).fetchone()[0]
+
+    def count_recovered(self, project_id):
+        with self._connect() as conn:
+            return conn.execute(
+                "SELECT COUNT(*) FROM import_source_records "
+                "WHERE project_id=? AND recovery_status='recovered'",
+                (project_id,),
+            ).fetchone()[0]
+
+    def count_canonical_without_source(self, project_id):
+        with self._connect() as conn:
+            return conn.execute(
+                """SELECT COUNT(*) FROM project_publications p
+                   WHERE p.project_id=? AND p.superseded_by IS NULL
+                     AND NOT EXISTS (
+                       SELECT 1 FROM import_source_records s
+                       WHERE s.project_id=p.project_id
+                         AND s.canonical_publication_id=p.record_id
+                     )""",
+                (project_id,),
+            ).fetchone()[0]
 
     def record_recovery_execution(
         self,
