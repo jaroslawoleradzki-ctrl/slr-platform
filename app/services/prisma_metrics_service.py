@@ -153,6 +153,48 @@ class PrismaMetricsService:
         else:
             self._merges = None
 
+    def get_source_accounting(self, project_id: str) -> dict:
+        """Return the persisted source/canonical accounting used by PRISMA and tooling."""
+
+        persisted = (
+            self._source_records.count_source_records(project_id)
+            if self._source_records is not None
+            else 0
+        )
+        exact = (
+            self._source_records.count_skip_audit(project_id, "exact_doi")
+            if self._source_records is not None
+            else 0
+        )
+        repeated = (
+            self._source_records.count_skip_audit(project_id, "repeated_occurrence")
+            if self._source_records is not None
+            else 0
+        )
+        recovered = (
+            self._source_records.count_recovered(project_id)
+            if self._source_records is not None
+            else 0
+        )
+        active = self._publications.count_active_by_project(project_id)
+        historical = (
+            self._source_records.count_canonical_without_source(project_id)
+            if self._source_records is not None
+            else active
+        )
+        return {
+            "persisted_source_records": persisted,
+            "source_records_identified": persisted + repeated,
+            "exact_duplicates_linked": exact,
+            "repeated_source_occurrences": repeated,
+            "recovered_records": recovered,
+            "canonical_publications": active,
+            "canonical_publications_total": self._publications.count_by_project(
+                project_id
+            ),
+            "historical_canonical_without_source_records": historical,
+        }
+
     def get_metrics(self, project_id: str, reviewer_id: str = "default_reviewer") -> PrismaMetrics:
         total_raw = self._publications.count_by_project(project_id)
         legacy_removed_count = (
@@ -240,31 +282,14 @@ class PrismaMetricsService:
         merged_duplicate_records = sum(
             max(0, len(merge.merged_publication_ids) - 1) for merge in merged_groups
         )
-        persisted_source_records = (
-            self._source_records.count_source_records(project_id)
-            if self._source_records is not None
-            else 0
-        )
-        exact_duplicates_linked = (
-            self._source_records.count_skip_audit(project_id, "exact_doi")
-            if self._source_records is not None
-            else 0
-        )
-        repeated_source_occurrences = (
-            self._source_records.count_skip_audit(project_id, "repeated_occurrence")
-            if self._source_records is not None
-            else 0
-        )
-        recovered_records = (
-            self._source_records.count_recovered(project_id)
-            if self._source_records is not None
-            else 0
-        )
-        historical_without_source = (
-            self._source_records.count_canonical_without_source(project_id)
-            if self._source_records is not None
-            else records_after_technical_merger
-        )
+        accounting = self.get_source_accounting(project_id)
+        persisted_source_records = accounting["persisted_source_records"]
+        exact_duplicates_linked = accounting["exact_duplicates_linked"]
+        repeated_source_occurrences = accounting["repeated_source_occurrences"]
+        recovered_records = accounting["recovered_records"]
+        historical_without_source = accounting[
+            "historical_canonical_without_source_records"
+        ]
         note = (
             "Source-aware accounting uses persisted source records; historical "
             "imports without source rows fall back to import-history counts and "
