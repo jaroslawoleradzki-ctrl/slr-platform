@@ -13,7 +13,7 @@ name: ci
 on:
   pull_request:
   push:
-    branches: [main, development]
+    branches: [main, development, integration/v0.7.3-r1-r5]
   workflow_dispatch:
 
 permissions:
