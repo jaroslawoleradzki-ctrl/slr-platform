@@ -1057,3 +1057,17 @@ Future work focuses on scientific functionality, not framework development.
 Every larger change should be implemented as a reviewable PR-sized increment.
 
 The roadmap is the authoritative sequence of work. Additional engineering tasks should be included within existing roadmap items unless a deliberate roadmap change is approved.
+
+## v0.7.4 — import warning decisions and workflow consistency
+
+- Warning imports now support explicit acceptance or guarded rejection with
+  reviewer attribution and non-active audit retention.
+- Rejected imports are excluded from active history and research populations,
+  remain in PRISMA identification, and are classified as
+  `removed before screening — rejected import`.
+- Deduplication, screening, workflow status, and PRISMA share one active-corpus
+  duplicate-readiness projection. Approved-unmerged groups block screening as
+  `merge_required`.
+- Regression coverage includes shared publications, downstream research
+  decisions, transaction rollback, merged-group-plus-new-import consistency,
+  and rejected-import PRISMA accounting.
