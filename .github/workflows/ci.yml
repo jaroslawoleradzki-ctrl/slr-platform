@@ -36,6 +36,8 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Reject GitHub-hosted runners and enforce AI-node labels
         run: bash scripts/ci/check_runner_policy.sh
       - name: Diff hygiene
@@ -43,7 +45,7 @@ jobs:
           set -euo pipefail
           BASE_REF="${{ github.base_ref }}"
           if [ -n "$BASE_REF" ]; then
-            git fetch --no-tags origin "$BASE_REF" --depth=1
+            git fetch --no-tags origin "$BASE_REF"
             git diff --check "origin/$BASE_REF...HEAD"
           else
             git diff --check HEAD^ HEAD
@@ -85,6 +87,8 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Prepare isolated CI directory
         run: |
           set -euo pipefail
@@ -110,7 +114,7 @@ jobs:
       - name: Type check
         run: uv run --frozen --no-sync mypy app
       - name: Fetch comparison branch
-        run: git fetch --no-tags origin "${{ github.base_ref || 'development' }}" --depth=1
+        run: git fetch --no-tags origin "${{ github.base_ref || 'development' }}"
       - name: Migration safety
         run: |
           uv run --frozen --no-sync python scripts/ci/check_migration_safety.py \
