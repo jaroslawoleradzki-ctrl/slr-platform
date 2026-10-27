@@ -61,8 +61,8 @@ const DEDUP_REVIEWED: ApiDuplicateGroupListResponse = {
   project_id: 'lean_energy',
   total_groups_count: 3,
   groups: [
-    { group_id: 'g-0', reason: 'DOI', records_count: 2, status: 'APPROVED', shared_identifiers: [], records: [] },
-    { group_id: 'g-1', reason: 'DOI', records_count: 2, status: 'APPROVED', shared_identifiers: [], records: [] },
+    { group_id: 'g-0', reason: 'DOI', records_count: 2, status: 'MERGED', shared_identifiers: [], records: [] },
+    { group_id: 'g-1', reason: 'DOI', records_count: 2, status: 'MERGED', shared_identifiers: [], records: [] },
     { group_id: 'g-2', reason: 'DOI', records_count: 2, status: 'REJECTED', shared_identifiers: [], records: [] },
   ],
 };

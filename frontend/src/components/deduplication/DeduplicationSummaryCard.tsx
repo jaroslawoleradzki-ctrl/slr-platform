@@ -17,6 +17,7 @@ export const DeduplicationSummaryCard: React.FC<DeduplicationSummaryCardProps> =
     // APPROVED includes groups whose technical merge completed, including
     // records historically persisted with the MERGED lifecycle status.
     const approvedGroups = groups.filter((g) => g.status === 'APPROVED' || g.status === 'MERGED').length;
+    const mergeRequiredGroups = groups.filter((g) => g.status === 'APPROVED').length;
     const rejectedGroups = groups.filter((g) => g.status === 'REJECTED').length;
 
     return (
@@ -39,6 +40,10 @@ export const DeduplicationSummaryCard: React.FC<DeduplicationSummaryCardProps> =
           ) : pendingGroups > 0 ? (
             <Badge variant="pending_action" icon={<ShieldAlert size={12} />}>
               Oczekujące grupy duplikatów ({pendingGroups})
+            </Badge>
+          ) : mergeRequiredGroups > 0 ? (
+            <Badge variant="pending_action" icon={<ShieldAlert size={12} />}>
+              Wymagają scalenia ({mergeRequiredGroups})
             </Badge>
           ) : (
             <Badge variant="completed" icon={<CheckCircle2 size={12} />}>
@@ -113,6 +118,11 @@ export const DeduplicationSummaryCard: React.FC<DeduplicationSummaryCardProps> =
               <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>Potwierdzone unikalne</span>
             </div>
           </div>
+          {mergeRequiredGroups > 0 && (
+            <div role="status" style={{ padding: '12px 16px', borderRadius: 'var(--radius-md)', backgroundColor: 'var(--status-warning-bg)', border: '1px solid var(--status-warning-border)', color: 'var(--status-warning-text)', fontSize: '0.8rem', fontWeight: 600 }}>
+              Zatwierdzone grupy ({mergeRequiredGroups}) wymagają zapisania scalenia, zanim screening będzie gotowy.
+            </div>
+          )}
         </div>
       </Card>
     );

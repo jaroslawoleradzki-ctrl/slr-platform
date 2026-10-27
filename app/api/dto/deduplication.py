@@ -78,6 +78,24 @@ class DuplicateGroupResponse(BaseModel):
     records: list[DuplicateRecordPreviewResponse]
 
 
+class DuplicateReadinessResponse(BaseModel):
+    """Shared duplicate-review readiness projection for workflow consumers."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    status: str
+    screening_ready: bool
+    total_groups: int = Field(ge=0)
+    pending_review_groups: int = Field(ge=0)
+    approved_unmerged_groups: int = Field(ge=0)
+    merged_groups: int = Field(ge=0)
+    rejected_groups: int = Field(ge=0)
+    stale_decisions: int = Field(ge=0)
+    blocking_groups: int = Field(ge=0)
+    blocking_group_ids: list[str] = Field(default_factory=list)
+    reason: str
+
+
 class DuplicateGroupListResponse(BaseModel):
     """List response containing candidate duplicate groups for a project."""
 
@@ -86,6 +104,7 @@ class DuplicateGroupListResponse(BaseModel):
     project_id: str
     total_groups_count: int
     groups: list[DuplicateGroupResponse]
+    readiness: DuplicateReadinessResponse
 
 
 class DuplicateGroupDecisionRequest(BaseModel):

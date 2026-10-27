@@ -59,3 +59,18 @@ For each compared attribute across candidate group records, the interface comput
     "rationale": "Verified full text agreement between Crossref and OpenAlex records."
   }
   ```
+
+## v0.7.4 — readiness labels
+
+The deduplication stage and summary card distinguish these states:
+
+| Backend readiness | UI label |
+|---|---|
+| `pending_review` | `X do oceny` / `Oczekujące grupy duplikatów (X)` |
+| `approved_unmerged` | `X do scalenia` / `Wymagają scalenia (X)` |
+| `ready` | `Oceniono` |
+| `no_candidates` | `Nie znaleziono grup wymagających oceny` |
+
+Title/abstract and full-text screening show separate messages for
+`unresolved_duplicates` and `unmerged_duplicates`. The warning is never hidden
+and always provides a route back to deduplication.
