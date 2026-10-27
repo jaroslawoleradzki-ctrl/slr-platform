@@ -1,5 +1,32 @@
 # Changelog
 
+## [0.7.3] — 2026-10-27
+
+### Added
+
+- **RIS/BibTeX import integrity**: file imports preserve every source occurrence, distinguish exact DOI links, repeated occurrences, title candidates, invalid-DOI records, and repository-skipped rows in durable source and skip-audit tables.
+- **Source-record provenance and auditability**: per-import source records capture the original DOI text, normalized DOI, DOI status, record fingerprint, source file identity, bibliographic metadata, canonical link, match type/reason, and recovery status.
+- **Duplicate review and canonical DOI handling**: duplicate candidates remain researcher-controlled; post-merge DOI re-imports resolve through `superseded_by` chains to the active canonical publication instead of linking to a superseded record.
+- **Recovery and reconciliation safeguards**: auditable recovery approvals, failed-import diagnostics, candidate-group snapshots, deterministic reconciliation, and explicit safe errors for dangling or cyclic supersession chains.
+- **PRISMA source-aware accounting**: source records, repeated occurrences, exact DOI duplicates, canonical publications, merged records, recovered records, pending duplicate groups, and historical fallback are reported separately and consistently across API and exports.
+- **Duplicate-group and PRISMA performance improvements**: indexed candidate generation, cached normalized titles, exact character prefiltering, integer union-find, and request-scoped duplicate-group reuse replace the previous quadratic comparison loop and redundant builder executions.
+- **Regression coverage**: R1–R5 integration, migration, recovery, duplicate-review, source-aware PRISMA, post-merge DOI integrity, candidate-equivalence, and bounded-comparison tests.
+
+### Fixed
+
+- DOI re-import after a duplicate merge no longer links new source occurrences to a superseded publication.
+- Similar-title detection no longer performs an all-pairs comparison for every file-imported record; candidate output is preserved exactly for ordinary and adversarial fixtures.
+- PRISMA no longer rebuilds duplicate groups three times per metrics request; workflow status and excluded counts share one screening input set.
+- Ruff and Mypy quality gates pass again for the v0.7.3 remediation code.
+- Duplicate-group and PRISMA latency regressions on larger working collections are resolved for normal/mixed datasets.
+
+### Known limitations
+
+- The historical 508-source/62-row RIS discrepancy is **not** claimed as resolved. The original RIS files and source rows required to verify it are unavailable, so that item remains `NOT VERIFIED`.
+- The audit’s original 578-publication project is not available for replay; performance evidence uses deterministic synthetic A–E fixtures.
+- A single worst-case family of 2000 near-identical titles still has many legitimate candidate pairs and is slower than normal/mixed datasets; no candidates are dropped and no cutoff is applied.
+- Production deployment and production data reconciliation are out of scope for this release.
+
 ## [0.7.1] — 2026-09-23
 
 ### Added
