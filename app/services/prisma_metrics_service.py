@@ -300,9 +300,16 @@ class PrismaMetricsService:
             "identified records fall back to import history."
         )
 
-        workflow = self._workflow_status.get_status(project_id, reviewer_id=reviewer_id)
+        # The workflow status and excluded counts share one screening input set
+        # so that a single PRISMA calculation executes the duplicate-group
+        # builder at most twice: once for the active population above and once
+        # for the screening corpus used by the workflow services.
+        workflow_input = self._workflow_status.get_input_set(project_id)
+        workflow = self._workflow_status.get_status(
+            project_id, reviewer_id=reviewer_id, input_set=workflow_input
+        )
         ta_excluded, ft_excluded = self._workflow_status.get_excluded_counts(
-            project_id, reviewer_id=reviewer_id
+            project_id, reviewer_id=reviewer_id, input_set=workflow_input
         )
 
         return PrismaMetrics(

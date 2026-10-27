@@ -6,6 +6,7 @@ from app.api.dto.workflow_status import (
     QualityAssessmentStatusDTO,
     TitleAbstractScreeningStatusDTO,
 )
+from app.domain.deduplication import DuplicateGroup
 from app.domain.screening import ScreeningStage
 from app.repositories.conflict_resolution_repository import (
     SqliteConflictResolutionRepository,
@@ -29,7 +30,7 @@ from app.repositories.screening_reviewer_assignment_repository import (
 )
 from app.services.multi_reviewer_screening_service import MultiReviewerScreeningService
 from app.services.screening_eligibility_adapter import ScreeningEligibilityAdapter
-from app.services.screening_input_service import ScreeningInputService
+from app.services.screening_input_service import ScreeningInput, ScreeningInputService
 
 
 class ProjectWorkflowStatusService:
@@ -65,10 +66,24 @@ class ProjectWorkflowStatusService:
             multi_reviewer_service=self._multi_service,
         )
 
+    def get_input_set(
+        self,
+        project_id: str,
+        *,
+        groups: list[DuplicateGroup] | None = None,
+    ) -> ScreeningInput:
+        """Build or reuse the screening input set for one logical request."""
+        return self._input_service.get_input_set(project_id, groups=groups)
+
     def get_status(
-        self, project_id: str, reviewer_id: str = "default_reviewer"
+        self,
+        project_id: str,
+        reviewer_id: str = "default_reviewer",
+        *,
+        input_set: ScreeningInput | None = None,
     ) -> ProjectWorkflowStatusResponse:
-        input_set = self._input_service.get_input_set(project_id)
+        if input_set is None:
+            input_set = self._input_service.get_input_set(project_id)
         total_ta = len(input_set.publications)
         active_publication_ids = {publication.record_id for publication in input_set.publications}
 
@@ -116,7 +131,11 @@ class ProjectWorkflowStatusService:
 
         # ── 2. Full-Text Stage Status ──────────────────────────────────────────
         ft_eligible_pubs = self._adapter.eligible_publications(
-            project_id, ScreeningStage.TITLE_ABSTRACT, ScreeningStage.FULL_TEXT, reviewer_id
+            project_id,
+            ScreeningStage.TITLE_ABSTRACT,
+            ScreeningStage.FULL_TEXT,
+            reviewer_id,
+            input_set=input_set,
         )
         ft_eligible_count = len(ft_eligible_pubs)
 
@@ -167,7 +186,11 @@ class ProjectWorkflowStatusService:
 
         # ── 3. Quality Assessment Status ───────────────────────────────────────
         qa_eligible_pubs = self._adapter.eligible_publications(
-            project_id, ScreeningStage.FULL_TEXT, "quality_assessment", reviewer_id
+            project_id,
+            ScreeningStage.FULL_TEXT,
+            "quality_assessment",
+            reviewer_id,
+            input_set=input_set,
         )
         qa_eligible_count = len(qa_eligible_pubs)
 
@@ -199,17 +222,29 @@ class ProjectWorkflowStatusService:
         )
 
     def get_excluded_counts(
-        self, project_id: str, reviewer_id: str = "default_reviewer"
+        self,
+        project_id: str,
+        reviewer_id: str = "default_reviewer",
+        *,
+        input_set: ScreeningInput | None = None,
     ) -> tuple[int, int]:
         """Return (records_excluded_title_abstract, records_excluded_full_text) for active canonical publications."""
+        if input_set is None:
+            input_set = self._input_service.get_input_set(project_id)
         ta_excluded = len(
             self._adapter.excluded_publications(
-                project_id, ScreeningStage.TITLE_ABSTRACT, reviewer_id
+                project_id,
+                ScreeningStage.TITLE_ABSTRACT,
+                reviewer_id,
+                input_set=input_set,
             )
         )
         ft_excluded = len(
             self._adapter.excluded_publications(
-                project_id, ScreeningStage.FULL_TEXT, reviewer_id
+                project_id,
+                ScreeningStage.FULL_TEXT,
+                reviewer_id,
+                input_set=input_set,
             )
         )
         return ta_excluded, ft_excluded
