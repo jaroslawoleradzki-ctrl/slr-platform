@@ -13,6 +13,7 @@ import {
   WorkflowStageState,
   ApiDuplicateGroupListResponse,
   DuplicateGroupStatus,
+  DuplicateReadinessStatus,
   BibliographicImportHistoryRecord,
   SearchStrategy,
   ProjectUpdatePayload,
@@ -68,7 +69,7 @@ export const computeWorkflowStatus = (
     sourcesCount = null;
     sourcesLabel = 'Błąd';
   } else if (imports && imports.length > 0) {
-    const hasWarning = imports.some((i) => i.status === 'warning');
+    const hasWarning = imports.some((i) => (i.effective_status ?? i.status) === 'warning');
     sourcesState = hasWarning ? 'warning' : 'completed';
     sourcesCount = imports.length;
     sourcesLabel = `${imports.length} importów`;
@@ -107,18 +108,41 @@ export const computeWorkflowStatus = (
   let rejectedGroups = 0;
   let dedupLabel: string | null = null;
 
+  let readinessStatus: DuplicateReadinessStatus = 'no_candidates';
+  let approvedUnmergedGroups = 0;
+  let blockingGroups = 0;
+  let dedupReason = '';
+
   if (errors.deduplication) {
     dedupState = 'error';
     dedupLabel = 'Błąd';
   } else if (deduplication) {
-    totalGroups = deduplication.total_groups_count;
-    pendingGroups = deduplication.groups.filter((g) => g.status === 'PENDING').length;
-    approvedGroups = deduplication.groups.filter((g) => g.status === 'APPROVED' || g.status === 'MERGED').length;
-    rejectedGroups = deduplication.groups.filter((g) => g.status === 'REJECTED').length;
+    const readiness = deduplication.readiness;
+    totalGroups = readiness?.total_groups ?? deduplication.total_groups_count;
+    pendingGroups = readiness?.pending_review_groups
+      ?? deduplication.groups.filter((g) => g.status === 'PENDING').length;
+    approvedGroups = readiness?.merged_groups
+      ?? deduplication.groups.filter((g) => g.status === 'APPROVED' || g.status === 'MERGED').length;
+    rejectedGroups = readiness?.rejected_groups
+      ?? deduplication.groups.filter((g) => g.status === 'REJECTED').length;
+    approvedUnmergedGroups = readiness?.approved_unmerged_groups
+      ?? deduplication.groups.filter((g) => g.status === 'APPROVED').length;
+    blockingGroups = readiness?.blocking_groups ?? pendingGroups;
+    readinessStatus = readiness?.status ?? (pendingGroups > 0
+      ? 'pending_review'
+      : approvedUnmergedGroups > 0
+        ? 'approved_unmerged'
+        : totalGroups > 0
+          ? 'ready'
+          : 'no_candidates');
+    dedupReason = readiness?.reason ?? '';
 
-    if (pendingGroups > 0) {
+    if (readinessStatus === 'pending_review' || pendingGroups > 0) {
       dedupState = 'pending_action';
-      dedupLabel = `${pendingGroups} do oceny`;
+      dedupLabel = `${Math.max(pendingGroups, blockingGroups)} do oceny`;
+    } else if (readinessStatus === 'approved_unmerged' || approvedUnmergedGroups > 0) {
+      dedupState = 'pending_action';
+      dedupLabel = `${approvedUnmergedGroups} do scalenia`;
     } else {
       dedupState = 'completed';
       dedupLabel = 'Oceniono';
@@ -301,6 +325,10 @@ export const computeWorkflowStatus = (
       pendingGroups,
       approvedGroups,
       rejectedGroups,
+      readinessStatus,
+      approvedUnmergedGroups,
+      blockingGroups,
+      reason: dedupReason,
       label: dedupLabel,
     },
     screening: {
@@ -542,6 +570,14 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
         importedAt: item.created_at,
         status: item.status,
         warnings: item.warnings,
+        sourceDatabase: item.source_database,
+        sourceLabel: item.source_label,
+        reviewStatus: item.review_status,
+        effectiveStatus: item.effective_status,
+        reviewerId: item.reviewer_id,
+        reviewedAt: item.reviewed_at,
+        canAccept: item.can_accept,
+        canReject: item.can_reject,
       }));
       setProjects((currentProjects) => currentProjects.map((project) => (
         project.id === targetProjectId ? { ...project, imports: importRecords } : project
@@ -1121,9 +1157,19 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
     newStatus: DuplicateGroupStatus,
     newRationale?: string | null
   ) => {
-    setDuplicateData((current) => {
-      if (!current) return current;
-      const updatedGroups = current.groups.map((group) =>
+    const baseGroups = duplicateData?.groups ?? [];
+    const updatedGroups = baseGroups.map((group) =>
+      group.group_id === groupId
+        ? {
+            ...group,
+            status: newStatus,
+            rationale: newRationale !== undefined ? newRationale : group.rationale,
+          }
+        : group
+    );
+    setDuplicateData((current) => current ? {
+      ...current,
+      groups: current.groups.map((group) =>
         group.group_id === groupId
           ? {
               ...group,
@@ -1131,36 +1177,41 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
               rationale: newRationale !== undefined ? newRationale : group.rationale,
             }
           : group
-      );
-      const pendingCount = updatedGroups.filter((g) => g.status === 'PENDING').length;
-      return {
-        ...current,
-        groups: updatedGroups,
-        pending_review_count: pendingCount,
-      };
-    });
+      ),
+    } : current);
 
-    setWorkflowStatus((current) => {
-      if (!current || !duplicateData) return current;
-      const updatedGroups = duplicateData.groups.map((group) =>
-        group.group_id === groupId ? { ...group, status: newStatus } : group
-      );
-      const pendingGroups = updatedGroups.filter((g) => g.status === 'PENDING').length;
-      const approvedGroups = updatedGroups.filter((g) => g.status === 'APPROVED' || g.status === 'MERGED').length;
-      const rejectedGroups = updatedGroups.filter((g) => g.status === 'REJECTED').length;
+    const pendingGroups = updatedGroups.filter((group) => group.status === 'PENDING').length;
+    const approvedUnmergedGroups = updatedGroups.filter((group) => group.status === 'APPROVED').length;
+    const mergedGroups = updatedGroups.filter((group) => group.status === 'MERGED').length;
+    const rejectedGroups = updatedGroups.filter((group) => group.status === 'REJECTED').length;
+    const readinessStatus: DuplicateReadinessStatus = pendingGroups > 0
+      ? 'pending_review'
+      : approvedUnmergedGroups > 0
+        ? 'approved_unmerged'
+        : updatedGroups.length === 0
+          ? 'no_candidates'
+          : 'ready';
 
-      return {
-        ...current,
-        deduplication: {
-          ...current.deduplication,
-          state: pendingGroups > 0 ? 'pending_action' : 'completed',
-          pendingGroups,
-          approvedGroups,
-          rejectedGroups,
-          label: pendingGroups > 0 ? `${pendingGroups} do oceny` : 'Oceniono',
-        },
-      };
-    });
+    setWorkflowStatus((current) => current ? {
+      ...current,
+      deduplication: {
+        ...current.deduplication,
+        state: readinessStatus === 'pending_review' || readinessStatus === 'approved_unmerged' ? 'pending_action' : 'completed',
+        totalGroups: updatedGroups.length,
+        pendingGroups,
+        approvedGroups: mergedGroups,
+        rejectedGroups,
+        readinessStatus,
+        approvedUnmergedGroups,
+        blockingGroups: pendingGroups + approvedUnmergedGroups,
+        reason: current.deduplication.reason ?? '',
+        label: readinessStatus === 'pending_review'
+          ? `${pendingGroups} do oceny`
+          : readinessStatus === 'approved_unmerged'
+            ? `${approvedUnmergedGroups} do scalenia`
+            : 'Oceniono',
+      },
+    } : current);
   };
 
   const runDeduplication = async (): Promise<ApiDuplicateGroupListResponse> => {
@@ -1173,19 +1224,32 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
       if (activeProjectIdRef.current !== targetProjectId) return result;
 
       setDuplicateData(result);
-      const pendingGroups = result.groups.filter((g) => g.status === 'PENDING').length;
-      const approvedGroups = result.groups.filter((g) => g.status === 'APPROVED' || g.status === 'MERGED').length;
-      const rejectedGroups = result.groups.filter((g) => g.status === 'REJECTED').length;
+      const readiness = result.readiness;
+      const pendingGroups = readiness?.pending_review_groups ?? result.groups.filter((g) => g.status === 'PENDING').length;
+      const approvedGroups = readiness?.merged_groups ?? result.groups.filter((g) => g.status === 'APPROVED' || g.status === 'MERGED').length;
+      const rejectedGroups = readiness?.rejected_groups ?? result.groups.filter((g) => g.status === 'REJECTED').length;
+      const approvedUnmergedGroups = readiness?.approved_unmerged_groups ?? 0;
+      const blockingGroups = readiness?.blocking_groups ?? pendingGroups;
+      const readinessStatus = readiness?.status ?? (pendingGroups > 0 ? 'pending_review' : 'ready');
 
       setWorkflowStatus((current) => current ? {
         ...current,
         deduplication: {
-          state: pendingGroups > 0 ? 'pending_action' : 'completed',
-          totalGroups: result.total_groups_count,
+          ...current.deduplication,
+          state: readinessStatus === 'pending_review' || readinessStatus === 'approved_unmerged' ? 'pending_action' : 'completed',
+          totalGroups: readiness?.total_groups ?? result.total_groups_count,
           pendingGroups,
           approvedGroups,
           rejectedGroups,
-          label: pendingGroups > 0 ? `${pendingGroups} do oceny` : 'Oceniono',
+          readinessStatus,
+          approvedUnmergedGroups,
+          blockingGroups,
+          reason: readiness?.reason ?? '',
+          label: readinessStatus === 'pending_review'
+            ? `${pendingGroups} do oceny`
+            : readinessStatus === 'approved_unmerged'
+              ? `${approvedUnmergedGroups} do scalenia`
+              : 'Oceniono',
         },
       } : current);
       return result;

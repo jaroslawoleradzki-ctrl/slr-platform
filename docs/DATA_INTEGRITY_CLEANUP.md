@@ -292,3 +292,36 @@ Sprint Data Integrity Cleanup nie obejmuje:
 5. Repository Contracts [COMPLETED]
 6. Test Fixtures [COMPLETED]
 7. CLI Integrity Check [COMPLETED]
+
+## v0.7.4 — import rejection safety
+
+Import rejection is a new guarded destructive operation. It is not a cascade
+delete.
+
+### Preconditions
+
+- the import is a warning file import with no existing terminal decision;
+- the request includes reviewer identity and explicit confirmation;
+- every publication to remove is owned solely by the selected import;
+- no publication is shared with another import, merged/superseded, or used by a
+  duplicate decision, pre-screening archive/finalization, screening, full-text,
+  quality, extraction, synthesis, or recovery decision.
+
+All blockers are returned together with machine-readable codes and counts.
+
+### Transaction
+
+1. Acquire `BEGIN IMMEDIATE`.
+2. Re-read the import and existing decision.
+3. Resolve owned publications and evaluate every blocker.
+4. Insert the rejection decision with warning and removed-publication snapshots.
+5. Delete only the safe import-owned publication rows.
+6. Invalidate project normalization execution because the active corpus changed.
+7. Commit; any exception rolls back all steps.
+
+### Retention and recovery
+
+The import history, source records, skip audit, warnings, and rejection decision
+remain as non-active audit. A committed rejection has no automatic restore;
+recovery requires a separate human-approved reconciliation using the retained
+audit and snapshots. Project deletion explicitly removes review decisions.

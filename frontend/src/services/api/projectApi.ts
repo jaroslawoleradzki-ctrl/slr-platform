@@ -32,6 +32,8 @@ import {
   ImportedRecord,
   ImportedRecordsPageResponse,
   PreScreeningRemovalReason,
+  ImportReviewDetail,
+  ImportReviewDecisionResponse,
 } from '../../types';
 import { API_BASE_URL } from '../../config/api';
 
@@ -128,6 +130,17 @@ export interface ProjectApiService {
   getBibliographicImports(
     projectId: string,
   ): Promise<BibliographicImportHistoryRecord[]>;
+  getImportReview(projectId: string, importId: string): Promise<ImportReviewDetail>;
+  postImportReview(
+    projectId: string,
+    importId: string,
+    payload: {
+      decision: 'accept' | 'reject';
+      reviewer_id: string;
+      rationale?: string | null;
+      confirm_rejection?: boolean;
+    },
+  ): Promise<ImportReviewDecisionResponse>;
   getImportedRecords(
     projectId: string,
     importId: string,
@@ -644,6 +657,51 @@ class MixedProjectApiService implements ProjectApiService {
       throw new Error(await formatFastApiError(response, 'pobrać historii importów'));
     }
     return response.json() as Promise<BibliographicImportHistoryRecord[]>;
+  }
+
+  async getImportReview(projectId: string, importId: string): Promise<ImportReviewDetail> {
+    const response = await fetch(`${API_BASE_URL}/projects/${projectId}/imports/${importId}/review`, {
+      headers: { Accept: 'application/json' },
+    });
+    if (!response.ok) {
+      throw new Error(await formatFastApiError(response, 'pobrać szczegóły importu'));
+    }
+    return response.json() as Promise<ImportReviewDetail>;
+  }
+
+  async postImportReview(
+    projectId: string,
+    importId: string,
+    payload: {
+      decision: 'accept' | 'reject';
+      reviewer_id: string;
+      rationale?: string | null;
+      confirm_rejection?: boolean;
+    },
+  ): Promise<ImportReviewDecisionResponse> {
+    const response = await fetch(`${API_BASE_URL}/projects/${projectId}/imports/${importId}/review`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!response.ok) {
+      const cloned = response.clone();
+      let blockerPayload: ImportReviewDetail['blockers'] | undefined;
+      try {
+        const body = await cloned.json() as { detail?: { blockers?: ImportReviewDetail['blockers'] } };
+        blockerPayload = body.detail?.blockers;
+      } catch {
+        // Retain the formatted message without structured blockers.
+      }
+      const error = new Error(await formatFastApiError(response, 'zapisać decyzję importu')) as Error & {
+        status?: number;
+        blockers?: ImportReviewDetail['blockers'];
+      };
+      error.status = response.status;
+      error.blockers = blockerPayload;
+      throw error;
+    }
+    return response.json() as Promise<ImportReviewDecisionResponse>;
   }
 
   async getImportedRecords(

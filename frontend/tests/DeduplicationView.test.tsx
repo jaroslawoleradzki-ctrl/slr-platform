@@ -183,12 +183,12 @@ describe('DeduplicationPage Phase 6.5 — Duplicate Comparison & Review UI', () 
     expect(screen.queryByText(/Oceniono wszystkie grupy/i)).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /Uruchom deduplikację/i }));
 
-    expect(await screen.findByText(/Deduplikacja zakończona pomyślnie/i)).toBeInTheDocument();
-    expect(screen.getByText(/Zakończono pomyślnie/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Analiza deduplikacji zakończona/i)).toBeInTheDocument();
+    expect(screen.getByText(/Status analizy/i).parentElement).toHaveTextContent('Zakończono');
     expect(screen.getByText(/535 publikacji/i)).toBeInTheDocument();
     expect(screen.getByText(/Znaleziono grup/i).parentElement).toHaveTextContent('1');
     expect(screen.getByText(/Czas wykonania/i).parentElement).toHaveTextContent(/s/);
-    expect(screen.getByText(/Oceniono wszystkie grupy/i)).toBeInTheDocument();
+    expect(screen.getByText(/Wymagają scalenia/i)).toBeInTheDocument();
     expect(await screen.findByText(/Existing decision/i)).toBeInTheDocument();
     expect(getGroupsSpy).toHaveBeenCalledTimes(2);
   });
@@ -236,7 +236,7 @@ describe('DeduplicationPage Phase 6.5 — Duplicate Comparison & Review UI', () 
 
     await act(async () => finishRerun(emptyResponse));
 
-    expect(await screen.findByText(/Deduplikacja zakończona pomyślnie/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Analiza deduplikacji zakończona/i)).toBeInTheDocument();
     expect(screen.queryByText(/Przeanalizowano 535 rekordów. Nie znaleziono grup kandydatów/i)).not.toBeInTheDocument();
     expect(screen.getByText(/Nie znaleziono grup wymagających oceny/i)).toBeInTheDocument();
     expect(screen.getByText(/Wykryte grupy kandydatów/i)).toBeInTheDocument();

@@ -113,3 +113,18 @@ OpenAlex, Crossref, Semantic Scholar, or any background provider request.
 - **Frontend Test Suite**: `npm run test` (5/5 tests passing)
 - **Production Bundle**: `npm run build` (Succeeded)
 - **Backend Test Suite**: `.venv/bin/pytest` (815/815 tests passing)
+
+## v0.7.4 — import warning review
+
+Warning badges in Sources & Imports open an accessible review dialog that shows:
+
+- import file/date/status and imported/canonical counts;
+- persisted warning messages and structured warning categories;
+- duplicate and invalid-DOI diagnostics;
+- `Akceptuję` and `Odrzucam` actions when eligible;
+- rejection blockers and a clear explanation when rejection is unsafe.
+
+`Odrzucam` opens the required confirmation dialog; cancel performs no request.
+`Akceptuję` calls the backend and updates the row to `Zaimportowano` only after
+the server confirms. Successful decisions refresh import history, source
+counters, and workflow status.

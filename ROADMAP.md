@@ -706,3 +706,18 @@ Feature
 → Stable Release
 
 Every completed phase results in a usable application.
+
+## v0.7.4 — Import warning resolution and workflow consistency
+
+Completed in the v0.7.4 increment:
+
+- explicit import warning accept/reject decisions;
+- guarded, transactional import rejection with audit retention;
+- rejected-import PRISMA classification;
+- one duplicate-readiness model across deduplication, screening, workflow
+  status, and PRISMA;
+- merged-group-plus-new-import consistency regression coverage.
+
+Remaining follow-up: provider-import rejection (out of scope), authenticated
+reviewer identity (separate feature), and a human-approved recovery procedure
+for committed import rejections.

@@ -51,8 +51,8 @@ export const WorkflowStepper: React.FC = () => {
           const alertCount =
             stage.id === 'dedup' &&
             workflowStatus?.deduplication &&
-            workflowStatus.deduplication.pendingGroups > 0
-              ? workflowStatus.deduplication.pendingGroups
+            (workflowStatus.deduplication.blockingGroups ?? workflowStatus.deduplication.pendingGroups) > 0
+              ? workflowStatus.deduplication.blockingGroups ?? workflowStatus.deduplication.pendingGroups
               : null;
 
           return (

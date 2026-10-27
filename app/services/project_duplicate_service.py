@@ -10,6 +10,7 @@ from app.api.dto.deduplication import (
     DuplicateGroupMergeResponse,
     DuplicateGroupResponse,
     DuplicateGroupStatus,
+    DuplicateReadinessResponse,
     DuplicateRecordPreviewResponse,
     ProvenanceEntryResponse,
     SharedIdentifierResponse,
@@ -44,6 +45,7 @@ from app.services.active_publication_filter import (
     repository_provides_method,
 )
 from app.services.duplicate_group_builder import DuplicateGroupBuilder, duplicate_group_builder
+from app.services.duplicate_readiness_service import evaluate_duplicate_readiness
 from app.services.publication_merge_policy import publication_merge_policy
 
 
@@ -277,7 +279,27 @@ class ProjectDuplicateService:
                     status=response.status.value,
                 )
 
-        return DuplicateGroupListResponse(project_id=project_id, total_groups_count=len(responses), groups=responses)
+        readiness = evaluate_duplicate_readiness(
+            live_groups.values(), decisions, merges
+        )
+        return DuplicateGroupListResponse(
+            project_id=project_id,
+            total_groups_count=len(responses),
+            groups=responses,
+            readiness=DuplicateReadinessResponse(
+                status=readiness.status.value,
+                screening_ready=readiness.screening_ready,
+                total_groups=readiness.total_groups,
+                pending_review_groups=readiness.pending_review_groups,
+                approved_unmerged_groups=readiness.approved_unmerged_groups,
+                merged_groups=readiness.merged_groups,
+                rejected_groups=readiness.rejected_groups,
+                stale_decisions=readiness.stale_decisions,
+                blocking_groups=readiness.blocking_groups,
+                blocking_group_ids=list(readiness.blocking_group_ids),
+                reason=readiness.reason,
+            ),
+        )
 
     def record_decision(
         self, project_id: str, group_id: str, decision: DuplicateDecisionType | str, rationale: str | None = None

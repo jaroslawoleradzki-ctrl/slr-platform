@@ -147,11 +147,18 @@ export const DeduplicationPage: React.FC = () => {
         ) : runReport?.status === 'success' ? (
           <div role="status" style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
             <div style={{ color: 'var(--status-success-text)', fontWeight: 700 }}>
-              Deduplikacja zakończona pomyślnie
+              Analiza deduplikacji zakończona
             </div>
+            {duplicateData?.readiness && (duplicateData.readiness.pending_review_groups > 0 || duplicateData.readiness.approved_unmerged_groups > 0) && (
+              <div style={{ color: 'var(--status-warning-text)', fontWeight: 600 }}>
+                {duplicateData.readiness.pending_review_groups > 0
+                  ? `${duplicateData.readiness.pending_review_groups} grup wymaga decyzji badacza.`
+                  : `${duplicateData.readiness.approved_unmerged_groups} zatwierdzonych grup wymaga scalenia.`}
+              </div>
+            )}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '14px' }}>
               <div><strong>Ostatnie wykonanie</strong><br />{runReport.completedAt.toLocaleString('pl-PL')}</div>
-              <div><strong>Status</strong><br />Zakończono pomyślnie</div>
+              <div><strong>Status analizy</strong><br />Zakończono</div>
               <div><strong>Wejściowa kolekcja</strong><br />{runReport.inputRecords.toLocaleString('pl-PL')}</div>
               <div><strong>Przeanalizowano</strong><br />{runReport.analyzedRecords.toLocaleString('pl-PL')} publikacji</div>
               <div><strong>Znaleziono grup</strong><br />{runReport.groupsFound.toLocaleString('pl-PL')}</div>

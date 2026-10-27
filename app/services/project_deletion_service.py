@@ -20,6 +20,7 @@ from app.repositories.full_text_availability_repository import (
     default_full_text_availability_repository,
 )
 from app.repositories.import_history_repository import ImportHistoryRepository, default_import_history_repository
+from app.repositories.import_review_repository import ImportReviewRepository, default_import_review_repository
 from app.repositories.normalization_execution_repository import (
     NormalizationExecutionRepository,
     default_normalization_execution_repository,
@@ -97,6 +98,7 @@ class SqliteProjectDeletionService:
         self,
         project_repo: ProjectRepository | None = None,
         import_history_repo: ImportHistoryRepository | None = None,
+        import_review_repo: ImportReviewRepository | None = None,
         normalization_repo: NormalizationExecutionRepository | None = None,
         publication_repo: ProjectPublicationRepository | None = None,
         duplicate_review_repo: DuplicateReviewDecisionRepository | None = None,
@@ -122,6 +124,7 @@ class SqliteProjectDeletionService:
     ) -> None:
         self._project_repo = project_repo or default_project_repository()
         self._import_history_repo = import_history_repo or default_import_history_repository()
+        self._import_review_repo = import_review_repo or default_import_review_repository()
         self._normalization_repo = normalization_repo or default_normalization_execution_repository()
         self._publication_repo = publication_repo or default_project_publication_repository()
         self._pre_screening_decision_repo = (
@@ -159,6 +162,7 @@ class SqliteProjectDeletionService:
     def delete_project(self, project_id: str) -> None:
         with self._tx_manager.transaction() as conn:
             # Delete dependent data first. All repositories accept an optional connection.
+            self._import_review_repo.delete_for_project(project_id, connection=conn)
             self._import_history_repo.delete_for_project(project_id, connection=conn)
             self._normalization_repo.delete_for_project(project_id, connection=conn)
             self._duplicate_review_repo.delete_for_project(project_id, connection=conn)

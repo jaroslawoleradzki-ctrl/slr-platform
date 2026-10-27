@@ -4,7 +4,6 @@ from dataclasses import dataclass
 from enum import StrEnum
 
 from app.domain.deduplication import DuplicateGroup
-from app.domain.duplicate_review import DuplicateDecision
 from app.domain.publication import Publication
 from app.repositories.corpus_finalization_repository import (
     CorpusFinalizationRepository,
@@ -24,6 +23,11 @@ from app.repositories.project_publication_repository import (
     default_project_publication_repository,
 )
 from app.services.duplicate_group_builder import DuplicateGroupBuilder
+from app.services.duplicate_readiness_service import (
+    DuplicateReadiness,
+    DuplicateReadinessStatus,
+    evaluate_duplicate_readiness,
+)
 
 
 class ScreeningInputReadinessStatus(StrEnum):
@@ -41,6 +45,7 @@ class ScreeningInput:
     unresolved_groups_count: int
     publications: tuple[Publication, ...]
     readiness_status: ScreeningInputReadinessStatus
+    duplicate_readiness: DuplicateReadiness
 
 
 class ScreeningInputService:
@@ -75,47 +80,50 @@ class ScreeningInputService:
         groups: list[DuplicateGroup] | None = None,
     ) -> ScreeningInput:
         if hasattr(self._publications, "get_screening_corpus_publications"):
-            publications = self._publications.get_screening_corpus_publications(project_id)
+            corpus_publications = self._publications.get_screening_corpus_publications(project_id)
         elif hasattr(self._publications, "get_all_publications"):
-            publications = self._publications.get_all_publications(project_id)
+            corpus_publications = self._publications.get_all_publications(project_id)
         else:
-            publications = self._publications.get_publications(project_id)
+            corpus_publications = self._publications.get_publications(project_id)
+
+        active = (
+            list(self._publications.get_active_publications(project_id))
+            if hasattr(self._publications, "get_active_publications")
+            else list(corpus_publications)
+        )
+        # Duplicate review is defined over active canonical publications only.
+        # The screening corpus may still contain superseded rows for provenance,
+        # but those rows must never create phantom candidate groups.
         if groups is None:
-            groups = self._builder.build(publications, include_title_candidates=True)
+            groups = self._builder.build(active, include_title_candidates=True)
         decisions = self._decisions.list_decisions_for_project(project_id)
-        unresolved = [group for group in groups if str(group.group_id) not in decisions]
-        if unresolved:
+        merges = self._merges.list_merges_for_project(project_id)
+        duplicate_readiness = evaluate_duplicate_readiness(groups, decisions, merges)
+
+        if duplicate_readiness.status is DuplicateReadinessStatus.PENDING_REVIEW:
             return ScreeningInput(
                 project_id,
                 False,
-                len(publications),
+                len(corpus_publications),
                 0,
-                len(unresolved),
+                duplicate_readiness.blocking_groups,
                 (),
                 ScreeningInputReadinessStatus.UNRESOLVED_DUPLICATES,
+                duplicate_readiness,
             )
 
-        unmerged = [
-            group
-            for group in groups
-            if decisions[str(group.group_id)].decision is DuplicateDecision.APPROVE
-            and self._merges.get_merge(project_id, str(group.group_id)) is None
-        ]
-        if unmerged:
+        if duplicate_readiness.status is DuplicateReadinessStatus.APPROVED_UNMERGED:
             return ScreeningInput(
                 project_id,
                 False,
-                len(publications),
+                len(corpus_publications),
                 0,
-                len(unmerged),
+                duplicate_readiness.blocking_groups,
                 (),
                 ScreeningInputReadinessStatus.UNMERGED_DUPLICATES,
+                duplicate_readiness,
             )
-        active = (
-            self._publications.get_active_publications(project_id)
-            if hasattr(self._publications, "get_active_publications")
-            else publications
-        )
+
         if self._finalizations is not None:
             latest_finalization = self._finalizations.get_latest_finalization(project_id)
             if latest_finalization is not None:
@@ -126,11 +134,12 @@ class ScreeningInputService:
         return ScreeningInput(
             project_id,
             True,
-            len(publications),
+            len(corpus_publications),
             len(ordered),
             0,
             ordered,
             ScreeningInputReadinessStatus.READY,
+            duplicate_readiness,
         )
 
     def get_readiness(

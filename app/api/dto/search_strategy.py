@@ -343,6 +343,12 @@ class BibliographicImportHistoryResponse(BaseModel):
     warnings: list[str] = Field(default_factory=list)
     source_database: ManualSourceDatabase | None = None
     source_label: str | None = None
+    review_status: str = "not_required"
+    effective_status: str = "success"
+    reviewer_id: str | None = None
+    reviewed_at: datetime | None = None
+    can_accept: bool = False
+    can_reject: bool = False
 
 
 SearchStrategyExecutionResponse.model_rebuild()
