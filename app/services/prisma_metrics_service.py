@@ -303,14 +303,24 @@ class PrismaMetricsService:
         # The workflow status and excluded counts share one screening input set
         # so that a single PRISMA calculation executes the duplicate-group
         # builder at most twice: once for the active population above and once
-        # for the screening corpus used by the workflow services.
-        workflow_input = self._workflow_status.get_input_set(project_id)
-        workflow = self._workflow_status.get_status(
-            project_id, reviewer_id=reviewer_id, input_set=workflow_input
-        )
-        ta_excluded, ft_excluded = self._workflow_status.get_excluded_counts(
-            project_id, reviewer_id=reviewer_id, input_set=workflow_input
-        )
+        # for the screening corpus used by the workflow services.  Test doubles
+        # that predate the input-set plumbing keep the legacy call path.
+        get_input_set = getattr(self._workflow_status, "get_input_set", None)
+        if get_input_set is not None:
+            workflow_input = get_input_set(project_id)
+            workflow = self._workflow_status.get_status(
+                project_id, reviewer_id=reviewer_id, input_set=workflow_input
+            )
+            ta_excluded, ft_excluded = self._workflow_status.get_excluded_counts(
+                project_id, reviewer_id=reviewer_id, input_set=workflow_input
+            )
+        else:
+            workflow = self._workflow_status.get_status(
+                project_id, reviewer_id=reviewer_id
+            )
+            ta_excluded, ft_excluded = self._workflow_status.get_excluded_counts(
+                project_id, reviewer_id=reviewer_id
+            )
 
         return PrismaMetrics(
             project_id=project_id,

@@ -73,6 +73,89 @@ def _source_label(publication: Publication) -> str:
     return publication.provenance[0].source if publication.provenance else ""
 
 
+class CanonicalResolutionError(ValueError):
+    """A DOI/identity match cannot be resolved to an active canonical record.
+
+    Raised instead of linking a new source occurrence to a superseded record or
+    guessing across a broken/cyclic ``superseded_by`` chain.  The import
+    transaction rolls back, leaving no partially linked source rows.
+    """
+
+
+def _resolve_active_canonical(
+    project_id: str,
+    record_id: UUID,
+    superseded_by: dict[UUID, UUID | None],
+) -> UUID:
+    """Follow ``superseded_by`` links until an active canonical is reached.
+
+    Raises :class:`CanonicalResolutionError` for dangling targets, targets from
+    another project, and malformed cycles.  Resolution is purely project-scoped:
+    the caller supplies the map for one project.
+    """
+
+    path: list[UUID] = [record_id]
+    seen: set[UUID] = set()
+    current = record_id
+    while True:
+        if current in seen:
+            cycle = " -> ".join(str(item) for item in [*path, current])
+            raise CanonicalResolutionError(
+                f"Supersession cycle in project '{project_id}': {cycle}"
+            )
+        seen.add(current)
+        if current not in superseded_by:
+            raise CanonicalResolutionError(
+                f"Publication '{current}' is not present in project '{project_id}'."
+            )
+        target = superseded_by[current]
+        if target is None:
+            return current
+        path.append(target)
+        current = target
+
+
+def _active_canonical_for_doi(
+    project_id: str,
+    doi: str,
+    candidates: list[UUID],
+    superseded_by: dict[UUID, UUID | None],
+) -> UUID:
+    """Resolve the first DOI candidate that reaches a valid active canonical."""
+
+    errors: list[str] = []
+    for record_id in candidates:
+        try:
+            return _resolve_active_canonical(project_id, record_id, superseded_by)
+        except CanonicalResolutionError as exc:
+            errors.append(str(exc))
+    raise CanonicalResolutionError(
+        f"DOI '{doi}' matches publication(s) "
+        f"{', '.join(str(item) for item in candidates)} in project "
+        f"'{project_id}', but no active canonical could be resolved: "
+        + "; ".join(errors)
+    )
+
+
+def _doi_candidates(
+    publications: list[Publication],
+) -> dict[str, list[UUID]]:
+    """Map normalized DOI to candidates while preserving deterministic order."""
+
+    candidates: dict[str, list[UUID]] = {}
+    for publication in publications:
+        for identifier in publication.identifiers:
+            if identifier.type is not IdentifierType.DOI:
+                continue
+            valid_doi = normalize_doi_strict(identifier.value)
+            if not valid_doi:
+                continue
+            bucket = candidates.setdefault(valid_doi, [])
+            if publication.record_id not in bucket:
+                bucket.append(publication.record_id)
+    return candidates
+
+
 class ProjectImportService:
     """Service orchestrating atomic multi-repository imports under one transaction boundary."""
 
@@ -242,9 +325,18 @@ class ProjectImportService:
             existing = self._pub_repo.get_publications(project_id, connection=conn)
         except TypeError:
             existing = self._pub_repo.get_publications(project_id)
+        try:
+            superseded_by = self._pub_repo.get_superseded_by_map(
+                project_id, connection=conn
+            )
+        except TypeError:
+            superseded_by = self._pub_repo.get_superseded_by_map(project_id)
         by_source_key: dict[tuple[str, str], Publication] = {}
-        by_doi: dict[str, Publication] = {}
-        for publication in [*existing, *[p for p in publications if str(p.record_id) in inserted_ids]]:
+        candidate_publications = [
+            *existing,
+            *[p for p in publications if str(p.record_id) in inserted_ids],
+        ]
+        for publication in candidate_publications:
             if publication.provenance:
                 pub_provenance = publication.provenance[0]
                 by_source_key[
@@ -253,11 +345,7 @@ class ProjectImportService:
                         pub_provenance.source_record_id.strip(),
                     )
                 ] = publication
-            for identifier in publication.identifiers:
-                if identifier.type is IdentifierType.DOI:
-                    valid_doi = normalize_doi_strict(identifier.value)
-                    if valid_doi:
-                        by_doi.setdefault(valid_doi, publication)
+        doi_candidates = _doi_candidates(candidate_publications)
         ordinals: dict[str, int] = {}
         filename = f"provider:{provider_name}"
         for index, publication in enumerate(publications, 1):
@@ -280,11 +368,28 @@ class ProjectImportService:
                 provenance.source.strip().casefold(),
                 provenance.source_record_id.strip(),
             ) if provenance else ("", "")
+            doi_canonical: UUID | None = None
+            doi_reason = "Normalized DOI equals an existing publication"
+            if valid_doi and valid_doi in doi_candidates:
+                doi_canonical = _active_canonical_for_doi(
+                    project_id,
+                    valid_doi,
+                    doi_candidates[valid_doi],
+                    superseded_by,
+                )
+                if any(
+                    superseded_by.get(candidate_id) is not None
+                    for candidate_id in doi_candidates[valid_doi]
+                ):
+                    doi_reason = (
+                        "Normalized DOI matched a superseded publication; "
+                        "linked to its active canonical"
+                    )
             canonical = (
                 str(publication.record_id)
                 if str(publication.record_id) in inserted_ids
-                else str(by_doi[valid_doi].record_id)
-                if valid_doi and valid_doi in by_doi
+                else str(doi_canonical)
+                if doi_canonical is not None
                 else str(by_source_key[key].record_id)
                 if key in by_source_key
                 else None
@@ -316,9 +421,9 @@ class ProjectImportService:
             matched = canonical is None or str(publication.record_id) not in inserted_ids
             match_type = None
             match_reason = None
-            if matched and valid_doi and valid_doi in by_doi:
+            if matched and doi_canonical is not None:
                 match_type = "exact_doi"
-                match_reason = "Normalized DOI equals an existing publication"
+                match_reason = doi_reason
             elif matched:
                 match_type = "provider_key_duplicate"
                 match_reason = "Provider source record already exists in the project"
@@ -437,13 +542,13 @@ class ProjectImportService:
         except TypeError:
             existing_pubs = self._pub_repo.get_publications(project_id)
         existing_ids = {str(pub.record_id) for pub in existing_pubs}
-        existing_by_doi: dict[str, Publication] = {}
-        for pub in existing_pubs:
-            for ident in pub.identifiers:
-                if ident.type is IdentifierType.DOI:
-                    existing_valid_doi = normalize_doi_strict(ident.value)
-                    if existing_valid_doi:
-                        existing_by_doi.setdefault(existing_valid_doi, pub)
+        try:
+            superseded_by = self._pub_repo.get_superseded_by_map(
+                project_id, connection=conn
+            )
+        except TypeError:
+            superseded_by = self._pub_repo.get_superseded_by_map(project_id)
+        existing_doi_candidates = _doi_candidates(existing_pubs)
 
         fingerprints = (
             list(record_fingerprints)
@@ -550,11 +655,28 @@ class ProjectImportService:
                 )
                 continue
 
-            matched_existing = (
-                existing_by_doi.get(valid_doi) if valid_doi is not None else None
+            matched_doi_candidates = (
+                existing_doi_candidates.get(valid_doi)
+                if valid_doi is not None
+                else None
             )
-            if matched_existing is not None:
-                canonical_id = str(matched_existing.record_id)
+            if valid_doi is not None and matched_doi_candidates is not None:
+                resolved_canonical = _active_canonical_for_doi(
+                    project_id,
+                    valid_doi,
+                    matched_doi_candidates,
+                    superseded_by,
+                )
+                canonical_id = str(resolved_canonical)
+                doi_reason = "Normalized DOI equals an existing publication"
+                if any(
+                    superseded_by.get(candidate_id) is not None
+                    for candidate_id in matched_doi_candidates
+                ):
+                    doi_reason = (
+                        "Normalized DOI matched a superseded publication; "
+                        "linked to its active canonical"
+                    )
                 doi_duplicate_count += 1
                 skipped_count += 1
                 planned.append(
@@ -563,7 +685,7 @@ class ProjectImportService:
                         "canonical_id": canonical_id,
                         "status": "linked_exact_doi",
                         "match_type": "exact_doi",
-                        "match_reason": "Normalized DOI equals an existing publication",
+                        "match_reason": doi_reason,
                         "review_required": False,
                     }
                 )
@@ -582,7 +704,7 @@ class ProjectImportService:
                         source_doi=original_doi,
                         matched_publication_id=canonical_id,
                         match_type="exact_doi",
-                        match_reason="Normalized DOI equals an existing publication",
+                        match_reason=doi_reason,
                         proposed_action="link_to_existing_canonical",
                         review_required=False,
                         recovery_status="not_needed",
