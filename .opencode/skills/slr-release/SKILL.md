@@ -1,0 +1,103 @@
+---
+name: SLR Release
+description: Use when preparing an SLR Platform version, updating VERSION or CHANGELOG, integrating development into main, creating a GitHub Release, mirroring to Homelab, or planning deployment and rollback.
+---
+
+# SLR Release
+
+## Activation criteria
+
+Activate for:
+
+- a version bump, changelog, release notes, or release report;
+- `development` → `main` integration;
+- GitHub Release or tag creation;
+- Homelab mirror synchronization;
+- deployment preflight, post-deployment verification, or rollback planning.
+
+A release is a RELEASE-risk activity. It always requires CI and explicit human
+approval.
+
+## Required context
+
+Read `AGENTS.md`, then:
+
+- `VERSION`, `pyproject.toml`, `frontend/package.json`;
+- `CHANGELOG.md`, `docs/VERSIONING.md`;
+- the latest `docs/releases/` and `docs/reviews/` reports;
+- `.github/workflows/ci.yml` and the latest CI result;
+- `scripts/deploy_ai_node.sh`, `compose.yaml`, and
+  `docs/runbooks/CI_SELF_HOSTED_RUNNER.md` when deployment is in scope;
+- `git status`, `git log`, and the relevant tags.
+
+## Workflow
+
+1. Confirm the release scope and that every intended change is merged and
+   covered by a green CI run.
+2. Choose the semantic version under `docs/VERSIONING.md` pre-1.0 rules.
+3. Update `VERSION` as the source of truth, then synchronize
+   `pyproject.toml` and `frontend/package.json`.
+4. Update `CHANGELOG.md` and write `docs/releases/vX.Y.Z.md`.
+5. Run the full quality gates and a clean build.
+6. Prepare the release report with scope, tests, known limitations, and
+   rollback notes.
+7. Integrate `development` into `main` with human approval. Do not rewrite
+   history or force-push.
+8. Tag the release and create the GitHub Release only after approval.
+9. Mirror to Homelab using the established procedure; verify the mirror.
+10. Run deployment preflight, deploy only with explicit authorization, then
+    perform post-deployment verification.
+11. Keep the previous version and database backup available for rollback.
+
+## Safety constraints
+
+- No autonomous production deployment. A human must authorize the deploy step.
+- No release with failing or missing CI.
+- No tag or release from a dirty worktree.
+- No force-push, history rewrite, or branch deletion.
+- No secrets in release notes, logs, or reports.
+- No schema-destructive operation without a tested recovery path.
+- Do not modify unrelated Docker stacks or FINNARO infrastructure.
+- Do not claim a deployment succeeded without post-deployment evidence.
+
+## Validation
+
+```bash
+git status --short
+git diff --check
+uv run --frozen --no-sync ruff check app tests scripts
+uv run --frozen --no-sync mypy app
+uv run --frozen --no-sync pytest -q -p no:cacheprovider
+cd frontend && npm run type-check && npm test && npm run build
+```
+
+Version consistency:
+
+```bash
+cat VERSION
+grep -n '^version' pyproject.toml
+grep -n '"version"' frontend/package.json
+```
+
+Post-deployment verification: health endpoint, version endpoint, a read-only
+project/workflow smoke check, and a log check for errors.
+
+## Expected outputs
+
+- Version bump and synchronized manifests.
+- Changelog and release notes.
+- Release report with CI evidence and known limitations.
+- Tag and GitHub Release (after approval).
+- Homelab mirror verification.
+- Deployment preflight, post-deployment verification, and rollback plan.
+
+## References
+
+- `AGENTS.md` sections D, F, and G
+- `VERSION`, `pyproject.toml`, `frontend/package.json`
+- `CHANGELOG.md`
+- `docs/VERSIONING.md`
+- `docs/releases/`, `docs/reviews/`
+- `.github/workflows/ci.yml`
+- `scripts/deploy_ai_node.sh`
+- `compose.yaml`

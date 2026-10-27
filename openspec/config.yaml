@@ -1,0 +1,65 @@
+schema: spec-driven
+
+# Project context: constraints an agent cannot reliably infer from code alone.
+context: |
+  SLR Platform is a deterministic systematic-literature-review workflow
+  platform. It must not embed an LLM or make autonomous scientific decisions.
+
+  Baseline conventions:
+  - Python 3.12 + FastAPI + Pydantic v2; SQLite via the standard library.
+  - React 18 + TypeScript + Vite + Vitest frontend.
+  - API prefix /api/v1; DTOs in app/api/dto; project-scoped routers in app/api/routers.
+  - SQL migrations are numbered files in migrations/ and applied idempotently
+    through schema_migrations by the owning repository.
+  - Tests live in tests/unit, tests/integration, and tests/contract; pytest
+    isolates SLR_DATABASE_PATH to a temporary database.
+  - The root VERSION file is the single application version source of truth.
+
+  Research-integrity invariants:
+  - Preserve PRISMA accounting, provenance, source-record identity, DOI
+    normalization, duplicate-review decisions, screening decisions, quality
+    assessment records, extraction records, synthesis records, and audit trails.
+  - Never silently discard research records, auto-merge uncertain duplicates,
+    fabricate publication metadata, or change methodological decisions.
+  - Uncertain duplicates and all scientific outcomes require a human decision.
+
+  Engineering invariants:
+  - Work only in an isolated git worktree; never modify the protected
+    /home/cloud/dev/slr-platform development worktree.
+  - Keep diffs minimal, add regression coverage, and run the documented quality
+    gates in AGENTS.md.
+  - No production deployment without explicit human authorization.
+
+# Per-artifact rules.
+rules:
+  proposal:
+    - State the risk tier (LOW, MEDIUM, HIGH, or RELEASE) and why.
+    - State explicitly what is out of scope, including application behavior and
+      production infrastructure when they are not part of the change.
+    - Name the human approval needed for HIGH-risk or RELEASE work.
+  specs:
+    - Write observable requirements using SHALL statements.
+    - Every requirement must have at least one WHEN/THEN scenario.
+    - Cover preservation of research records and backward compatibility when the
+      change touches persistence, import, DOI, deduplication, screening, quality
+      assessment, extraction, synthesis, or PRISMA accounting.
+  design:
+    - Identify affected layers, API contracts, schema/migration impact, and
+      rollback or recovery behavior.
+    - Record rejected alternatives only when they affect future maintenance.
+  tasks:
+    - Order tasks test-first for behavioral changes.
+    - Include the exact validation command for each affected quality gate.
+    - Include documentation and implementation-report tasks.
+
+operations:
+  apply:
+    guidance:
+      - Stop and ask when implementation reveals a methodology or schema decision
+        that the planning artifacts do not cover.
+      - Never weaken a failing integrity test to make a task pass.
+  archive:
+    guidance:
+      - Verify the implementation report and validation evidence exist before
+        archiving.
+      - Summarize any follow-up risk that remains after the change is archived.
