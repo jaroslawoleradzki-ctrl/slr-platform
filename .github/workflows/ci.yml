@@ -179,13 +179,18 @@ jobs:
           mkdir -p "$TEST_ROOT"
           export TMPDIR="$TEST_ROOT"
           export SLR_DATABASE_PATH="$TEST_ROOT/slr-platform-ci.db"
+          DATA_DB_STATE_BEFORE="$(find data -maxdepth 1 -type f -name '*.db' -printf '%p %s %T@\n' 2>/dev/null | sort || true)"
           uv run --frozen --no-sync pytest -q -p no:cacheprovider
-          # The repository's working database must never be touched by CI.
-          if [ -d data ] && find data -maxdepth 1 -name '*.db' -print -quit | grep -q .; then
-            echo "::error::CI created a database under data/; tests are not isolated"
-            find data -maxdepth 1 -name '*.db' -print
+          # The repository's working database must never be created or modified by CI.
+          # A self-hosted runner may have a pre-existing ignored data/*.db; compare
+          # state instead of deleting or requiring an empty data/ directory.
+          DATA_DB_STATE_AFTER="$(find data -maxdepth 1 -type f -name '*.db' -printf '%p %s %T@\n' 2>/dev/null | sort || true)"
+          if [ "$DATA_DB_STATE_BEFORE" != "$DATA_DB_STATE_AFTER" ]; then
+            echo "::error::tests created or modified a database under data/; tests are not isolated"
+            diff <(printf '%s\n' "$DATA_DB_STATE_BEFORE") <(printf '%s\n' "$DATA_DB_STATE_AFTER") || true
             exit 1
           fi
+          echo "data/ database state unchanged by tests"
       - name: Remove isolated test directory
         if: always()
         run: |
