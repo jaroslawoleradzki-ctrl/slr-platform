@@ -3,6 +3,10 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from app.api.dto.prisma import PrismaMetricsResponse
+from app.repositories.duplicate_merge_repository import (
+    DuplicateMergeRepository,
+    SqliteDuplicateMergeRepository,
+)
 from app.repositories.duplicate_review_decision_repository import (
     DuplicateReviewDecisionRepository,
     default_duplicate_review_decision_repository,
@@ -10,6 +14,10 @@ from app.repositories.duplicate_review_decision_repository import (
 from app.repositories.import_history_repository import (
     ImportHistoryRepository,
     default_import_history_repository,
+)
+from app.repositories.import_source_record_repository import (
+    ImportSourceRecordRepository,
+    SqliteImportSourceRecordRepository,
 )
 from app.repositories.pre_screening_archive_repository import (
     PreScreeningArchiveRepository,
@@ -89,6 +97,17 @@ class PrismaMetrics:
     records_excluded_title_abstract: int = 0
     records_excluded_full_text: int = 0
     records_removed_prescreening: int = 0
+    source_records_identified: int = 0
+    persisted_source_records: int = 0
+    exact_duplicates_linked: int = 0
+    repeated_source_occurrences: int = 0
+    canonical_publications: int = 0
+    canonical_publications_total: int = 0
+    merged_duplicate_groups: int = 0
+    merged_duplicate_records: int = 0
+    recovered_records: int = 0
+    historical_canonical_without_source_records: int = 0
+    prisma_accounting_note: str = ""
 
 
 class PrismaMetricsService:
@@ -107,6 +126,8 @@ class PrismaMetricsService:
         workflow_status_service: ProjectWorkflowStatusService | None = None,
         builder: DuplicateGroupBuilder | None = None,
         archive_repository: PreScreeningArchiveRepository | None = None,
+        source_record_repository: ImportSourceRecordRepository | None = None,
+        merge_repository: DuplicateMergeRepository | None = None,
     ) -> None:
         self._publications = publication_repository or default_project_publication_repository()
         self._history = import_history_repository or default_import_history_repository()
@@ -114,6 +135,66 @@ class PrismaMetricsService:
         self._workflow_status = workflow_status_service or default_project_workflow_status_service()
         self._builder = builder or duplicate_group_builder
         self._archive_repo = archive_repository or default_pre_screening_archive_repository()
+        self._source_records: ImportSourceRecordRepository | None
+        if source_record_repository is not None:
+            self._source_records = source_record_repository
+        elif hasattr(self._publications, "_database_path"):
+            self._source_records = SqliteImportSourceRecordRepository(
+                self._publications._database_path
+            )
+        else:
+            self._source_records = None
+        self._merges: DuplicateMergeRepository | None
+        if merge_repository is not None:
+            self._merges = merge_repository
+        elif hasattr(self._publications, "_database_path"):
+            self._merges = SqliteDuplicateMergeRepository(
+                self._publications._database_path
+            )
+        else:
+            self._merges = None
+
+    def get_source_accounting(self, project_id: str) -> dict:
+        """Return the persisted source/canonical accounting used by PRISMA and tooling."""
+
+        persisted = (
+            self._source_records.count_source_records(project_id)
+            if self._source_records is not None
+            else 0
+        )
+        exact = (
+            self._source_records.count_skip_audit(project_id, "exact_doi")
+            if self._source_records is not None
+            else 0
+        )
+        repeated = (
+            self._source_records.count_skip_audit(project_id, "repeated_occurrence")
+            if self._source_records is not None
+            else 0
+        )
+        recovered = (
+            self._source_records.count_recovered(project_id)
+            if self._source_records is not None
+            else 0
+        )
+        active = self._publications.count_active_by_project(project_id)
+        historical = (
+            self._source_records.count_canonical_without_source(project_id)
+            if self._source_records is not None
+            else active
+        )
+        return {
+            "persisted_source_records": persisted,
+            "source_records_identified": persisted + repeated,
+            "exact_duplicates_linked": exact,
+            "repeated_source_occurrences": repeated,
+            "recovered_records": recovered,
+            "canonical_publications": active,
+            "canonical_publications_total": self._publications.count_by_project(
+                project_id
+            ),
+            "historical_canonical_without_source_records": historical,
+        }
 
     def get_metrics(self, project_id: str, reviewer_id: str = "default_reviewer") -> PrismaMetrics:
         total_raw = self._publications.count_by_project(project_id)
@@ -139,27 +220,107 @@ class PrismaMetricsService:
             if record.status not in _SUCCESS_STATUSES:
                 continue
             if record.source_type == "provider":
-                identified_providers += record.records_count
                 provider_key = record.provider or "unknown"
-                provider_breakdown[provider_key] = provider_breakdown.get(provider_key, 0) + record.records_count
+                import_count = record.records_count
+                if self._source_records is not None:
+                    source_records = self._source_records.list_source_records_for_import(
+                        project_id, record.import_id
+                    )
+                    skip_records = self._source_records.list_skip_audit_for_import(
+                        project_id, record.import_id
+                    )
+                    repeated = sum(
+                        1
+                        for item in skip_records
+                        if item.match_type == "repeated_occurrence"
+                    )
+                    if source_records or skip_records:
+                        import_count = len(source_records) + repeated
+                identified_providers += import_count
+                provider_breakdown[provider_key] = (
+                    provider_breakdown.get(provider_key, 0) + import_count
+                )
             elif record.source_type == "file":
-                identified_imports += record.records_count
                 source_key = record.source_database or "unknown"
-                manual_breakdown[source_key] = manual_breakdown.get(source_key, 0) + record.records_count
+                import_count = record.records_count
+                if self._source_records is not None:
+                    source_records = self._source_records.list_source_records_for_import(
+                        project_id, record.import_id
+                    )
+                    skip_records = self._source_records.list_skip_audit_for_import(
+                        project_id, record.import_id
+                    )
+                    repeated = sum(
+                        1
+                        for item in skip_records
+                        if item.match_type == "repeated_occurrence"
+                    )
+                    if source_records or skip_records:
+                        # Exact DOI links are source records; repeated
+                        # occurrences are audited but not persisted twice.
+                        import_count = len(source_records) + repeated
+                identified_imports += import_count
+                manual_breakdown[source_key] = (
+                    manual_breakdown.get(source_key, 0) + import_count
+                )
 
         active_publications = self._publications.get_active_publications(project_id)
-        groups = self._builder.build(active_publications)
+        groups = self._builder.build(
+            active_publications, include_title_candidates=True
+        )
         decisions = self._decisions.list_decisions_for_project(project_id)
 
         records_after_technical_merger = self._publications.count_active_by_project(project_id)
         duplicate_groups_pending_review = sum(
             1 for group in groups if str(group.group_id) not in decisions
         )
-
-        workflow = self._workflow_status.get_status(project_id, reviewer_id=reviewer_id)
-        ta_excluded, ft_excluded = self._workflow_status.get_excluded_counts(
-            project_id, reviewer_id=reviewer_id
+        merges = (
+            self._merges.list_merges_for_project(project_id)
+            if self._merges is not None
+            else {}
         )
+        merged_groups = [merge for merge in merges.values() if merge.status == "merged"]
+        merged_duplicate_records = sum(
+            max(0, len(merge.merged_publication_ids) - 1) for merge in merged_groups
+        )
+        accounting = self.get_source_accounting(project_id)
+        persisted_source_records = accounting["persisted_source_records"]
+        exact_duplicates_linked = accounting["exact_duplicates_linked"]
+        repeated_source_occurrences = accounting["repeated_source_occurrences"]
+        recovered_records = accounting["recovered_records"]
+        historical_without_source = accounting[
+            "historical_canonical_without_source_records"
+        ]
+        note = (
+            "Source-aware accounting uses persisted source records; historical "
+            "imports without source rows fall back to import-history counts and "
+            "are reported as historical canonicals without source provenance."
+            if persisted_source_records or repeated_source_occurrences
+            else "Historical project: no source-record rows are available; "
+            "identified records fall back to import history."
+        )
+
+        # The workflow status and excluded counts share one screening input set
+        # so that a single PRISMA calculation executes the duplicate-group
+        # builder at most twice: once for the active population above and once
+        # for the screening corpus used by the workflow services.  Test doubles
+        # that predate the input-set plumbing keep the legacy call path.
+        get_input_set = getattr(self._workflow_status, "get_input_set", None)
+        if get_input_set is not None:
+            workflow_input = get_input_set(project_id)
+            workflow = self._workflow_status.get_status(
+                project_id, reviewer_id=reviewer_id, input_set=workflow_input
+            )
+            ta_excluded, ft_excluded = self._workflow_status.get_excluded_counts(
+                project_id, reviewer_id=reviewer_id, input_set=workflow_input
+            )
+        else:
+            workflow = self._workflow_status.get_status(
+                project_id, reviewer_id=reviewer_id
+            )
+            ta_excluded, ft_excluded = self._workflow_status.get_excluded_counts(
+                project_id, reviewer_id=reviewer_id
+            )
 
         return PrismaMetrics(
             project_id=project_id,
@@ -178,6 +339,21 @@ class PrismaMetricsService:
             records_excluded_title_abstract=ta_excluded,
             records_excluded_full_text=ft_excluded,
             records_removed_prescreening=prescreening_removed,
+            source_records_identified=(
+                persisted_source_records + repeated_source_occurrences
+            ),
+            persisted_source_records=persisted_source_records,
+            exact_duplicates_linked=exact_duplicates_linked,
+            repeated_source_occurrences=repeated_source_occurrences,
+            canonical_publications=records_after_technical_merger,
+            canonical_publications_total=self._publications.count_by_project(
+                project_id
+            ),
+            merged_duplicate_groups=len(merged_groups),
+            merged_duplicate_records=merged_duplicate_records,
+            recovered_records=recovered_records,
+            historical_canonical_without_source_records=historical_without_source,
+            prisma_accounting_note=note,
         )
 
     def to_response(self, metrics: PrismaMetrics) -> PrismaMetricsResponse:
@@ -198,6 +374,17 @@ class PrismaMetricsService:
             records_excluded_title_abstract=metrics.records_excluded_title_abstract,
             records_excluded_full_text=metrics.records_excluded_full_text,
             records_removed_prescreening=metrics.records_removed_prescreening,
+            source_records_identified=metrics.source_records_identified,
+            persisted_source_records=metrics.persisted_source_records,
+            exact_duplicates_linked=metrics.exact_duplicates_linked,
+            repeated_source_occurrences=metrics.repeated_source_occurrences,
+            canonical_publications=metrics.canonical_publications,
+            canonical_publications_total=metrics.canonical_publications_total,
+            merged_duplicate_groups=metrics.merged_duplicate_groups,
+            merged_duplicate_records=metrics.merged_duplicate_records,
+            recovered_records=metrics.recovered_records,
+            historical_canonical_without_source_records=metrics.historical_canonical_without_source_records,
+            prisma_accounting_note=metrics.prisma_accounting_note,
         )
 
 

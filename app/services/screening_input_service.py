@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import StrEnum
 
+from app.domain.deduplication import DuplicateGroup
 from app.domain.duplicate_review import DuplicateDecision
 from app.domain.publication import Publication
 from app.repositories.corpus_finalization_repository import (
@@ -67,14 +68,20 @@ class ScreeningInputService:
             else None
         )
 
-    def get_input_set(self, project_id: str) -> ScreeningInput:
+    def get_input_set(
+        self,
+        project_id: str,
+        *,
+        groups: list[DuplicateGroup] | None = None,
+    ) -> ScreeningInput:
         if hasattr(self._publications, "get_screening_corpus_publications"):
             publications = self._publications.get_screening_corpus_publications(project_id)
         elif hasattr(self._publications, "get_all_publications"):
             publications = self._publications.get_all_publications(project_id)
         else:
             publications = self._publications.get_publications(project_id)
-        groups = self._builder.build(publications)
+        if groups is None:
+            groups = self._builder.build(publications, include_title_candidates=True)
         decisions = self._decisions.list_decisions_for_project(project_id)
         unresolved = [group for group in groups if str(group.group_id) not in decisions]
         if unresolved:
@@ -126,5 +133,10 @@ class ScreeningInputService:
             ScreeningInputReadinessStatus.READY,
         )
 
-    def get_readiness(self, project_id: str) -> ScreeningInput:
-        return self.get_input_set(project_id)
+    def get_readiness(
+        self,
+        project_id: str,
+        *,
+        groups: list[DuplicateGroup] | None = None,
+    ) -> ScreeningInput:
+        return self.get_input_set(project_id, groups=groups)

@@ -275,6 +275,18 @@ export interface ImportFileRecord {
   warnings?: string[];
   sourceDatabase?: ManualSourceDatabase;
   sourceLabel?: string | null;
+  sourceRecordCount?: number | null;
+  canonicalPublicationCount?: number | null;
+  exactDoiMatchCount?: number | null;
+  repeatedSourceCount?: number | null;
+  titleCandidateCount?: number | null;
+  similarTitleCandidateCount?: number | null;
+  skippedCanonicalCount?: number | null;
+  invalidDoiCount?: number | null;
+  validationErrorCount?: number;
+  skipAuditAvailable?: boolean;
+  auditAvailable?: boolean;
+  recoveryStatus?: string | null;
 }
 
 export interface BibliographicImportResponse {
@@ -312,6 +324,18 @@ export interface ImportHistoryItemDTO {
   created_at: string;
   source_database?: ManualSourceDatabase;
   source_label?: string | null;
+  source_record_count?: number | null;
+  canonical_publication_count?: number | null;
+  exact_doi_match_count?: number | null;
+  repeated_source_count?: number | null;
+  title_candidate_count?: number | null;
+  similar_title_candidate_count?: number | null;
+  skipped_canonical_count?: number | null;
+  invalid_doi_count?: number | null;
+  validation_error_count?: number;
+  skip_audit_available?: boolean;
+  audit_available?: boolean;
+  recovery_status?: string | null;
 }
 
 export interface SourcesSummaryResponse {
@@ -548,6 +572,17 @@ export interface PrismaFunnelMetrics {
   studiesIncludedSynthesis: number;
   manualSourceBreakdown: Record<string, number>;
   providerBreakdown?: Record<string, number>;
+  sourceRecordsIdentified?: number;
+  persistedSourceRecords?: number;
+  exactDuplicatesLinked?: number;
+  repeatedSourceOccurrences?: number;
+  canonicalPublications?: number;
+  canonicalPublicationsTotal?: number;
+  mergedDuplicateGroups?: number;
+  mergedDuplicateRecords?: number;
+  recoveredRecords?: number;
+  historicalCanonicalWithoutSourceRecords?: number;
+  prismaAccountingNote?: string;
 }
 
 export type ProjectStatusType = 'active' | 'archived';
@@ -686,6 +721,17 @@ export interface PrismaMetricsResponse {
   studies_included_synthesis: number;
   manual_source_breakdown: Record<string, number>;
   provider_breakdown?: Record<string, number>;
+  source_records_identified?: number;
+  persisted_source_records?: number;
+  exact_duplicates_linked?: number;
+  repeated_source_occurrences?: number;
+  canonical_publications?: number;
+  canonical_publications_total?: number;
+  merged_duplicate_groups?: number;
+  merged_duplicate_records?: number;
+  recovered_records?: number;
+  historical_canonical_without_source_records?: number;
+  prisma_accounting_note?: string;
 }
 
 export type PreScreeningStatus = 'retained' | 'removed';

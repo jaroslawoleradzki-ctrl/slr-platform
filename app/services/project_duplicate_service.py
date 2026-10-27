@@ -29,6 +29,10 @@ from app.repositories.duplicate_review_decision_repository import (
     GroupNotFoundError,
     default_duplicate_review_decision_repository,
 )
+from app.repositories.import_source_record_repository import (
+    ImportSourceRecordRepository,
+    SqliteImportSourceRecordRepository,
+)
 from app.repositories.project_publication_repository import (
     ProjectPublicationRepository,
     default_project_publication_repository,
@@ -103,6 +107,7 @@ class ProjectDuplicateService:
         builder: DuplicateGroupBuilder = duplicate_group_builder,
         merge_repository: DuplicateMergeRepository | None = None,
         transaction_manager: SqliteTransactionManager | None = None,
+        source_record_repository: ImportSourceRecordRepository | None = None,
     ) -> None:
         self._repository = repository or default_project_publication_repository()
         self._decision_repository = decision_repository or default_duplicate_review_decision_repository()
@@ -114,6 +119,15 @@ class ProjectDuplicateService:
         self._transaction_manager = transaction_manager or SqliteTransactionManager(
             getattr(self._repository, "_database_path", "data/slr-platform.db")
         )
+        self._source_records: ImportSourceRecordRepository | None
+        if source_record_repository is not None:
+            self._source_records = source_record_repository
+        elif hasattr(self._repository, "_database_path"):
+            self._source_records = SqliteImportSourceRecordRepository(
+                self._repository._database_path
+            )
+        else:
+            self._source_records = None
         self._builder = builder
 
     def _active_publications(self, project_id: str, *, connection=None) -> list[Publication]:
@@ -148,9 +162,15 @@ class ProjectDuplicateService:
             )
         return list(publications)
 
+    def _build_groups(self, publications: list[Publication]):
+        return self._builder.build(publications, include_title_candidates=True)
+
     def _find_group(self, project_id: str, group_id: str, *, connection=None):
         publications = self._active_publications(project_id, connection=connection)
-        group = next((g for g in self._builder.build(publications) if str(g.group_id) == group_id), None)
+        group = next(
+            (g for g in self._build_groups(publications) if str(g.group_id) == group_id),
+            None,
+        )
         if group is None:
             merge = self._merge_repository.get_merge(project_id, group_id, connection=connection)
             if merge is None:
@@ -169,7 +189,7 @@ class ProjectDuplicateService:
         decisions = self._decision_repository.list_decisions_for_project(project_id)
         merges = self._merge_repository.list_merges_for_project(project_id)
         responses: list[DuplicateGroupResponse] = []
-        live_groups = {str(group.group_id): group for group in self._builder.build(publications)}
+        live_groups = {str(group.group_id): group for group in self._build_groups(publications)}
         for group_id, group in live_groups.items():
             members = [by_id[i] for i in group.publication_ids]
             decision = decisions.get(group_id)
@@ -190,7 +210,14 @@ class ProjectDuplicateService:
             responses.append(
                 DuplicateGroupResponse(
                     group_id=group_id,
-                    reason=f"Zgodność identyfikatorów ({detail})" if detail else "Identical strong identifier match",
+                    reason=(
+                        group.match_reason
+                        or (
+                            f"Zgodność identyfikatorów ({detail})"
+                            if detail
+                            else "Identical strong identifier match"
+                        )
+                    ),
                     records_count=len(members),
                     status=state,
                     rationale=decision.rationale if decision else None,
@@ -225,6 +252,31 @@ class ProjectDuplicateService:
                     records=[_preview(publication) for publication in members],
                 )
             )
+
+        if self._source_records is not None:
+            self._source_records.clear_candidate_groups(project_id)
+            for response in responses:
+                publication_ids = [record.id for record in response.records]
+                for merged_id in response.merged_publication_ids or []:
+                    if merged_id not in publication_ids:
+                        publication_ids.append(merged_id)
+                live_group = live_groups.get(response.group_id)
+                self._source_records.update_candidate_group(
+                    project_id,
+                    publication_ids,
+                    response.group_id,
+                    match_type=live_group.match_type if live_group else None,
+                    match_reason=live_group.match_reason if live_group else None,
+                )
+                self._source_records.record_candidate_group_snapshot(
+                    project_id,
+                    response.group_id,
+                    publication_ids,
+                    match_type=live_group.match_type if live_group else None,
+                    match_reason=live_group.match_reason if live_group else None,
+                    status=response.status.value,
+                )
+
         return DuplicateGroupListResponse(project_id=project_id, total_groups_count=len(responses), groups=responses)
 
     def record_decision(

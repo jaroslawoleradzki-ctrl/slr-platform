@@ -149,13 +149,16 @@ def workflow_setup(tmp_path: Path):
 
     pub1 = Publication(
         record_id=pub1_id,
-        title="Lean energy management in automotive manufacturing (Duplicate Record)",
+        title="=HYPERLINK(\"http://evil.com\") Lean energy management in automotive manufacturing",
         authors=[Author(display_name="Kowalski, J.", family_name="Kowalski", given_name="J.")],
         publication_year=2023,
         document_type=DocumentType.JOURNAL_ARTICLE,
-        identifiers=[Identifier(type=IdentifierType.DOI, value="10.1016/j.lean.2023.01")],
+        identifiers=[],
         provenance=[ProvenanceEntry(source="bibtex", source_record_id=str(pub1_id))],
     )
+    # One record has a DOI and the other has none, with identical titles: this
+    # is an ambiguous manual-review candidate under the conservative v0.7.3
+    # import rules, not an automatic DOI link.
     pub2 = Publication(
         record_id=pub2_id,
         title="=HYPERLINK(\"http://evil.com\") Lean energy management in automotive manufacturing",
@@ -221,7 +224,7 @@ def workflow_setup(tmp_path: Path):
         project_id=project_id,
         group_id=target_group.group_id,
         decision=DuplicateDecisionType.APPROVE,
-        rationale="Authoritative DOI match and manual verification",
+        rationale="Identical title with conflicting DOI evidence and manual verification",
     )
 
     # Execute canonical merge through production service

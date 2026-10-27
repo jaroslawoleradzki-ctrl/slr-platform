@@ -275,6 +275,16 @@ PRISMA_SUMMARY_METRICS = (
     "records_screened_full_text",
     "records_excluded_full_text",
     "studies_included_synthesis",
+    "source_records_identified",
+    "persisted_source_records",
+    "exact_duplicates_linked",
+    "repeated_source_occurrences",
+    "canonical_publications",
+    "canonical_publications_total",
+    "merged_duplicate_groups",
+    "merged_duplicate_records",
+    "recovered_records",
+    "historical_canonical_without_source_records",
 )
 
 

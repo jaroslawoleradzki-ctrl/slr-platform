@@ -5,6 +5,7 @@ from uuid import UUID, uuid4
 import pytest
 
 from app.api.dto.search_strategy import SearchResultRecordResponse
+from app.domain.identifiers import Identifier, IdentifierType
 from app.domain.integrity_audit import IntegrityAuditStatus
 from app.domain.provenance import ProvenanceEntry
 from app.domain.publication import Publication
@@ -171,7 +172,8 @@ def test_transaction_import_duplicate_only(import_service, pub_repo, history_rep
     pub1 = Publication(
         record_id=UUID("00000000-0000-0000-0000-000000000001"),
         title="Existing Pub",
-        provenance=[ProvenanceEntry(source="ris", source_record_id="Title 1")],
+        identifiers=[Identifier(type=IdentifierType.DOI, value="10.1000/existing")],
+        provenance=[ProvenanceEntry(source="ris", source_record_id="10.1000/existing")],
         created_at=_TIME,
     )
     pub_repo.add_publications(project_id, [pub1])

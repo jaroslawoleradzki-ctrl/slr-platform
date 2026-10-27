@@ -70,6 +70,28 @@ export const LivePrismaFlowChart: React.FC<LivePrismaFlowChartProps> = ({ metric
         </span>
       </div>
 
+      <div
+        data-testid="prisma-source-accounting"
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
+          gap: '10px',
+          padding: '12px 14px',
+          backgroundColor: 'var(--bg-primary)',
+          borderRadius: 'var(--radius-md)',
+          border: '1px solid var(--border-subtle)',
+          fontSize: '0.8rem',
+          color: 'var(--text-secondary)',
+        }}
+      >
+        <div>Rekordy źródłowe: <strong>{metrics.sourceRecordsIdentified ?? 0}</strong></div>
+        <div>Duplikaty DOI: <strong>{metrics.exactDuplicatesLinked ?? 0}</strong></div>
+        <div>Powtórzenia: <strong>{metrics.repeatedSourceOccurrences ?? 0}</strong></div>
+        <div>Scalone duplikaty: <strong>{metrics.mergedDuplicateRecords ?? 0}</strong></div>
+        <div>Odzyskane: <strong>{metrics.recoveredRecords ?? 0}</strong></div>
+        <div>Kanoniczne: <strong>{metrics.canonicalPublications ?? 0}</strong></div>
+      </div>
+
       {/* PRISMA 2020 Flow Stages Diagram */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', alignItems: 'center' }}>
         {/* Stage 1: Identification */}
