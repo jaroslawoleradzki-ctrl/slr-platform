@@ -44,6 +44,8 @@ Read `AGENTS.md`, then:
 ## Safety constraints
 
 - Never modify or delete production data.
+- Never read or copy the real `data/` database from an agent shell; use a
+  disposable copy or the safe test wrapper.
 - Never edit an already-applied migration.
 - Never drop a table or column, rewrite identifiers, or merge records without
   explicit human approval and a documented recovery path.
@@ -55,12 +57,17 @@ Read `AGENTS.md`, then:
 ## Validation
 
 ```bash
-uv run --frozen --no-sync pytest -q tests/unit/repositories tests/integration -k "migration or reconciliation"
-uv run --frozen --no-sync pytest -q -p no:cacheprovider
+bash scripts/agent/safe_pytest.sh tests/unit/repositories tests/integration -k "migration or reconciliation"
+bash scripts/agent/safe_pytest.sh
 uv run --frozen --no-sync ruff check app tests scripts
 uv run --frozen --no-sync mypy app
+uv run --frozen --no-sync python scripts/ci/check_migration_safety.py --base-ref origin/development
 git diff --check
 ```
+
+The migration-safety guard rejects modified/deleted existing migrations and
+requires the `migration-safety: approved-destructive` marker for destructive SQL
+in an added migration.
 
 Also verify on a disposable copy:
 

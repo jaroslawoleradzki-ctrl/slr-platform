@@ -33,17 +33,26 @@ Configuration: `pyproject.toml`; third-party stubs for `openpyxl`, `fpdf`, and
 
 ### Pytest
 
+Agent sessions:
+
+```bash
+bash scripts/agent/safe_pytest.sh
+```
+
+The wrapper forces a disposable `SLR_DATABASE_PATH` and `TMPDIR`. The raw
+command remains valid for CI and human local runs:
+
 ```bash
 uv run --frozen --no-sync pytest -q -p no:cacheprovider
 ```
 
-`tests/conftest.py` isolates `SLR_DATABASE_PATH` to a `tmp_path` database for
-each test. Do not run tests against `data/slr-platform.db`.
+`tests/conftest.py` also isolates `SLR_DATABASE_PATH` to a `tmp_path` database
+for each test. Do not run tests against `data/slr-platform.db`.
 
 For a fast loop, target the relevant module:
 
 ```bash
-uv run --frozen --no-sync pytest -q -p no:cacheprovider tests/unit/services/test_<area>.py
+bash scripts/agent/safe_pytest.sh tests/unit/services/test_<area>.py
 ```
 
 ### Migration-focused tests
@@ -52,20 +61,33 @@ uv run --frozen --no-sync pytest -q -p no:cacheprovider tests/unit/services/test
 uv run --frozen --no-sync pytest -q tests/unit/repositories tests/integration -k "migration or reconciliation"
 ```
 
-This selects the migration/reconciliation modules, including
-`test_migration_reconciliation.py`, the numbered migration tests, and the
-integration migration/reconciliation tests. The full pytest suite remains the
-authoritative gate.
+### Migration safety
+
+```bash
+uv run --frozen --no-sync python scripts/ci/check_migration_safety.py --base-ref origin/development
+```
+
+The guard fails if an existing migration was modified, renamed, or deleted. It
+also fails on destructive SQL in an added migration unless the file carries the
+explicit marker `migration-safety: approved-destructive: <reason>`. Do not add
+the marker without human approval and a recovery plan.
 
 ### Frontend
 
 ```bash
-cd frontend
-npm ci
-npm run type-check
-npm test
-npm run build
+npm --prefix frontend run type-check
+npm --prefix frontend test
+npm --prefix frontend run build
 ```
+
+### OpenSpec
+
+```bash
+openspec validate --all --strict
+openspec validate --archived --strict
+```
+
+The CI CLI version is pinned to `@fission-ai/openspec@1.15.0`.
 
 ### Diff hygiene
 
@@ -81,39 +103,42 @@ GitHub-hosted runners.
 
 | CI job | What it runs |
 |---|---|
-| `ci-policy` | `bash scripts/ci/check_runner_policy.sh`, runner/host assertions |
-| `backend` | locked `uv sync`, Ruff, mypy, full pytest on a disposable SQLite database |
+| `ci-policy` | `bash scripts/ci/check_runner_policy.sh`, runner/host assertions, `git diff --check` |
+| `openspec` | pinned `@fission-ai/openspec@1.15.0`, strict change/spec validation, archived validation |
+| `backend` | locked `uv sync`, Ruff, mypy, migration safety, full pytest on a disposable SQLite database |
 | `frontend` | `npm ci`, `npm run type-check`, `npm test`, `npm run build` |
 
 The backend job keeps test files and the SQLite database outside the checkout,
-prefers `/dev/shm` for speed, and fails if a database appears under `data/`. Do
-not duplicate these jobs or add a parallel copy. Add a new check only when it
-covers a gap with clear value and low maintenance cost.
+prefers `/dev/shm` for speed, and fails if a database appears under `data/`. The
+cleanup step removes the actual temporary directory, including the
+`RUNNER_TEMP` fallback.
 
-CI is triggered by pull requests and pushes to `main` and `development`. A
-feature branch is validated through its pull request.
+CI is triggered by pull requests and pushes to `main`, `development`, and
+`integration/**`. A feature branch is validated through its pull request.
 
 ## Gate selection by change type
 
 | Change type | Minimum gates |
 |---|---|
 | Documentation only | `git diff --check`; link/path sanity |
-| Agent/skill/config | config test + Ruff + `git diff --check` |
+| Agent/skill/config | configuration/effective-permission tests + Ruff + `git diff --check` |
 | Backend behavior | targeted pytest, Ruff, mypy, full pytest |
 | API contract | targeted/contract tests, full pytest, Ruff, mypy |
-| Migration | migration-focused subset, full pytest, Ruff, mypy, backup/restore notes |
-| Frontend behavior | `npm run type-check`, `npm test`, `npm run build` |
-| Release | all backend and frontend gates, clean worktree, CI green |
+| Migration | migration-focused subset, migration-safety guard, full pytest, Ruff, mypy, backup/restore notes |
+| Frontend behavior | `npm --prefix frontend run type-check`, `npm --prefix frontend test`, `npm --prefix frontend run build` |
+| Release | all backend and frontend gates, OpenSpec, clean worktree, CI green |
 
 ## Result semantics
 
 Use exactly one of these in reports:
 
-- **PASS** — command ran and succeeded.
+- **PASS** — command ran and succeeded, and CI is green for merge readiness.
+- **PASS WITH CONDITIONS** — local evidence is green but a named condition
+  remains (for example CI not yet run).
 - **FAIL** — command ran and failed; include the failure.
+- **BLOCK** — a critical or high-severity finding remains.
 - **NOT VERIFIED** — the tool or environment was unavailable. Never report this
   as PASS.
-- **NOT APPLICABLE** — the gate does not cover this change; state why.
 
 A green targeted test is not a substitute for the full regression suite before
 commit. A skipped or weakened check is a failure of the task, not a pass.

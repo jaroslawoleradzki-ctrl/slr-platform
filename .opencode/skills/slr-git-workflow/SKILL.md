@@ -32,11 +32,12 @@ Also read `.github/workflows/ci.yml` and the current task/report when present.
 1. Fetch `origin` and identify the correct baseline (`origin/development` for
    feature work unless the task says otherwise).
 2. Create a dedicated worktree and branch. Never implement in the protected
-   `/home/cloud/dev/slr-platform` worktree.
+   development checkout; identify it with `git worktree list`.
 3. Confirm the branch and worktree do not already exist. If they do, inspect
    and stop instead of overwriting.
 4. Keep the change scoped to one logical outcome.
-5. Run the quality gates before each commit.
+5. Run the quality gates before each commit. Agent sessions use
+   `bash scripts/agent/safe_pytest.sh`.
 6. Commit with a conventional message, for example:
    - `feat(import): preserve source-record identity`
    - `fix(dedup): keep uncertain candidates pending`
@@ -46,7 +47,8 @@ Also read `.github/workflows/ci.yml` and the current task/report when present.
 8. Open a pull request with scope, risk tier, tests, and known limitations.
 9. Merge only with human approval and green CI.
 
-Branch prefixes in use: `feature/`, `fix/`, `release/`, `audit/`, `ci/`.
+Branch prefixes in use: `feature/`, `fix/`, `release/`, `audit/`, `ci/`, and
+release-specific `integration/` branches.
 
 ## Safety constraints
 
@@ -54,8 +56,14 @@ Never run:
 
 ```text
 git reset --hard
-git clean -fd
+git clean
 git stash
+git restore .
+git checkout -- .
+git worktree remove
+git branch -D
+git -C <path> reset --hard
+git -C <path> clean
 git push --force
 ```
 
@@ -68,6 +76,8 @@ Also:
 - Never push to `main` or `development` as part of a feature task.
 - Do not alter self-hosted runner configuration or FINNARO workflows.
 
+The agents default-deny shell access; destructive commands are not allowlisted.
+
 ## Validation
 
 ```bash
@@ -77,7 +87,9 @@ git diff --stat
 uv run --frozen --no-sync ruff check app tests scripts
 uv run --frozen --no-sync mypy app
 uv run --frozen --no-sync pytest -q -p no:cacheprovider
-cd frontend && npm run type-check && npm test && npm run build
+npm --prefix frontend run type-check
+npm --prefix frontend test
+npm --prefix frontend run build
 ```
 
 CI is authoritative: `.github/workflows/ci.yml`.

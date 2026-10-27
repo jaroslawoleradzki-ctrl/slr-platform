@@ -8,6 +8,36 @@ permissions:
   - action: edit
     resource: "*"
     effect: deny
+  - action: read
+    resource: ".env*"
+    effect: deny
+  - action: read
+    resource: "**/.env*"
+    effect: deny
+  - action: read
+    resource: "**/secrets/**"
+    effect: deny
+  - action: read
+    resource: "**/*.pem"
+    effect: deny
+  - action: read
+    resource: "**/*.key"
+    effect: deny
+  - action: read
+    resource: "data/**"
+    effect: deny
+  - action: read
+    resource: "projects/**"
+    effect: deny
+  - action: read
+    resource: "**/*.db"
+    effect: deny
+  - action: read
+    resource: ".env.example"
+    effect: allow
+  - action: read
+    resource: "**/.env.example"
+    effect: allow
   - action: webfetch
     resource: "*"
     effect: deny
@@ -33,41 +63,65 @@ permissions:
     resource: "git log*"
     effect: allow
   - action: shell
-    resource: "git show*"
+    resource: "git show --stat*"
+    effect: allow
+  - action: shell
+    resource: "git show --name-only*"
     effect: allow
   - action: shell
     resource: "git branch --show-current"
     effect: allow
   - action: shell
-    resource: "rg *"
+    resource: "git worktree list"
     effect: allow
   - action: shell
-    resource: "find *"
+    resource: "bash scripts/agent/safe_pytest.sh*"
     effect: allow
   - action: shell
-    resource: "ls *"
-    effect: allow
-  - action: shell
-    resource: "cat *"
-    effect: allow
-  - action: shell
-    resource: "sed *"
-    effect: allow
-  - action: shell
-    resource: "head *"
-    effect: allow
-  - action: shell
-    resource: "tail *"
-    effect: allow
-  - action: shell
-    resource: "wc *"
+    resource: "./scripts/agent/safe_pytest.sh*"
     effect: allow
   - action: shell
     resource: "sqlite3 -readonly*"
     effect: allow
   - action: shell
-    resource: "uv run --frozen --no-sync pytest*"
+    resource: "openspec validate*"
     effect: allow
+  - action: shell
+    resource: "openspec list*"
+    effect: allow
+  - action: shell
+    resource: "openspec show*"
+    effect: allow
+  - action: shell
+    resource: "openspec status*"
+    effect: allow
+  - action: shell
+    resource: "openspec doctor*"
+    effect: allow
+  - action: shell
+    resource: "*;*"
+    effect: deny
+  - action: shell
+    resource: "*&&*"
+    effect: deny
+  - action: shell
+    resource: "*&*"
+    effect: deny
+  - action: shell
+    resource: "*|*"
+    effect: deny
+  - action: shell
+    resource: "*$(*"
+    effect: deny
+  - action: shell
+    resource: "*`*"
+    effect: deny
+  - action: shell
+    resource: "*>*"
+    effect: deny
+  - action: shell
+    resource: "*\n*"
+    effect: deny
 ---
 
 You are `slr-research-reviewer`, the independent research-integrity reviewer
@@ -94,6 +148,11 @@ Hard boundaries:
 - Do not accept an AI recommendation as a scientific decision.
 - Do not approve deletion, merge, or methodology changes without a human.
 - Human approval is required for any methodological exception or accepted risk.
+
+Shell access is default-deny. Use the native read, grep, and glob tools for
+files. Read-only SQLite inspection is limited to `sqlite3 -readonly`; tests run
+through `bash scripts/agent/safe_pytest.sh`. Do not use shell file readers or
+compound commands.
 
 Report findings in severity order with file/line evidence and the exact test or
 query that supports each finding.

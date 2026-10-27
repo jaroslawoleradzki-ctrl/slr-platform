@@ -10,7 +10,8 @@ description: Use when preparing an SLR Platform version, updating VERSION or CHA
 Activate for:
 
 - a version bump, changelog, release notes, or release report;
-- `development` → `main` integration;
+- `development` → `main` integration, including release-specific
+  `integration/` branches;
 - GitHub Release or tag creation;
 - Homelab mirror synchronization;
 - deployment preflight, post-deployment verification, or rollback planning.
@@ -41,22 +42,29 @@ Read `AGENTS.md`, then:
 5. Run the full quality gates and a clean build.
 6. Prepare the release report with scope, tests, known limitations, and
    rollback notes.
-7. Integrate `development` into `main` with human approval. Do not rewrite
+7. Integrate `development` into `main` with human approval; release-specific
+   `integration/` branches follow the same approval rule. Do not rewrite
    history or force-push.
 8. Tag the release and create the GitHub Release only after approval.
 9. Mirror to Homelab using the established procedure; verify the mirror.
-10. Run deployment preflight, deploy only with explicit authorization, then
+10. Run deployment preflight. Deployment is human-run; the agent may request
+    the exact `scripts/deploy_ai_node.sh` through the approval prompt, but shell
+    wrappers, `sudo`, `ssh`, and Docker compose deployment are denied. Then
     perform post-deployment verification.
 11. Keep the previous version and database backup available for rollback.
 
 ## Safety constraints
 
-- No autonomous production deployment. A human must authorize the deploy step.
+- No autonomous production deployment. A human must authorize and run the
+  deploy step.
 - No release with failing or missing CI.
 - No tag or release from a dirty worktree.
+- No merge to main, push, tag, GitHub Release, or `gh api` without approval.
 - No force-push, history rewrite, or branch deletion.
 - No secrets in release notes, logs, or reports.
 - No schema-destructive operation without a tested recovery path.
+- Do not modify dependency/build configuration or audit reports without
+  approval.
 - Do not modify unrelated Docker stacks or FINNARO infrastructure.
 - Do not claim a deployment succeeded without post-deployment evidence.
 
@@ -65,19 +73,16 @@ Read `AGENTS.md`, then:
 ```bash
 git status --short
 git diff --check
+bash scripts/agent/safe_pytest.sh
 uv run --frozen --no-sync ruff check app tests scripts
 uv run --frozen --no-sync mypy app
-uv run --frozen --no-sync pytest -q -p no:cacheprovider
-cd frontend && npm run type-check && npm test && npm run build
+npm --prefix frontend run type-check
+npm --prefix frontend test
+npm --prefix frontend run build
 ```
 
-Version consistency:
-
-```bash
-cat VERSION
-grep -n '^version' pyproject.toml
-grep -n '"version"' frontend/package.json
-```
+Use the read tool to compare `VERSION`, `pyproject.toml`, and
+`frontend/package.json`; do not use shell `cat`.
 
 Post-deployment verification: health endpoint, version endpoint, a read-only
 project/workflow smoke check, and a log check for errors.

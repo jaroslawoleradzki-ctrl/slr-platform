@@ -7,6 +7,13 @@
 - **Risk tier:** MEDIUM (development infrastructure only)
 - **Mode:** BUILD, development infrastructure only
 
+> **Post-audit correction (2026-10-27):** The independent audit found that this
+> report overstated the configuration test's model-pinning and effective
+> permission-verification coverage. The model allow-list was deterministic and
+> did not by itself detect provider-side model removal, and the original tests
+> inspected declared rules rather than effective command decisions. See
+> [`SLR_AGENT_ENGINEERING_HARDENING_REPORT.md`](SLR_AGENT_ENGINEERING_HARDENING_REPORT.md).
+
 ## 1. Executive summary
 
 The repository now has a complete, version-controlled agent engineering
@@ -141,8 +148,10 @@ Verified on 2026-10-27 with `opencode models`:
 | MiMo-V2.6-Flash | `opencode-go/mimo-v2.6-flash` | available (OpenCode Go fallback) |
 | Nemotron 3.5 Lightning | `opencode/nemotron-3.5-lightning-free` | available (free) |
 
-The configuration test pins these IDs. If a provider changes an ID, the test
-fails rather than silently breaking agent loading.
+The configuration test pins these IDs in a deterministic allow-list and, when
+the OpenCode CLI is available, also checks the live `opencode models` catalog.
+A provider-side removal is detected only in an environment with OpenCode; a
+green CI run without OpenCode does not prove live availability.
 
 ## 7. OpenSpec status
 
@@ -202,8 +211,10 @@ the CI isolation contract.
   six `slr-*` skills plus the generated OpenSpec skills.
 - All agent and skill YAML frontmatter parses and passes the configuration test.
 - No invalid model identifier is present.
-- Read-only permissions, release approval gates, and preservation of the global
-  ask-before-read rule for `.env` files are asserted by tests.
+- Read-only edit rules and exact release approval rules are asserted by the
+  original tests. Effective shell decisions were not tested at the time; the
+  hardening change adds an effective-permission evaluator and command-family
+  coverage.
 - `openspec validate --all --strict` passes.
 - No CI workflow, runner configuration, or application file was changed.
 
@@ -261,7 +272,7 @@ without authorization.
 ## 14. Final status
 
 ```text
-SLR AGENT FOUNDATION: PASS
+SLR AGENT FOUNDATION: PASS WITH CONDITIONS
 BRANCH: feature/slr-agent-engineering-foundation
 WORKTREE: /home/cloud/dev/wt-slr-agent-foundation
 AGENTS.MD: PASS

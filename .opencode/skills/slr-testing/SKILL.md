@@ -66,34 +66,40 @@ Determinism rules:
 ## Validation
 
 ```bash
-uv run --frozen --no-sync pytest -q -p no:cacheprovider <targeted-tests>
+bash scripts/agent/safe_pytest.sh <targeted-tests>
 uv run --frozen --no-sync ruff check app tests scripts
 uv run --frozen --no-sync mypy app
 git diff --check
 ```
 
+The safe wrapper forces a disposable `SLR_DATABASE_PATH` and `TMPDIR`; it is
+not a filesystem sandbox.
+
 For frontend work:
 
 ```bash
-cd frontend
-npm run type-check
-npm test
-npm run build
+npm --prefix frontend run type-check
+npm --prefix frontend test
+npm --prefix frontend run build
 ```
 
 Migration work also runs:
 
 ```bash
-uv run --frozen --no-sync pytest -q tests/unit/repositories tests/integration -k "migration or reconciliation"
+bash scripts/agent/safe_pytest.sh tests/unit/repositories tests/integration -k "migration or reconciliation"
+uv run --frozen --no-sync python scripts/ci/check_migration_safety.py --base-ref origin/development
 ```
 
 ## Expected outputs
 
 - Tests added or updated, with names that state the invariant.
-- Red and green command evidence.
+- Failing command/output, green command/output, refactor verification, and the
+  relevant test diff.
 - Full relevant gate results.
 - Any gate that could not run, reported as **NOT VERIFIED**.
 - Residual risk and follow-up tests.
+
+A green CI run does not prove red-first discipline; state that limitation.
 
 ## References
 

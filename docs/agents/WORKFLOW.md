@@ -6,22 +6,23 @@ wins over this document if they conflict.
 ## 1. Start a task safely
 
 ```bash
-cd /home/cloud/dev/slr-platform
 git fetch origin --prune
 git worktree list
 git branch -a
 ```
 
-Confirm the target branch/worktree does not already exist. Create an isolated
-worktree from the latest agreed baseline, normally `origin/development`:
+Identify the protected development checkout from `git worktree list`; it is the
+repository root, not a task worktree. Confirm the target branch/worktree does
+not already exist. Create an isolated worktree from the latest agreed baseline,
+normally `origin/development`:
 
 ```bash
-git worktree add -b feature/<name> /home/cloud/dev/wt-<name> origin/development
-cd /home/cloud/dev/wt-<name>
+git worktree add -b feature/<name> <path-outside-the-protected-checkout> origin/development
+cd <path-outside-the-protected-checkout>
 ```
 
-Never implement in `/home/cloud/dev/slr-platform`. The task branch is the only
-thing you push.
+Never implement in the protected development checkout. The task branch is the
+only thing you push.
 
 ## 2. Classify risk before choosing agents
 
@@ -78,6 +79,11 @@ The generated `/opsx-*` commands and `openspec-*` skills provide the detailed
 workflow. Keep proposals short. The value is the explicit contract and the
 verification trail, not document volume.
 
+The CI CLI is pinned to `@fission-ai/openspec@1.15.0`. Generated skills and
+commands are version-controlled. When the pinned version changes, run
+`openspec update`, review the generated diff, and commit it with the CLI version
+change. Do not hand-edit generated OpenSpec artifacts.
+
 ## 4. Apply TDD
 
 For behavioral work:
@@ -88,19 +94,23 @@ For behavioral work:
 4. Run the targeted test module.
 5. Refactor while green.
 6. Run regression and static checks.
-7. Record red/green evidence in the report.
+7. Record the failing command/output, the green command/output, the refactor
+   verification, and the relevant test diff in the report.
 
 Example:
 
 ```bash
-uv run --frozen --no-sync pytest -q -p no:cacheprovider tests/unit/services/test_<area>.py
+bash scripts/agent/safe_pytest.sh tests/unit/services/test_<area>.py
 
 # implement
 
-uv run --frozen --no-sync pytest -q -p no:cacheprovider tests/unit/services/test_<area>.py
+bash scripts/agent/safe_pytest.sh tests/unit/services/test_<area>.py
 uv run --frozen --no-sync ruff check app tests scripts
 uv run --frozen --no-sync mypy app
 ```
+
+A green CI run proves the final state, not that the test was written first. Say
+so explicitly rather than claiming unverified red-first discipline.
 
 Use the proportionate exception for documentation, comments, formatting, and
 non-behavioral configuration. Configuration changes still need a deterministic
@@ -132,11 +142,15 @@ Use `slr-release-engineer` and the `slr-release` skill. The sequence is:
 3. `VERSION` update, then `pyproject.toml` and `frontend/package.json`.
 4. `CHANGELOG.md`, `docs/releases/vX.Y.Z.md`, and a release report.
 5. Full quality gates and a clean build.
-6. Human-approved `development` → `main` integration.
-7. Human-approved tag, GitHub Release, Homelab mirror, and deployment.
+6. Human-approved `development` → `main` integration. Release-specific
+   `integration/` branches follow the same approval rule.
+7. Human-approved tag, GitHub Release, Homelab mirror, and human-run
+   deployment.
 8. Post-deployment verification and rollback readiness.
 
-No agent may tag, publish, or deploy without explicit human authorization.
+No agent may merge to main, tag, publish, or deploy without explicit human
+authorization. The exact deployment script is at most an approval request; shell
+wrappers, `sudo`, `ssh`, and Docker compose deployment are denied.
 
 ## 7. Handle a blocked task
 

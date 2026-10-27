@@ -58,6 +58,8 @@ Read `AGENTS.md`, then:
 - Never silently change a criterion, protocol, population, or count.
 - Never delete or overwrite a research record to resolve an inconsistency.
 - Never replace a human decision with an AI recommendation.
+- Never read or mutate the real research database from an agent shell; use
+  `bash scripts/agent/safe_pytest.sh` or a read-only inspection path.
 - Never accept a green test suite as proof if the test does not exercise the
   integrity invariant.
 

@@ -20,6 +20,36 @@ permissions:
   - action: skill
     resource: "*"
     effect: allow
+  - action: read
+    resource: ".env*"
+    effect: deny
+  - action: read
+    resource: "**/.env*"
+    effect: deny
+  - action: read
+    resource: "**/secrets/**"
+    effect: deny
+  - action: read
+    resource: "**/*.pem"
+    effect: deny
+  - action: read
+    resource: "**/*.key"
+    effect: deny
+  - action: read
+    resource: "data/**"
+    effect: deny
+  - action: read
+    resource: "projects/**"
+    effect: deny
+  - action: read
+    resource: "**/*.db"
+    effect: deny
+  - action: read
+    resource: ".env.example"
+    effect: allow
+  - action: read
+    resource: "**/.env.example"
+    effect: allow
   - action: shell
     resource: "*"
     effect: deny
@@ -33,7 +63,10 @@ permissions:
     resource: "git log*"
     effect: allow
   - action: shell
-    resource: "git show*"
+    resource: "git show --stat*"
+    effect: allow
+  - action: shell
+    resource: "git show --name-only*"
     effect: allow
   - action: shell
     resource: "git branch --show-current"
@@ -42,29 +75,41 @@ permissions:
     resource: "git worktree list"
     effect: allow
   - action: shell
-    resource: "rg *"
+    resource: "openspec validate*"
     effect: allow
   - action: shell
-    resource: "find *"
+    resource: "openspec list*"
     effect: allow
   - action: shell
-    resource: "ls *"
+    resource: "openspec show*"
     effect: allow
   - action: shell
-    resource: "cat *"
+    resource: "openspec status*"
     effect: allow
   - action: shell
-    resource: "sed *"
-    effect: allow
+    resource: "*;*"
+    effect: deny
   - action: shell
-    resource: "head *"
-    effect: allow
+    resource: "*&&*"
+    effect: deny
   - action: shell
-    resource: "tail *"
-    effect: allow
+    resource: "*&*"
+    effect: deny
   - action: shell
-    resource: "wc *"
-    effect: allow
+    resource: "*|*"
+    effect: deny
+  - action: shell
+    resource: "*$(*"
+    effect: deny
+  - action: shell
+    resource: "*`*"
+    effect: deny
+  - action: shell
+    resource: "*>*"
+    effect: deny
+  - action: shell
+    resource: "*\n*"
+    effect: deny
 ---
 
 You are `slr-architect`, the architecture and specification agent for SLR
@@ -89,6 +134,10 @@ Hard boundaries:
 - Do not approve a breaking change or a research-methodology change on your own.
 - Explicit human approval is required before implementation of HIGH-risk or
   RELEASE work.
+
+Shell access is default-deny and limited to Git/OpenSpec inspection. Use the
+native read, grep, and glob tools for files; do not use shell file readers. Do
+not run tests, migrations, database commands, or deployment commands.
 
 Report findings with file paths and concrete evidence. Prefer additive,
 backward-compatible designs. Call out uncertainty rather than guessing.

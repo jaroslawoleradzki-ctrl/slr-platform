@@ -24,5 +24,7 @@
    - Ruff,
    - mypy,
    - git diff --check,
-   - przygotuj raport,
-   - nie wykonuj commit ani push.
+   - przygotuj raport.
+   W sesji review-only nie wykonuj commit ani push. W sesji implementacyjnej
+   commit i push są dozwolone wyłącznie na dedykowanej gałęzi zgodnie z
+   `AGENTS.md`; nie pushuj do `main` ani `development`.

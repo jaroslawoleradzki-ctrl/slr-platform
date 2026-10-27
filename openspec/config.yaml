@@ -25,10 +25,15 @@ context: |
 
   Engineering invariants:
   - Work only in an isolated git worktree; never modify the protected
-    /home/cloud/dev/slr-platform development worktree.
+    development checkout (identify it with `git worktree list`).
   - Keep diffs minimal, add regression coverage, and run the documented quality
     gates in AGENTS.md.
-  - No production deployment without explicit human authorization.
+  - No production deployment without explicit human authorization; deployment
+    is human-run.
+  - Agent shell access is default-deny; use `scripts/agent/safe_pytest.sh` for
+    tests and never point an agent at the real `data/` database.
+  - Generated OpenSpec skills and commands are version-controlled; refresh them
+    with `openspec update` when the pinned CLI version changes.
 
 # Per-artifact rules.
 rules:

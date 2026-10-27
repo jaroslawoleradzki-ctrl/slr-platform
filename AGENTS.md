@@ -95,20 +95,26 @@ uv run --frozen --no-sync ruff check app tests scripts
 uv run --frozen --no-sync mypy app
 uv run --frozen --no-sync pytest -q -p no:cacheprovider
 
-# Frontend
-cd frontend
-npm ci
-npm run type-check
-npm test
-npm run build
+# Agent sessions: disposable SQLite database and temporary directory
+bash scripts/agent/safe_pytest.sh
+bash scripts/agent/safe_pytest.sh tests/unit/test_agent_foundation_configuration.py
 
-# Diff hygiene
+# Frontend (agents use the --prefix form)
+npm --prefix frontend run type-check
+npm --prefix frontend test
+npm --prefix frontend run build
+
+# OpenSpec, migration safety, and diff hygiene
+openspec validate --all --strict
+uv run --frozen --no-sync python scripts/ci/check_migration_safety.py --base-ref origin/development
 git diff --check
 ```
 
-The CI workflow (`.github/workflows/ci.yml`) is the authoritative gate. It runs
-the same backend and frontend checks on a disposable SQLite database outside
-the checkout. Do not weaken, skip, or duplicate those jobs.
+The CI workflow (`.github/workflows/ci.yml`) is the authoritative gate. Its
+backend job runs on a disposable SQLite database outside the checkout; the
+frontend job runs the Node checks. CI also runs diff hygiene, pinned OpenSpec
+strict validation, and the migration-safety guard. Do not weaken, skip, or
+duplicate those jobs.
 
 ## C. Research integrity (non-negotiable)
 
@@ -140,11 +146,11 @@ Hard rules:
 
 ## D. Development rules
 
-- Work in an isolated git worktree. The checkout at
-  `/home/cloud/dev/slr-platform` is the protected development worktree; never
-  edit it while implementing a task.
+- Work in an isolated git worktree. The repository-root checkout is the
+  protected development worktree; never edit it while implementing a task.
+  Identify it with `git worktree list`.
 - Use the branch prefixes already in use: `feature/`, `fix/`, `release/`,
-  `audit/`, `ci/`.
+  `audit/`, `ci/`, and release-specific `integration/` branches.
 - State the task scope and acceptance criteria before editing. Do not expand
   scope opportunistically.
 - Keep diffs minimal. No drive-by refactors, formatting churn, dependency
@@ -169,7 +175,15 @@ For behavioral changes:
 4. Run the relevant test module.
 5. Refactor safely while the test stays green.
 6. Run the regression suite and static checks.
-7. Record the red/green evidence in the implementation report.
+7. Record in the implementation report:
+   - the failing test command and failure evidence;
+   - the green test command and result;
+   - the refactor verification;
+   - the relevant test diff.
+
+A green CI run proves the final state, not that the test was written first.
+Reports must state that limitation rather than claiming red-first discipline that
+was not evidenced.
 
 Proportionate exceptions: documentation-only, comment-only, formatting-only, and
 non-behavioral configuration changes do not need a failing test, but they still
@@ -189,30 +203,43 @@ Run the gates that cover the change, plus the full relevant suite before commit.
 | Ruff | `uv run --frozen --no-sync ruff check app tests scripts` |
 | Mypy | `uv run --frozen --no-sync mypy app` |
 | Pytest | `uv run --frozen --no-sync pytest -q -p no:cacheprovider` |
+| Agent pytest (disposable DB) | `bash scripts/agent/safe_pytest.sh` |
 | Migration-focused tests | `uv run --frozen --no-sync pytest -q tests/unit/repositories tests/integration -k "migration or reconciliation"` |
-| TypeScript | `cd frontend && npm run type-check` |
-| Frontend tests | `cd frontend && npm test` |
-| Frontend build | `cd frontend && npm run build` |
+| Migration safety | `uv run --frozen --no-sync python scripts/ci/check_migration_safety.py --base-ref origin/development` |
+| TypeScript | `npm --prefix frontend run type-check` |
+| Frontend tests | `npm --prefix frontend test` |
+| Frontend build | `npm --prefix frontend run build` |
+| OpenSpec | `openspec validate --all --strict` |
 | Diff hygiene | `git diff --check` |
 | CI | `.github/workflows/ci.yml` |
 
 The full pytest suite is the regression gate; targeted modules are for fast
 feedback. A gate that cannot run in the current environment must be reported as
-**NOT VERIFIED**, never as pass.
+**NOT VERIFIED**, never as pass. CI must run before a branch is called
+merge-ready.
 
 ## G. Security and operational boundaries
 
 - Never expose, print, commit, or paste secrets, tokens, `.env` contents, or
   files under `~/.config/opencode/secrets/`.
+- Never read or modify `data/`, `projects/`, database files, backups, or
+  production database paths from an agent shell. Use the disposable test wrapper
+  and the native read tool with the documented path restrictions.
 - Never modify production infrastructure, production databases, or unrelated
   Docker stacks without explicit human authorization.
 - Never delete user data, research records, branches, or worktrees to "clean up".
 - Do not change the self-hosted runner configuration or affect FINNARO
   workflows/runners.
-- Do not deploy from an agent session. Deployment requires a human-approved
-  release procedure.
-- Do not install providers, spend paid credits, or add dependencies without
-  authorization and a documented reason.
+- Do not deploy from an agent session. Deployment is human-run. Agents must not
+  invoke `bash`/`sh`/`./scripts/deploy_ai_node.sh`, `sudo`, `ssh`, or Docker
+  compose deployment commands; the release engineer may only request the exact
+  deployment script through the human approval prompt.
+- Do not install providers or add dependencies without authorization and a
+  documented reason. The configured
+  `opencode-go/muse-spark-1.3-contributor` developer model is pre-authorized by
+  the project owner for implementation tasks; any other paid model or provider
+  requires explicit authorization. Prefer the free
+  `opencode/mimo-v2.6-flash-free` fallback.
 
 ## H. Definition of done
 
@@ -220,11 +247,23 @@ A task is complete only when:
 
 - acceptance criteria are met;
 - relevant tests pass and regression evidence exists;
-- Ruff, mypy, TypeScript, frontend tests/build, and diff hygiene pass as
-  applicable;
+- TDD evidence is recorded when the change is behavioral;
+- Ruff, mypy, TypeScript, frontend tests/build, OpenSpec, migration safety, and
+  diff hygiene pass as applicable;
 - documentation is updated;
 - changes are committed on the task branch;
 - an implementation/review report is available when required.
+
+A branch is **merge-ready** only when the CI run for the exact commit is green.
+Use exactly one of these statuses:
+
+- **PASS** — the evidence exists, including green CI for merge readiness.
+- **PASS WITH CONDITIONS** — local evidence is green but a named condition
+  remains, such as CI not yet run.
+- **BLOCK** — a critical or high-severity finding remains.
+- **NOT VERIFIED** — the gate or environment was unavailable.
+
+Do not report PASS when CI has not run.
 
 ## I. Agent routing and skills
 
@@ -245,3 +284,8 @@ Repository-local skills are auto-discovered from
 `.opencode/skills/<skill-id>/SKILL.md`; agents from
 `.opencode/agents/<agent-id>.md`. Load a skill explicitly with `@skill-id` or
 let OpenCode activate it from its description.
+
+All five agents use default-deny shell permissions with narrow allowlists.
+OpenCode permissions are not a filesystem sandbox; see
+`scripts/agent/README.md` and `docs/agents/SECURITY_MODEL.md` for the residual
+risk and the disposable test wrapper.

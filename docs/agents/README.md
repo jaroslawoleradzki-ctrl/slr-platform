@@ -15,6 +15,8 @@ AGENTS.md                       Project-wide agent contract
 openspec/                       OpenSpec root, specs, and change archive
 docs/agents/                    This operational documentation
 docs/reviews/                   Implementation and review reports
+scripts/agent/safe_pytest.sh    Disposable-database test wrapper
+scripts/ci/                     CI policy and migration-safety guards
 ```
 
 OpenCode discovers project agents from `.opencode/agents/<id>.md` and project
@@ -32,7 +34,9 @@ required for discovery.
 | `slr-release-engineer` | versioning, changelog, integration, release/deploy prep | release metadata only |
 
 Model choices and fallbacks are in [MODEL_ROUTING.md](MODEL_ROUTING.md).
-Permissions are least-privilege and are declared in each agent file.
+All agents use default-deny shell permissions with narrow allowlists; the
+security model and residual risks are in [SECURITY_MODEL.md](SECURITY_MODEL.md).
+The disposable test wrapper is `scripts/agent/safe_pytest.sh`.
 
 ## The six project skills
 
@@ -81,7 +85,7 @@ Fallback model override without editing configuration:
 
 ```bash
 opencode run --agent slr-developer \
-  --model opencode-go/mimo-v2.6-flash \
+  --model opencode/mimo-v2.6-flash-free \
   "Continue the implementation."
 ```
 
@@ -99,6 +103,7 @@ form above is the stable documented path for scripted use.
 ## Related documentation
 
 - [WORKFLOW.md](WORKFLOW.md) — feature, TDD, OpenSpec, review, release, blocked tasks, token control.
-- [MODEL_ROUTING.md](MODEL_ROUTING.md) — risk routing, model IDs, fallbacks, handoffs.
+- [MODEL_ROUTING.md](MODEL_ROUTING.md) — risk routing, model IDs, free fallbacks, HTTP 429 handling, handoffs.
 - [QUALITY_GATES.md](QUALITY_GATES.md) — exact commands and CI mapping.
+- [SECURITY_MODEL.md](SECURITY_MODEL.md) — default-deny shell, protected paths, residual risk.
 - [`../../openspec/config.yaml`](../../openspec/config.yaml) — OpenSpec project context and rules.
