@@ -1,5 +1,7 @@
 from pathlib import Path
 
+from app.domain.provenance import ProvenanceEntry
+from app.domain.publication import Publication
 from app.repositories.duplicate_merge_repository import SqliteDuplicateMergeRepository
 from app.repositories.duplicate_review_decision_repository import SqliteDuplicateReviewDecisionRepository
 from app.repositories.import_history_repository import SqliteImportHistoryRepository
@@ -9,8 +11,6 @@ from app.repositories.project_publication_repository import SqliteProjectPublica
 from app.repositories.transaction_manager import SqliteTransactionManager
 from app.services.project_duplicate_service import ProjectDuplicateService
 from app.services.project_import_service import ProjectImportService
-from app.domain.provenance import ProvenanceEntry
-from app.domain.publication import Publication
 
 
 def _pub(title: str) -> Publication:

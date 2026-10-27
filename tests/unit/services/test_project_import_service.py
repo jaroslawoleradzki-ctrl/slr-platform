@@ -5,8 +5,8 @@ from uuid import UUID, uuid4
 import pytest
 
 from app.api.dto.search_strategy import SearchResultRecordResponse
-from app.domain.integrity_audit import IntegrityAuditStatus
 from app.domain.identifiers import Identifier, IdentifierType
+from app.domain.integrity_audit import IntegrityAuditStatus
 from app.domain.provenance import ProvenanceEntry
 from app.domain.publication import Publication
 from app.repositories.import_history_repository import (

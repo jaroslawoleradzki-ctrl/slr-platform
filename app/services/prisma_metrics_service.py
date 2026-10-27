@@ -6,19 +6,18 @@ from app.api.dto.prisma import PrismaMetricsResponse
 from app.repositories.duplicate_merge_repository import (
     DuplicateMergeRepository,
     SqliteDuplicateMergeRepository,
-    default_duplicate_merge_repository,
 )
 from app.repositories.duplicate_review_decision_repository import (
     DuplicateReviewDecisionRepository,
     default_duplicate_review_decision_repository,
 )
-from app.repositories.import_source_record_repository import (
-    ImportSourceRecordRepository,
-    SqliteImportSourceRecordRepository,
-)
 from app.repositories.import_history_repository import (
     ImportHistoryRepository,
     default_import_history_repository,
+)
+from app.repositories.import_source_record_repository import (
+    ImportSourceRecordRepository,
+    SqliteImportSourceRecordRepository,
 )
 from app.repositories.pre_screening_archive_repository import (
     PreScreeningArchiveRepository,
@@ -136,6 +135,7 @@ class PrismaMetricsService:
         self._workflow_status = workflow_status_service or default_project_workflow_status_service()
         self._builder = builder or duplicate_group_builder
         self._archive_repo = archive_repository or default_pre_screening_archive_repository()
+        self._source_records: ImportSourceRecordRepository | None
         if source_record_repository is not None:
             self._source_records = source_record_repository
         elif hasattr(self._publications, "_database_path"):
@@ -144,6 +144,7 @@ class PrismaMetricsService:
             )
         else:
             self._source_records = None
+        self._merges: DuplicateMergeRepository | None
         if merge_repository is not None:
             self._merges = merge_repository
         elif hasattr(self._publications, "_database_path"):

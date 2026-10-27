@@ -5,12 +5,6 @@ import sqlite3
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
-from app.normalization.doi import normalize_doi_strict
-from app.services.import_identity import (
-    fingerprint_publication,
-    source_occurrence_id,
-)
-
 from app.api.dto.search_strategy import (
     ManualSourceDatabase,
     SearchResultRecordResponse,
@@ -19,6 +13,7 @@ from app.domain.author import Author
 from app.domain.identifiers import Identifier, IdentifierType
 from app.domain.provenance import ProvenanceEntry
 from app.domain.publication import Publication
+from app.normalization.doi import normalize_doi_strict
 from app.repositories.import_history_repository import (
     ImportHistoryRecord,
     ImportHistoryRepository,
@@ -49,6 +44,10 @@ from app.repositories.search_result_snapshot_repository import (
 from app.repositories.transaction_manager import (
     SqliteTransactionManager,
     default_transaction_manager,
+)
+from app.services.import_identity import (
+    fingerprint_publication,
+    source_occurrence_id,
 )
 
 
@@ -247,11 +246,11 @@ class ProjectImportService:
         by_doi: dict[str, Publication] = {}
         for publication in [*existing, *[p for p in publications if str(p.record_id) in inserted_ids]]:
             if publication.provenance:
-                provenance = publication.provenance[0]
+                pub_provenance = publication.provenance[0]
                 by_source_key[
                     (
-                        provenance.source.strip().casefold(),
-                        provenance.source_record_id.strip(),
+                        pub_provenance.source.strip().casefold(),
+                        pub_provenance.source_record_id.strip(),
                     )
                 ] = publication
             for identifier in publication.identifiers:
@@ -442,9 +441,9 @@ class ProjectImportService:
         for pub in existing_pubs:
             for ident in pub.identifiers:
                 if ident.type is IdentifierType.DOI:
-                    valid_doi = normalize_doi_strict(ident.value)
-                    if valid_doi:
-                        existing_by_doi.setdefault(valid_doi, pub)
+                    existing_valid_doi = normalize_doi_strict(ident.value)
+                    if existing_valid_doi:
+                        existing_by_doi.setdefault(existing_valid_doi, pub)
 
         fingerprints = (
             list(record_fingerprints)
@@ -468,33 +467,35 @@ class ProjectImportService:
         for pub in existing_pubs:
             key = pub.title.strip().casefold()
             title_counts[key] = title_counts.get(key, 0) + 1
-        for publication in publications:
-            key = publication.title.strip().casefold()
+        for title_publication in publications:
+            key = title_publication.title.strip().casefold()
             title_counts[key] = title_counts.get(key, 0) + 1
 
         ordinal_by_fingerprint: dict[str, int] = {}
         prepared: list[dict] = []
-        for index, publication in enumerate(publications):
-            fingerprint = fingerprints[index]
+        for prepared_index, prepared_publication in enumerate(publications):
+            fingerprint = fingerprints[prepared_index]
             ordinal = ordinal_by_fingerprint.get(fingerprint, 0) + 1
             ordinal_by_fingerprint[fingerprint] = ordinal
-            valid_doi, original_doi, doi_status = _doi_evidence(publication)
+            prepared_valid_doi, prepared_original_doi, prepared_doi_status = _doi_evidence(
+                prepared_publication
+            )
             prepared.append(
                 {
-                    "index": index,
-                    "publication": publication,
+                    "index": prepared_index,
+                    "publication": prepared_publication,
                     "fingerprint": fingerprint,
                     "source_record_id": source_occurrence_id(
                         project_id=project_id,
-                        source_label=_source_label(publication),
+                        source_label=_source_label(prepared_publication),
                         filename=filename,
                         record_fingerprint=fingerprint,
                         ordinal=ordinal,
                     ),
-                    "valid_doi": valid_doi,
-                    "original_doi": original_doi,
-                    "doi_status": doi_status,
-                    "source_label": _source_label(publication),
+                    "valid_doi": prepared_valid_doi,
+                    "original_doi": prepared_original_doi,
+                    "doi_status": prepared_doi_status,
+                    "source_label": _source_label(prepared_publication),
                 }
             )
 

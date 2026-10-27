@@ -38,7 +38,7 @@ def environment(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("SLR_DATABASE_PATH", str(db))
     pub = SqliteProjectPublicationRepository(db)
     history = SqliteImportHistoryRepository(db)
-    normalization = SqliteNormalizationExecutionRepository(db)
+    SqliteNormalizationExecutionRepository(db)
     source = SqliteImportSourceRecordRepository(db)
     con = sqlite3.connect(db)
     con.execute("INSERT INTO projects(project_id,title) VALUES ('p1','Project 1')")

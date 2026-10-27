@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal, cast
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 
@@ -71,11 +71,11 @@ from app.services.fetch_all_search import (
     UnknownFetchAllJobError,
     fetch_all_service,
 )
+from app.services.import_identity import fingerprint_raw_record
 from app.services.live_search import (
     LiveSearchExecutor,
     live_search_service,
 )
-from app.services.import_identity import fingerprint_raw_record
 from app.services.project_import_service import ProjectImportService
 from app.services.search_strategy_support import (
     map_search_result_record,
@@ -874,13 +874,13 @@ def get_sources_summary(
 @router.get("/{project_id}/imports/{import_id}/source-records")
 def list_import_source_records(
     project_id: str,
-    import_id: str,
+    import_id: UUID,
     repo: ImportSourceRecordRepository = Depends(get_import_source_record_repository),
 ):
     records = repo.list_source_records_for_import(project_id, import_id)
     return {
         "project_id": project_id,
-        "import_id": import_id,
+        "import_id": str(import_id),
         "items": [
             {
                 "source_record_id": r.source_record_id,
@@ -908,13 +908,13 @@ def list_import_source_records(
 @router.get("/{project_id}/imports/{import_id}/skip-audit")
 def list_import_skip_audit(
     project_id: str,
-    import_id: str,
+    import_id: UUID,
     repo: ImportSourceRecordRepository = Depends(get_import_source_record_repository),
 ):
     records = repo.list_skip_audit_for_import(project_id, import_id)
     return {
         "project_id": project_id,
-        "import_id": import_id,
+        "import_id": str(import_id),
         "items": [
             {
                 "skip_audit_id": r.skip_audit_id,

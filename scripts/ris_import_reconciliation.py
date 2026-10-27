@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
-from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
+from uuid import NAMESPACE_URL, uuid4, uuid5
 
 from app.domain.identifiers import Identifier, IdentifierType
 from app.domain.provenance import ProvenanceEntry
@@ -334,7 +334,6 @@ def build_reconciliation_report(
                     else None
                 )
                 abstract = publication.abstract
-                provenance = publication.provenance[0].model_dump(mode="json")
                 first_author = _first_author(publication)
             except ValueError as exc:
                 validation_error = str(exc)
@@ -343,10 +342,6 @@ def build_reconciliation_report(
                 invalid_doi = raw_doi if raw_doi and doi is None else None
                 document_type = None
                 abstract = None
-                provenance = {
-                    "source": source_database,
-                    "source_record_id": raw_doi or title,
-                }
                 first_author = _normalized(authors[0]) if authors else ""
                 publication = None
 

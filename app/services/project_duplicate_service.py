@@ -119,6 +119,7 @@ class ProjectDuplicateService:
         self._transaction_manager = transaction_manager or SqliteTransactionManager(
             getattr(self._repository, "_database_path", "data/slr-platform.db")
         )
+        self._source_records: ImportSourceRecordRepository | None
         if source_record_repository is not None:
             self._source_records = source_record_repository
         elif hasattr(self._repository, "_database_path"):

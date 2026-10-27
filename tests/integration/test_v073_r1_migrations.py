@@ -4,17 +4,16 @@ import sqlite3
 from pathlib import Path
 from uuid import uuid4
 
+from app.domain.provenance import ProvenanceEntry
+from app.domain.publication import Publication
 from app.repositories.import_source_record_repository import (
     ImportSkipAuditRecord,
     ImportSourceRecord,
     SqliteImportSourceRecordRepository,
 )
-from app.domain.provenance import ProvenanceEntry
-from app.domain.publication import Publication
 from app.repositories.project_publication_repository import (
     SqliteProjectPublicationRepository,
 )
-
 
 OLD_SOURCE_DDL = """
 CREATE TABLE import_source_records (
@@ -100,7 +99,7 @@ def test_upgrade_from_v072_adds_tables_without_data_loss(tmp_path: Path) -> None
     con.commit()
     con.close()
 
-    repo = SqliteImportSourceRecordRepository(db)
+    SqliteImportSourceRecordRepository(db)
     con = sqlite3.connect(db)
     assert con.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
     assert con.execute("SELECT COUNT(*) FROM project_publications").fetchone()[0] == before

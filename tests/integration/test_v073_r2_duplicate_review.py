@@ -24,8 +24,7 @@ from app.repositories.project_publication_repository import (
 )
 from app.repositories.transaction_manager import SqliteTransactionManager
 from app.services.project_duplicate_service import ProjectDuplicateService
-from app.services.screening_input_service import ScreeningInputService
-from app.services.screening_input_service import ScreeningInputReadinessStatus
+from app.services.screening_input_service import ScreeningInputReadinessStatus, ScreeningInputService
 
 
 def _ris(title: str, year: int | None = None, doi: str | None = None) -> str:
@@ -43,8 +42,8 @@ def environment(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     db = tmp_path / "v073_r2.db"
     monkeypatch.setenv("SLR_DATABASE_PATH", str(db))
     pub = SqliteProjectPublicationRepository(db)
-    history = SqliteImportHistoryRepository(db)
-    normalization = SqliteNormalizationExecutionRepository(db)
+    SqliteImportHistoryRepository(db)
+    SqliteNormalizationExecutionRepository(db)
     source = SqliteImportSourceRecordRepository(db)
     decisions = SqliteDuplicateReviewDecisionRepository(db)
     merges = SqliteDuplicateMergeRepository(db)

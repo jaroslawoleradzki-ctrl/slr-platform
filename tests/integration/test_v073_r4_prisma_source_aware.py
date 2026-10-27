@@ -70,7 +70,7 @@ def environment(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     project_repo = SqliteProjectRepository(db)
     pub = SqliteProjectPublicationRepository(db)
     history = SqliteImportHistoryRepository(db)
-    normalization = SqliteNormalizationExecutionRepository(db)
+    SqliteNormalizationExecutionRepository(db)
     source = SqliteImportSourceRecordRepository(db)
     decisions = SqliteDuplicateReviewDecisionRepository(db)
     merges = SqliteDuplicateMergeRepository(db)
