@@ -4,7 +4,8 @@
 - **Branch:** `feature/slr-agent-engineering-foundation`
 - **Worktree:** `/home/cloud/dev/wt-slr-agent-foundation`
 - **Audited baseline:** `10239bb29547bf1a33188976da8e30af9cf0afc9`
-- **Hardening commit:** `1aa7fc9`
+- **Remediation commit:** `1aa7fc9`
+- **OpenSpec archive commit:** `8d1faed`
 - **Pull request:** https://github.com/jaroslawoleradzki-ctrl/slr-platform/pull/5
 - **OpenSpec change:** `agent-engineering-hardening`
 - **Mode:** BUILD, development infrastructure only
@@ -31,9 +32,10 @@ Local validation is green:
 - all five agents and all six project skills were discovered;
 - the migration-safety guard and CI runner-policy checks passed.
 
-GitHub Actions is green on run 40504478073: `ci-policy`, `openspec`, `backend`,
-and `frontend` all passed. The branch is ready for independent review; it is not
-merged or deployed by this task.
+GitHub Actions is green on run 40504478073 (remediation commit) and run
+40505000269 (archive commit): `ci-policy`, `openspec`, `backend`, and `frontend`
+all passed. The branch is ready for independent review; it is not merged or
+deployed by this task.
 
 ## 2. Security design
 
@@ -62,7 +64,7 @@ See [`docs/agents/SECURITY_MODEL.md`](../agents/SECURITY_MODEL.md) and
 | H-03 | HIGH | Developer could tag/publish; release could merge/checkout main/use `gh api` without approval | `.opencode/agents/slr-developer.md`, `.opencode/agents/slr-release-engineer.md` | Developer tag/`gh`/merge/checkout denied; release merge/push/tag/`gh release`/`gh api`/`gh pr` ask | Release-action tests and merged-rule tests | FIXED |
 | H-04 | HIGH | Tests inspected declared strings; hardcoded model allow-list did not detect provider removal | `tests/unit/test_agent_foundation_configuration.py`, `docs/reviews/SLR_AGENT_ENGINEERING_FOUNDATION_REPORT.md` | Effective `fnmatch` last-match evaluator; command-family tests; merged OpenCode permissions test; live `opencode models` test when CLI is available; report overclaims corrected | 93 effective/contract tests; merged OpenCode rules test; live catalog check passed locally | FIXED |
 | H-05 | HIGH | Read-only agents had shell `cat`/`sed`/`find`/`rg`, bypassing the read-tool `.env` ask | All five agents, `docs/agents/SECURITY_MODEL.md` | Shell file readers removed; `read` denies for `.env`, secrets, keys, data; `.env.example` allow; tests added | Secret-read tests pass; shell file-reader tests deny | FIXED |
-| M-01 | MEDIUM | CI lacked `git diff --check`, OpenSpec strict validation, and migration safety | `.github/workflows/ci.yml`, `docs/agents/QUALITY_GATES.md` | CI adds diff hygiene, pinned `@fission-ai/openspec@1.15.0` job, migration-safety step; branch triggers aligned | CI run 40504478073: `ci-policy`, `openspec`, `backend`, and `frontend` all passed | FIXED |
+| M-01 | MEDIUM | CI lacked `git diff --check`, OpenSpec strict validation, and migration safety | `.github/workflows/ci.yml`, `docs/agents/QUALITY_GATES.md` | CI adds diff hygiene, pinned `@fission-ai/openspec@1.15.0` job, migration-safety step; branch triggers aligned | CI runs 40504478073 and 40505000269: `ci-policy`, `openspec`, `backend`, and `frontend` all passed | FIXED |
 | M-02 | MEDIUM | TDD evidence requirement was weak; red-first not enforced | `AGENTS.md`, `docs/agents/WORKFLOW.md`, `.opencode/skills/slr-testing/SKILL.md` | Reports must record failing command/output, green command/output, refactor verification, and test diff; limitation documented | Policy reviewed; this hardening change is non-behavioral configuration and uses the proportionate exception | FIXED |
 | M-03 | MEDIUM | Paid default/fallback contradicted "no paid credits without authorization" | `docs/agents/MODEL_ROUTING.md`, `docs/agents/README.md`, `AGENTS.md` | Free `opencode/mimo-v2.6-flash-free` fallback; developer model documented as pre-authorized; paid fallback requires approval | Live catalog check includes configured models; fallback documented | FIXED |
 | M-04 | MEDIUM | No operational HTTP 429 procedure | `docs/agents/MODEL_ROUTING.md`, `AGENTS.md` | Retry/backoff, free fallback, paid approval, NOT VERIFIED rule documented | Documentation inspection | FIXED |
@@ -189,7 +191,7 @@ and non-destructive SQL patterns.
 | OpenSpec | `openspec validate --all --strict`; `--archived --strict` | PASS — 1 spec; 2 archived changes |
 | Migration safety | `python scripts/ci/check_migration_safety.py --base-ref origin/development` | PASS |
 | CI runner policy | `bash scripts/ci/check_runner_policy.sh` | PASS |
-| GitHub Actions | PR #5 checks, run 40504478073 | PASS — ci-policy, openspec, backend, frontend |
+| GitHub Actions | PR #5 checks, runs 40504478073 and 40505000269 | PASS — ci-policy, openspec, backend, frontend |
 | Live model execution | — | NOT VERIFIED (quota; no paid call) |
 
 No application behavior, production data, or deployment was changed.
@@ -225,7 +227,7 @@ No application behavior, production data, or deployment was changed.
 - OpenSpec: PASS (change archived; 14 requirements)
 - Backend tests: PASS
 - Frontend tests/build: PASS
-- GitHub Actions: PASS (run 40504478073)
+- GitHub Actions: PASS (runs 40504478073 and 40505000269)
 - Live model execution: NOT VERIFIED
 
 **Overall:** **PASS**. All local gates and the PR CI checks are green. The branch
