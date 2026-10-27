@@ -11,6 +11,7 @@ from app.api.routers import (
     exports,
     extraction,
     full_text_screening,
+    import_review,
     normalization,
     pre_screening,
     projects,
@@ -63,6 +64,7 @@ app.add_middleware(
 app.include_router(projects.router, prefix=API_V1_PREFIX)
 app.include_router(deduplication.router, prefix=API_V1_PREFIX)
 app.include_router(search_strategy.router, prefix=API_V1_PREFIX)
+app.include_router(import_review.router, prefix=API_V1_PREFIX)
 app.include_router(normalization.router, prefix=API_V1_PREFIX)
 app.include_router(pre_screening.router, prefix=API_V1_PREFIX)
 app.include_router(screening.router, prefix=API_V1_PREFIX)

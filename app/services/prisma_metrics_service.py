@@ -15,6 +15,10 @@ from app.repositories.import_history_repository import (
     ImportHistoryRepository,
     default_import_history_repository,
 )
+from app.repositories.import_review_repository import (
+    ImportReviewRepository,
+    SqliteImportReviewRepository,
+)
 from app.repositories.import_source_record_repository import (
     ImportSourceRecordRepository,
     SqliteImportSourceRecordRepository,
@@ -31,6 +35,7 @@ from app.services.duplicate_group_builder import (
     DuplicateGroupBuilder,
     duplicate_group_builder,
 )
+from app.services.duplicate_readiness_service import evaluate_duplicate_readiness
 from app.services.project_workflow_status_service import (
     ProjectWorkflowStatusService,
     default_project_workflow_status_service,
@@ -107,6 +112,9 @@ class PrismaMetrics:
     merged_duplicate_records: int = 0
     recovered_records: int = 0
     historical_canonical_without_source_records: int = 0
+    duplicate_groups_awaiting_merge: int = 0
+    duplicate_groups_blocking_screening: int = 0
+    records_removed_rejected_import: int = 0
     prisma_accounting_note: str = ""
 
 
@@ -128,6 +136,7 @@ class PrismaMetricsService:
         archive_repository: PreScreeningArchiveRepository | None = None,
         source_record_repository: ImportSourceRecordRepository | None = None,
         merge_repository: DuplicateMergeRepository | None = None,
+        review_repository: ImportReviewRepository | None = None,
     ) -> None:
         self._publications = publication_repository or default_project_publication_repository()
         self._history = import_history_repository or default_import_history_repository()
@@ -153,6 +162,15 @@ class PrismaMetricsService:
             )
         else:
             self._merges = None
+        self._reviews: ImportReviewRepository | None
+        if review_repository is not None:
+            self._reviews = review_repository
+        elif hasattr(self._publications, "_database_path"):
+            self._reviews = SqliteImportReviewRepository(
+                self._publications._database_path
+            )
+        else:
+            self._reviews = None
 
     def get_source_accounting(self, project_id: str) -> dict:
         """Return the persisted source/canonical accounting used by PRISMA and tooling."""
@@ -208,7 +226,12 @@ class PrismaMetricsService:
             if self._archive_repo is not None
             else 0
         )
-        prescreening_removed = archived_count + legacy_removed_count
+        review_decisions = (
+            self._reviews.list_for_project(project_id)
+            if self._reviews is not None
+            else {}
+        )
+        rejected_import_removed = 0
 
         active_before_dedup = max(0, total_raw - legacy_removed_count)
 
@@ -240,6 +263,9 @@ class PrismaMetricsService:
                 provider_breakdown[provider_key] = (
                     provider_breakdown.get(provider_key, 0) + import_count
                 )
+                decision = review_decisions.get(record.import_id)
+                if decision is not None and decision.decision == "rejected":
+                    rejected_import_removed += import_count
             elif record.source_type == "file":
                 source_key = record.source_database or "unknown"
                 import_count = record.records_count
@@ -263,7 +289,13 @@ class PrismaMetricsService:
                 manual_breakdown[source_key] = (
                     manual_breakdown.get(source_key, 0) + import_count
                 )
+                decision = review_decisions.get(record.import_id)
+                if decision is not None and decision.decision == "rejected":
+                    rejected_import_removed += import_count
 
+        prescreening_removed = (
+            archived_count + legacy_removed_count + rejected_import_removed
+        )
         active_publications = self._publications.get_active_publications(project_id)
         groups = self._builder.build(
             active_publications, include_title_candidates=True
@@ -271,14 +303,13 @@ class PrismaMetricsService:
         decisions = self._decisions.list_decisions_for_project(project_id)
 
         records_after_technical_merger = self._publications.count_active_by_project(project_id)
-        duplicate_groups_pending_review = sum(
-            1 for group in groups if str(group.group_id) not in decisions
-        )
         merges = (
             self._merges.list_merges_for_project(project_id)
             if self._merges is not None
             else {}
         )
+        readiness = evaluate_duplicate_readiness(groups, decisions, merges)
+        duplicate_groups_pending_review = readiness.pending_review_groups
         merged_groups = [merge for merge in merges.values() if merge.status == "merged"]
         merged_duplicate_records = sum(
             max(0, len(merge.merged_publication_ids) - 1) for merge in merged_groups
@@ -353,6 +384,9 @@ class PrismaMetricsService:
             merged_duplicate_records=merged_duplicate_records,
             recovered_records=recovered_records,
             historical_canonical_without_source_records=historical_without_source,
+            duplicate_groups_awaiting_merge=readiness.approved_unmerged_groups,
+            duplicate_groups_blocking_screening=readiness.blocking_groups,
+            records_removed_rejected_import=rejected_import_removed,
             prisma_accounting_note=note,
         )
 
@@ -366,6 +400,9 @@ class PrismaMetricsService:
             records_before_dedup=metrics.records_before_dedup,
             records_after_technical_merger=metrics.records_after_technical_merger,
             duplicate_groups_pending_review=metrics.duplicate_groups_pending_review,
+            duplicate_groups_awaiting_merge=metrics.duplicate_groups_awaiting_merge,
+            duplicate_groups_blocking_screening=metrics.duplicate_groups_blocking_screening,
+            records_removed_rejected_import=metrics.records_removed_rejected_import,
             records_screened_title_abstract=metrics.records_screened_title_abstract,
             records_screened_full_text=metrics.records_screened_full_text,
             studies_included_synthesis=metrics.studies_included_synthesis,

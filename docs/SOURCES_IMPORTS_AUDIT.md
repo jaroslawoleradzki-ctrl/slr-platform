@@ -203,3 +203,58 @@ Live API Provider w warstwie Search Strategy:
 Wymagane komendy walidacji backendu i frontendu przechodzą bez regresji
 (pytest, ruff, mypy, frontend test/type-check/build). Wprowadzenie wymaga
 commita i wydania w przyszłości.
+
+## Aktualizacja v0.7.4 — rozstrzyganie ostrzeżeń importu
+
+### Decyzje
+
+Ostrzeżenie importu jest teraz rozstrzygane jawnie:
+
+- `Akceptuję` zapisuje decyzję, zachowuje wszystkie publikacje i decyzje
+  badawcze oraz ustawia efektywny status `Zaimportowano`. Oryginalny status
+  `warning` i ostrzeżenia pozostają w audycie.
+- `Odrzucam` wymaga potwierdzenia w dialogu i flagi
+  `confirm_rejection=true` w API. Odrzucenie usuwa wyłącznie aktywne publikacje
+  należące wyłącznie do wybranego importu, a następnie pozostawia import,
+  source records, skip audit i decyzję jako nieaktywny audyt.
+
+Potwierdzenie:
+
+> Odrzucić import?
+>
+> „Czy na pewno chcesz odrzucić ten import? Operacja usunie dane należące do
+> wybranego importu. Nie wpłynie na pozostałe importy.”
+>
+> `Anuluj` / `Potwierdź odrzucenie`
+
+### Endpointy
+
+- `GET /api/v1/projects/{project_id}/imports/{import_id}/review`
+- `POST /api/v1/projects/{project_id}/imports/{import_id}/review`
+- `GET /api/v1/projects/{project_id}/imports?include_rejected=true`
+
+Decyzja akceptacji używa `decision="accept"`; odrzucenie używa
+`decision="reject"` oraz `confirm_rejection=true`. Konflikt decyzji lub blokada
+odrzucenia zwraca `409` z `detail.code` i listą `detail.blockers`.
+
+### Ochrona danych
+
+Odrzucenie jest blokowane, gdy publikacja:
+
+- jest współdzielona z innym importem;
+- należy do merge'a lub łańcucha supersession;
+- ma decyzję duplicate review, pre-screening, finalizację korpusu, screening,
+  metadane full-text, ocenę jakości, ekstrakcję lub rekord syntezy;
+- ma zatwierdzoną decyzję recovery;
+- nie ma możliwego do zweryfikowania ownershipu (import historyczny).
+
+Wszystkie blokady są raportowane łącznie. Operacja odrzucenia używa jednej
+transakcji `BEGIN IMMEDIATE`; każdy błąd wycofuje usunięcie publikacji,
+decyzję i unieważnienie normalizacji.
+
+### PRISMA i liczniki
+
+Odrzucony import jest ukryty w aktywnej historii i podsumowaniu źródeł.
+Jego source records pozostają w identyfikacji PRISMA i są raportowane jako
+`removed before screening — rejected import`. Etapy późniejsze korzystają
+wyłącznie z aktywnego korpusu.
