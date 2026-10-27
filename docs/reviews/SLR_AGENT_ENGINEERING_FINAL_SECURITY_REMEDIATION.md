@@ -45,9 +45,11 @@ Local results are green:
 - Ruff, mypy, migration safety, diff hygiene, OpenSpec strict and archived
   validation, and the CI runner policy.
 
-The PR head must still be pushed and the GitHub Actions run on the new commit
-must be green. Until then, the CI result is **NOT VERIFIED** in this report.
-The final PR head is verified through PR #5 checks.
+The remediation is pushed and verified by GitHub Actions run `40513341817` on
+`f91d1db8278ce3abb1bd18e36afd3c9e3d06c82a`: all four jobs passed, including the
+mandatory sealed permission tests (130 passed) and the full backend suite
+(2,676 passed). The run also verified that the pre-existing research database
+under `data/` was unchanged by the test suite.
 
 **Assessment:** **PASS WITH CONDITIONS** for the targeted security remediation.
 The conditions are non-blocking residuals: live model execution remains
@@ -230,7 +232,7 @@ Model verification is split:
 | `.opencode/skills/slr-git-workflow/SKILL.md` | Wrapper commands; direct Git denied |
 | `.opencode/skills/slr-testing/SKILL.md` | Wrapper diff check |
 | `.opencode/skills/slr-release/SKILL.md` | Wrapper status/diff commands |
-| `.github/workflows/ci.yml` | Pinned CLI install; mandatory security tests; isolated HOME |
+| `.github/workflows/ci.yml` | Pinned CLI install; mandatory security tests; isolated HOME; before/after data database isolation check |
 | `tests/unit/test_agent_foundation_configuration.py` | Exact matcher; bypass, Ruff, SQLite, wrapper, merged-rule tests |
 | `tests/unit/test_agent_git_inspection_wrapper.py` | New wrapper unit tests |
 
@@ -363,9 +365,30 @@ mandatory test fails instead of skipping, as intended.
 ### GitHub Actions
 
 The workflow now runs the pinned installation and the mandatory security tests
-in the backend job. The run on the remediation commit is recorded on PR #5.
-Status at report creation: **pending until push**; do not treat it as PASS until
-the PR checks are green.
+in the backend job.
+
+- **Green run:** `40513341817` on `f91d1db8278ce3abb1bd18e36afd3c9e3d06c82a`;
+  all four jobs passed:
+  - `CI runner policy` — pass;
+  - `OpenSpec (pinned CLI)` — pass;
+  - `Backend (Python 3.12)` — pass;
+  - `Frontend (Node 22)` — pass.
+- **Mandatory security step:** `130 passed in 7.11s` with
+  `OPENCODE_BIN`/`REQUIRE_OPENCODE_CLI=1` and the isolated HOME.
+- **Full backend suite in CI:** `2676 passed, 1 warning` in 102.50 s.
+- **Data isolation:** `data/ database state unchanged by tests`.
+- **Migration safety:** passed.
+- **OpenSpec:** 1 spec and 2 archived changes passed.
+- **Pinned CLI:** downloaded from the v2.2.0 release, checksum verified against
+  `SHA256SUMS`, installed under `$RUNNER_TEMP/opencode-cli`, and asserted as
+  `opencode v2.2.0`.
+
+An earlier run, `40512305838`, failed **after** all 2,676 tests passed because
+the old CI check required `data/` to be empty; the persistent self-hosted runner
+has a pre-existing ignored `data/slr-platform.db`. The check was corrected in
+`f91d1db` to compare the path/size/mtime state before and after pytest and fail
+only if tests create or modify a database. The corrected run above is green.
+The pre-existing research database was not deleted, read, or modified.
 
 ---
 
@@ -388,6 +411,7 @@ the PR checks are green.
 | OpenSpec doctor | `openspec doctor` | **PASS** — root OK |
 | CI runner policy | `bash scripts/ci/check_runner_policy.sh` | **PASS** |
 | CI YAML parse | `yaml.safe_load('.github/workflows/ci.yml')` | **PASS** — jobs `backend`, `ci-policy`, `frontend`, `openspec` |
+| GitHub Actions | Run `40513341817` on `f91d1db` | **PASS** — all four jobs green |
 
 ---
 
@@ -519,11 +543,11 @@ CI runner policy PASSED
 | H-01 governance protection | **FIXED** (permission-rule level) |
 | H-04 effective permission tests | **FIXED** |
 | H-05 secret protection | **FIXED** (permission-rule level) |
-| CI security tests | **PASS locally; pending GitHub Actions on the new head** |
-| Backend | **PASS** |
-| Frontend | **PASS** |
-| OpenSpec | **PASS** |
-| GitHub Actions | **PENDING — must be green on the pushed head** |
+| CI security tests | **PASS** — run `40513341817`, 130 security tests |
+| Backend | **PASS** — 2,676 tests locally and in CI |
+| Frontend | **PASS** — 342 tests, TypeScript, build |
+| OpenSpec | **PASS** — strict and archived |
+| GitHub Actions | **PASS** — run `40513341817` on `f91d1db` |
 | Merge conflicts | **None observed at baseline** |
 | Live model execution | **NOT VERIFIED** |
 
@@ -531,4 +555,67 @@ CI runner policy PASSED
 audit-identified permission bypasses are closed and covered by tests. The
 conditions are non-blocking and documented: live model execution and the paid
 provider catalog are not verified in CI, and permissions are not an OS sandbox.
-Do not merge until the GitHub Actions run on the final PR head is green.
+The verified security remediation commit is
+`f91d1db8278ce3abb1bd18e36afd3c9e3d06c82a`; its GitHub Actions run is green.
+This report update is a docs-only follow-up whose own PR check is verified on
+PR #5. Do not merge without the normal human review.
+
+---
+
+## 12. Final security remediation output
+
+```text
+SLR AGENT SECURITY REMEDIATION:
+PASS WITH CONDITIONS
+
+BRANCH:
+feature/slr-agent-engineering-foundation
+
+COMMIT:
+f91d1db8278ce3abb1bd18e36afd3c9e3d06c82a
+
+PR:
+#5
+
+N-01 GIT BYPASS:
+FIXED
+
+N-02 RUFF MUTATION:
+FIXED
+
+N-03 SQLITE ESCAPE:
+FIXED
+
+C-02 DATA PROTECTION:
+FIXED
+
+H-01 GOVERNANCE PROTECTION:
+FIXED
+
+H-04 PERMISSION TESTS:
+FIXED
+
+H-05 SECRET PROTECTION:
+FIXED
+
+CI SECURITY TESTS:
+PASS
+
+BACKEND:
+PASS
+
+FRONTEND:
+PASS
+
+OPENSPEC:
+PASS
+
+GITHUB ACTIONS:
+PASS
+
+READY FOR FINAL SECURITY REVIEW:
+YES
+
+REPORT:
+docs/reviews/SLR_AGENT_ENGINEERING_FINAL_SECURITY_REMEDIATION.md
+```
