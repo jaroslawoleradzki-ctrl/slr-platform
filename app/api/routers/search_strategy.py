@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal, cast
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 
@@ -30,9 +30,15 @@ from app.providers.import_file.bibtex.parser import parse_bibtex
 from app.providers.import_file.ris.mapper import map_ris_record
 from app.providers.import_file.ris.parser import parse_ris
 from app.repositories.import_history_repository import (
+    ImportHistoryRecord,
     ImportHistoryRepository,
     SqliteImportHistoryRepository,
     default_import_history_repository,
+)
+from app.repositories.import_source_record_repository import (
+    ImportSourceRecordRepository,
+    SqliteImportSourceRecordRepository,
+    default_import_source_record_repository,
 )
 from app.repositories.normalization_execution_repository import (
     NormalizationExecutionRepository,
@@ -65,6 +71,7 @@ from app.services.fetch_all_search import (
     UnknownFetchAllJobError,
     fetch_all_service,
 )
+from app.services.import_identity import fingerprint_raw_record
 from app.services.live_search import (
     LiveSearchExecutor,
     live_search_service,
@@ -97,6 +104,18 @@ def get_import_history_repository() -> ImportHistoryRepository:
     return default_import_history_repository()
 
 
+def get_import_source_record_repository() -> ImportSourceRecordRepository:
+    return default_import_source_record_repository()
+
+
+def _source_repo_for_publication_repo(
+    pub_repo: ProjectPublicationRepository,
+) -> ImportSourceRecordRepository | None:
+    if isinstance(pub_repo, SqliteProjectPublicationRepository):
+        return SqliteImportSourceRecordRepository(pub_repo._database_path)
+    return None
+
+
 def get_normalization_execution_repository() -> NormalizationExecutionRepository:
     return default_normalization_execution_repository()
 
@@ -123,6 +142,7 @@ def get_project_import_service(
         import_history_repository=history_repo,
         normalization_repository=norm_repo,
         transaction_manager=tx_manager,
+        source_record_repository=_source_repo_for_publication_repo(pub_repo),
         snapshot_repository=(
             None
             if isinstance(pub_repo, DemoProjectPublicationRepository)
@@ -638,6 +658,41 @@ def import_search_results(
     )
 
 
+def _record_failed_file_import(
+    history_repository: ImportHistoryRepository,
+    *,
+    project_id: str,
+    filename: str | None,
+    file_format: str | None,
+    source_database: ManualSourceDatabase | None,
+    source_label: str | None,
+    error: str,
+) -> None:
+    try:
+        history_repository.create(
+            ImportHistoryRecord(
+                import_id=uuid4(),
+                project_id=project_id,
+                source_type="file",
+                filename=filename,
+                format=file_format,
+                provider=None,
+                query=None,
+                records_count=0,
+                total_available=None,
+                status="failed",
+                warnings=(error,),
+                created_at=datetime.now(timezone.utc),
+                fingerprint=None,
+                source_database=source_database,
+                source_label=source_label,
+            )
+        )
+    except Exception:
+        # A diagnostics write must never hide the original validation error.
+        return
+
+
 @router.post(
     "/{project_id}/imports",
     response_model=BibliographicImportResponse,
@@ -650,6 +705,7 @@ async def import_bibliographic_file(
     source_label: str | None = Form(default=None),
     repository: ProjectPublicationRepository = Depends(get_project_publication_repository),
     import_service: ProjectImportService = Depends(get_project_import_service),
+    history_repository: ImportHistoryRepository = Depends(get_import_history_repository),
 ) -> BibliographicImportResponse:
     """Parse one RIS/BibTeX file and append its publications to a project."""
 
@@ -673,6 +729,9 @@ async def import_bibliographic_file(
         if not raw_content.strip():
             raise ValueError("The uploaded file is empty.")
         content = raw_content.decode("utf-8-sig")
+        import hashlib
+
+        source_file_hash = hashlib.sha256(raw_content).hexdigest()
 
         if suffix == ".ris":
             parsed_ris = parse_ris(content)
@@ -680,6 +739,7 @@ async def import_bibliographic_file(
                 normalize_publication(map_ris_record(record, source="ris", source_database=source_database or "ris"))
                 for record in parsed_ris
             ]
+            record_fingerprints = [fingerprint_raw_record(record) for record in parsed_ris]
         else:
             parsed_bibtex = parse_bibtex(content)
             publications = [
@@ -688,6 +748,7 @@ async def import_bibliographic_file(
                 )
                 for record in parsed_bibtex
             ]
+            record_fingerprints = [fingerprint_raw_record(record) for record in parsed_bibtex]
 
         if not publications:
             raise ValueError("The uploaded file contains no bibliographic records.")
@@ -699,15 +760,36 @@ async def import_bibliographic_file(
             publications=publications,
             source_database=source_database,
             source_label=source_label,
+            source_file_hash=source_file_hash,
+            record_fingerprints=record_fingerprints,
         )
     except ProjectNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except UnicodeDecodeError as exc:
+        message = "The uploaded file must be valid UTF-8 text."
+        _record_failed_file_import(
+            history_repository,
+            project_id=project_id,
+            filename=file.filename,
+            file_format="RIS" if suffix == ".ris" else "BibTeX",
+            source_database=source_database,
+            source_label=source_label,
+            error=message,
+        )
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail="The uploaded file must be valid UTF-8 text.",
+            detail=message,
         ) from exc
     except ValueError as exc:
+        _record_failed_file_import(
+            history_repository,
+            project_id=project_id,
+            filename=file.filename,
+            file_format="RIS" if suffix == ".ris" else "BibTeX",
+            source_database=source_database,
+            source_label=source_label,
+            error=str(exc),
+        )
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=str(exc),
@@ -765,6 +847,7 @@ def get_sources_summary_service(
     return SourcesSummaryService(
         publication_repository=pub_repo,
         import_history_repository=history_repo,
+        source_record_repository=_source_repo_for_publication_repo(pub_repo),
     )
 
 
@@ -786,3 +869,70 @@ def get_sources_summary(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
 
     return service.get_sources_summary(project_id)
+
+
+@router.get("/{project_id}/imports/{import_id}/source-records")
+def list_import_source_records(
+    project_id: str,
+    import_id: UUID,
+    repo: ImportSourceRecordRepository = Depends(get_import_source_record_repository),
+):
+    records = repo.list_source_records_for_import(project_id, import_id)
+    return {
+        "project_id": project_id,
+        "import_id": str(import_id),
+        "items": [
+            {
+                "source_record_id": r.source_record_id,
+                "source_filename": r.source_filename,
+                "source_file_hash": r.source_file_hash,
+                "record_fingerprint": r.record_fingerprint,
+                "import_format": r.import_format,
+                "source_record_index": r.source_record_index,
+                "title": r.title,
+                "publication_year": r.publication_year,
+                "original_doi": r.original_doi,
+                "normalized_doi": r.normalized_doi,
+                "doi_status": r.doi_status,
+                "canonical_publication_id": r.canonical_publication_id,
+                "duplicate_match_type": r.duplicate_match_type,
+                "duplicate_match_reason": r.duplicate_match_reason,
+                "duplicate_candidate_group_id": r.duplicate_candidate_group_id,
+                "recovery_status": r.recovery_status,
+            }
+            for r in records
+        ],
+    }
+
+
+@router.get("/{project_id}/imports/{import_id}/skip-audit")
+def list_import_skip_audit(
+    project_id: str,
+    import_id: UUID,
+    repo: ImportSourceRecordRepository = Depends(get_import_source_record_repository),
+):
+    records = repo.list_skip_audit_for_import(project_id, import_id)
+    return {
+        "project_id": project_id,
+        "import_id": str(import_id),
+        "items": [
+            {
+                "skip_audit_id": r.skip_audit_id,
+                "source_record_id": r.source_record_id,
+                "source_filename": r.source_filename,
+                "source_file_hash": r.source_file_hash,
+                "record_fingerprint": r.record_fingerprint,
+                "import_format": r.import_format,
+                "source_record_index": r.source_record_index,
+                "source_title": r.source_title,
+                "source_doi": r.source_doi,
+                "matched_publication_id": r.matched_publication_id,
+                "match_type": r.match_type,
+                "match_reason": r.match_reason,
+                "proposed_action": r.proposed_action,
+                "review_required": r.review_required,
+                "recovery_status": r.recovery_status,
+            }
+            for r in records
+        ],
+    }

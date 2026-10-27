@@ -17,6 +17,7 @@ export const FileDropzone: React.FC<FileDropzoneProps> = ({ onFileSelect, import
   const { activeProject } = useProject();
   const effectiveProjectId = projectId || activeProject?.id;
   const [selectedImportForReview, setSelectedImportForReview] = useState<ImportFileRecord | null>(null);
+  const [selectedImportForWarnings, setSelectedImportForWarnings] = useState<ImportFileRecord | null>(null);
   const [dragActive, setDragActive] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -264,8 +265,24 @@ export const FileDropzone: React.FC<FileDropzoneProps> = ({ onFileSelect, import
                   </div>
                   {item.status === 'success' ? (
                     <Badge variant="completed" icon={<CheckCircle2 size={12} />}>Zaimportowano</Badge>
+                  ) : item.status === 'failed' || item.status === 'error' ? (
+                    <button
+                      type="button"
+                      onClick={() => setSelectedImportForWarnings(item)}
+                      style={{ border: 'none', background: 'none', padding: 0, cursor: 'pointer' }}
+                      title="Pokaż szczegóły błędu importu"
+                    >
+                      <Badge variant="pending_action" icon={<AlertTriangle size={12} />}>Błąd importu</Badge>
+                    </button>
                   ) : (
-                    <Badge variant="pending_action" icon={<AlertTriangle size={12} />}>Ostrzeżenie</Badge>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedImportForWarnings(item)}
+                      style={{ border: 'none', background: 'none', padding: 0, cursor: 'pointer' }}
+                      title="Pokaż szczegóły ostrzeżenia importu"
+                    >
+                      <Badge variant="pending_action" icon={<AlertTriangle size={12} />}>Ostrzeżenie</Badge>
+                    </button>
                   )}
                   {effectiveProjectId && (
                     <button
@@ -310,6 +327,75 @@ export const FileDropzone: React.FC<FileDropzoneProps> = ({ onFileSelect, import
           }
           onCountsUpdated={onRefresh}
         />
+      )}
+
+      {selectedImportForWarnings && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.45)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+            padding: '24px',
+          }}
+          onClick={() => setSelectedImportForWarnings(null)}
+        >
+          <div
+            style={{
+              width: 'min(640px, 100%)',
+              backgroundColor: 'var(--bg-surface)',
+              borderRadius: 'var(--radius-lg)',
+              border: '1px solid var(--border-subtle)',
+              boxShadow: 'var(--shadow-lg)',
+              padding: '20px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '16px',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
+              <h3 style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                Szczegóły importu: {selectedImportForWarnings.filename ?? 'Plik'}
+              </h3>
+              <button type="button" onClick={() => setSelectedImportForWarnings(null)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '1.2rem' }}>
+                ×
+              </button>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '8px', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+              <div>Status: <strong>{selectedImportForWarnings.status}</strong></div>
+              <div>Rekordy źródłowe: <strong>{selectedImportForWarnings.sourceRecordCount ?? 'brak danych'}</strong></div>
+              <div>Publikacje kanoniczne: <strong>{selectedImportForWarnings.canonicalPublicationCount ?? 'brak danych'}</strong></div>
+              <div>Dokładne duplikaty DOI: <strong>{selectedImportForWarnings.exactDoiMatchCount ?? 'brak danych'}</strong></div>
+              <div>Powtórzone wystąpienia: <strong>{selectedImportForWarnings.repeatedSourceCount ?? 'brak danych'}</strong></div>
+              <div>Pominięte wstawienia: <strong>{selectedImportForWarnings.skippedCanonicalCount ?? 'brak danych'}</strong></div>
+              <div>Kandydaci tytułowi: <strong>{selectedImportForWarnings.titleCandidateCount ?? 'brak danych'}</strong></div>
+              <div>Kandydaci podobni: <strong>{selectedImportForWarnings.similarTitleCandidateCount ?? 'brak danych'}</strong></div>
+              <div>Niepoprawne DOI: <strong>{selectedImportForWarnings.invalidDoiCount ?? 'brak danych'}</strong></div>
+              <div>Błędy walidacji: <strong>{selectedImportForWarnings.validationErrorCount ?? 0}</strong></div>
+              <div>Status odzyskiwania: <strong>{selectedImportForWarnings.recoveryStatus ?? 'brak danych'}</strong></div>
+              <div>Audyt dostępny: <strong>{(selectedImportForWarnings.auditAvailable ?? selectedImportForWarnings.skipAuditAvailable) ? 'tak' : 'nie'}</strong></div>
+            </div>
+            {(selectedImportForWarnings.warnings ?? []).length > 0 ? (
+              <ul style={{ margin: 0, paddingLeft: '20px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {(selectedImportForWarnings.warnings ?? []).map((warning, index) => (
+                  <li key={index} style={{ fontSize: '0.85rem', color: 'var(--text-primary)' }}>
+                    {warning}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                Brak szczegółowych informacji diagnostycznych dla tego importu historycznego.
+              </div>
+            )}
+          </div>
+        </div>
       )}
     </div>
   );
