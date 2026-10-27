@@ -113,6 +113,42 @@ jobs:
         run: uv run --frozen --no-sync ruff check app tests scripts
       - name: Type check
         run: uv run --frozen --no-sync mypy app
+      - name: Install pinned OpenCode CLI (job-local)
+        run: |
+          set -euo pipefail
+          VERSION=2.2.0
+          DEST="$RUNNER_TEMP/opencode-cli"
+          HOME_DIR="$RUNNER_TEMP/opencode-home"
+          mkdir -p "$DEST" "$HOME_DIR"
+          case "$(uname -m)" in
+            x86_64) ASSET=opencode-linux-x64.tar.gz ;;
+            aarch64|arm64) ASSET=opencode-linux-arm64.tar.gz ;;
+            *) echo "::error::Unsupported architecture: $(uname -m)"; exit 1 ;;
+          esac
+          BASE="https://github.com/anomalyco/opencode/releases/download/v${VERSION}"
+          curl -fsSL -o "$DEST/$ASSET" "$BASE/$ASSET"
+          curl -fsSL -o "$DEST/SHA256SUMS" "$BASE/SHA256SUMS"
+          (cd "$DEST" && grep " $ASSET\$" SHA256SUMS | sha256sum -c -)
+          tar -xzf "$DEST/$ASSET" -C "$DEST"
+          test -x "$DEST/opencode"
+          "$DEST/opencode" --version | grep -qx "opencode v${VERSION}"
+          {
+            echo "OPENCODE_BIN=$DEST/opencode"
+            echo "REQUIRE_OPENCODE_CLI=1"
+          } >> "$GITHUB_ENV"
+      - name: Security permission tests (mandatory)
+        env:
+          HOME: ${{ runner.temp }}/opencode-home
+          XDG_CONFIG_HOME: ${{ runner.temp }}/opencode-home/.config
+          XDG_DATA_HOME: ${{ runner.temp }}/opencode-home/.local/share
+          XDG_CACHE_HOME: ${{ runner.temp }}/opencode-home/.cache
+          XDG_STATE_HOME: ${{ runner.temp }}/opencode-home/.local/state
+        run: |
+          set -euo pipefail
+          mkdir -p "$XDG_CONFIG_HOME" "$XDG_DATA_HOME" "$XDG_CACHE_HOME" "$XDG_STATE_HOME"
+          uv run --frozen --no-sync pytest -q -p no:cacheprovider -rs \
+            tests/unit/test_agent_foundation_configuration.py \
+            tests/unit/test_agent_git_inspection_wrapper.py
       - name: Fetch comparison branch
         run: git fetch --no-tags origin "${{ github.base_ref || 'development' }}"
       - name: Migration safety
@@ -120,8 +156,15 @@ jobs:
           uv run --frozen --no-sync python scripts/ci/check_migration_safety.py \
             --base-ref "origin/${{ github.base_ref || 'development' }}"
       - name: Tests (disposable SQLite database)
+        env:
+          HOME: ${{ runner.temp }}/opencode-home
+          XDG_CONFIG_HOME: ${{ runner.temp }}/opencode-home/.config
+          XDG_DATA_HOME: ${{ runner.temp }}/opencode-home/.local/share
+          XDG_CACHE_HOME: ${{ runner.temp }}/opencode-home/.cache
+          XDG_STATE_HOME: ${{ runner.temp }}/opencode-home/.local/state
         run: |
           set -euo pipefail
+          mkdir -p "$XDG_CONFIG_HOME" "$XDG_DATA_HOME" "$XDG_CACHE_HOME" "$XDG_STATE_HOME"
           # This suite is SQLite-heavy. Keep test files on tmpfs when available:
           # the same suite takes ~13 min on ext4 due to fsync overhead versus
           # ~1.5 min on tmpfs. The directory is unique per run and disposable.

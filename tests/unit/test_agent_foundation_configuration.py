@@ -7,8 +7,8 @@ so a broken or over-privileged configuration cannot silently ship.
 
 from __future__ import annotations
 
-import fnmatch
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -48,9 +48,14 @@ READ_ONLY_AGENTS = ("slr-architect", "slr-qa", "slr-research-reviewer")
 KNOWN_MODELS = {
     "opencode/nemotron-3-ultra-free",
     "opencode/nemotron-3.5-lightning-free",
+    "opencode/mimo-v2.6-flash-free",
     "opencode-go/muse-spark-1.3-contributor",
     "opencode-go/mimo-v2.6-flash",
 }
+
+OPENCODE_TIMEOUT_SECONDS = 120
+REQUIRE_OPENCODE_CLI = os.environ.get("REQUIRE_OPENCODE_CLI") == "1"
+SAFE_GIT_WRAPPER = "python3 scripts/agent/safe_git_inspect.py"
 
 SKILL_SECTIONS = (
     "## Activation criteria",
@@ -132,13 +137,41 @@ def _rules_with(frontmatter: dict[str, Any], action: str, effect: str) -> list[d
     ]
 
 
-def effective_effect(frontmatter: dict[str, Any], action: str, resource: str) -> str | None:
-    """Evaluate ordered rules with OpenCode's documented last-match semantics.
+_WILDCARD_SPECIAL = set(".+^${}()|[]\\")
 
-    Shell resources are raw command text; ``fnmatch`` gives the same ``*``
-    wildcard behaviour used by the documented examples. The evaluator returns
-    ``None`` when no declared rule matches, so an agent must declare an explicit
-    default for the action it relies on.
+
+def _opencode_wildcard(value: str, pattern: str) -> bool:
+    """Replicate OpenCode v2's permission wildcard matcher exactly.
+
+    The matcher escapes ``[.+^${}()|[]\\]``, translates ``*`` to ``.*`` and
+    ``?`` to ``.``, and evaluates the result with the ``s`` (dot-all) flag.
+    A trailing ``" .*"`` also matches without the space.
+    """
+
+    value = value.replace("\\", "/")
+    translated: list[str] = []
+    for character in pattern.replace("\\", "/"):
+        if character in _WILDCARD_SPECIAL:
+            translated.append("\\" + character)
+        elif character == "*":
+            translated.append(".*")
+        elif character == "?":
+            translated.append(".")
+        else:
+            translated.append(character)
+    expression = "".join(translated)
+    if expression.endswith(" .*"):
+        expression = expression[:-3] + "( .*)?"
+    return re.fullmatch(expression, value, flags=re.S) is not None
+
+
+def effective_effect(frontmatter: dict[str, Any], action: str, resource: str) -> str | None:
+    """Evaluate ordered rules with OpenCode's last-match semantics.
+
+    ``resource`` is the actual resource OpenCode passes to the permission
+    service (a repository-relative path for file tools, a parsed command node
+    for the shell tool). The evaluator returns ``None`` when no declared rule
+    matches; callers that require a deny must still ensure a default rule.
     """
 
     effect: str | None = None
@@ -146,7 +179,7 @@ def effective_effect(frontmatter: dict[str, Any], action: str, resource: str) ->
         if rule.get("action") not in {action, "*"}:
             continue
         pattern = str(rule.get("resource", ""))
-        if fnmatch.fnmatchcase(resource, pattern):
+        if _opencode_wildcard(resource, pattern):
             effect = str(rule.get("effect"))
     return effect
 
@@ -168,21 +201,39 @@ def assert_edit_effect(frontmatter: dict[str, Any], path: str, expected: str) ->
     assert effective_effect(frontmatter, "edit", path) == expected, path
 
 
-def merged_agent_permissions(agent_id: str) -> list[dict[str, Any]]:
-    """Return the actual merged permissions reported by OpenCode, when available."""
-
-    if shutil.which("opencode") is None:
+def _opencode_cli() -> str:
+    binary = os.environ.get("OPENCODE_BIN") or shutil.which("opencode")
+    if not binary or not Path(binary).is_file():
+        if REQUIRE_OPENCODE_CLI:
+            pytest.fail(
+                "OpenCode CLI is required for security verification but was not found; "
+                "install the pinned CLI or set OPENCODE_BIN"
+            )
         pytest.skip("opencode CLI is not installed in this environment")
+    return binary
+
+
+def _opencode(*args: str) -> subprocess.CompletedProcess[str]:
     result = subprocess.run(
-        ["opencode", "debug", "agents"],
+        [_opencode_cli(), "--standalone", *args],
         check=False,
         capture_output=True,
         text=True,
-        timeout=60,
+        timeout=OPENCODE_TIMEOUT_SECONDS,
+        cwd=REPO_ROOT,
     )
     if result.returncode != 0:
-        pytest.skip(f"opencode debug agents unavailable: {result.stderr.strip()[:200]}")
-    agents = json.loads(result.stdout)
+        message = (result.stderr or result.stdout).strip()[:300]
+        if REQUIRE_OPENCODE_CLI:
+            pytest.fail(f"opencode {' '.join(args)} failed: {message}")
+        pytest.skip(f"opencode {' '.join(args)} unavailable: {message}")
+    return result
+
+
+def merged_agent_permissions(agent_id: str) -> list[dict[str, Any]]:
+    """Return the actual merged permissions reported by OpenCode, when available."""
+
+    agents = json.loads(_opencode("debug", "agents").stdout)
     for agent in agents:
         if agent.get("id") == agent_id:
             permissions = agent.get("permissions")
@@ -243,6 +294,16 @@ def test_project_agent_is_valid(agent_id: str) -> None:
         assert rule["resource"], f"{path} has an empty permission resource"
 
     assert _rules_with(frontmatter, "skill", "allow"), f"{path} must allow the skill tool"
+
+
+def test_permission_wildcard_matches_opencode_semantics() -> None:
+    assert _opencode_wildcard("git status --short", "git status*")
+    assert _opencode_wildcard("git status", "git status*")
+    assert not _opencode_wildcard("bash scripts/deploy_ai_node.sh", "scripts/deploy_ai_node.sh*")
+    assert _opencode_wildcard("line1\nline2", "*\n*")
+    assert _opencode_wildcard("[x]", "[x]")
+    assert not _opencode_wildcard("y", "[x]")
+    assert _opencode_wildcard("a?b", "a?b")
 
 
 @pytest.mark.parametrize("agent_id", PROJECT_AGENTS)
@@ -317,20 +378,165 @@ def test_merged_opencode_permissions_enforce_hard_boundaries() -> None:
 
     for command in (
         "bash scripts/deploy_ai_node.sh",
+        "sh scripts/deploy_ai_node.sh",
+        "./scripts/deploy_ai_node.sh",
         "sudo docker compose up -d",
         "ssh cloud@ai-node deploy",
         "python3 -c \"open('data/slr-platform.db')\"",
+        "sqlite3 -readonly data/slr-platform.db",
+        "git reset --hard",
         "git restore .",
         "git worktree remove /tmp/wt",
         "git branch -D old",
+        "git tag v1",
         "gh release create v1",
+        "git diff --no-index /dev/null .env",
+        "git diff --no-index /dev/null /home/cloud/.ssh/id_rsa",
+        "git diff --output=data/slr-platform.db",
+        "git diff --output=AGENTS.md",
+        "git diff --output=.opencode/agents/slr-developer.md",
+        "git log -p -- .env",
+        "git show HEAD:.env",
     ):
         assert_denied(developer, command)
+
+    assert_allowed(developer, "python3 scripts/agent/safe_git_inspect.py status --short")
+    assert_allowed(developer, "python3 scripts/agent/safe_git_inspect.py diff --stat")
+    assert_allowed(developer, "python3 scripts/agent/safe_git_inspect.py log --oneline -n 20")
+    assert_allowed(developer, "python3 scripts/agent/safe_git_inspect.py show --stat HEAD")
 
     assert_denied(release, "bash scripts/deploy_ai_node.sh")
     assert_ask(release, "scripts/deploy_ai_node.sh")
     assert_ask(release, "git merge development")
     assert_ask(release, "gh api repos/x/y/releases")
+    assert_denied(release, "git diff --no-index /dev/null .env")
+    assert_denied(release, "git diff --output=AGENTS.md")
+    assert_denied(release, "uv run --frozen --no-sync ruff check --fix app")
+    assert_denied(release, "uv run --frozen --no-sync ruff format app/services/example.py")
+    assert_allowed(release, "python3 scripts/agent/safe_git_inspect.py diff --stat")
+    assert_allowed(release, "uv run --frozen --no-sync ruff check app tests scripts")
+
+
+@pytest.mark.parametrize("agent_id", PROJECT_AGENTS)
+def test_merged_permissions_do_not_allow_content_git_or_sqlite(agent_id: str) -> None:
+    rules = merged_agent_permissions(agent_id)
+    forbidden = [
+        rule
+        for rule in rules
+        if rule.get("action") == "shell"
+        and rule.get("effect") == "allow"
+        and str(rule.get("resource", "")).startswith(("git diff", "git log", "git show", "sqlite3"))
+    ]
+    assert not forbidden, f"{agent_id} merged permissions still allow: {forbidden}"
+
+
+def test_safe_git_inspection_wrapper_is_executable() -> None:
+    wrapper = REPO_ROOT / "scripts" / "agent" / "safe_git_inspect.py"
+    assert wrapper.is_file()
+    assert os.access(wrapper, os.X_OK), "safe_git_inspect.py must be executable"
+
+
+@pytest.mark.parametrize("agent_id", PROJECT_AGENTS)
+def test_direct_git_read_and_write_bypasses_are_denied(agent_id: str) -> None:
+    frontmatter = _frontmatter(agent_id)
+    for command in (
+        "git diff",
+        "git diff HEAD~1",
+        "git diff --no-index /dev/null .env",
+        "git diff --no-index /dev/null secrets/token.txt",
+        "git diff --no-index /dev/null /home/cloud/.ssh/id_rsa",
+        "git diff --output=data/slr-platform.db",
+        "git diff --output=data/x.db",
+        "git diff --output=AGENTS.md",
+        "git diff --output=.opencode/agents/slr-developer.md",
+        "git diff --output=scripts/agent/safe_pytest.sh",
+        "git log -p -- .env",
+        "git log -p",
+        "git show HEAD:.env",
+        "git show HEAD",
+    ):
+        assert_denied(frontmatter, command)
+
+
+@pytest.mark.parametrize("agent_id", PROJECT_AGENTS)
+def test_safe_git_inspection_wrapper_is_allowed(agent_id: str) -> None:
+    frontmatter = _frontmatter(agent_id)
+    for command in (
+        f"{SAFE_GIT_WRAPPER} status --short",
+        f"{SAFE_GIT_WRAPPER} diff --stat",
+        f"{SAFE_GIT_WRAPPER} diff HEAD~1 -- app/services/example.py",
+        f"{SAFE_GIT_WRAPPER} log --oneline -n 20",
+        f"{SAFE_GIT_WRAPPER} show --stat HEAD",
+        f"{SAFE_GIT_WRAPPER} branch-current",
+        f"{SAFE_GIT_WRAPPER} worktree-list",
+    ):
+        assert_allowed(frontmatter, command)
+
+
+@pytest.mark.parametrize("agent_id", ("slr-qa", "slr-release-engineer"))
+def test_read_only_roles_cannot_mutate_with_ruff(agent_id: str) -> None:
+    frontmatter = _frontmatter(agent_id)
+    for command in (
+        "uv run --frozen --no-sync ruff check --fix app",
+        "uv run --frozen --no-sync ruff check --unsafe-fixes app",
+        "uv run --frozen --no-sync ruff format app/services/example.py",
+        "uv run --frozen --no-sync ruff check --fix",
+    ):
+        assert_denied(frontmatter, command)
+    assert_allowed(frontmatter, "uv run --frozen --no-sync ruff check app tests scripts")
+
+
+def test_developer_may_intentionally_fix_with_ruff() -> None:
+    frontmatter = _frontmatter("slr-developer")
+    assert_allowed(frontmatter, "uv run --frozen --no-sync ruff check --fix app")
+    assert_allowed(frontmatter, "uv run --frozen --no-sync ruff format app/services/example.py")
+
+
+@pytest.mark.parametrize("agent_id", PROJECT_AGENTS)
+def test_sqlite_shell_escape_is_denied(agent_id: str) -> None:
+    frontmatter = _frontmatter(agent_id)
+    for command in (
+        "sqlite3",
+        "sqlite3 data/slr-platform.db",
+        "sqlite3 -readonly data/slr-platform.db",
+        "sqlite3 -readonly data/slr-platform.db '.shell id'",
+        "sqlite3 -readonly data/slr-platform.db '.output /tmp/x' 'select 1'",
+    ):
+        assert_denied(frontmatter, command)
+
+
+def test_normal_developer_and_qa_workflows_remain_available() -> None:
+    developer = _frontmatter("slr-developer")
+    qa = _frontmatter("slr-qa")
+
+    for command in (
+        f"{SAFE_GIT_WRAPPER} status --short",
+        f"{SAFE_GIT_WRAPPER} diff --stat",
+        f"{SAFE_GIT_WRAPPER} diff HEAD~1 -- app/services/example.py",
+        f"{SAFE_GIT_WRAPPER} log --oneline",
+        f"{SAFE_GIT_WRAPPER} show --stat HEAD",
+        "bash scripts/agent/safe_pytest.sh",
+        "uv run --frozen --no-sync ruff check --fix app",
+        "uv run --frozen --no-sync mypy app",
+        "npm --prefix frontend run type-check",
+        "openspec validate --all --strict",
+    ):
+        assert_allowed(developer, command)
+
+    for command in (
+        f"{SAFE_GIT_WRAPPER} status --short",
+        f"{SAFE_GIT_WRAPPER} diff --stat",
+        f"{SAFE_GIT_WRAPPER} log --oneline",
+        f"{SAFE_GIT_WRAPPER} show --stat HEAD",
+        "bash scripts/agent/safe_pytest.sh",
+        "uv run --frozen --no-sync ruff check app tests scripts",
+        "uv run --frozen --no-sync mypy app",
+        "npm --prefix frontend run type-check",
+        "npm --prefix frontend test",
+        "npm --prefix frontend run build",
+        "openspec validate --all --strict",
+    ):
+        assert_allowed(qa, command)
 
 
 def test_developer_cannot_mutate_research_database() -> None:
@@ -345,6 +551,8 @@ def test_developer_cannot_mutate_research_database() -> None:
         "mv data/slr-platform.db /tmp/other.db",
         "truncate -s 0 data/slr-platform.db",
         "cat data/slr-platform.db",
+        "git diff --output=data/slr-platform.db",
+        "git diff --no-index /dev/null projects/demo/raw/source.pdf",
     ):
         assert_denied(frontmatter, command)
 
@@ -435,7 +643,18 @@ def test_agents_do_not_override_secret_read_protection(agent_id: str) -> None:
 @pytest.mark.parametrize("agent_id", ("slr-architect", "slr-research-reviewer"))
 def test_read_only_agents_have_no_shell_file_readers(agent_id: str) -> None:
     frontmatter = _frontmatter(agent_id)
-    for command in ("cat .env", "sed -n '1p' .env", "find .", "rg secret", "head .env", "tail .env"):
+    for command in (
+        "cat .env",
+        "sed -n '1p' .env",
+        "find .",
+        "rg secret",
+        "head .env",
+        "tail .env",
+        "git diff --no-index /dev/null .env",
+        "git diff --no-index /dev/null /home/cloud/.ssh/id_rsa",
+        "git log -p -- .env",
+        "git show HEAD:.env",
+    ):
         assert_denied(frontmatter, command)
 
 
@@ -494,13 +713,13 @@ def test_qa_frontend_commands_match_the_documented_workflow() -> None:
 def test_compound_commands_are_denied(agent_id: str) -> None:
     frontmatter = _frontmatter(agent_id)
     for command in (
-        "git status; rm -rf data",
-        "git status && rm -rf data",
-        "git status | tee /tmp/x",
-        "git status $(rm -rf data)",
-        "git status `rm -rf data`",
-        "git status > /tmp/x",
-        "git status\nrm -rf data",
+        "python3 scripts/agent/safe_git_inspect.py status; rm -rf data",
+        "python3 scripts/agent/safe_git_inspect.py status && rm -rf data",
+        "python3 scripts/agent/safe_git_inspect.py status | tee /tmp/x",
+        "python3 scripts/agent/safe_git_inspect.py status $(rm -rf data)",
+        "python3 scripts/agent/safe_git_inspect.py status `rm -rf data`",
+        "python3 scripts/agent/safe_git_inspect.py status > /tmp/x",
+        "python3 scripts/agent/safe_git_inspect.py status\nrm -rf data",
     ):
         assert_denied(frontmatter, command)
 
@@ -542,22 +761,30 @@ def test_release_engineer_declares_approval_for_release_actions() -> None:
         assert matching[-1]["effect"] in {"ask", "deny"}, f"{resource} must require approval or be denied"
 
 
-def test_configured_models_are_in_live_catalog_when_opencode_is_available() -> None:
-    if shutil.which("opencode") is None:
-        pytest.skip("opencode CLI is not installed in this environment")
-    result = subprocess.run(
-        ["opencode", "models"],
-        check=False,
-        capture_output=True,
-        text=True,
-        timeout=60,
-    )
-    if result.returncode != 0:
-        pytest.skip(f"opencode models unavailable: {result.stderr.strip()[:200]}")
-    catalog = set(result.stdout.splitlines())
+def test_configured_models_are_statically_allowlisted() -> None:
+    assert "opencode/mimo-v2.6-flash-free" in KNOWN_MODELS
     for agent_id in PROJECT_AGENTS:
         model = _frontmatter(agent_id).get("model")
-        assert model in catalog, f"{agent_id} model is missing from the live catalog: {model}"
+        assert model in KNOWN_MODELS, f"{agent_id} model is not statically allow-listed: {model}"
+        assert re.fullmatch(r"[a-z0-9-]+/[A-Za-z0-9._:-]+", str(model))
+
+
+def test_configured_free_models_are_in_standalone_catalog() -> None:
+    """Verify free models against the pinned CLI's isolated catalog.
+
+    Paid provider catalogs need provider credentials, so they are covered by the
+    static allow-list test above. The standalone catalog is deterministic and
+    available on the self-hosted runner without model inference or paid credits.
+    """
+
+    catalog = set(_opencode("models").stdout.splitlines())
+    assert "opencode/mimo-v2.6-flash-free" in catalog
+    for agent_id in PROJECT_AGENTS:
+        model = str(_frontmatter(agent_id).get("model"))
+        if model.startswith("opencode/"):
+            assert model in catalog, f"{agent_id} free model is missing from the catalog: {model}"
+        else:
+            assert model in KNOWN_MODELS, f"{agent_id} paid model is not statically allow-listed: {model}"
 
 
 def test_openspec_root_is_initialized_and_configured() -> None:

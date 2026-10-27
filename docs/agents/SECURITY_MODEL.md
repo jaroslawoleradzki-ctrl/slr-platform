@@ -33,6 +33,49 @@ and human approval for production and release actions.
 Governance edits are `ask` for the developer. Data, secrets, and the deployment
 script are `deny`. The release engineer cannot edit audit reports.
 
+## Git inspection
+
+Direct `git` inspection commands are not allowlisted. Their option surface can
+read arbitrary files (`--no-index`), write files (`--output`), invoke external
+diff helpers (`--ext-diff`), print file contents from history (`-p`), or run
+repository-configured hooks (`core.fsmonitor`). Agents use the read-only
+wrapper:
+
+```bash
+python3 scripts/agent/safe_git_inspect.py status --short
+python3 scripts/agent/safe_git_inspect.py diff --stat
+python3 scripts/agent/safe_git_inspect.py diff HEAD~1 -- app/services/foo.py
+python3 scripts/agent/safe_git_inspect.py log --oneline -n 20
+python3 scripts/agent/safe_git_inspect.py show --stat HEAD
+python3 scripts/agent/safe_git_inspect.py branch-current
+python3 scripts/agent/safe_git_inspect.py worktree-list
+```
+
+The wrapper:
+
+- accepts only those operations and an explicit per-operation option allowlist;
+- rejects `--no-index`, `--output`, `--ext-diff`, `--textconv`, `--config`,
+  `-c`, `--git-dir`, `--work-tree`, external helpers, and unknown options;
+- accepts only repository-relative paths without traversal, glob, or pathspec
+  magic; paths must resolve inside the worktree and must not touch `.env*`,
+  `data/`, `projects/`, `secrets/`, `backups/`, `*.db`, `*.sqlite*`, `*.pem`, or
+  `*.key`;
+- accepts only revisions that resolve to commits, rejecting `rev:path` blobs;
+- rejects patch-producing `git log`/`git show` forms and excludes protected
+  paths from unfiltered output.
+
+Direct `git` commands are denied for agents; every Git inspection operation
+goes through the wrapper above. Use the native read/grep/glob tools for file
+content.
+
+## Ruff and SQLite
+
+`slr-qa` and `slr-release-engineer` may run only
+`uv run --frozen --no-sync ruff check app tests scripts`. `--fix`,
+`--unsafe-fixes`, and `ruff format` are denied because those roles are
+read-only. `sqlite3` shell access is denied for every agent: SQLite dot-commands
+such as `.shell` can execute arbitrary commands.
+
 ## Compound commands
 
 Allowed command strings are denied when they contain `;`, `&&`, `&`, a pipe,

@@ -92,7 +92,8 @@ The CI CLI version is pinned to `@fission-ai/openspec@1.15.0`.
 ### Diff hygiene
 
 ```bash
-git diff --check
+# Agents use the read-only wrapper; humans and CI may run git diff --check.
+python3 scripts/agent/safe_git_inspect.py diff --check
 ```
 
 ## CI mapping
@@ -120,8 +121,8 @@ CI is triggered by pull requests and pushes to `main`, `development`, and
 
 | Change type | Minimum gates |
 |---|---|
-| Documentation only | `git diff --check`; link/path sanity |
-| Agent/skill/config | configuration/effective-permission tests + Ruff + `git diff --check` |
+| Documentation only | `git diff --check` (human/CI) or the safe Git wrapper (agent); link/path sanity |
+| Agent/skill/config | configuration/effective-permission tests + Ruff + diff hygiene |
 | Backend behavior | targeted pytest, Ruff, mypy, full pytest |
 | API contract | targeted/contract tests, full pytest, Ruff, mypy |
 | Migration | migration-focused subset, migration-safety guard, full pytest, Ruff, mypy, backup/restore notes |

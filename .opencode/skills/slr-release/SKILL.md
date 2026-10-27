@@ -29,7 +29,8 @@ Read `AGENTS.md`, then:
 - `.github/workflows/ci.yml` and the latest CI result;
 - `scripts/deploy_ai_node.sh`, `compose.yaml`, and
   `docs/runbooks/CI_SELF_HOSTED_RUNNER.md` when deployment is in scope;
-- `git status`, `git log`, and the relevant tags.
+- the wrapper's `status`/`log` output and the relevant tags (read-only tag
+  listing requires approval).
 
 ## Workflow
 
@@ -71,8 +72,8 @@ Read `AGENTS.md`, then:
 ## Validation
 
 ```bash
-git status --short
-git diff --check
+python3 scripts/agent/safe_git_inspect.py status --short
+python3 scripts/agent/safe_git_inspect.py diff --check
 bash scripts/agent/safe_pytest.sh
 uv run --frozen --no-sync ruff check app tests scripts
 uv run --frozen --no-sync mypy app

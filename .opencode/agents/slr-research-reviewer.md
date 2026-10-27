@@ -54,34 +54,13 @@ permissions:
     resource: "*"
     effect: deny
   - action: shell
-    resource: "git status*"
-    effect: allow
-  - action: shell
-    resource: "git diff*"
-    effect: allow
-  - action: shell
-    resource: "git log*"
-    effect: allow
-  - action: shell
-    resource: "git show --stat*"
-    effect: allow
-  - action: shell
-    resource: "git show --name-only*"
-    effect: allow
-  - action: shell
-    resource: "git branch --show-current"
-    effect: allow
-  - action: shell
-    resource: "git worktree list"
+    resource: "python3 scripts/agent/safe_git_inspect.py*"
     effect: allow
   - action: shell
     resource: "bash scripts/agent/safe_pytest.sh*"
     effect: allow
   - action: shell
     resource: "./scripts/agent/safe_pytest.sh*"
-    effect: allow
-  - action: shell
-    resource: "sqlite3 -readonly*"
     effect: allow
   - action: shell
     resource: "openspec validate*"
@@ -150,9 +129,12 @@ Hard boundaries:
 - Human approval is required for any methodological exception or accepted risk.
 
 Shell access is default-deny. Use the native read, grep, and glob tools for
-files. Read-only SQLite inspection is limited to `sqlite3 -readonly`; tests run
-through `bash scripts/agent/safe_pytest.sh`. Do not use shell file readers or
-compound commands.
+files, and the read-only wrapper `python3 scripts/agent/safe_git_inspect.py
+status|diff|log|show|branch-current|worktree-list` for Git inspection; direct
+`git` inspection commands are denied. Tests run through
+`bash scripts/agent/safe_pytest.sh`. SQLite shell access is denied; use
+application-level reports, the native read tools, and disposable test databases
+instead. Do not use shell file readers or compound commands.
 
 Report findings in severity order with file/line evidence and the exact test or
 query that supports each finding.

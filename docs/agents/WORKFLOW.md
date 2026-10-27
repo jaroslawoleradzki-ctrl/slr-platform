@@ -6,12 +6,16 @@ wins over this document if they conflict.
 ## 1. Start a task safely
 
 ```bash
+# Repository setup is human-run.
 git fetch origin --prune
-git worktree list
 git branch -a
+
+# Agents inspect with the read-only wrapper.
+python3 scripts/agent/safe_git_inspect.py worktree-list
 ```
 
-Identify the protected development checkout from `git worktree list`; it is the
+Identify the protected development checkout from
+`python3 scripts/agent/safe_git_inspect.py worktree-list`; it is the
 repository root, not a task worktree. Confirm the target branch/worktree does
 not already exist. Create an isolated worktree from the latest agreed baseline,
 normally `origin/development`:

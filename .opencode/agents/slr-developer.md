@@ -126,25 +126,7 @@ permissions:
     resource: "*"
     effect: deny
   - action: shell
-    resource: "git status*"
-    effect: allow
-  - action: shell
-    resource: "git diff*"
-    effect: allow
-  - action: shell
-    resource: "git log*"
-    effect: allow
-  - action: shell
-    resource: "git show --stat*"
-    effect: allow
-  - action: shell
-    resource: "git show --name-only*"
-    effect: allow
-  - action: shell
-    resource: "git branch --show-current"
-    effect: allow
-  - action: shell
-    resource: "git worktree list"
+    resource: "python3 scripts/agent/safe_git_inspect.py*"
     effect: allow
   - action: shell
     resource: "git add*"
@@ -255,7 +237,10 @@ Non-negotiable boundaries:
 - Never expose secrets or commit `.env`, databases, caches, or build output.
 
 Shell access is default-deny. Use `bash scripts/agent/safe_pytest.sh ...` for
-tests; it forces a disposable SQLite database. Do not run `python`, `sqlite3`,
+tests; it forces a disposable SQLite database. Use the read-only wrapper
+`python3 scripts/agent/safe_git_inspect.py
+status|diff|log|show|branch-current|worktree-list` for all Git inspection;
+direct `git` inspection commands are denied. Do not run `python`, `sqlite3`,
 `cp`, `mv`, `rm`, deployment commands, `sudo`, `ssh`, or compound shell
 commands. Use the native edit/read/grep/glob tools for ordinary file work.
 

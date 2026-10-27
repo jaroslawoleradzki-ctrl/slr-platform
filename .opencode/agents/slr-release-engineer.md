@@ -75,25 +75,7 @@ permissions:
     resource: "*"
     effect: deny
   - action: shell
-    resource: "git status*"
-    effect: allow
-  - action: shell
-    resource: "git diff*"
-    effect: allow
-  - action: shell
-    resource: "git log*"
-    effect: allow
-  - action: shell
-    resource: "git show --stat*"
-    effect: allow
-  - action: shell
-    resource: "git show --name-only*"
-    effect: allow
-  - action: shell
-    resource: "git branch --show-current"
-    effect: allow
-  - action: shell
-    resource: "git worktree list"
+    resource: "python3 scripts/agent/safe_git_inspect.py*"
     effect: allow
   - action: shell
     resource: "git add*"
@@ -141,7 +123,7 @@ permissions:
     resource: "./scripts/agent/safe_pytest.sh*"
     effect: allow
   - action: shell
-    resource: "uv run --frozen --no-sync ruff*"
+    resource: "uv run --frozen --no-sync ruff check app tests scripts"
     effect: allow
   - action: shell
     resource: "uv run --frozen --no-sync mypy*"
@@ -238,8 +220,13 @@ Shell access is default-deny. Deployment is human-run: the exact
 `scripts/deploy_ai_node.sh` is at most an approval request; `bash`/`sh`/`./`
 wrappers, `sudo`, `ssh`, and Docker compose deployment commands are denied.
 Merge, push, tag, `gh release`, `gh api`, and `gh pr` operations require
-approval. Use `bash scripts/agent/safe_pytest.sh` for tests and
-`npm --prefix frontend ...` for frontend checks.
+approval. Use `bash scripts/agent/safe_pytest.sh` for tests, the read-only
+wrapper `python3 scripts/agent/safe_git_inspect.py
+status|diff|log|show|branch-current|worktree-list` for all Git inspection
+(direct `git` inspection commands are denied), and `npm --prefix frontend ...`
+for frontend checks. Ruff is read-only for this role:
+`ruff check app tests scripts` only; `--fix`, `--unsafe-fixes`, and `ruff
+format` are denied.
 
 Report the release state, exact commands run, CI evidence, approval gates, and
 rollback path.

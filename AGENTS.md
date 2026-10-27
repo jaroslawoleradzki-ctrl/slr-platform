@@ -107,7 +107,7 @@ npm --prefix frontend run build
 # OpenSpec, migration safety, and diff hygiene
 openspec validate --all --strict
 uv run --frozen --no-sync python scripts/ci/check_migration_safety.py --base-ref origin/development
-git diff --check
+python3 scripts/agent/safe_git_inspect.py diff --check   # agents; humans may run git diff --check
 ```
 
 The CI workflow (`.github/workflows/ci.yml`) is the authoritative gate. Its
@@ -148,7 +148,7 @@ Hard rules:
 
 - Work in an isolated git worktree. The repository-root checkout is the
   protected development worktree; never edit it while implementing a task.
-  Identify it with `git worktree list`.
+  Identify it with `python3 scripts/agent/safe_git_inspect.py worktree-list`.
 - Use the branch prefixes already in use: `feature/`, `fix/`, `release/`,
   `audit/`, `ci/`, and release-specific `integration/` branches.
 - State the task scope and acceptance criteria before editing. Do not expand
@@ -210,7 +210,7 @@ Run the gates that cover the change, plus the full relevant suite before commit.
 | Frontend tests | `npm --prefix frontend test` |
 | Frontend build | `npm --prefix frontend run build` |
 | OpenSpec | `openspec validate --all --strict` |
-| Diff hygiene | `git diff --check` |
+| Diff hygiene | `python3 scripts/agent/safe_git_inspect.py diff --check` (agents) / `git diff --check` (humans, CI) |
 | CI | `.github/workflows/ci.yml` |
 
 The full pytest suite is the regression gate; targeted modules are for fast

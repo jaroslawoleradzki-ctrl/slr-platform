@@ -19,11 +19,15 @@ Activate when:
 Read `AGENTS.md`, then inspect:
 
 ```bash
-git status
-git worktree list
-git branch -a
-git log --oneline -5
+python3 scripts/agent/safe_git_inspect.py status --short
+python3 scripts/agent/safe_git_inspect.py worktree-list
+python3 scripts/agent/safe_git_inspect.py branch-current
+python3 scripts/agent/safe_git_inspect.py log --oneline -5
 ```
+
+Direct `git` inspection commands are denied; use
+`python3 scripts/agent/safe_git_inspect.py` for status, diffs, history,
+worktrees, and commit metadata.
 
 Also read `.github/workflows/ci.yml` and the current task/report when present.
 
@@ -32,7 +36,8 @@ Also read `.github/workflows/ci.yml` and the current task/report when present.
 1. Fetch `origin` and identify the correct baseline (`origin/development` for
    feature work unless the task says otherwise).
 2. Create a dedicated worktree and branch. Never implement in the protected
-   development checkout; identify it with `git worktree list`.
+   development checkout; identify it with
+   `python3 scripts/agent/safe_git_inspect.py worktree-list`.
 3. Confirm the branch and worktree do not already exist. If they do, inspect
    and stop instead of overwriting.
 4. Keep the change scoped to one logical outcome.
@@ -81,9 +86,9 @@ The agents default-deny shell access; destructive commands are not allowlisted.
 ## Validation
 
 ```bash
-git status
-git diff --check
-git diff --stat
+python3 scripts/agent/safe_git_inspect.py status --short
+python3 scripts/agent/safe_git_inspect.py diff --check
+python3 scripts/agent/safe_git_inspect.py diff --stat
 uv run --frozen --no-sync ruff check app tests scripts
 uv run --frozen --no-sync mypy app
 uv run --frozen --no-sync pytest -q -p no:cacheprovider
@@ -100,7 +105,7 @@ CI is authoritative: `.github/workflows/ci.yml`.
 - Logical commit(s) with clear messages.
 - PR description with scope, risk, tests, and limitations.
 - CI result and any **NOT VERIFIED** gate.
-- No unintended files in `git status`.
+- No unintended files in the wrapper's `status` output.
 
 ## References
 

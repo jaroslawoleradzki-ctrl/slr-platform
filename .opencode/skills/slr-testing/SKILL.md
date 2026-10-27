@@ -69,7 +69,7 @@ Determinism rules:
 bash scripts/agent/safe_pytest.sh <targeted-tests>
 uv run --frozen --no-sync ruff check app tests scripts
 uv run --frozen --no-sync mypy app
-git diff --check
+python3 scripts/agent/safe_git_inspect.py diff --check
 ```
 
 The safe wrapper forces a disposable `SLR_DATABASE_PATH` and `TMPDIR`; it is

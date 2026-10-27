@@ -54,25 +54,7 @@ permissions:
     resource: "*"
     effect: deny
   - action: shell
-    resource: "git status*"
-    effect: allow
-  - action: shell
-    resource: "git diff*"
-    effect: allow
-  - action: shell
-    resource: "git log*"
-    effect: allow
-  - action: shell
-    resource: "git show --stat*"
-    effect: allow
-  - action: shell
-    resource: "git show --name-only*"
-    effect: allow
-  - action: shell
-    resource: "git branch --show-current"
-    effect: allow
-  - action: shell
-    resource: "git worktree list"
+    resource: "python3 scripts/agent/safe_git_inspect.py*"
     effect: allow
   - action: shell
     resource: "bash scripts/agent/safe_pytest.sh*"
@@ -81,7 +63,7 @@ permissions:
     resource: "./scripts/agent/safe_pytest.sh*"
     effect: allow
   - action: shell
-    resource: "uv run --frozen --no-sync ruff*"
+    resource: "uv run --frozen --no-sync ruff check app tests scripts"
     effect: allow
   - action: shell
     resource: "uv run --frozen --no-sync mypy*"
@@ -164,9 +146,14 @@ Hard boundaries:
 - Do not deploy. Human approval is required before release or production action.
 
 Shell access is default-deny. Use `bash scripts/agent/safe_pytest.sh ...` for
-backend tests; it forces a disposable SQLite database. Use
-`npm --prefix frontend ...` for frontend checks. Do not use shell file readers;
-use the native read, grep, and glob tools.
+backend tests; it forces a disposable SQLite database. Use the read-only
+wrapper `python3 scripts/agent/safe_git_inspect.py
+status|diff|log|show|branch-current|worktree-list` for all Git inspection;
+direct `git` inspection commands are denied. Use `npm --prefix frontend ...`
+for frontend checks. Ruff is read-only for this role:
+`ruff check app tests scripts` only; `--fix`, `--unsafe-fixes`, and `ruff
+format` are denied. Do not use shell file readers; use the native read, grep,
+and glob tools.
 
 A green subset is not proof of regression safety. State clearly what was run,
 what was not run, and whether the result is PASS, PASS WITH CONDITIONS, FAIL, or

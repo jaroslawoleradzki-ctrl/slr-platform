@@ -54,25 +54,7 @@ permissions:
     resource: "*"
     effect: deny
   - action: shell
-    resource: "git status*"
-    effect: allow
-  - action: shell
-    resource: "git diff*"
-    effect: allow
-  - action: shell
-    resource: "git log*"
-    effect: allow
-  - action: shell
-    resource: "git show --stat*"
-    effect: allow
-  - action: shell
-    resource: "git show --name-only*"
-    effect: allow
-  - action: shell
-    resource: "git branch --show-current"
-    effect: allow
-  - action: shell
-    resource: "git worktree list"
+    resource: "python3 scripts/agent/safe_git_inspect.py*"
     effect: allow
   - action: shell
     resource: "openspec validate*"
@@ -135,9 +117,12 @@ Hard boundaries:
 - Explicit human approval is required before implementation of HIGH-risk or
   RELEASE work.
 
-Shell access is default-deny and limited to Git/OpenSpec inspection. Use the
-native read, grep, and glob tools for files; do not use shell file readers. Do
-not run tests, migrations, database commands, or deployment commands.
+Shell access is default-deny and limited to the read-only Git inspection
+wrapper (`python3 scripts/agent/safe_git_inspect.py
+status|diff|log|show|branch-current|worktree-list`) and OpenSpec inspection.
+Direct `git` inspection commands are denied. Use the native read, grep, and
+glob tools for files; do not use shell file readers. Do not run tests,
+migrations, database commands, or deployment commands.
 
 Report findings with file paths and concrete evidence. Prefer additive,
 backward-compatible designs. Call out uncertainty rather than guessing.

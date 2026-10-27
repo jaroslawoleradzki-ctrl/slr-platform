@@ -26,6 +26,35 @@ It does not prevent a deliberately written test from opening another path. Do
 not treat shell restrictions as complete isolation. Never point an agent at the
 real `data/` database, production credentials, or a production host.
 
+## `safe_git_inspect.py`
+
+Direct `git` commands are not agent-allowed. Use the read-only wrapper
+instead:
+
+```bash
+python3 scripts/agent/safe_git_inspect.py status --short
+python3 scripts/agent/safe_git_inspect.py diff --stat
+python3 scripts/agent/safe_git_inspect.py diff HEAD~1 -- app/services/foo.py
+python3 scripts/agent/safe_git_inspect.py log --oneline -n 20
+python3 scripts/agent/safe_git_inspect.py show --stat HEAD
+```
+
+The wrapper is deliberately fail-closed:
+
+- operation allowlist: `status`, `diff`, `log`, `show`, `branch-current`,
+  `worktree-list`;
+- rejects `--no-index`, `--output`, `--ext-diff`, `--textconv`, `--config`,
+  `-c`, `--git-dir`, `--work-tree`, external helpers, and unknown options;
+- rejects absolute paths, traversal, glob/pathspec magic, symlink escapes, and
+  protected paths (`.env*`, `data/`, `projects/`, `secrets/`, `backups/`,
+  `*.db`, `*.sqlite*`, `*.pem`, `*.key`);
+- rejects `rev:path` blob syntax and patch-producing `log`/`show` forms;
+- runs Git with argument arrays, a sanitised environment, no pager, no external
+  diff/textconv, and no optional index locks.
+
+It is not a sandbox. An allowed test or build command can still run repository
+code. See `docs/agents/SECURITY_MODEL.md`.
+
 ## Deployment
 
 Deployment is human-run. `scripts/deploy_ai_node.sh` is not an agent-allowed
