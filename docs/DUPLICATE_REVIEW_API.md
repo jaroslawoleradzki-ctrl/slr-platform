@@ -75,3 +75,29 @@ The **Candidate Duplicate Review Read API** exposes candidate duplicate publicat
 2. **Structured Identifiers**: `shared_identifiers` provides structured `{ identifier_type, value }` objects rather than plain text strings.
 3. **No Similarity Scoring**: `similarity_score` is removed from DTOs as matching relies on exact strong identifier equality.
 4. **Configuration Isolation**: API connection config is located in `frontend/src/config/api.ts`.
+
+## v0.7.4 — shared readiness
+
+`GET /projects/{project_id}/duplicate-groups` now also returns a `readiness`
+object:
+
+- `status`: `no_candidates`, `pending_review`, `approved_unmerged`, `ready`
+- `screening_ready`
+- `total_groups`
+- `pending_review_groups`
+- `approved_unmerged_groups`
+- `merged_groups`
+- `rejected_groups`
+- `stale_decisions`
+- `blocking_groups`
+- `blocking_group_ids`
+- `reason`
+
+Candidate groups are built only from the active canonical corpus. Superseded
+records and pre-screening removals never create live groups. A group with an
+APPROVE decision but no persisted merge is reported as `approved_unmerged`, not
+as completed.
+
+`GET /projects/{project_id}/workflow-status` exposes the same readiness fields
+under `deduplication`. PRISMA uses the same projection and separately reports
+`duplicate_groups_awaiting_merge` and `duplicate_groups_blocking_screening`.

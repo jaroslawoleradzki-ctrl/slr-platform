@@ -287,6 +287,75 @@ export interface ImportFileRecord {
   skipAuditAvailable?: boolean;
   auditAvailable?: boolean;
   recoveryStatus?: string | null;
+  reviewStatus?: 'pending' | 'accepted' | 'rejected' | 'not_required';
+  effectiveStatus?: 'success' | 'warning' | 'failed' | 'error' | 'rejected';
+  reviewerId?: string | null;
+  reviewedAt?: string | null;
+  canAccept?: boolean;
+  canReject?: boolean;
+}
+
+export interface ImportReviewBlocker {
+  code: string;
+  message: string;
+  count: number;
+  publication_ids: string[];
+}
+
+export interface ImportWarningCategory {
+  code: string;
+  label: string;
+  count: number;
+}
+
+export interface ImportReviewDecisionSummary {
+  decision_id: string;
+  decision: 'accepted' | 'rejected';
+  reviewer_id: string;
+  rationale: string | null;
+  decided_at: string;
+  deleted_publication_count: number;
+  retained_source_record_count: number;
+  prisma_treatment: string;
+}
+
+export interface ImportReviewDetail {
+  project_id: string;
+  import_id: string;
+  source_type: 'provider' | 'file';
+  filename: string | null;
+  format: string | null;
+  provider: string | null;
+  query: string | null;
+  records_count: number;
+  status: 'success' | 'warning' | 'failed';
+  effective_status: 'success' | 'warning' | 'failed' | 'rejected';
+  review_status: 'pending' | 'accepted' | 'rejected' | 'not_required';
+  warnings: string[];
+  created_at: string;
+  source_record_count: number;
+  canonical_publication_count: number;
+  exact_doi_match_count: number;
+  repeated_source_count: number;
+  title_candidate_count: number;
+  similar_title_candidate_count: number;
+  skipped_canonical_count: number;
+  invalid_doi_count: number;
+  validation_error_count: number;
+  audit_available: boolean;
+  can_accept: boolean;
+  can_reject: boolean;
+  warning_categories: ImportWarningCategory[];
+  blockers: ImportReviewBlocker[];
+  decision: ImportReviewDecisionSummary | null;
+}
+
+export interface ImportReviewDecisionResponse {
+  project_id: string;
+  import_id: string;
+  decision: ImportReviewDecisionSummary;
+  effective_status: 'success' | 'rejected';
+  review_status: 'accepted' | 'rejected';
 }
 
 export interface BibliographicImportResponse {
@@ -336,6 +405,12 @@ export interface ImportHistoryItemDTO {
   skip_audit_available?: boolean;
   audit_available?: boolean;
   recovery_status?: string | null;
+  review_status?: 'pending' | 'accepted' | 'rejected' | 'not_required';
+  effective_status?: 'success' | 'warning' | 'failed' | 'rejected';
+  reviewer_id?: string | null;
+  reviewed_at?: string | null;
+  can_accept?: boolean;
+  can_reject?: boolean;
 }
 
 export interface SourcesSummaryResponse {
@@ -360,6 +435,12 @@ export interface BibliographicImportHistoryRecord {
   warnings: string[];
   source_database?: ManualSourceDatabase;
   source_label?: string | null;
+  review_status?: 'pending' | 'accepted' | 'rejected' | 'not_required';
+  effective_status?: 'success' | 'warning' | 'failed' | 'rejected';
+  reviewer_id?: string | null;
+  reviewed_at?: string | null;
+  can_accept?: boolean;
+  can_reject?: boolean;
 }
 
 export interface NormalizationStatus {
@@ -469,10 +550,27 @@ export interface ApiDuplicateGroup {
   records: ApiDuplicateRecordPreview[];
 }
 
+export type DuplicateReadinessStatus = 'no_candidates' | 'pending_review' | 'approved_unmerged' | 'ready';
+
+export interface DuplicateReadiness {
+  status: DuplicateReadinessStatus;
+  screening_ready: boolean;
+  total_groups: number;
+  pending_review_groups: number;
+  approved_unmerged_groups: number;
+  merged_groups: number;
+  rejected_groups: number;
+  stale_decisions: number;
+  blocking_groups: number;
+  blocking_group_ids: string[];
+  reason: string;
+}
+
 export interface ApiDuplicateGroupListResponse {
   project_id: string;
   total_groups_count: number;
   groups: ApiDuplicateGroup[];
+  readiness?: DuplicateReadiness;
 }
 
 export type ScreeningCriterionType = 'inclusion' | 'exclusion';
@@ -672,6 +770,10 @@ export interface WorkflowNavigationStatus {
     pendingGroups: number;
     approvedGroups: number;
     rejectedGroups: number;
+    readinessStatus?: DuplicateReadinessStatus;
+    approvedUnmergedGroups?: number;
+    blockingGroups?: number;
+    reason?: string;
     label: string | null;
   };
   screening: {
@@ -782,6 +884,19 @@ export interface ImportedRecordsPageResponse {
 
 export interface ApiProjectWorkflowStatusResponse {
   project_id: string;
+  deduplication?: {
+    status: DuplicateReadinessStatus;
+    screening_ready: boolean;
+    total_groups: number;
+    pending_review_groups: number;
+    approved_unmerged_groups: number;
+    merged_groups: number;
+    rejected_groups: number;
+    stale_decisions: number;
+    blocking_groups: number;
+    blocking_group_ids: string[];
+    reason: string;
+  };
   title_abstract_screening: {
     status: 'not_started' | 'in_progress' | 'completed' | 'unresolved_conflict' | 'stale_resolution';
     evaluated_count: number;

@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Literal, cast
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 
 from app.api.dto.search_strategy import (
     BibliographicImportHistoryResponse,
@@ -23,6 +23,7 @@ from app.api.dto.search_strategy import (
     SearchStrategyPutRequest,
 )
 from app.api.dto.sources_summary import SourcesSummaryResponse
+from app.domain.import_review import effective_import_status
 from app.domain.search import SearchStrategy
 from app.normalization import normalize_publication
 from app.providers.import_file.bibtex.mapper import map_bibtex_record
@@ -34,6 +35,11 @@ from app.repositories.import_history_repository import (
     ImportHistoryRepository,
     SqliteImportHistoryRepository,
     default_import_history_repository,
+)
+from app.repositories.import_review_repository import (
+    ImportReviewRepository,
+    SqliteImportReviewRepository,
+    default_import_review_repository,
 )
 from app.repositories.import_source_record_repository import (
     ImportSourceRecordRepository,
@@ -108,11 +114,23 @@ def get_import_source_record_repository() -> ImportSourceRecordRepository:
     return default_import_source_record_repository()
 
 
+def get_import_review_repository() -> ImportReviewRepository:
+    return default_import_review_repository()
+
+
 def _source_repo_for_publication_repo(
     pub_repo: ProjectPublicationRepository,
 ) -> ImportSourceRecordRepository | None:
     if isinstance(pub_repo, SqliteProjectPublicationRepository):
         return SqliteImportSourceRecordRepository(pub_repo._database_path)
+    return None
+
+
+def _review_repo_for_publication_repo(
+    pub_repo: ProjectPublicationRepository,
+) -> ImportReviewRepository | None:
+    if isinstance(pub_repo, SqliteProjectPublicationRepository):
+        return SqliteImportReviewRepository(pub_repo._database_path)
     return None
 
 
@@ -812,32 +830,61 @@ async def import_bibliographic_file(
 )
 def list_bibliographic_imports(
     project_id: str,
+    include_rejected: bool = Query(default=False),
     project_repository: ProjectPublicationRepository = Depends(get_project_publication_repository),
     history_repository: ImportHistoryRepository = Depends(get_import_history_repository),
+    review_repository: ImportReviewRepository = Depends(get_import_review_repository),
 ) -> list[BibliographicImportHistoryResponse]:
-    """Return durable bibliographic import history for one project."""
+    """Return durable bibliographic import history for one project.
+
+    Rejected imports are hidden from the active history by default and remain
+    available through ``include_rejected=true`` for audit.
+    """
 
     try:
         project_repository.get_publications(project_id)
     except ProjectNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
-    return [
-        BibliographicImportHistoryResponse(
-            import_id=record.import_id,
-            project_id=record.project_id,
-            source_type=cast(Literal["file", "provider"], record.source_type),
-            filename=record.filename,
-            format=cast(Literal["RIS", "BibTeX"] | None, record.format),
-            provider=record.provider,
-            query=record.query,
-            records_count=record.records_count,
-            total_available=record.total_available,
-            status=cast(Literal["success", "warning"], record.status),
-            created_at=record.created_at,
-            warnings=list(record.warnings),
+    decisions = review_repository.list_for_project(project_id)
+    records = []
+    for record in history_repository.list_for_project(project_id):
+        decision = decisions.get(record.import_id)
+        if decision is not None and decision.decision == "rejected" and not include_rejected:
+            continue
+        effective_status = effective_import_status(
+            record.status, decision.decision if decision is not None else None
         )
-        for record in history_repository.list_for_project(project_id)
-    ]
+        records.append(
+            BibliographicImportHistoryResponse(
+                import_id=record.import_id,
+                project_id=record.project_id,
+                source_type=cast(Literal["file", "provider"], record.source_type),
+                filename=record.filename,
+                format=cast(Literal["RIS", "BibTeX"] | None, record.format),
+                provider=record.provider,
+                query=record.query,
+                records_count=record.records_count,
+                total_available=record.total_available,
+                status=cast(Literal["success", "warning"], record.status),
+                created_at=record.created_at,
+                warnings=list(record.warnings),
+                source_database=cast(
+                    ManualSourceDatabase | None, record.source_database
+                ),
+                source_label=record.source_label,
+                review_status=(
+                    decision.decision
+                    if decision is not None
+                    else ("not_required" if record.status == "success" else "pending")
+                ),
+                effective_status=effective_status,
+                reviewer_id=decision.reviewer_id if decision is not None else None,
+                reviewed_at=decision.decided_at if decision is not None else None,
+                can_accept=record.status == "warning" and decision is None,
+                can_reject=False,
+            )
+        )
+    return records
 
 
 def get_sources_summary_service(
@@ -848,6 +895,7 @@ def get_sources_summary_service(
         publication_repository=pub_repo,
         import_history_repository=history_repo,
         source_record_repository=_source_repo_for_publication_repo(pub_repo),
+        review_repository=_review_repo_for_publication_repo(pub_repo),
     )
 
 

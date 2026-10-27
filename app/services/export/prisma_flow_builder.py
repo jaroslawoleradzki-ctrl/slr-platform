@@ -69,6 +69,10 @@ def build_flow_model(
     annotations_removed: dict[str, str] = {}
     if metrics.duplicate_groups_pending_review > 0:
         annotations_removed["pending_review"] = str(metrics.duplicate_groups_pending_review)
+    if metrics.duplicate_groups_awaiting_merge > 0:
+        annotations_removed["awaiting_merge"] = str(metrics.duplicate_groups_awaiting_merge)
+    if metrics.records_removed_rejected_import > 0:
+        annotations_removed["rejected_import"] = str(metrics.records_removed_rejected_import)
 
     # Main funnel nodes always render (with count 0 when partially completed or empty)
     nodes: list[PrismaFlowNode] = [
@@ -173,6 +177,9 @@ def build_flow_model(
         "records_removed_prescreening": metrics.records_removed_prescreening,
         "records_after_technical_merger": metrics.records_after_technical_merger,
         "duplicate_groups_pending_review": metrics.duplicate_groups_pending_review,
+        "duplicate_groups_awaiting_merge": metrics.duplicate_groups_awaiting_merge,
+        "duplicate_groups_blocking_screening": metrics.duplicate_groups_blocking_screening,
+        "records_removed_rejected_import": metrics.records_removed_rejected_import,
         "records_screened_title_abstract": metrics.records_screened_title_abstract,
         "records_screened_full_text": metrics.records_screened_full_text,
         "studies_included_synthesis": metrics.studies_included_synthesis,

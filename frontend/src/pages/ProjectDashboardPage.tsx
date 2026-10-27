@@ -220,7 +220,9 @@ export const ProjectDashboardPage: React.FC = () => {
                   ? s.deduplication.label
                   : s.deduplication.pendingGroups > 0
                     ? `${s.deduplication.pendingGroups} oczekuje`
-                    : (s.deduplication.approvedGroups > 0 || s.deduplication.rejectedGroups > 0)
+                    : (s.deduplication.approvedUnmergedGroups ?? 0) > 0
+                      ? `${s.deduplication.approvedUnmergedGroups} do scalenia`
+                      : (s.deduplication.approvedGroups > 0 || s.deduplication.rejectedGroups > 0)
                       ? `${s.deduplication.approvedGroups} APPROVE · ${s.deduplication.rejectedGroups} REJECT`
                       : s.deduplication.label
               }

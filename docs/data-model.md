@@ -187,3 +187,47 @@ Klucz główny: Kompozytowy `PRIMARY KEY (decision_id, criterion_id)`.
 5. Decyzje człowieka i AI są przechowywane oddzielnie.
 6. Usunięcie duplikatu nie usuwa danych źródłowych.
 7. Migawka kryteriów w ocenach decyzji jest imutowalna i tworzona po stronie serwera z autorytatywnych kryteriów projektu.
+
+## v0.7.4 — Import review decisions and duplicate readiness
+
+### `import_review_decisions`
+
+Append-only reviewer decision for one warning import. `import_history` remains
+the immutable import event: its raw `status` and `warnings` are never overwritten.
+The decision table stores:
+
+- `decision` (`accepted` or `rejected`), reviewer identity, rationale, and time;
+- the import status and warning snapshot at decision time;
+- the affected source-record and publication identifiers;
+- removed-publication snapshots and deletion/source-retention counts;
+- the PRISMA treatment (`removed_before_screening_rejected_import` for a
+  rejected import).
+
+A rejected import remains in the audit tables but is excluded from active
+history, the active corpus, screening, extraction, synthesis, and exports. Its
+source records remain in PRISMA identification and are reported as
+`removed before screening — rejected import`.
+
+### Effective import status
+
+The effective status is derived, not written back to `import_history`:
+
+| Raw status | Decision | Effective status |
+|---|---|---|
+| `success` | none | `success` |
+| `warning` | none | `warning` |
+| `warning` | `accepted` | `success` (`Zaimportowano`) |
+| `warning` | `rejected` | `rejected` (non-active audit) |
+
+### Duplicate readiness
+
+Duplicate candidate groups are built only from the active canonical corpus
+(not superseded, not pre-screening removed, not archived). The shared readiness
+projection reports:
+
+- `no_candidates`, `pending_review`, `approved_unmerged`, or `ready`;
+- pending, approved-unmerged, merged, rejected, and stale-decision counts;
+- blocking group identifiers and a human-readable reason.
+
+Deduplication, screening input, workflow status, and PRISMA use this same
+projection. Historical merges remain visible but do not block screening.

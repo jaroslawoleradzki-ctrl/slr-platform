@@ -43,6 +43,16 @@ class ImportHistoryRepository(Protocol):
         """Create a new import history audit record."""
         ...
 
+    def get(
+        self,
+        project_id: str,
+        import_id: UUID,
+        *,
+        connection: sqlite3.Connection | None = None,
+    ) -> ImportHistoryRecord | None:
+        """Return one import history record scoped to a project."""
+        ...
+
     def list_for_project(self, project_id: str) -> list[ImportHistoryRecord]:
         """List all import history records for a project ordered newest first."""
         ...
@@ -105,6 +115,31 @@ class SqliteImportHistoryRepository:
                 record.source_label,
             ),
         )
+
+    def get(
+        self,
+        project_id: str,
+        import_id: UUID,
+        *,
+        connection: sqlite3.Connection | None = None,
+    ) -> ImportHistoryRecord | None:
+        def query(conn: sqlite3.Connection) -> ImportHistoryRecord | None:
+            row = conn.execute(
+                """
+                SELECT import_id, project_id, source_type, filename, format,
+                       provider, query, records_count, total_available, status,
+                       warnings, created_at, fingerprint, source_database, source_label
+                FROM import_history
+                WHERE project_id = ? AND import_id = ?
+                """,
+                (project_id, str(import_id)),
+            ).fetchone()
+            return self._record_from_row(row) if row is not None else None
+
+        if connection is not None:
+            return query(connection)
+        with self._connect() as conn:
+            return query(conn)
 
     def list_for_project(self, project_id: str) -> list[ImportHistoryRecord]:
         with self._connect() as connection:

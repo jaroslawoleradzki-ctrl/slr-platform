@@ -112,10 +112,11 @@ describe('Title & Abstract Screening GUI (Phase 7.5C)', () => {
 
   it.each([
     ['unresolved_duplicates', 'Pozostały nierozstrzygnięte duplikaty.'],
+    ['unmerged_duplicates', 'Zatwierdzone duplikaty wymagają scalenia.'],
     ['merge_conflict', 'Wystąpił konflikt metadanych podczas tworzenia canonical screening input set.'],
   ] as const)('blocks executable workflow for %s readiness', async (readiness_status, message) => {
     localStorage.setItem('slr_screening_reviewer_id', 'reviewer-a');
-    vi.spyOn(screeningApi, 'getOverview').mockResolvedValue(overview({ ready: false, readiness_status, unresolved_duplicate_groups: readiness_status === 'unresolved_duplicates' ? 2 : 0 }));
+    vi.spyOn(screeningApi, 'getOverview').mockResolvedValue(overview({ ready: false, readiness_status, unresolved_duplicate_groups: readiness_status === 'unresolved_duplicates' || readiness_status === 'unmerged_duplicates' ? 2 : 0 }));
     renderPage();
     expect(await screen.findByText(message)).toBeInTheDocument();
     expect(screen.queryByText('Decyzja końcowa')).not.toBeInTheDocument();

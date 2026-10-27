@@ -101,3 +101,21 @@ The `GET /api/v1/projects/{id}/prisma/flow` model carries a `metadata` payload c
 - **D4 Synthesis Included Definition**: `studies_included_synthesis` in PRISMA 2020 reflects the final Full-Text INCLUDE population, matching `quality_assessment.eligible_count`.
 - **D5 Bibliographic Fields**: Volume, issue, and page numbers are currently omitted as they are not part of the core domain model.
 - **D10 QA Roster Awareness**: Multi-reviewer QA roster awareness is decoupled from PRISMA reporting and scheduled for future QA enhancements.
+
+## v0.7.4 — rejected imports and duplicate readiness
+
+PRISMA metrics now expose:
+
+- `records_removed_rejected_import` — source occurrences belonging to rejected
+  imports;
+- `duplicate_groups_awaiting_merge` — approved groups without a persisted merge;
+- `duplicate_groups_blocking_screening` — pending plus approved-unmerged groups.
+
+`records_removed_rejected_import` is included in the
+`records_removed_prescreening` population and is displayed as
+`removed before screening — rejected import`. The rejected import remains in
+identification history, while the active corpus and all later stages exclude it.
+
+XLSX/PDF/SVG PRISMA exports and the JSON flow model use the same authoritative
+metrics. Duplicate readiness is computed once from the active canonical corpus
+and shared with deduplication, screening, and workflow status.

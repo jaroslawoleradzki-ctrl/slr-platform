@@ -56,6 +56,9 @@ export const Sidebar: React.FC = () => {
       if (dedup.pendingGroups > 0) {
         return <Badge variant="pending_action">{dedup.pendingGroups} do oceny</Badge>;
       }
+      if ((dedup.approvedUnmergedGroups ?? 0) > 0) {
+        return <Badge variant="pending_action">{dedup.approvedUnmergedGroups} do scalenia</Badge>;
+      }
       if (dedup.state === 'completed') {
         return (
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: '0.72rem', color: 'var(--status-success-text)', fontWeight: 600 }}>

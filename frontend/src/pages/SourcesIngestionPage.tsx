@@ -86,6 +86,12 @@ export const SourcesIngestionPage: React.FC = () => {
     skipAuditAvailable: item.skip_audit_available,
     auditAvailable: item.audit_available,
     recoveryStatus: item.recovery_status,
+    reviewStatus: item.review_status,
+    effectiveStatus: item.effective_status,
+    reviewerId: item.reviewer_id,
+    reviewedAt: item.reviewed_at,
+    canAccept: item.can_accept,
+    canReject: item.can_reject,
   }));
 
   if (loading && !sourcesSummary) {

@@ -1,5 +1,30 @@
 # Changelog
 
+## [0.7.4] — 2026-10-27
+
+### Added
+
+- **Explicit import warning resolution**: warning imports can be accepted or rejected with reviewer attribution, durable audit, and an effective `Zaimportowano` status after acceptance.
+- **Guarded import rejection**: rejection requires confirmation, validates publication ownership and downstream dependencies, reports structured blockers, and executes in a single transaction.
+- **Non-active import audit**: rejected imports retain import history, source records, skip audit, warnings, and removed-publication snapshots while leaving active history and research populations.
+- **Rejected-import PRISMA accounting**: rejected source records remain in identification history and are reported as `removed before screening — rejected import`.
+- **Shared duplicate readiness**: deduplication, screening, workflow status, and PRISMA consume the same active-corpus readiness projection, distinguishing pending review from approved-unmerged groups.
+
+### Fixed
+
+- Deduplication no longer reports completion while screening is blocked by remaining duplicate decisions.
+- Approved duplicate groups without a persisted merge are reported as `merge_required` rather than completed.
+- Superseded records no longer create phantom screening groups after a later import.
+- Screening now explains pending duplicates and unmerged approvals separately instead of reporting a generic metadata conflict.
+- `GET /imports` hides rejected imports from active history while retaining `include_rejected=true` audit access.
+
+### Known limitations
+
+- Provider-import rejection remains out of scope; the decision workflow applies to warning file imports.
+- Rejected imports cannot be restored automatically after commit. Recovery requires a separate human-approved reconciliation using retained source records and removed-publication snapshots.
+- Reviewer identity remains a self-asserted workflow identifier because the application has no authentication/account layer.
+- Production data reconciliation, deployment, merge, and release publication are out of scope.
+
 ## [0.7.3] — 2026-10-27
 
 ### Added

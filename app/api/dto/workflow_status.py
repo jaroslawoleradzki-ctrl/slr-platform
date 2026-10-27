@@ -24,8 +24,25 @@ class QualityAssessmentStatusDTO(BaseModel):
     eligible_count: int = Field(ge=0)
 
 
+class DeduplicationStatusDTO(BaseModel):
+    status: str = Field(
+        description="Readiness state: no_candidates, pending_review, approved_unmerged, ready"
+    )
+    screening_ready: bool
+    total_groups: int = Field(ge=0)
+    pending_review_groups: int = Field(ge=0)
+    approved_unmerged_groups: int = Field(ge=0)
+    merged_groups: int = Field(ge=0)
+    rejected_groups: int = Field(ge=0)
+    stale_decisions: int = Field(ge=0)
+    blocking_groups: int = Field(ge=0)
+    blocking_group_ids: list[str] = Field(default_factory=list)
+    reason: str
+
+
 class ProjectWorkflowStatusResponse(BaseModel):
     project_id: str
+    deduplication: DeduplicationStatusDTO
     title_abstract_screening: TitleAbstractScreeningStatusDTO
     full_text_screening: FullTextScreeningStatusDTO
     quality_assessment: QualityAssessmentStatusDTO
