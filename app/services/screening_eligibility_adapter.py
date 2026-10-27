@@ -15,7 +15,11 @@ from app.repositories.screening_reviewer_assignment_repository import (
     default_screening_reviewer_assignment_repository,
 )
 from app.services.multi_reviewer_screening_service import MultiReviewerScreeningService, ScreeningConflictStatus
-from app.services.screening_input_service import ScreeningInputReadinessStatus, ScreeningInputService
+from app.services.screening_input_service import (
+    ScreeningInput,
+    ScreeningInputReadinessStatus,
+    ScreeningInputService,
+)
 
 
 class StageReadinessStatus(StrEnum):
@@ -99,6 +103,8 @@ class ScreeningEligibilityAdapter:
         source_stage: ScreeningStage,
         target_stage: ScreeningStage | str,
         reviewer_id: str,
+        *,
+        input_set: ScreeningInput | None = None,
     ) -> tuple[UUID, ...]:
         """Returns list of publication UUIDs eligible for target_stage.
 
@@ -110,7 +116,8 @@ class ScreeningEligibilityAdapter:
           - Multi-reviewer (active FT roster): publications where ProjectOutcome(FT) == INCLUDE.
           - Single-reviewer (no FT roster): publications where reviewer's latest FT decision == INCLUDE.
         """
-        input_set = self._input_service.get_input_set(project_id)
+        if input_set is None:
+            input_set = self._input_service.get_input_set(project_id)
         if not input_set.ready:
             return ()
 
@@ -143,6 +150,8 @@ class ScreeningEligibilityAdapter:
         project_id: str,
         stage: ScreeningStage,
         reviewer_id: str,
+        *,
+        input_set: ScreeningInput | None = None,
     ) -> tuple[UUID, ...]:
         """Returns list of active canonical publication UUIDs with a final EXCLUDE outcome at stage.
 
@@ -154,7 +163,8 @@ class ScreeningEligibilityAdapter:
           - Multi-reviewer (active FT roster): publications where ProjectOutcome(FT) == EXCLUDE.
           - Single-reviewer (no FT roster): publications where reviewer's latest FT decision == EXCLUDE.
         """
-        input_set = self._input_service.get_input_set(project_id)
+        if input_set is None:
+            input_set = self._input_service.get_input_set(project_id)
         if not input_set.ready:
             return ()
 
@@ -185,9 +195,12 @@ class ScreeningEligibilityAdapter:
         project_id: str,
         stage: ScreeningStage,
         reviewer_id: str,
+        *,
+        input_set: ScreeningInput | None = None,
     ) -> ScreeningStageReadiness:
         """Returns readiness status and eligible count for stage."""
-        input_set = self._input_service.get_input_set(project_id)
+        if input_set is None:
+            input_set = self._input_service.get_input_set(project_id)
         if not input_set.ready:
             if input_set.readiness_status is ScreeningInputReadinessStatus.UNRESOLVED_DUPLICATES:
                 return ScreeningStageReadiness(StageReadinessStatus.UNRESOLVED_DUPLICATES, 0, 0)
@@ -220,6 +233,7 @@ class ScreeningEligibilityAdapter:
                 source_stage=ScreeningStage.TITLE_ABSTRACT,
                 target_stage=ScreeningStage.FULL_TEXT,
                 reviewer_id=reviewer_id,
+                input_set=input_set,
             )
 
             if not eligible:

@@ -291,6 +291,17 @@ const mapPrismaMetricsResponseToFunnel = (p: PrismaMetricsResponse): PrismaFunne
   studiesIncludedSynthesis: p.studies_included_synthesis,
   manualSourceBreakdown: p.manual_source_breakdown ?? {},
   providerBreakdown: p.provider_breakdown ?? {},
+  sourceRecordsIdentified: p.source_records_identified ?? 0,
+  persistedSourceRecords: p.persisted_source_records ?? 0,
+  exactDuplicatesLinked: p.exact_duplicates_linked ?? 0,
+  repeatedSourceOccurrences: p.repeated_source_occurrences ?? 0,
+  canonicalPublications: p.canonical_publications ?? 0,
+  canonicalPublicationsTotal: p.canonical_publications_total ?? 0,
+  mergedDuplicateGroups: p.merged_duplicate_groups ?? 0,
+  mergedDuplicateRecords: p.merged_duplicate_records ?? 0,
+  recoveredRecords: p.recovered_records ?? 0,
+  historicalCanonicalWithoutSourceRecords: p.historical_canonical_without_source_records ?? 0,
+  prismaAccountingNote: p.prisma_accounting_note ?? '',
 });
 
 class MixedProjectApiService implements ProjectApiService {

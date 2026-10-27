@@ -1,0 +1,140 @@
+# SLR Platform quality gate.
+#
+# Execution contract: every job runs on the dedicated self-hosted runner
+# `ai-node-slr-platform` on AI-node (192.168.100.29). GitHub-hosted runners are
+# forbidden. The label contract is enforced by `scripts/ci/check_runner_policy.sh`
+# in the `ci-policy` job before any test job is allowed to start.
+#
+# The runner is repo-scoped to jaroslawoleradzki-ctrl/slr-platform, has its own
+# installation directory/work folder and uses no FINNARO credentials or secrets.
+# See docs/runbooks/CI_SELF_HOSTED_RUNNER.md.
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main, development, integration/v0.7.3-r1-r5]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' && github.ref != 'refs/heads/development' }}
+
+env:
+  PYTHON_VERSION: "3.12"
+  NODE_VERSION: "22"
+
+jobs:
+  ci-policy:
+    name: CI runner policy
+    runs-on: [self-hosted, linux, slr-platform]
+    # Self-hosted runners must never execute untrusted fork code.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reject GitHub-hosted runners and enforce AI-node labels
+        run: bash scripts/ci/check_runner_policy.sh
+      - name: Prove execution on AI-node
+        run: |
+          set -euo pipefail
+          echo "runner=${RUNNER_NAME}"
+          echo "host=$(hostname)"
+          echo "addresses=$(hostname -I)"
+          test "${RUNNER_NAME}" = "ai-node-slr-platform"
+          test "$(hostname)" = "ai-node"
+
+  backend:
+    name: Backend (Python 3.12)
+    runs-on: [self-hosted, linux, slr-platform]
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    needs: [ci-policy]
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare isolated CI directory
+        run: |
+          set -euo pipefail
+          # Keep every derived artifact outside the checkout and outside any
+          # FINNARO directory. runner.temp is created and cleaned per job.
+          SCRATCH="$RUNNER_TEMP/slr-ci-$GITHUB_RUN_ID-backend"
+          mkdir -p "$SCRATCH"
+          {
+            echo "SCRATCH=$SCRATCH"
+            echo "UV_PROJECT_ENVIRONMENT=$SCRATCH/venv"
+            echo "UV_CACHE_DIR=$SCRATCH/uv-cache"
+            echo "UV_PYTHON_INSTALL_DIR=$SCRATCH/uv-python"
+          } >> "$GITHUB_ENV"
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.11.28"
+          enable-cache: false
+          python-version: "${{ env.PYTHON_VERSION }}"
+      - name: Install locked dependencies
+        run: uv sync --frozen --extra dev --python "${{ env.PYTHON_VERSION }}"
+      - name: Lint
+        run: uv run --frozen --no-sync ruff check app tests scripts
+      - name: Type check
+        run: uv run --frozen --no-sync mypy app
+      - name: Tests (disposable SQLite database)
+        run: |
+          set -euo pipefail
+          # This suite is SQLite-heavy. Keep test files on tmpfs when available:
+          # the same suite takes ~13 min on ext4 due to fsync overhead versus
+          # ~1.5 min on tmpfs. The directory is unique per run and disposable.
+          TMP_ROOT=/dev/shm
+          if [ ! -d "$TMP_ROOT" ] || [ ! -w "$TMP_ROOT" ]; then
+            echo "::warning::/dev/shm unavailable; falling back to runner temp"
+            TMP_ROOT="$RUNNER_TEMP"
+          fi
+          TEST_ROOT="$TMP_ROOT/slr-platform-ci-$GITHUB_RUN_ID-$GITHUB_JOB"
+          rm -rf "$TEST_ROOT"
+          mkdir -p "$TEST_ROOT"
+          export TMPDIR="$TEST_ROOT"
+          export SLR_DATABASE_PATH="$TEST_ROOT/slr-platform-ci.db"
+          uv run --frozen --no-sync pytest -q -p no:cacheprovider
+          # The repository's working database must never be touched by CI.
+          if [ -d data ] && find data -maxdepth 1 -name '*.db' -print -quit | grep -q .; then
+            echo "::error::CI created a database under data/; tests are not isolated"
+            find data -maxdepth 1 -name '*.db' -print
+            exit 1
+          fi
+      - name: Remove isolated test directory
+        if: always()
+        run: rm -rf "/dev/shm/slr-platform-ci-${GITHUB_RUN_ID}-${GITHUB_JOB}"
+
+  frontend:
+    name: Frontend (Node 22)
+    runs-on: [self-hosted, linux, slr-platform]
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    needs: [ci-policy]
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: frontend
+    env:
+      CI: "true"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare isolated npm cache
+        run: |
+          set -euo pipefail
+          CACHE="$RUNNER_TEMP/slr-ci-$GITHUB_RUN_ID-frontend/npm-cache"
+          mkdir -p "$CACHE"
+          echo "npm_config_cache=$CACHE" >> "$GITHUB_ENV"
+      # Deliberately no `cache:` input: this runner is dedicated to SLR Platform
+      # and must not inherit caches from other workloads on AI-node.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "${{ env.NODE_VERSION }}"
+      - name: Install from lockfile
+        run: npm ci --no-audit --no-fund
+      - name: Type check
+        run: npm run type-check
+      - name: Unit tests
+        run: npm test
+      - name: Production build
+        run: npm run build

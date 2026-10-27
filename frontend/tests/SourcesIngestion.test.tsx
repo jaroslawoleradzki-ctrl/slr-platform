@@ -208,4 +208,32 @@ describe('Sources ingestion upload', () => {
     // Karta OpenAlex nie powinna przejąć licznika 500 z pliku
     expect(screen.queryByText('500')).not.toBeInTheDocument();
   });
+  it('shows structured diagnostics from backend values when the warning badge is clicked', async () => {
+    vi.spyOn(projectApiService, 'getSourcesSummary').mockResolvedValue({
+      project_id: 'lean_energy',
+      working_collection: { total_records: 446 },
+      source_summaries: [{
+        source: 'RIS', source_kind: 'file', successful_imports_count: 0, warning_imports_count: 1, failed_imports_count: 0, records_added_count: 378, last_import_at: '2026-10-26T17:39:34Z', last_import_status: 'warning'
+      }],
+      import_history: [{
+        import_id: 'import-gs01', source_type: 'file', filename: 'GS01.ris', format: 'RIS', provider: null, query: null, records_count: 378, status: 'warning', warnings: ['Skipped 2 exact DOI duplicate record(s) already in the project.'], created_at: '2026-10-26T17:39:34Z', source_record_count: 380, canonical_publication_count: 378, exact_doi_match_count: 2, repeated_source_count: 3, title_candidate_count: 4, similar_title_candidate_count: 1, skipped_canonical_count: 5, invalid_doi_count: 2, validation_error_count: 0, skip_audit_available: true, audit_available: true, recovery_status: 'not_started'
+      }],
+    });
+    renderPage();
+
+    const warningBadge = await screen.findByText('Ostrzeżenie');
+    fireEvent.click(warningBadge);
+
+    const dialog = await screen.findByRole('dialog');
+    expect(dialog).toBeInTheDocument();
+    expect(screen.getByText(/Rekordy źródłowe:/i).parentElement).toHaveTextContent('380');
+    expect(screen.getByText(/Publikacje kanoniczne:/i).parentElement).toHaveTextContent('378');
+    expect(screen.getByText(/Dokładne duplikaty DOI:/i).parentElement).toHaveTextContent('2');
+    expect(screen.getByText(/Powtórzone wystąpienia:/i).parentElement).toHaveTextContent('3');
+    expect(screen.getByText(/Pominięte wstawienia:/i).parentElement).toHaveTextContent('5');
+    expect(screen.getByText(/Kandydaci tytułowi:/i).parentElement).toHaveTextContent('4');
+    expect(screen.getByText(/Kandydaci podobni:/i).parentElement).toHaveTextContent('1');
+    expect(screen.getByText(/Niepoprawne DOI:/i).parentElement).toHaveTextContent('2');
+    expect(screen.getByText(/Skipped 2 exact DOI duplicate/i)).toBeInTheDocument();
+  });
 });

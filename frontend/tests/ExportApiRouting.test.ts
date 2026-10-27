@@ -2,6 +2,14 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { exportApi, ExportApiError } from '../src/services/api/exportApi';
 import { extractionApi } from '../src/services/api/extractionApi';
 
+// `Response.blob()` is produced by Node's fetch implementation while jsdom
+// installs its own global `Blob`. Cross-realm `instanceof Blob` is therefore
+// not reliable across Node patch releases; assert the Blob tag instead.
+function expectBlob(blob: Blob): void {
+  expect(Object.prototype.toString.call(blob)).toBe('[object Blob]');
+  expect(blob.size).toBeGreaterThan(0);
+}
+
 describe('Stage 9 Export API routing and backend contract boundary', () => {
   afterEach(() => vi.restoreAllMocks());
 
@@ -15,7 +23,7 @@ describe('Stage 9 Export API routing and backend contract boundary', () => {
 
     const blob = await exportApi.exportBibtex('project-123');
     expect(fetchMock).toHaveBeenCalledWith('/api/v1/projects/project-123/exports/bibtex');
-    expect(blob).toBeInstanceOf(Blob);
+    expectBlob(blob);
   });
 
   it('routes exportRis to GET /api/v1/projects/:projectId/exports/ris', async () => {
@@ -28,7 +36,7 @@ describe('Stage 9 Export API routing and backend contract boundary', () => {
 
     const blob = await exportApi.exportRis('project-123');
     expect(fetchMock).toHaveBeenCalledWith('/api/v1/projects/project-123/exports/ris');
-    expect(blob).toBeInstanceOf(Blob);
+    expectBlob(blob);
   });
 
   it('routes exportXlsx to GET /api/v1/projects/:projectId/exports/xlsx with reviewer_id query', async () => {
@@ -41,7 +49,7 @@ describe('Stage 9 Export API routing and backend contract boundary', () => {
 
     const blob = await exportApi.exportXlsx('project-123', 'reviewer-a');
     expect(fetchMock).toHaveBeenCalledWith('/api/v1/projects/project-123/exports/xlsx?reviewer_id=reviewer-a');
-    expect(blob).toBeInstanceOf(Blob);
+    expectBlob(blob);
   });
 
   it('routes exportPrismaSvg to GET /api/v1/projects/:projectId/prisma/flow.svg with reviewer_id query', async () => {
@@ -54,7 +62,7 @@ describe('Stage 9 Export API routing and backend contract boundary', () => {
 
     const blob = await exportApi.exportPrismaSvg('project-123', 'reviewer-a');
     expect(fetchMock).toHaveBeenCalledWith('/api/v1/projects/project-123/prisma/flow.svg?reviewer_id=reviewer-a');
-    expect(blob).toBeInstanceOf(Blob);
+    expectBlob(blob);
   });
 
   it('routes exportPrismaPdf to GET /api/v1/projects/:projectId/prisma/flow.pdf with reviewer_id query', async () => {
@@ -67,7 +75,7 @@ describe('Stage 9 Export API routing and backend contract boundary', () => {
 
     const blob = await exportApi.exportPrismaPdf('project-123', 'reviewer-a');
     expect(fetchMock).toHaveBeenCalledWith('/api/v1/projects/project-123/prisma/flow.pdf?reviewer_id=reviewer-a');
-    expect(blob).toBeInstanceOf(Blob);
+    expectBlob(blob);
   });
 
   it('routes extractionApi.exportDataset for CSV to GET /api/v1/projects/:projectId/extraction/export', async () => {
@@ -82,7 +90,7 @@ describe('Stage 9 Export API routing and backend contract boundary', () => {
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/v1/projects/project-123/extraction/export?format=csv&dataset=publications&reviewer_id=reviewer-a',
     );
-    expect(blob).toBeInstanceOf(Blob);
+    expectBlob(blob);
   });
 
   it('routes extractionApi.exportDataset for JSON to GET /api/v1/projects/:projectId/extraction/export', async () => {
@@ -97,7 +105,7 @@ describe('Stage 9 Export API routing and backend contract boundary', () => {
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/v1/projects/project-123/extraction/export?format=json&dataset=publications&reviewer_id=reviewer-a',
     );
-    expect(blob).toBeInstanceOf(Blob);
+    expectBlob(blob);
   });
 
   it('surfaces backend error details in ExportApiError on failure', async () => {

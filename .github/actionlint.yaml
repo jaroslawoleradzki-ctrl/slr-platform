@@ -1,0 +1,6 @@
+# Local/CI static validation of workflow files.
+# The SLR Platform runner is repo-scoped, so its custom label is not part of
+# actionlint's built-in label set.
+self-hosted-runner:
+  labels:
+    - slr-platform
