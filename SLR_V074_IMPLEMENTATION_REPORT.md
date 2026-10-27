@@ -324,9 +324,9 @@ This report is committed separately after the implementation commits.
 
 ## 10. Push status
 
-The branch was not pushed at the time this report was written. The final
-session step pushes only `feature/slr-v0.7.4` after local validation. No merge
-or release push is performed.
+**PUSHED** to `origin/feature/slr-v0.7.4`. The branch tracks its upstream and
+the working tree is clean. No merge, tag, release, or deployment push was
+performed.
 
 ## 11. Remaining risks
 
