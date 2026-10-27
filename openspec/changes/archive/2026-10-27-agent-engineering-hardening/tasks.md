@@ -37,8 +37,8 @@
 - [x] 5.3 Run OpenCode agent/skill discovery and OpenSpec strict validation.
 - [x] 5.4 Verify no application, production data, or deployment change.
 - [x] 5.5 Write the hardening report with the 22-finding remediation matrix.
-- [ ] 5.6 Archive the OpenSpec change after validation.
-- [ ] 5.7 Commit, push, open/update the PR, and wait for CI.
+- [x] 5.6 Archive the OpenSpec change after validation.
+- [x] 5.7 Commit, push, open/update the PR, and wait for CI.
 
 ## Workflow follow-up
 
