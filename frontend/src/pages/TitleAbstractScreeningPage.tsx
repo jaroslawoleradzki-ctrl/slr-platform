@@ -176,8 +176,16 @@ export const TitleAbstractScreeningPage: React.FC = () => {
   if (!overview) return null;
   if (!overview.ready) {
     const unresolved = overview.readiness_status === 'unresolved_duplicates';
-    return <Card title="Screening nie może się rozpocząć"><p>{unresolved ? 'Pozostały nierozstrzygnięte duplikaty.' : 'Wystąpił konflikt metadanych podczas tworzenia canonical screening input set.'}</p>
-      {unresolved && <p>Grupy do rozstrzygnięcia: {overview.unresolved_duplicate_groups}</p>}
+    const unmerged = overview.readiness_status === 'unmerged_duplicates';
+    const message = unresolved
+      ? 'Pozostały nierozstrzygnięte duplikaty.'
+      : unmerged
+        ? 'Zatwierdzone duplikaty wymagają scalenia.'
+        : overview.readiness_status === 'merge_conflict'
+          ? 'Wystąpił konflikt metadanych podczas tworzenia canonical screening input set.'
+          : 'Screening nie jest jeszcze gotowy.';
+    return <Card title="Screening nie może się rozpocząć"><p>{message}</p>
+      {(unresolved || unmerged) && <p>{unresolved ? 'Grupy do rozstrzygnięcia' : 'Grupy wymagające scalenia'}: {overview.unresolved_duplicate_groups}</p>}
       <Button onClick={() => navigate(`/projects/${projectId}/dedup`)}>Przejdź do Deduplication</Button>{' '}
       <Button variant="outline" onClick={() => void load(0)}>Sprawdź ponownie</Button></Card>;
   }

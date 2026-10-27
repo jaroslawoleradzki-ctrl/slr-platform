@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from app.api.dto.workflow_status import (
+    DeduplicationStatusDTO,
     FullTextScreeningStatusDTO,
     ProjectWorkflowStatusResponse,
     QualityAssessmentStatusDTO,
@@ -199,8 +200,22 @@ class ProjectWorkflowStatusService:
         else:
             qa_status = "ready"
 
+        readiness = input_set.duplicate_readiness
         return ProjectWorkflowStatusResponse(
             project_id=project_id,
+            deduplication=DeduplicationStatusDTO(
+                status=readiness.status.value,
+                screening_ready=readiness.screening_ready,
+                total_groups=readiness.total_groups,
+                pending_review_groups=readiness.pending_review_groups,
+                approved_unmerged_groups=readiness.approved_unmerged_groups,
+                merged_groups=readiness.merged_groups,
+                rejected_groups=readiness.rejected_groups,
+                stale_decisions=readiness.stale_decisions,
+                blocking_groups=readiness.blocking_groups,
+                blocking_group_ids=list(readiness.blocking_group_ids),
+                reason=readiness.reason,
+            ),
             title_abstract_screening=TitleAbstractScreeningStatusDTO(
                 status=ta_status,
                 evaluated_count=ta_evaluated_count,

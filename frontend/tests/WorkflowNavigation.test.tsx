@@ -73,7 +73,7 @@ describe('v0.2.2 — WorkflowNavigationStatus Unit & Integration Tests', () => {
       </ProjectProvider>
     );
 
-  it('A. Deduplication: returns 35 groups with 34 APPROVE, 1 REJECT, 0 PENDING -> shows Oceniono & completed step', async () => {
+  it('A. Deduplication: returns 34 approved-unmerged groups and 1 reject -> shows merge required', async () => {
     const mockGroups: ApiDuplicateGroupListResponse = {
       project_id: 'lean_energy',
       total_groups_count: 35,
@@ -101,7 +101,7 @@ describe('v0.2.2 — WorkflowNavigationStatus Unit & Integration Tests', () => {
 
     renderNav();
 
-    await waitFor(() => expect(screen.getByText('Oceniono')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('34 do scalenia')).toBeInTheDocument());
     expect(screen.queryByText(/45 do oceny/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/35 do oceny/i)).not.toBeInTheDocument();
   });
@@ -183,7 +183,7 @@ describe('v0.2.2 — WorkflowNavigationStatus Unit & Integration Tests', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Approve Group' }));
 
-    await waitFor(() => expect(screen.getByText('Oceniono')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('1 do scalenia')).toBeInTheDocument());
     expect(screen.queryByText('1 do oceny')).not.toBeInTheDocument();
   });
 

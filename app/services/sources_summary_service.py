@@ -8,9 +8,15 @@ from app.api.dto.sources_summary import (
     SourceSummaryItem,
     WorkingCollectionSummary,
 )
+from app.domain.import_review import effective_import_status
 from app.repositories.import_history_repository import (
     ImportHistoryRepository,
     default_import_history_repository,
+)
+from app.repositories.import_review_repository import (
+    ImportReviewRepository,
+    SqliteImportReviewRepository,
+    default_import_review_repository,
 )
 from app.repositories.import_source_record_repository import (
     ImportSourceRecordRepository,
@@ -31,26 +37,35 @@ class SourcesSummaryService:
         publication_repository: ProjectPublicationRepository | None = None,
         import_history_repository: ImportHistoryRepository | None = None,
         source_record_repository: ImportSourceRecordRepository | None = None,
+        review_repository: ImportReviewRepository | None = None,
     ) -> None:
         self._pub_repo = publication_repository or default_project_publication_repository()
         self._history_repo = import_history_repository or default_import_history_repository()
+        database_path = getattr(self._pub_repo, "_database_path", None) or getattr(
+            self._history_repo, "_database_path", None
+        )
         if source_record_repository is not None:
             self._source_repo = source_record_repository
+        elif database_path is not None:
+            self._source_repo = SqliteImportSourceRecordRepository(database_path)
         else:
-            database_path = getattr(self._pub_repo, "_database_path", None) or getattr(
-                self._history_repo, "_database_path", None
-            )
-            if database_path is not None:
-                self._source_repo = SqliteImportSourceRecordRepository(database_path)
-            else:
-                self._source_repo = default_import_source_record_repository()
+            self._source_repo = default_import_source_record_repository()
+        if review_repository is not None:
+            self._review_repo = review_repository
+        elif database_path is not None:
+            self._review_repo = SqliteImportReviewRepository(database_path)
+        else:
+            self._review_repo = default_import_review_repository()
 
     def get_sources_summary(self, project_id: str) -> SourcesSummaryResponse:
         # 1. Total records in Working Collection directly from publication repository count
         total_records = self._pub_repo.count_by_project(project_id)
 
-        # 2. Get import history
+        # 2. Get import history and terminal review decisions. Rejected imports
+        # remain available through the audit review endpoint but never appear in
+        # active source summaries or counters.
         raw_history = self._history_repo.list_for_project(project_id)
+        review_decisions = self._review_repo.list_for_project(project_id)
 
         # 3. Transform import history into lightweight DTO list (sorted created_at DESC, import_id DESC)
         import_history_dtos = []
@@ -61,6 +76,12 @@ class SourcesSummaryService:
         )
         approvals_by_source = {item.source_record_id: item for item in approvals}
         for rec in sorted(raw_history, key=lambda x: (x.created_at, str(x.import_id)), reverse=True):
+            decision = review_decisions.get(rec.import_id)
+            if decision is not None and decision.decision == "rejected":
+                continue
+            effective_status = effective_import_status(
+                rec.status, decision.decision if decision is not None else None
+            )
             source_records = self._source_repo.list_source_records_for_import(project_id, rec.import_id)
             skip_records = self._source_repo.list_skip_audit_for_import(project_id, rec.import_id)
             repeated_source_count = sum(
@@ -126,6 +147,16 @@ class SourcesSummaryService:
                     skip_audit_available=audit_available,
                     audit_available=audit_available,
                     recovery_status=recovery_status,
+                    review_status=(
+                        decision.decision
+                        if decision is not None
+                        else ("not_required" if rec.status == "success" else "pending")
+                    ),
+                    effective_status=effective_status,
+                    reviewer_id=decision.reviewer_id if decision is not None else None,
+                    reviewed_at=decision.decided_at if decision is not None else None,
+                    can_accept=rec.status == "warning" and decision is None,
+                    can_reject=False,
                 )
             )
 
@@ -149,10 +180,12 @@ class SourcesSummaryService:
             )
             latest = sorted_items[0]
 
-            successful_count = sum(1 for i in items if i.status == "success")
-            warning_count = sum(1 for i in items if i.status == "warning")
-            failed_count = sum(1 for i in items if i.status == "failed")
-            records_added = sum(i.records_count for i in items if i.status in ("success", "warning"))
+            successful_count = sum(1 for i in items if i.effective_status == "success")
+            warning_count = sum(1 for i in items if i.effective_status == "warning")
+            failed_count = sum(1 for i in items if i.effective_status == "failed")
+            records_added = sum(
+                i.records_count for i in items if i.effective_status in ("success", "warning")
+            )
 
             source_summaries.append(
                 SourceSummaryItem(
@@ -163,7 +196,9 @@ class SourcesSummaryService:
                     failed_imports_count=failed_count,
                     records_added_count=records_added,
                     last_import_at=latest.created_at,
-                    last_import_status=latest.status,
+                    last_import_status=cast(
+                        Literal["success", "warning", "failed"], latest.effective_status
+                    ),
                 )
             )
 

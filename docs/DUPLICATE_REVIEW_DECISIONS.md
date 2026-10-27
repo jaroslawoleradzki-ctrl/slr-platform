@@ -57,3 +57,21 @@
 - **`InMemoryDuplicateReviewDecisionRepository`**: In-memory repository implementing `DuplicateReviewDecisionRepository`.
 - **`ProjectDuplicateService`**: Injected with `ProjectPublicationRepository` and `DuplicateReviewDecisionRepository`. Validates group existence and handles decision recording and reading.
 - **Frontend `DuplicateGroupCardPreview`**: Interactive UI component rendering active decision buttons (*Approve*, *Reject*), state indicators (*Saving...*, *Saved*, *Error*, *Retry*), and status badges (*Approved*, *Rejected*, *Pending*).
+
+## v0.7.4 — current persistence and readiness semantics
+
+The current implementation persists reviewer decisions in SQLite through
+`SqliteDuplicateReviewDecisionRepository`; the earlier in-memory description is
+historical.
+
+Duplicate readiness is shared by deduplication, screening, workflow status, and
+PRISMA:
+
+- pending groups block both stages as `unresolved_duplicates`;
+- APPROVE without a merge blocks as `unmerged_duplicates` / `merge_required`;
+- REJECT and persisted MERGE unblock screening;
+- historical merges remain auditable but do not block;
+- superseded records are excluded from live group construction.
+
+The frontend no longer derives deduplication completion from a local
+`PENDING === 0` calculation.

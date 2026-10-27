@@ -96,6 +96,36 @@ class ProjectPublicationRepository(Protocol):
         *,
         connection: sqlite3.Connection | None = None,
     ) -> tuple[int, int, int]: ...
+    def get_publication_ids_for_import(
+        self,
+        project_id: str,
+        import_id: UUID,
+        *,
+        connection: sqlite3.Connection | None = None,
+    ) -> set[UUID]:
+        """Return canonical rows directly owned by an import, without legacy relinking."""
+        ...
+
+    def get_publications_by_ids(
+        self,
+        project_id: str,
+        record_ids: list[UUID],
+        *,
+        connection: sqlite3.Connection | None = None,
+    ) -> list[Publication]:
+        """Return canonical rows for exact record IDs in a project."""
+        ...
+
+    def delete_publications(
+        self,
+        project_id: str,
+        record_ids: list[UUID],
+        *,
+        connection: sqlite3.Connection | None = None,
+    ) -> int:
+        """Delete exact canonical rows and return the number removed."""
+        ...
+
     def update_publication(
         self, project_id: str, publication: Publication, *, connection: sqlite3.Connection | None = None
     ) -> None: ...
@@ -365,6 +395,43 @@ class DemoProjectPublicationRepository:
             else:
                 retained += 1
         return total, retained, removed
+
+    def get_publication_ids_for_import(
+        self,
+        project_id: str,
+        import_id: UUID,
+        **_: object,
+    ) -> set[UUID]:
+        return {
+            record_id
+            for (owner_project_id, record_id), owner_import_id in self._import_ids.items()
+            if owner_project_id == project_id and owner_import_id == import_id
+        }
+
+    def get_publications_by_ids(
+        self,
+        project_id: str,
+        record_ids: list[UUID],
+        **_: object,
+    ) -> list[Publication]:
+        wanted = set(record_ids)
+        return [p for p in self.get_publications(project_id) if p.record_id in wanted]
+
+    def delete_publications(
+        self,
+        project_id: str,
+        record_ids: list[UUID],
+        **_: object,
+    ) -> int:
+        wanted = set(record_ids)
+        before = len(self._projects_data[project_id])
+        self._projects_data[project_id] = [
+            p for p in self._projects_data[project_id] if p.record_id not in wanted
+        ]
+        for record_id in wanted:
+            self._import_ids.pop((project_id, record_id), None)
+            self._pre_screening_statuses.pop((project_id, record_id), None)
+        return before - len(self._projects_data[project_id])
 
     def update_publication(self, project_id: str, publication: Publication, **_: object) -> None:
         records = self._projects_data[project_id]
@@ -818,6 +885,80 @@ class SqliteProjectPublicationRepository:
             return int(row[0]), int(row[1]), int(row[2])
 
         return query(connection) if connection is not None else self._with_connection(query)
+
+    def get_publication_ids_for_import(
+        self,
+        project_id: str,
+        import_id: UUID,
+        *,
+        connection: sqlite3.Connection | None = None,
+    ) -> set[UUID]:
+        self._ensure_project(project_id, connection=connection)
+
+        def query(conn: sqlite3.Connection) -> set[UUID]:
+            rows = conn.execute(
+                """
+                SELECT record_id
+                FROM project_publications
+                WHERE project_id = ? AND import_id = ?
+                """,
+                (project_id, str(import_id)),
+            ).fetchall()
+            return {UUID(str(row[0])) for row in rows}
+
+        return query(connection) if connection is not None else self._with_connection(query)
+
+    def get_publications_by_ids(
+        self,
+        project_id: str,
+        record_ids: list[UUID],
+        *,
+        connection: sqlite3.Connection | None = None,
+    ) -> list[Publication]:
+        self._ensure_project(project_id, connection=connection)
+        if not record_ids:
+            return []
+        placeholders = ",".join("?" for _ in record_ids)
+        params: list[object] = [project_id, *(str(record_id) for record_id in record_ids)]
+
+        def query(conn: sqlite3.Connection) -> list[Publication]:
+            rows = conn.execute(
+                f"""
+                SELECT document
+                FROM project_publications
+                WHERE project_id = ? AND record_id IN ({placeholders})
+                ORDER BY position ASC, rowid ASC
+                """,
+                params,
+            ).fetchall()
+            return [Publication.model_validate(json.loads(row[0])) for row in rows]
+
+        return query(connection) if connection is not None else self._with_connection(query)
+
+    def delete_publications(
+        self,
+        project_id: str,
+        record_ids: list[UUID],
+        *,
+        connection: sqlite3.Connection | None = None,
+    ) -> int:
+        self._ensure_project(project_id, connection=connection)
+        if not record_ids:
+            return 0
+        placeholders = ",".join("?" for _ in record_ids)
+        params: list[object] = [project_id, *(str(record_id) for record_id in record_ids)]
+
+        def delete(conn: sqlite3.Connection) -> int:
+            cursor = conn.execute(
+                f"""
+                DELETE FROM project_publications
+                WHERE project_id = ? AND record_id IN ({placeholders})
+                """,
+                params,
+            )
+            return int(cursor.rowcount)
+
+        return delete(connection) if connection is not None else self._with_connection(delete)
 
     def update_publication(
         self, project_id: str, publication: Publication, *, connection: sqlite3.Connection | None = None

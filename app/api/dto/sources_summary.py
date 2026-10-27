@@ -54,6 +54,12 @@ class ImportHistoryItemDTO(BaseModel):
     skip_audit_available: bool = False
     audit_available: bool = False
     recovery_status: str | None = None
+    review_status: str = "not_required"
+    effective_status: str = "success"
+    reviewer_id: str | None = None
+    reviewed_at: datetime | None = None
+    can_accept: bool = False
+    can_reject: bool = False
 
 
 class SourcesSummaryResponse(BaseModel):
