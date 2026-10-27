@@ -230,9 +230,10 @@ No application behavior, production data, or deployment was changed.
 - GitHub Actions: PASS (runs 40504478073 and 40505000269)
 - Live model execution: NOT VERIFIED
 
-**Overall:** **PASS**. All local gates and the PR CI checks are green. The branch
-is ready for independent review and merge by a human; this task does not merge
-or deploy.
+**Overall:** **PASS WITH CONDITIONS**. All local gates and the PR CI checks are
+green. The remaining condition is that live model execution is **NOT VERIFIED**
+due to provider quota; no paid call was made. The branch is ready for
+independent review and human merge; this task does not merge or deploy.
 
 ## 13. Independent review request
 
