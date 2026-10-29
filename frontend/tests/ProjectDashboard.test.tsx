@@ -227,6 +227,30 @@ describe('ProjectDashboardPage — real data, no mock values', () => {
     expect(await screen.findByText(/Ładowanie statusu projektu/i)).toBeInTheDocument();
   });
 
+  it('shows per-stage loading indicators for slow stages', async () => {
+    vi.spyOn(projectApiService, 'getSearchStrategy').mockResolvedValue(STRATEGY_2_GROUPS);
+    vi.spyOn(projectApiService, 'getBibliographicImports').mockResolvedValue(TWO_IMPORTS);
+    vi.spyOn(projectApiService, 'getNormalization').mockResolvedValue(OK_NORM);
+    vi.spyOn(projectApiService, 'getDuplicateGroups').mockReturnValue(new Promise(() => {}));
+    renderDashboard();
+
+    await waitFor(() => expect(screen.getByRole('region', { name: 'Etap: 1. Search Strategy' })).toHaveAttribute('data-loading', 'false'));
+    expect(screen.getByRole('region', { name: 'Etap: 4. Deduplikacja' })).toHaveAttribute('data-loading', 'true');
+    expect(screen.getByRole('region', { name: 'Etap: 4. Deduplikacja' })).toHaveTextContent(/Ładowanie/);
+  });
+
+  it('keeps ready stages visible when one status endpoint fails', async () => {
+    vi.spyOn(projectApiService, 'getSearchStrategy').mockResolvedValue(STRATEGY_2_GROUPS);
+    vi.spyOn(projectApiService, 'getBibliographicImports').mockResolvedValue(TWO_IMPORTS);
+    vi.spyOn(projectApiService, 'getNormalization').mockResolvedValue(OK_NORM);
+    vi.spyOn(projectApiService, 'getDuplicateGroups').mockRejectedValue(new Error('timeout'));
+    renderDashboard();
+
+    await waitFor(() => expect(screen.getByRole('region', { name: 'Etap: 1. Search Strategy' })).toHaveAttribute('data-loading', 'false'));
+    expect(screen.getByRole('region', { name: 'Etap: 1. Search Strategy' })).toHaveTextContent('2 grup');
+    await waitFor(() => expect(screen.getByRole('region', { name: 'Etap: 4. Deduplikacja' })).toHaveTextContent(/Błąd/));
+  });
+
   // ── No mock values leak ──────────────────────────────────────────────────────
   it('does not render static mock numbers (45, 425, 2105, "Triage", "Finalna Synteza")', async () => {
     vi.spyOn(projectApiService, 'getSearchStrategy').mockResolvedValue(null);

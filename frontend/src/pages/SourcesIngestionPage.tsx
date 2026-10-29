@@ -9,8 +9,58 @@ import {
   ImportReviewDecisionResponse,
 } from '../types';
 
+export const applyImportDecisionToSummary = (
+  current: SourcesSummaryResponse,
+  result: ImportReviewDecisionResponse,
+): SourcesSummaryResponse => {
+  const updatedHistory = current.import_history.map((item) => (
+    item.import_id === result.import_id
+      ? {
+          ...item,
+          effective_status: result.effective_status,
+          review_status: result.review_status,
+          reviewer_id: result.decision.reviewer_id,
+          reviewed_at: result.decision.decided_at,
+          can_accept: false,
+          can_reject: false,
+        }
+      : item
+  ));
+
+  const accepted = result.effective_status === 'success';
+  const affectedImport = current.import_history.find((i) => i.import_id === result.import_id);
+  const affectedSource = affectedImport
+    ? (affectedImport.source_type === 'provider'
+        ? (affectedImport.provider || 'provider')
+        : (affectedImport.format || 'file'))
+    : null;
+  const affectedKind: 'provider' | 'file' = affectedImport?.source_type === 'provider' ? 'provider' : 'file';
+
+  const updatedSummaries = current.source_summaries.map((summary) => {
+    if (!affectedSource || summary.source.toLowerCase() !== affectedSource.toLowerCase() || summary.source_kind !== affectedKind) {
+      return summary;
+    }
+    return {
+      ...summary,
+      successful_imports_count: accepted
+        ? summary.successful_imports_count + 1
+        : summary.successful_imports_count,
+      warning_imports_count: accepted || result.effective_status === 'rejected'
+        ? Math.max(0, summary.warning_imports_count - 1)
+        : summary.warning_imports_count,
+      last_import_status: accepted ? 'success' : summary.last_import_status,
+    };
+  });
+
+  return {
+    ...current,
+    import_history: updatedHistory,
+    source_summaries: updatedSummaries,
+  };
+};
+
 export const SourcesIngestionPage: React.FC = () => {
-  const { activeProject, importBibliographicFile } = useProject();
+  const { activeProject, importBibliographicFile, applyImportReviewDecision } = useProject();
   const [sourcesSummary, setSourcesSummary] = useState<SourcesSummaryResponse | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -35,26 +85,9 @@ export const SourcesIngestionPage: React.FC = () => {
   }, [fetchSummary]);
 
   const handleDecisionApplied = useCallback((result: ImportReviewDecisionResponse) => {
-    setSourcesSummary((current) => {
-      if (!current) return current;
-      return {
-        ...current,
-        import_history: current.import_history.map((item) => (
-          item.import_id === result.import_id
-            ? {
-                ...item,
-                effective_status: result.effective_status,
-                review_status: result.review_status,
-                reviewer_id: result.decision.reviewer_id,
-                reviewed_at: result.decision.decided_at,
-                can_accept: false,
-                can_reject: false,
-              }
-            : item
-        )),
-      };
-    });
-  }, []);
+    applyImportReviewDecision(result);
+    setSourcesSummary((current) => (current ? applyImportDecisionToSummary(current, result) : current));
+  }, [applyImportReviewDecision]);
 
   if (!activeProject) return null;
 

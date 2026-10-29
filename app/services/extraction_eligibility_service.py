@@ -31,6 +31,7 @@ from app.services.multi_reviewer_screening_service import (
     MultiReviewerScreeningService,
 )
 from app.services.screening_input_service import (
+    ScreeningInput,
     ScreeningInputService,
 )
 
@@ -95,7 +96,7 @@ class ExtractionEligibilityService:
         )
 
     def evaluate_publication(
-        self, project_id: str, publication_id: UUID, reviewer_id: str = ""
+        self, project_id: str, publication_id: UUID, reviewer_id: str = "", input_set: ScreeningInput | None = None
     ) -> ExtractionEligibilityResult:
         """Evaluates whether a single publication is eligible for data extraction."""
         # 1. Project Configuration Check
@@ -110,7 +111,8 @@ class ExtractionEligibilityService:
 
         # Direct callers must observe the same active-record boundary as batch
         # extraction.  A superseded source can never be independently eligible.
-        input_set = self._input_service.get_input_set(project_id)
+        if input_set is None:
+            input_set = self._input_service.get_input_set(project_id)
         if publication_id not in {publication.record_id for publication in input_set.publications}:
             return ExtractionEligibilityResult(
                 publication_id=publication_id,
@@ -231,7 +233,7 @@ class ExtractionEligibilityService:
 
         results: list[ExtractionEligibilityResult] = []
         for pub in input_set.publications:
-            res = self.evaluate_publication(project_id, pub.record_id, reviewer_id=reviewer_id)
+            res = self.evaluate_publication(project_id, pub.record_id, reviewer_id=reviewer_id, input_set=input_set)
             results.append(res)
         return results
 

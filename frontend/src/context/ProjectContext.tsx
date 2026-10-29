@@ -18,6 +18,7 @@ import {
   SearchStrategy,
   ProjectUpdatePayload,
   SearchResultsImportMetadata,
+  ImportReviewDecisionResponse,
 } from '../types';
 import { projectApiService, mapPrismaMetricsResponseToFunnel } from '../services/api/projectApi';
 import { screeningApi, TitleAbstractOverview, FullTextOverview } from '../services/api/screeningApi';
@@ -369,6 +370,7 @@ interface ProjectContextType {
   error: string | null;
   workflowStatus: WorkflowNavigationStatus | null;
   workflowStatusLoading: boolean;
+  workflowStatusLoadingStages: Record<string, boolean>;
   workflowStatusError: string | null;
   prismaMetricsLoading: boolean;
   prismaMetricsError: string | null;
@@ -384,6 +386,7 @@ interface ProjectContextType {
   refreshWorkflowStatus: (projectId?: string) => Promise<void>;
   runDeduplication: () => Promise<ApiDuplicateGroupListResponse>;
   updateGroupDecision: (groupId: string, newStatus: DuplicateGroupStatus, newRationale?: string | null) => void;
+  applyImportReviewDecision: (result: ImportReviewDecisionResponse) => void;
   currentSearchStrategy: EditableSearchStrategy | null;
   lastExecutedSearchStrategy: EditableSearchStrategy | null;
   searchExecutionResult: SearchExecutionResult | null;
@@ -425,6 +428,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
   workflowStatusRef.current = workflowStatus;
 
   const [workflowStatusLoading, setWorkflowStatusLoading] = useState<boolean>(true);
+  const [workflowStatusLoadingStages, setWorkflowStatusLoadingStages] = useState<Record<string, boolean>>({});
   const [workflowStatusError, setWorkflowStatusError] = useState<string | null>(null);
   const [prismaMetricsLoading, setPrismaMetricsLoading] = useState<boolean>(false);
   const [prismaMetricsError, setPrismaMetricsError] = useState<string | null>(null);
@@ -450,6 +454,28 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const fetchAllJobIdRef = useRef<string | null>(null);
   const fetchAllPollTimerRef = useRef<number | null>(null);
   const fetchAllFailureCountRef = useRef(0);
+  const memoCacheRef = useRef<Record<string, { value: any; expires: number }>>({});
+  const inFlightRef = useRef<Record<string, Promise<any> | null>>({});
+
+  const trackMemo = (key: string, factory: () => Promise<any>) => {
+    const now = Date.now();
+    const cached = memoCacheRef.current[key];
+    if (cached && cached.expires > now) {
+      return Promise.resolve(cached.value);
+    }
+    const inFlight = inFlightRef.current[key];
+    if (inFlight) return inFlight;
+    const p = factory().then((value) => {
+      memoCacheRef.current[key] = { value, expires: Date.now() + 10000 };
+      inFlightRef.current[key] = null;
+      return value;
+    }).catch((err) => {
+      inFlightRef.current[key] = null;
+      throw err;
+    });
+    inFlightRef.current[key] = p;
+    return p;
+  };
 
   const refreshWorkflowStatus = useCallback(async (projectId?: string) => {
     const targetProjectId = projectId || activeProjectIdRef.current;
@@ -463,6 +489,74 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
     const reviewer = localStorage.getItem('slr_screening_reviewer_id') || 'default_reviewer';
 
+    const collected: any = {};
+    const publishPartial = () => {
+      if (activeProjectIdRef.current !== targetProjectId) return;
+      const searchRes = collected.searchRes || { status: 'pending' };
+      const importsRes = collected.importsRes || { status: 'pending' };
+      const normRes = collected.normRes || { status: 'pending' };
+      const dedupRes = collected.dedupRes || { status: 'pending' };
+      const screeningRes = collected.screeningRes || { status: 'pending' };
+      const fullTextRes = collected.fullTextRes || { status: 'pending' };
+      const qaRes = collected.qaRes || { status: 'pending' };
+      const extractionProgressRes = collected.extractionProgressRes || { status: 'pending' };
+
+      const searchStrategy = searchRes.status === 'fulfilled' ? searchRes.value : null;
+      const imports = importsRes.status === 'fulfilled' ? importsRes.value : null;
+      const normalization = normRes.status === 'fulfilled' ? normRes.value : null;
+      const deduplication = dedupRes.status === 'fulfilled' ? dedupRes.value : null;
+      const screeningOverview = screeningRes.status === 'fulfilled' ? screeningRes.value : null;
+      const fullTextOverview = fullTextRes.status === 'fulfilled' ? fullTextRes.value : null;
+      const qaOverview = qaRes.status === 'fulfilled' ? qaRes.value : null;
+      const extractionProgress = extractionProgressRes.status === 'fulfilled' ? extractionProgressRes.value : null;
+
+      const errors = {
+        search: searchRes.status === 'rejected',
+        sources: importsRes.status === 'rejected',
+        normalization: normRes.status === 'rejected',
+        deduplication: dedupRes.status === 'rejected',
+        screening: screeningRes.status === 'rejected',
+        fullText: fullTextRes.status === 'rejected',
+        qualityAssessment: qaRes.status === 'rejected',
+        dataExtraction: extractionProgressRes.status === 'rejected',
+      };
+
+      const status = computeWorkflowStatus(
+        searchStrategy,
+        imports,
+        normalization,
+        deduplication,
+        screeningOverview,
+        fullTextOverview,
+        qaOverview,
+        extractionProgress,
+        errors
+      );
+      setWorkflowStatus(status);
+    };
+
+    const markStages = (stages: string[], loading: boolean) => {
+      if (activeProjectIdRef.current !== targetProjectId) return;
+      setWorkflowStatusLoadingStages((current) => {
+        const next = { ...current };
+        stages.forEach((stage) => { next[stage] = loading; });
+        return next;
+      });
+    };
+
+    markStages(['search', 'sources', 'normalization', 'deduplication', 'screening', 'fullTextScreening', 'qualityAssessment', 'dataExtraction', 'exports'], true);
+
+    const withTimeout = <T,>(p: Promise<T>, ms: number) =>
+      Promise.race([p, new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), ms))]);
+
+    const track = <T,>(key: string, promise: Promise<T>, stages: string[] = []) =>
+      promise.then(
+        (value: any) => { collected[key] = { status: 'fulfilled', value }; markStages(stages, false); publishPartial(); return value; },
+        (reason: any) => { collected[key] = { status: 'rejected', reason }; markStages(stages, false); publishPartial(); throw reason; }
+      );
+
+    const STATUS_TIMEOUT_MS = 8000;
+
     const [
       searchRes,
       importsRes,
@@ -475,16 +569,16 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
       prismaMetricsRes,
       resumableSearchRes,
     ] = await Promise.allSettled([
-      projectApiService.getSearchStrategy(targetProjectId),
-      projectApiService.getBibliographicImports(targetProjectId),
-      projectApiService.getNormalization(targetProjectId),
-      projectApiService.getDuplicateGroups(targetProjectId),
-      screeningApi.getOverview(targetProjectId, reviewer),
-      screeningApi.getFullTextOverview(targetProjectId, reviewer),
-      qualityAssessmentApi.getOverview(targetProjectId, reviewer),
-      extractionApi.getExtractionProgress(targetProjectId, reviewer),
-      projectApiService.getPrismaMetrics(targetProjectId, reviewer),
-      projectApiService.getResumableFetchAllSearches(targetProjectId),
+      track('searchRes', withTimeout(projectApiService.getSearchStrategy(targetProjectId), STATUS_TIMEOUT_MS), ['search']),
+      track('importsRes', withTimeout(projectApiService.getBibliographicImports(targetProjectId), STATUS_TIMEOUT_MS), ['sources']),
+      track('normRes', withTimeout(projectApiService.getNormalization(targetProjectId), STATUS_TIMEOUT_MS), ['normalization']),
+      track('dedupRes', trackMemo(`${targetProjectId}:dedup`, () => withTimeout(projectApiService.getDuplicateGroups(targetProjectId), STATUS_TIMEOUT_MS)), ['deduplication']),
+      track('screeningRes', withTimeout(screeningApi.getOverview(targetProjectId, reviewer), STATUS_TIMEOUT_MS), ['screening']),
+      track('fullTextRes', withTimeout(screeningApi.getFullTextOverview(targetProjectId, reviewer), STATUS_TIMEOUT_MS), ['fullTextScreening']),
+      track('qaRes', withTimeout(qualityAssessmentApi.getOverview(targetProjectId, reviewer), STATUS_TIMEOUT_MS), ['qualityAssessment']),
+      track('extractionProgressRes', withTimeout(extractionApi.getExtractionProgress(targetProjectId, reviewer), STATUS_TIMEOUT_MS), ['dataExtraction']),
+      track('prismaMetricsRes', trackMemo(`${targetProjectId}:prisma`, () => withTimeout(projectApiService.getPrismaMetrics(targetProjectId, reviewer), STATUS_TIMEOUT_MS))),
+      track('resumableSearchRes', withTimeout(projectApiService.getResumableFetchAllSearches(targetProjectId), STATUS_TIMEOUT_MS)),
     ]);
 
     if (activeProjectIdRef.current !== targetProjectId) return;
@@ -547,7 +641,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const extractionProgress = extractionProgressRes.status === 'fulfilled' ? extractionProgressRes.value : null;
 
     if (searchRes.status === 'fulfilled' && searchStrategy) {
-      const conceptGroups = searchStrategy.concept_groups.map((cg) => ({
+      const conceptGroups = searchStrategy.concept_groups.map((cg: any) => ({
         id: cg.group_id,
         name: cg.name,
         terms: cg.terms,
@@ -558,7 +652,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
 
     if (importsRes.status === 'fulfilled' && imports) {
-      const importRecords = imports.map((item) => ({
+      const importRecords = imports.map((item: any) => ({
         id: item.import_id,
         sourceType: item.source_type,
         filename: item.filename,
@@ -653,6 +747,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
     );
 
     setWorkflowStatus(status);
+    markStages(['search', 'sources', 'normalization', 'deduplication', 'screening', 'fullTextScreening', 'qualityAssessment', 'dataExtraction', 'exports'], false);
     setWorkflowStatusLoading(false);
   }, []);
 
@@ -715,6 +810,8 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setFetchAllStarting(false);
     setFetchAllError(null);
 
+    memoCacheRef.current = {};
+    inFlightRef.current = {};
     setWorkflowStatus(null);
     setPrismaMetricsError(null);
     setPrismaMetricsLoading(true);
@@ -1135,6 +1232,8 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
   };
 
   const importBibliographicFile = async (file: File): Promise<BibliographicImportResponse> => {
+    memoCacheRef.current = {};
+    inFlightRef.current = {};
     const targetProjectId = activeProjectIdRef.current;
     const result = await projectApiService.importBibliographicFile(targetProjectId, file);
     if (activeProjectIdRef.current === targetProjectId) {
@@ -1144,6 +1243,8 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
   };
 
   const runNormalization = async (): Promise<NormalizationResponse> => {
+    memoCacheRef.current = {};
+    inFlightRef.current = {};
     const targetProjectId = activeProjectIdRef.current;
     const result = await projectApiService.runNormalization(targetProjectId);
     if (activeProjectIdRef.current === targetProjectId) {
@@ -1157,6 +1258,8 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
     newStatus: DuplicateGroupStatus,
     newRationale?: string | null
   ) => {
+    memoCacheRef.current = {};
+    inFlightRef.current = {};
     const baseGroups = duplicateData?.groups ?? [];
     const updatedGroups = baseGroups.map((group) =>
       group.group_id === groupId
@@ -1214,7 +1317,61 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
     } : current);
   };
 
+  const applyImportReviewDecision = (result: ImportReviewDecisionResponse) => {
+    memoCacheRef.current = {};
+    inFlightRef.current = {};
+    const targetProjectId = activeProjectIdRef.current;
+    const project = projects.find((p) => p.id === targetProjectId);
+    const updatedImports = (project?.imports ?? []).map((imp) =>
+      imp.id === result.import_id
+        ? {
+            ...imp,
+            effectiveStatus: result.effective_status,
+            reviewStatus: result.review_status,
+            canAccept: false,
+            canReject: false,
+          }
+        : imp
+    );
+    const hasWarning = updatedImports.some((imp) => (imp.effectiveStatus ?? imp.status) === 'warning');
+    const importsCount = updatedImports.length > 0 ? updatedImports.length : (project?.imports?.length ?? 0);
+
+    setProjects((currentProjects) => currentProjects.map((p) => {
+      if (p.id !== targetProjectId || !p.imports) return p;
+      return {
+        ...p,
+        imports: p.imports.map((imp) =>
+          imp.id === result.import_id
+            ? {
+                ...imp,
+                effectiveStatus: result.effective_status,
+                reviewStatus: result.review_status,
+                canAccept: false,
+                canReject: false,
+              }
+            : imp
+        ),
+      };
+    }));
+
+    setWorkflowStatus((current) => {
+      if (!current) return current;
+      const sourcesState = importsCount > 0 ? (hasWarning ? 'warning' : 'completed') : 'not_started';
+      return {
+        ...current,
+        sources: {
+          ...current.sources,
+          state: sourcesState,
+          count: importsCount > 0 ? importsCount : current.sources.count,
+          label: importsCount > 0 ? `${importsCount} importów` : current.sources.label,
+        },
+      };
+    });
+  };
+
   const runDeduplication = async (): Promise<ApiDuplicateGroupListResponse> => {
+    memoCacheRef.current = {};
+    inFlightRef.current = {};
     const targetProjectId = activeProjectIdRef.current;
     setWorkflowStatusLoading(true);
     setDuplicateGroupError(null);
@@ -1271,6 +1428,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
         error,
         workflowStatus,
         workflowStatusLoading,
+        workflowStatusLoadingStages,
         workflowStatusError,
         prismaMetricsLoading,
         prismaMetricsError,
@@ -1286,6 +1444,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
         refreshWorkflowStatus,
         runDeduplication,
         updateGroupDecision,
+        applyImportReviewDecision,
         currentSearchStrategy,
         lastExecutedSearchStrategy,
         searchExecutionResult,

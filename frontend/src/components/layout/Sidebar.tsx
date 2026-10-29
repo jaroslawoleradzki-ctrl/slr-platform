@@ -149,6 +149,8 @@ export const Sidebar: React.FC = () => {
             <NavLink
               key={stage.id}
               to={buildStagePath(currentId || undefined, stage.pathSuffix)}
+              data-stage-id={stage.id}
+              data-stage-state={stage.statusKey ? workflowStatus?.[stage.statusKey]?.state ?? 'unknown' : 'unknown'}
               style={({ isActive }) => stageRowStyle(isActive)}
             >
               {({ isActive }) => (
