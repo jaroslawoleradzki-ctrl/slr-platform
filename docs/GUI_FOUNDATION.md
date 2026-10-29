@@ -128,3 +128,24 @@ Warning badges in Sources & Imports open an accessible review dialog that shows:
 `Akceptuję` calls the backend and updates the row to `Zaimportowano` only after
 the server confirms. Successful decisions refresh import history, source
 counters, and workflow status.
+
+## v0.7.5 — decision feedback and refresh lifecycle
+
+A successful decision is complete as soon as the backend confirms it. The dialog
+applies the server-returned `effective_status`, `review_status`, and decision
+summary, sends the same response to the Sources page through
+`onDecisionApplied`, and closes immediately. Import history, source counters, and
+workflow status refresh afterwards in the background; the dialog never waits for
+that refresh and a slow refresh cannot keep it open.
+
+Pending feedback is per action. While `Akceptuję` or `Potwierdź odrzucenie` is in
+flight, only that control shows a spinner, both decision actions are disabled,
+and repeated activation submits at most one request. `Zamknij` is disabled only
+while the decision request itself is pending and becomes available again when
+the request settles.
+
+Decision errors and refresh errors are separate. A failed POST keeps the dialog
+open and shows the backend error with any structured blockers. A failed
+post-decision refresh does not reopen the dialog and is not reported as a failed
+decision; the Sources page shows a non-blocking refresh error with `Ponów` even
+when an older summary is still displayed.

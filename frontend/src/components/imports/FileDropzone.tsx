@@ -1,6 +1,11 @@
 import React, { useRef, useState } from 'react';
 import { Upload, FileText, CheckCircle2, AlertTriangle, Eye } from 'lucide-react';
-import { ImportFileRecord, ManualSourceDatabase, MANUAL_SOURCE_DATABASE_LABELS } from '../../types';
+import {
+  ImportFileRecord,
+  ImportReviewDecisionResponse,
+  ManualSourceDatabase,
+  MANUAL_SOURCE_DATABASE_LABELS,
+} from '../../types';
 import { useProject } from '../../context/ProjectContext';
 import { Card } from '../common/Card';
 import { Badge } from '../common/Badge';
@@ -12,9 +17,16 @@ interface FileDropzoneProps {
   imports: ImportFileRecord[];
   projectId?: string;
   onRefresh?: () => void;
+  onDecisionApplied?: (result: ImportReviewDecisionResponse) => void;
 }
 
-export const FileDropzone: React.FC<FileDropzoneProps> = ({ onFileSelect, imports, projectId, onRefresh }) => {
+export const FileDropzone: React.FC<FileDropzoneProps> = ({
+  onFileSelect,
+  imports,
+  projectId,
+  onRefresh,
+  onDecisionApplied,
+}) => {
   const { activeProject, refreshWorkflowStatus } = useProject();
   const effectiveProjectId = projectId || activeProject?.id;
   const [selectedImportForReview, setSelectedImportForReview] = useState<ImportFileRecord | null>(null);
@@ -335,9 +347,11 @@ export const FileDropzone: React.FC<FileDropzoneProps> = ({ onFileSelect, import
           importRecord={selectedImportForWarnings}
           projectId={effectiveProjectId}
           onClose={() => setSelectedImportForWarnings(null)}
-          onChanged={async () => {
-            await onRefresh?.();
-            await refreshWorkflowStatus(effectiveProjectId);
+          onDecisionApplied={onDecisionApplied}
+          onChanged={() => {
+            const refreshes: Promise<unknown>[] = [refreshWorkflowStatus(effectiveProjectId)];
+            if (onRefresh) refreshes.push(Promise.resolve(onRefresh()));
+            void Promise.allSettled(refreshes);
           }}
         />
       )}

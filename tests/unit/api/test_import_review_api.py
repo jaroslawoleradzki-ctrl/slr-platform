@@ -156,8 +156,21 @@ def test_accept_endpoint_sets_effective_success(environment) -> None:
     assert response.status_code == 200
     assert response.json()["effective_status"] == "success"
     assert response.json()["review_status"] == "accepted"
+    assert response.json()["decision"]["decision"] == "accepted"
     assert publications.get_publications(PROJECT_ID) == records
     assert history.get(PROJECT_ID, import_id).status == "warning"
+
+    repeated = client.post(
+        f"/api/v1/projects/{PROJECT_ID}/imports/{import_id}/review",
+        json={"decision": "accept", "reviewer_id": "alice", "rationale": "Reviewed again."},
+    )
+
+    assert repeated.status_code == 200
+    assert repeated.json()["effective_status"] == "success"
+    assert repeated.json()["review_status"] == "accepted"
+    assert repeated.json()["decision"]["decision_id"] == response.json()["decision"]["decision_id"]
+    assert repeated.json()["decision"]["reviewer_id"] == "alice"
+    assert publications.get_publications(PROJECT_ID) == records
 
 
 def test_reject_requires_confirmation(environment) -> None:
