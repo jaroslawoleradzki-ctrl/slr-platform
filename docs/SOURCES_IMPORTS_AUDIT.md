@@ -258,3 +258,12 @@ Odrzucony import jest ukryty w aktywnej historii i podsumowaniu źródeł.
 Jego source records pozostają w identyfikacji PRISMA i są raportowane jako
 `removed before screening — rejected import`. Etapy późniejsze korzystają
 wyłącznie z aktywnego korpusu.
+
+Akceptacja jest niezniszczająca. Zmienia wyłącznie efektywny status importu
+(`warning` → `success`) oraz liczniki pochodne od tego statusu:
+`successful_imports_count` rośnie o jeden, a `warning_imports_count` maleje o
+jeden dla danego źródła. `records_added_count`, całkowita liczba rekordów w
+kolekcji roboczej, liczba publikacji kanonicznych, source records, wiersze
+skip-audit oraz populacje PRISMA pozostają bez zmian. Ten sam niezmiennik
+obowiązuje po odświeżeniu podsumowania źródeł; odświeżenie nie może sztucznie
+zmienić liczników ani ukryć błędu odświeżenia.

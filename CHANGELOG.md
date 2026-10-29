@@ -1,5 +1,47 @@
 # Changelog
 
+## [0.7.5] — 2026-10-29
+
+### Fixed
+
+- **Import review dialog no longer stays open on a slow or failed refresh**: a successful
+  accept/reject decision is now terminal as soon as the backend confirms it. The dialog
+  applies the server-returned `effective_status`, `review_status`, and decision summary,
+  notifies the Sources page through `onDecisionApplied`, and closes immediately without
+  waiting for the Sources summary or shared workflow refresh.
+- **Per-action pending feedback**: the shared `saving` flag is replaced by a per-action
+  `pendingAction` state. Only the action in flight shows a spinner; both decision triggers
+  are disabled while pending; `Zamknij` is re-enabled when the request settles. Repeated
+  activation submits at most one POST.
+- **Refresh failures are no longer reported as decision failures**: a failed post-decision
+  refresh does not reopen the dialog or mark the decision as failed. The Sources page shows a
+  non-blocking refresh error with a `Ponów` retry action even when an older summary is still
+  displayed.
+- **Stale counters after acceptance**: the active import row updates to `Zaimportowano`
+  immediately from the decision response; the Sources summary and workflow status refresh in
+  the background concurrently (`Promise.allSettled`). The summary loader now depends on
+  `activeProject.id` instead of the whole project object, removing redundant fetches.
+
+### Preserved
+
+- Acceptance remains non-destructive: only `effective_status` (`warning` → `success`) and
+  the warning-derived counters (`successful_imports_count` +1, `warning_imports_count` −1)
+  change. `records_added_count`, working-collection total, canonical publications, source
+  records, skip-audit, duplicate/screening/QA/extraction/synthesis records, and PRISMA
+  populations are unchanged. Pinned by new service, API, and integration tests.
+
+### Added
+
+- Browser E2E coverage via Playwright (Chromium) for the accept flow, spinner/close, and
+  refresh-failure retry (`frontend/e2e/import-review.spec.ts`).
+
+### Known limitations
+
+- Full E2E against a running FastAPI backend remains a CI item (Playwright uses a mocked
+  backend).
+- Reviewer identity remains a self-asserted workflow identifier.
+- No production deployment performed.
+
 ## [0.7.4] — 2026-10-27
 
 ### Added

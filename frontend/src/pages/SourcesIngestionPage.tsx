@@ -3,31 +3,58 @@ import { useProject } from '../context/ProjectContext';
 import { ProviderStatusCard } from '../components/search/ProviderStatusCard';
 import { FileDropzone } from '../components/imports/FileDropzone';
 import { projectApiService } from '../services/api/projectApi';
-import { SourcesSummaryResponse, ImportFileRecord } from '../types';
+import {
+  SourcesSummaryResponse,
+  ImportFileRecord,
+  ImportReviewDecisionResponse,
+} from '../types';
 
 export const SourcesIngestionPage: React.FC = () => {
   const { activeProject, importBibliographicFile } = useProject();
   const [sourcesSummary, setSourcesSummary] = useState<SourcesSummaryResponse | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const activeProjectId = activeProject?.id;
 
   const fetchSummary = useCallback(async () => {
-    if (!activeProject) return;
+    if (!activeProjectId) return;
     setLoading(true);
     setError(null);
     try {
-      const summary = await projectApiService.getSourcesSummary(activeProject.id);
+      const summary = await projectApiService.getSourcesSummary(activeProjectId);
       setSourcesSummary(summary);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Nie udało się pobrać podsumowania źródeł');
     } finally {
       setLoading(false);
     }
-  }, [activeProject]);
+  }, [activeProjectId]);
 
   useEffect(() => {
     void fetchSummary();
   }, [fetchSummary]);
+
+  const handleDecisionApplied = useCallback((result: ImportReviewDecisionResponse) => {
+    setSourcesSummary((current) => {
+      if (!current) return current;
+      return {
+        ...current,
+        import_history: current.import_history.map((item) => (
+          item.import_id === result.import_id
+            ? {
+                ...item,
+                effective_status: result.effective_status,
+                review_status: result.review_status,
+                reviewer_id: result.decision.reviewer_id,
+                reviewed_at: result.decision.decided_at,
+                can_accept: false,
+                can_reject: false,
+              }
+            : item
+        )),
+      };
+    });
+  }, []);
 
   if (!activeProject) return null;
 
@@ -99,7 +126,14 @@ export const SourcesIngestionPage: React.FC = () => {
   }
 
   if (error && !sourcesSummary) {
-    return <div role="alert" style={{ padding: '24px', color: 'var(--status-error-text)' }}>{error}</div>;
+    return (
+      <div role="alert" style={{ padding: '24px', color: 'var(--status-error-text)' }}>
+        {error}
+        <div style={{ marginTop: '12px' }}>
+          <button type="button" onClick={() => void fetchSummary()}>Ponów</button>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -113,6 +147,29 @@ export const SourcesIngestionPage: React.FC = () => {
         </p>
       </div>
 
+      {error && (
+        <div
+          role="alert"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '12px',
+            padding: '12px 14px',
+            borderRadius: 'var(--radius-md)',
+            border: '1px solid var(--status-error-border)',
+            backgroundColor: 'var(--status-error-bg)',
+            color: 'var(--status-error-text)',
+            fontSize: '0.85rem',
+          }}
+        >
+          <span>
+            {error} Wyświetlane liczniki mogą być nieaktualne.
+          </span>
+          <button type="button" onClick={() => void fetchSummary()}>Ponów</button>
+        </div>
+      )}
+
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
         {displayedProviders.map((provider) => (
           <ProviderStatusCard key={provider.id} provider={provider} />
@@ -124,6 +181,7 @@ export const SourcesIngestionPage: React.FC = () => {
         onFileSelect={handleFileSelect}
         projectId={activeProject.id}
         onRefresh={fetchSummary}
+        onDecisionApplied={handleDecisionApplied}
       />
     </div>
   );

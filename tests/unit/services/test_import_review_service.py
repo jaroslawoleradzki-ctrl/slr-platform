@@ -1,3 +1,4 @@
+import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 from uuid import UUID, uuid4
@@ -18,6 +19,7 @@ from app.repositories.import_history_repository import (
 )
 from app.repositories.import_review_repository import SqliteImportReviewRepository
 from app.repositories.import_source_record_repository import (
+    ImportSkipAuditRecord,
     ImportSourceRecord,
     SqliteImportSourceRecordRepository,
 )
@@ -109,6 +111,107 @@ def _environment(tmp_path: Path, publications: list[Publication], *, warnings=("
         transaction_manager=SqliteTransactionManager(database),
     )
     return database, service, publications_repo, sources, history, reviews, import_id, decisions, merges
+
+
+def _research_table_snapshot(database: Path) -> dict[str, list[tuple[object, ...]]]:
+    with sqlite3.connect(database) as connection:
+        table_names = [
+            row[0]
+            for row in connection.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
+            )
+        ]
+        return {
+            table: sorted(
+                connection.execute(f'SELECT * FROM "{table}"').fetchall(),
+                key=repr,
+            )
+            for table in table_names
+            if table not in {"import_review_decisions", "schema_migrations"}
+        }
+
+
+def test_acceptance_preserves_publications_source_records_and_research_tables(
+    tmp_path: Path,
+) -> None:
+    publication = _publication(1)
+    database, service, publications, sources, history, _, import_id, decisions, _ = _environment(
+        tmp_path, [publication]
+    )
+    decisions.save_decision(
+        PROJECT_ID,
+        "group-1",
+        DuplicateGroupReviewDecision(
+            decision=DuplicateDecision.APPROVE,
+            rationale="Keep both records.",
+        ),
+    )
+    sources.create_skip_audit(
+        ImportSkipAuditRecord(
+            skip_audit_id="skip-1",
+            project_id=PROJECT_ID,
+            import_id=import_id,
+            source_filename="review.ris",
+            source_file_hash=None,
+            source_record_index=99,
+            source_title="Duplicate record",
+            source_doi="10.1000/import",
+            matched_publication_id=str(publication.record_id),
+            match_type="exact_doi",
+            match_reason="Duplicate DOI.",
+            proposed_action="skip",
+            review_required=False,
+            created_at=datetime(2026, 10, 27, 10, 0, tzinfo=timezone.utc),
+        )
+    )
+    # Non-empty downstream research records: acceptance must not touch them.
+    with sqlite3.connect(database) as connection:
+        connection.execute(
+            "INSERT INTO screening_decisions (decision_id, project_id, publication_id, stage, outcome, reviewer_id, rationale, decided_at) VALUES ('sd-1', ?, ?, 'title_abstract', 'include', 'alice', 'Included.', '2026-10-27T10:00:00Z')",
+            (PROJECT_ID, str(publication.record_id)),
+        )
+        connection.execute(
+            "INSERT INTO quality_assessment_tools (tool_id, name, created_at) VALUES ('tool-1', 'CASP', '2026-10-27T10:00:00Z')"
+        )
+        connection.execute(
+            "INSERT INTO quality_assessment_templates (template_id, tool_id, template_key, name, version, is_active, created_at) VALUES ('tpl-1', 'tool-1', 'casp', 'CASP v1', 1, 1, '2026-10-27T10:00:00Z')"
+        )
+        connection.execute(
+            "INSERT INTO quality_assessments (assessment_id, project_id, publication_id, reviewer_id, template_id, assessed_at) VALUES ('qa-1', ?, ?, 'alice', 'tpl-1', '2026-10-27T10:00:00Z')",
+            (PROJECT_ID, str(publication.record_id)),
+        )
+        connection.execute(
+            "INSERT INTO extraction_templates (template_id, name, created_at) VALUES ('et-1', 'Extraction', '2026-10-27T10:00:00Z')"
+        )
+        connection.execute(
+            "INSERT INTO extraction_template_versions (template_id, version, schema_json, created_at) VALUES ('et-1', '1.0', '{}', '2026-10-27T10:00:00Z')"
+        )
+        connection.execute(
+            "INSERT INTO extraction_records (record_id, project_id, publication_id, template_id, template_version, current_status, created_at, updated_at) VALUES ('er-1', ?, ?, 'et-1', '1.0', 'in_progress', '2026-10-27T10:00:00Z', '2026-10-27T10:00:00Z')",
+            (PROJECT_ID, str(publication.record_id)),
+        )
+        connection.execute(
+            "INSERT INTO synthesis_analytical_relations (relation_id, project_id, publication_id, latest_revision_id, group_item_id, source_practice, source_effect, direction, evidence_character, approval_state) VALUES ('syn-1', ?, ?, 'rev1', 'item1', 'Kaizen', 'Energy', 'positive', 'empirical', 'approved')",
+            (PROJECT_ID, str(publication.record_id)),
+        )
+        connection.commit()
+    before = _research_table_snapshot(database)
+
+    service.accept(PROJECT_ID, import_id, reviewer_id="alice")
+
+    after = _research_table_snapshot(database)
+    assert after == before
+    assert publications.get_publications(PROJECT_ID) == [publication]
+    assert len(sources.list_source_records_for_import(PROJECT_ID, import_id)) == 1
+    assert len(sources.list_skip_audit_for_import(PROJECT_ID, import_id)) == 1
+    assert decisions.get_decision(PROJECT_ID, "group-1") is not None
+    assert history.get(PROJECT_ID, import_id).status == "warning"
+    assert service.get_review(PROJECT_ID, import_id).effective_status == "success"
+    with sqlite3.connect(database) as connection:
+        assert connection.execute("SELECT COUNT(*) FROM screening_decisions").fetchone()[0] == 1
+        assert connection.execute("SELECT COUNT(*) FROM quality_assessments").fetchone()[0] == 1
+        assert connection.execute("SELECT COUNT(*) FROM extraction_records").fetchone()[0] == 1
+        assert connection.execute("SELECT COUNT(*) FROM synthesis_analytical_relations").fetchone()[0] == 1
 
 
 def test_accept_records_one_decision_without_changing_publications(tmp_path: Path) -> None:
