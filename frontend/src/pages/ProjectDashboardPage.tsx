@@ -63,15 +63,18 @@ interface StageCardProps {
   primary: string | null;
   secondary?: string | null;
   route: string;
+  loading?: boolean;
 }
 
-const StageCard: React.FC<StageCardProps> = ({ id, icon, label, state, primary, secondary, route }) => {
+const StageCard: React.FC<StageCardProps> = ({ id, icon, label, state, primary, secondary, route, loading = false }) => {
   const navigate = useNavigate();
   return (
     <div
       id={id}
       role="region"
       aria-label={`Etap: ${label}`}
+      data-loading={loading ? 'true' : 'false'}
+      data-state={state}
       onClick={() => navigate(route)}
       style={{
         backgroundColor: 'var(--bg-surface)',
@@ -101,7 +104,9 @@ const StageCard: React.FC<StageCardProps> = ({ id, icon, label, state, primary, 
         {stageStateIcon(state)}
       </div>
       <div>
-        {primary !== null
+        {loading ? (
+          <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>Ładowanie…</div>
+        ) : primary !== null
           ? <div style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)' }}>{primary}</div>
           : <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>Brak danych</div>
         }
@@ -116,7 +121,7 @@ const StageCard: React.FC<StageCardProps> = ({ id, icon, label, state, primary, 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export const ProjectDashboardPage: React.FC = () => {
-  const { activeProject, workflowStatus, workflowStatusLoading, refreshWorkflowStatus } = useProject();
+  const { activeProject, workflowStatus, workflowStatusLoading, workflowStatusLoadingStages, refreshWorkflowStatus } = useProject();
   const { projectId } = useParams<{ projectId?: string }>();
   const pid = projectId || activeProject?.id || '';
 
@@ -182,6 +187,7 @@ export const ProjectDashboardPage: React.FC = () => {
                 : s.search.count !== null ? `${s.search.count} ${s.search.count === 1 ? 'grupa' : 'grup'}` : null}
               secondary={s.search.label}
               route={`/projects/${pid}/search`}
+              loading={workflowStatusLoadingStages['search']}
             />
 
             <StageCard
@@ -193,6 +199,7 @@ export const ProjectDashboardPage: React.FC = () => {
                 : s.sources.count !== null ? formatImportCount(s.sources.count) : null}
               secondary={s.sources.label}
               route={`/projects/${pid}/sources`}
+              loading={workflowStatusLoadingStages['sources']}
             />
 
             <StageCard
@@ -203,6 +210,7 @@ export const ProjectDashboardPage: React.FC = () => {
               primary={normPrimaryValue(s.normalization.state, s.normalization.label)}
               secondary={s.normalization.state === 'completed' ? s.normalization.label : null}
               route={`/projects/${pid}/normalize`}
+              loading={workflowStatusLoadingStages['normalization']}
             />
 
             <StageCard
@@ -227,6 +235,7 @@ export const ProjectDashboardPage: React.FC = () => {
                       : s.deduplication.label
               }
               route={`/projects/${pid}/dedup`}
+              loading={workflowStatusLoadingStages['deduplication']}
             />
 
             <StageCard
@@ -242,6 +251,7 @@ export const ProjectDashboardPage: React.FC = () => {
               }
               secondary={s.screening.label}
               route={`/projects/${pid}/screen/title-abstract`}
+              loading={workflowStatusLoadingStages['screening']}
             />
           </div>
         </div>
@@ -272,6 +282,7 @@ export const ProjectDashboardPage: React.FC = () => {
               }
               secondary={s.fullTextScreening.label}
               route={`/projects/${pid}/screen/full-text`}
+              loading={workflowStatusLoadingStages['fullTextScreening']}
             />
 
             <StageCard
@@ -288,6 +299,7 @@ export const ProjectDashboardPage: React.FC = () => {
               }
               secondary={s.qualityAssessment.state === 'completed' ? 'Ocena jakościowa zakończona' : s.qualityAssessment.label}
               route={`/projects/${pid}/quality-assessment`}
+              loading={workflowStatusLoadingStages['qualityAssessment']}
             />
 
             <StageCard
@@ -304,6 +316,7 @@ export const ProjectDashboardPage: React.FC = () => {
               }
               secondary={s.dataExtraction.state === 'completed' ? 'Ekstrakcja zakończona' : s.dataExtraction.label}
               route={`/projects/${pid}/extract`}
+              loading={workflowStatusLoadingStages['dataExtraction']}
             />
 
             <StageCard
