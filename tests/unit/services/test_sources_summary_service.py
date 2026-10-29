@@ -4,12 +4,15 @@ from uuid import UUID, uuid4
 import pytest
 
 from app.api.dto.search_strategy import SearchResultRecordResponse
+from app.domain.project import Project
 from app.domain.provenance import ProvenanceEntry
 from app.domain.publication import Publication
 from app.repositories.import_history_repository import (
     ImportHistoryRecord,
     SqliteImportHistoryRepository,
 )
+from app.repositories.import_review_repository import SqliteImportReviewRepository
+from app.repositories.import_source_record_repository import SqliteImportSourceRecordRepository
 from app.repositories.normalization_execution_repository import (
     SqliteNormalizationExecutionRepository,
 )
@@ -17,7 +20,9 @@ from app.repositories.project_publication_repository import (
     ProjectNotFoundError,
     SqliteProjectPublicationRepository,
 )
+from app.repositories.project_repository import SqliteProjectRepository
 from app.repositories.transaction_manager import SqliteTransactionManager
+from app.services.import_review_service import ImportReviewService
 from app.services.integrity_audit_service import ProjectIntegrityAuditService
 from app.services.project_import_service import ProjectImportService
 from app.services.sources_summary_service import SourcesSummaryService
@@ -249,6 +254,72 @@ def test_sources_summary_deterministic_tie_breaker(history_repo, pub_repo, summa
     history_ids = [item.import_id for item in res.import_history]
     # Tie-breaker (created_at DESC, import_id DESC) places uuid_b before uuid_a
     assert history_ids == [uuid_b, uuid_a]
+
+
+def test_acceptance_changes_only_warning_derived_summary_counters(
+    temp_db_path, pub_repo, history_repo, summary_service
+):
+    project_id = "acceptance-counters"
+    SqliteProjectRepository(temp_db_path).create(Project(project_id=project_id, title="Acceptance"))
+    import_id = UUID("00000000-0000-0000-0000-0000000000aa")
+    publications = [
+        Publication(
+            record_id=UUID(f"00000000-0000-0000-0000-{number:012d}"),
+            title=f"Accepted publication {number}",
+            provenance=[ProvenanceEntry(source="ris", source_record_id=f"ris-{number}")],
+            created_at=_TIME,
+        )
+        for number in (1, 2)
+    ]
+    history_repo.create(
+        ImportHistoryRecord(
+            import_id=import_id,
+            project_id=project_id,
+            source_type="file",
+            filename="accepted.ris",
+            format="RIS",
+            provider=None,
+            query=None,
+            records_count=2,
+            total_available=2,
+            status="warning",
+            warnings=("Skipped 1 duplicate record.",),
+            created_at=_TIME,
+        )
+    )
+    pub_repo.import_source_publications(
+        project_id,
+        publications,
+        import_id=import_id,
+        preserve_source_occurrences=True,
+    )
+    reviews = SqliteImportReviewRepository(temp_db_path)
+    review_service = ImportReviewService(
+        publication_repository=pub_repo,
+        import_history_repository=history_repo,
+        source_record_repository=SqliteImportSourceRecordRepository(temp_db_path),
+        review_repository=reviews,
+        transaction_manager=SqliteTransactionManager(temp_db_path),
+    )
+
+    before = summary_service.get_sources_summary(project_id)
+    assert before.working_collection.total_records == 2
+    assert before.source_summaries[0].successful_imports_count == 0
+    assert before.source_summaries[0].warning_imports_count == 1
+    assert before.source_summaries[0].records_added_count == 2
+    assert before.import_history[0].effective_status == "warning"
+
+    review_service.accept(project_id, import_id, reviewer_id="alice")
+
+    after = summary_service.get_sources_summary(project_id)
+    assert after.working_collection.total_records == before.working_collection.total_records
+    assert after.source_summaries[0].successful_imports_count == 1
+    assert after.source_summaries[0].warning_imports_count == 0
+    assert after.source_summaries[0].records_added_count == before.source_summaries[0].records_added_count
+    assert after.source_summaries[0].last_import_status == "success"
+    assert after.import_history[0].effective_status == "success"
+    assert after.import_history[0].review_status == "accepted"
+    assert after.import_history[0].can_accept is False
 
 
 def test_sources_summary_http_endpoint(pub_repo, history_repo):

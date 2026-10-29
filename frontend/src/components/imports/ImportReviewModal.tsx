@@ -1,17 +1,25 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { AlertTriangle, CheckCircle2, ShieldAlert } from 'lucide-react';
 import { Button } from '../common/Button';
 import { Modal } from '../common/Modal';
 import { useReviewerIdentity } from '../../hooks/useReviewerIdentity';
 import { projectApiService } from '../../services/api/projectApi';
-import { ImportFileRecord, ImportReviewBlocker, ImportReviewDetail } from '../../types';
+import {
+  ImportFileRecord,
+  ImportReviewBlocker,
+  ImportReviewDecisionResponse,
+  ImportReviewDetail,
+} from '../../types';
 
 interface ImportReviewModalProps {
   importRecord: ImportFileRecord;
   projectId: string;
   onClose: () => void;
   onChanged: () => Promise<void> | void;
+  onDecisionApplied?: (result: ImportReviewDecisionResponse) => void;
 }
+
+type PendingAction = 'accept' | 'reject' | null;
 
 const blockerLabel = (blocker: ImportReviewBlocker): string => {
   const publicationLabel = blocker.count === 1 ? 'publikacja' : 'publikacji';
@@ -23,12 +31,14 @@ export const ImportReviewModal: React.FC<ImportReviewModalProps> = ({
   projectId,
   onClose,
   onChanged,
+  onDecisionApplied,
 }) => {
   const { reviewerId } = useReviewerIdentity();
   const reviewer = reviewerId || 'default_reviewer';
   const [detail, setDetail] = useState<ImportReviewDetail | null>(null);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const [pendingAction, setPendingAction] = useState<PendingAction>(null);
+  const pendingActionRef = useRef<PendingAction>(null);
   const [error, setError] = useState<string | null>(null);
   const [blockers, setBlockers] = useState<ImportReviewBlocker[]>([]);
   const [confirmReject, setConfirmReject] = useState(false);
@@ -53,53 +63,81 @@ export const ImportReviewModal: React.FC<ImportReviewModalProps> = ({
     void load();
   }, [load]);
 
-  const accept = async () => {
-    setSaving(true);
+  const applyDecision = (result: ImportReviewDecisionResponse) => {
+    setDetail((current) => current ? {
+      ...current,
+      effective_status: result.effective_status,
+      review_status: result.review_status,
+      can_accept: false,
+      can_reject: false,
+      decision: result.decision,
+    } : current);
+  };
+
+  const submitDecision = async (
+    action: Exclude<PendingAction, null>,
+    payload: Parameters<typeof projectApiService.postImportReview>[2],
+    fallbackError: string,
+  ) => {
+    if (pendingActionRef.current !== null) return;
+    pendingActionRef.current = action;
+    setPendingAction(action);
     setError(null);
     setBlockers([]);
     try {
-      await projectApiService.postImportReview(projectId, importRecord.id, {
-        decision: 'accept',
-        reviewer_id: reviewer,
-      });
-      await onChanged();
+      const result = await projectApiService.postImportReview(
+        projectId,
+        importRecord.id,
+        payload,
+      );
+      applyDecision(result);
+      try {
+        onDecisionApplied?.(result);
+      } catch {
+        // A parent callback failure must not turn a committed decision into a failed one.
+      }
+      setConfirmReject(false);
       onClose();
+      try {
+        // The refresh is intentionally not awaited: the decision is already terminal.
+        void Promise.resolve(onChanged()).catch(() => undefined);
+      } catch {
+        // A synchronous refresh failure is reported by the Sources view, not here.
+      }
     } catch (caught) {
       const typed = caught as Error & { blockers?: ImportReviewBlocker[] };
-      setError(typed.message || 'Nie udało się zaakceptować importu.');
+      setError(typed.message || fallbackError);
       setBlockers(typed.blockers || []);
     } finally {
-      setSaving(false);
+      pendingActionRef.current = null;
+      setPendingAction(null);
     }
   };
 
-  const reject = async () => {
-    setSaving(true);
-    setError(null);
-    setBlockers([]);
-    try {
-      await projectApiService.postImportReview(projectId, importRecord.id, {
-        decision: 'reject',
-        reviewer_id: reviewer,
-        confirm_rejection: true,
-      });
-      setConfirmReject(false);
-      await onChanged();
-      onClose();
-    } catch (caught) {
-      const typed = caught as Error & { blockers?: ImportReviewBlocker[] };
-      setError(typed.message || 'Nie udało się odrzucić importu.');
-      setBlockers(typed.blockers || []);
-    } finally {
-      setSaving(false);
-    }
-  };
+  const accept = () => submitDecision(
+    'accept',
+    { decision: 'accept', reviewer_id: reviewer },
+    'Nie udało się zaakceptować importu.',
+  );
+
+  const reject = () => submitDecision(
+    'reject',
+    { decision: 'reject', reviewer_id: reviewer, confirm_rejection: true },
+    'Nie udało się odrzucić importu.',
+  );
 
   const title = `Szczegóły importu: ${importRecord.filename ?? importRecord.provider ?? 'Import'}`;
 
   return (
     <>
-      <Modal isOpen onClose={onClose} title={title} maxWidth="720px">
+      <Modal
+        isOpen
+        onClose={() => {
+          if (pendingAction === null) onClose();
+        }}
+        title={title}
+        maxWidth="720px"
+      >
         {loading ? (
           <p role="status" style={{ color: 'var(--text-secondary)' }}>Ładowanie szczegółów importu…</p>
         ) : (
@@ -184,26 +222,43 @@ export const ImportReviewModal: React.FC<ImportReviewModalProps> = ({
                 <>
                   <Button
                     variant="outline"
-                    isLoading={saving}
-                    disabled={!detail.can_reject}
+                    disabled={pendingAction !== null || !detail.can_reject}
                     onClick={() => setConfirmReject(true)}
                     title={!detail.can_reject ? 'Odrzucenie jest zablokowane przez zależne decyzje badawcze.' : undefined}
                   >
                     Odrzucam
                   </Button>
-                  <Button isLoading={saving} onClick={() => void accept()} icon={<CheckCircle2 size={15} />}>
+                  <Button
+                    isLoading={pendingAction === 'accept'}
+                    disabled={pendingAction !== null}
+                    onClick={() => void accept()}
+                    icon={pendingAction === 'accept' ? undefined : <CheckCircle2 size={15} />}
+                  >
                     Akceptuję
                   </Button>
                 </>
               )}
-              <Button variant="outline" onClick={onClose} disabled={saving}>Zamknij</Button>
+              <Button
+                variant="outline"
+                onClick={onClose}
+                disabled={pendingAction !== null}
+              >
+                Zamknij
+              </Button>
             </div>
           </div>
         )}
       </Modal>
 
       {confirmReject && (
-        <Modal isOpen onClose={() => !saving && setConfirmReject(false)} title="Odrzucić import?" maxWidth="520px">
+        <Modal
+          isOpen
+          onClose={() => {
+            if (pendingAction === null) setConfirmReject(false);
+          }}
+          title="Odrzucić import?"
+          maxWidth="520px"
+        >
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start', color: 'var(--status-warning-text)' }}>
               <AlertTriangle size={20} style={{ flexShrink: 0, marginTop: '2px' }} />
@@ -212,8 +267,20 @@ export const ImportReviewModal: React.FC<ImportReviewModalProps> = ({
               </p>
             </div>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
-              <Button variant="outline" onClick={() => setConfirmReject(false)} disabled={saving}>Anuluj</Button>
-              <Button isLoading={saving} onClick={() => void reject()}>Potwierdź odrzucenie</Button>
+              <Button
+                variant="outline"
+                onClick={() => setConfirmReject(false)}
+                disabled={pendingAction !== null}
+              >
+                Anuluj
+              </Button>
+              <Button
+                isLoading={pendingAction === 'reject'}
+                disabled={pendingAction !== null}
+                onClick={() => void reject()}
+              >
+                Potwierdź odrzucenie
+              </Button>
             </div>
           </div>
         </Modal>
