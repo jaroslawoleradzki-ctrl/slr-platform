@@ -1,5 +1,47 @@
 # Changelog
 
+## [0.7.6] — 2026-10-29
+
+### Fixed
+
+- **Workflow status lags behind import decisions**: accepting or rejecting an import now
+  updates the shared `workflowStatus` immediately, so the sidebar and dashboard Sources
+  stage no longer wait for a full ten-endpoint refresh. The stage becomes `completed` as
+  soon as no import remains in `warning`.
+- **Source-summary counters lag behind decisions**: successful and warning import counters
+  update from the decision response, while `records_added_count`, working-collection total,
+  canonical publications, source records, and PRISMA populations stay unchanged.
+- **Slow workflow refresh on large data**: `refreshWorkflowStatus` publishes partial results
+  as each endpoint settles instead of waiting for the slowest one, with a per-endpoint
+  timeout and graceful partial status.
+- **Cross-project read-model reuse**: the 10 s memoization for duplicate groups and PRISMA
+  metrics is now scoped by project id and cleared on project switch, so one project can no
+  longer display another project's read models.
+- **Redundant extraction eligibility work**: batch eligibility evaluation computes the
+  screening input set once per batch instead of once per publication.
+
+### Added
+
+- Per-stage loading state in `ProjectContext` and per-stage indicators on dashboard stage
+  cards, plus `data-state`/`data-stage-state` hooks used by E2E assertions.
+- Regression coverage for decision propagation, rejection, partial results/timeout,
+  large-dataset refresh, project-switch isolation, real-backend integration, and Playwright
+  E2E (mocked and real backend).
+
+### Preserved
+
+- No change to PRISMA semantics, research data, deduplication logic, API response shapes, or
+  database schema. No migrations.
+- Import decisions remain non-destructive, append-only, and attributed.
+
+### Known limitations
+
+- Production post-change timings were not measured; the project owner waived the measurement
+  gate on 2026-10-29. The improvement is evidenced by the removed redundant code path and
+  local tests only.
+- The `Promise.race` timeout path is covered indirectly through partial-result tests, not
+  with fake timers.
+
 ## [0.7.5] — 2026-10-29
 
 ### Fixed
