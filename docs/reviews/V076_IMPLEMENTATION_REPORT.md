@@ -2,7 +2,7 @@
 
 **Change:** `slr-v0-7-6-dashboard-refresh-performance`
 **Worktree:** `/home/cloud/dev/wt-slr-v0.7.6`
-**Branch:** `feature/slr-v0.7.6`  
+**Branch:** `feature/slr-v0.7.6`
 **Date:** 2026-10-29
 
 ## 1. Baseline measurements (from v0.7.5 diagnostic)
