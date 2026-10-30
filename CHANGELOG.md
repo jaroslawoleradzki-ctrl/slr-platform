@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.7.7] — 2026-10-30
+
+### Fixed
+
+- **Stale frontend after deploy**: `index.html` is now served with
+  `Cache-Control: no-cache, no-store, must-revalidate`, so browsers always
+  revalidate and load the current hashed bundle instead of a stale one. This is
+  why previous deploys appeared to change nothing for users with a cached
+  `index.html`.
+
 ## [0.7.6] — 2026-10-29
 
 ### Fixed
