@@ -98,7 +98,10 @@ if (_FRONTEND_DIST / "assets").is_dir():
 def root():
     index_file = _FRONTEND_DIST / "index.html"
     if index_file.is_file():
-        return FileResponse(index_file)
+        return FileResponse(
+            index_file,
+            headers={"Cache-Control": "no-cache, no-store, must-revalidate"},
+        )
     return {"name": "SLR Platform", "version": get_app_version()}
 
 
@@ -113,6 +116,9 @@ def spa_fallback(full_path: str):
 
     index_file = _FRONTEND_DIST / "index.html"
     if index_file.is_file():
-        return FileResponse(index_file)
+        return FileResponse(
+            index_file,
+            headers={"Cache-Control": "no-cache, no-store, must-revalidate"},
+        )
 
     return JSONResponse(status_code=404, content={"detail": "Not Found"})
