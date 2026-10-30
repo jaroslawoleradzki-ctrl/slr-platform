@@ -121,6 +121,18 @@ def replace_screening_reviewers(
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
 
 
+@router.get("/{project_id}/screening/reviewer-ids", response_model=list[str])
+def list_screening_reviewer_ids(
+    project_id: str,
+    stage: ScreeningStage = Query(...),
+    service: ScreeningReportingService = Depends(get_screening_reporting_service),
+):
+    try:
+        return service.distinct_reviewer_ids(project_id, stage)
+    except Exception as exc:
+        raise _workflow_error(exc) from exc
+
+
 @router.get("/{project_id}/screening/conflicts", response_model=ScreeningConflictPageResponse)
 def list_screening_conflicts(
     project_id: str,
