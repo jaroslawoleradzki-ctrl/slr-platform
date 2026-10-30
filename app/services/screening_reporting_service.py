@@ -87,6 +87,9 @@ class ScreeningReportingService:
         self._publications = publication_repository or default_project_publication_repository()
         self._resolutions = resolution_repository or SqliteConflictResolutionRepository(self._reporting._database_path)
 
+    def distinct_reviewer_ids(self, project_id: str, stage: ScreeningStage) -> list[str]:
+        return self._reporting.distinct_reviewer_ids(project_id, stage)
+
     @staticmethod
     def _reviewer(reviewer_id: str) -> str:
         reviewer = reviewer_id.strip()

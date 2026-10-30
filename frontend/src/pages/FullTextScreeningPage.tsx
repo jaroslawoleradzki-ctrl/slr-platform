@@ -39,6 +39,19 @@ export const FullTextScreeningPage: React.FC = () => {
   const { reviewerId: reviewer, setReviewerId: setReviewer } = useReviewerIdentity();
   const [reviewerDraft, setReviewerDraft] = useState(reviewer);
   const [reviewerModal, setReviewerModal] = useState(!reviewer);
+  useEffect(() => {
+    if (reviewer || !projectId) return;
+    let cancelled = false;
+    screeningApi.getReviewerIds(projectId, 'full_text')
+      .then((ids) => {
+        if (cancelled) return;
+        if (ids.length === 1) {
+          setReviewer(ids[0]); setReviewerDraft(ids[0]); setReviewerModal(false);
+        }
+      })
+      .catch(() => { /* ignore */ });
+    return () => { cancelled = true; };
+  }, [reviewer, projectId, setReviewer]);
   const [overview, setOverview] = useState<FullTextOverview | null>(null);
   const [records, setRecords] = useState<FullTextRecord[]>([]);
   const [record, setRecord] = useState<FullTextRecord | null>(null);

@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.7.8] — 2026-10-30
+
+### Fixed
+
+- **Database connections leak under load**: `with sqlite3.connect(...)` commits/rollbacks but
+  does not close the connection, so every request leaked file descriptors; under dashboard
+  fan-out this surfaced as `sqlite3.OperationalError: unable to open database file`
+  (HTTP 500 on `extraction/progress` and others). Connections are now closed on context
+  exit, with a 10 s busy timeout and WAL mode for better concurrency. `nofile` ulimit
+  raised to 65536 in `compose.yaml`.
+- **Screening progress lost after clearing browser data**: reviewer identity was stored only
+  in `localStorage`. Added a backend endpoint listing reviewer ids with decisions for a
+  project/stage and auto-adopt the single existing reviewer when identity is missing;
+  manual picker lists all known reviewers.
+- **Sources stage ambiguity**: added an explicit notice that the Sources stage stays
+  `warning` while any import remains unresolved, and that accepting does not change the
+  import count (by design).
+
+### Preserved
+
+- No change to PRISMA semantics, research data, deduplication logic, or API shapes.
+- No migrations.
+
 ## [0.7.7] — 2026-10-30
 
 ### Fixed

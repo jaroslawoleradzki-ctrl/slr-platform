@@ -203,6 +203,11 @@ export const screeningApi = {
       `/projects/${projectId}/screening/title-abstract?${query({ reviewer_id: reviewerId })}`,
     );
   },
+  getReviewerIds(projectId: string, stage: 'title_abstract' | 'full_text') {
+    return request<string[]>(
+      `/projects/${projectId}/screening/reviewer-ids?${query({ stage })}`,
+    );
+  },
   listRecords(projectId: string, reviewerId: string, status: TitleAbstractStatus | null, offset: number, limit: number) {
     return request<TitleAbstractRecordList>(
       `/projects/${projectId}/screening/title-abstract/records?${query({ reviewer_id: reviewerId, status, offset, limit })}`,

@@ -47,6 +47,24 @@ export const TitleAbstractScreeningPage: React.FC = () => {
   const { reviewerId: reviewer, setReviewerId: setReviewer } = useReviewerIdentity();
   const [reviewerDraft, setReviewerDraft] = useState(reviewer);
   const [reviewerModal, setReviewerModal] = useState(!reviewer);
+  const [knownReviewers, setKnownReviewers] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (reviewer || !projectId) return;
+    let cancelled = false;
+    screeningApi.getReviewerIds(projectId, 'title_abstract')
+      .then((ids) => {
+        if (cancelled) return;
+        setKnownReviewers(ids);
+        if (ids.length === 1) {
+          setReviewer(ids[0]);
+          setReviewerDraft(ids[0]);
+          setReviewerModal(false);
+        }
+      })
+      .catch(() => { /* ignore */ });
+    return () => { cancelled = true; };
+  }, [reviewer, projectId, setReviewer]);
   const [overview, setOverview] = useState<TitleAbstractOverview | null>(null);
   const [records, setRecords] = useState<TitleAbstractRecord[]>([]);
   const [total, setTotal] = useState(0);
@@ -168,6 +186,18 @@ export const TitleAbstractScreeningPage: React.FC = () => {
   if (!reviewer) return <Modal isOpen={reviewerModal} onClose={() => undefined} title="Reviewer">
     <p>Podaj lokalny identyfikator reviewera. Nie jest to konto ani login.</p>
     {error && <ErrorAlert message={error} />}
+    {knownReviewers.length > 0 && (
+      <div style={{ marginBottom: '12px' }}>
+        <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Znaleziono wcześniejsze oceny dla: {knownReviewers.join(', ')}. Kliknij, aby przywrócić:</p>
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+          {knownReviewers.map((id) => (
+            <Button key={id} variant="outline" onClick={() => { setReviewer(id); setReviewerDraft(id); setReviewerModal(false); }}>
+              {id}
+            </Button>
+          ))}
+        </div>
+      </div>
+    )}
     <label style={screeningLabelStyle}>Identyfikator reviewera<input aria-label="Reviewer identifier" value={reviewerDraft} onChange={(event) => setReviewerDraft(event.target.value)} style={screeningControlStyle} autoFocus /></label>
     <div style={{ marginTop: '12px' }}><Button onClick={submitReviewer}>Rozpocznij screening</Button></div>
   </Modal>;

@@ -49,6 +49,11 @@ class ScreeningReportingRepository:
             rows = conn.execute(query, (project_id, reviewer_id)).fetchall()
             return self._hydrate(conn, rows)
 
+    def distinct_reviewer_ids(self, project_id: str, stage: ScreeningStage) -> list[str]:
+        query = "SELECT DISTINCT reviewer_id FROM screening_decisions WHERE project_id = ? AND stage = ? ORDER BY reviewer_id"
+        with self._connect() as conn:
+            return [row[0] for row in conn.execute(query, (project_id, stage.value)).fetchall()]
+
     def latest_decisions_for_stage_all_reviewers(
         self, project_id: str, stage: ScreeningStage
     ) -> list[ScreeningDecision]:
