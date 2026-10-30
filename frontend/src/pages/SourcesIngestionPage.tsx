@@ -178,6 +178,12 @@ export const SourcesIngestionPage: React.FC = () => {
         <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
           Łącznie publikacji w kolekcji roboczej (Working Collection): {sourcesSummary?.working_collection.total_records ?? 0}
         </p>
+        {sourcesSummary && sourcesSummary.import_history.some((i) => i.effective_status === 'warning') && (
+          <div role="status" style={{ padding: '10px 12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--status-warning-border)', backgroundColor: 'var(--status-warning-bg)', color: 'var(--status-warning-text)', fontSize: '0.85rem' }}>
+            Pozostało {sourcesSummary.import_history.filter((i) => i.effective_status === 'warning').length} ostrzeżeń do rozstrzygnięcia.
+            Zaakceptuj lub odrzuć je, aby etap „Źródła” przeszedł w stan zakończony. Liczba importów nie zmienia się — to zachowanie zamierzone (akceptacja zmienia tylko status, nie dane).
+          </div>
+        )}
       </div>
 
       {error && (
