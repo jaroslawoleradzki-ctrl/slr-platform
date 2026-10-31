@@ -44,16 +44,21 @@ export const WorkflowStepper: React.FC = () => {
         {WORKFLOW_STAGES.map((stage, idx) => {
           const state = getWorkflowStageState(workflowStatus, stage);
           const presentation = getStageStatusPresentation(state, 13);
-          const detailLabel =
+          const stageLabel =
             stage.statusKey && workflowStatus
               ? workflowStatus[stage.statusKey].label
               : null;
+          const detailLabel = stage.id === 'sources' && state === 'warning'
+            ? `${workflowStatus?.sources.warningsCount ?? 0} ostrzeżeń`
+            : stageLabel;
           const alertCount =
-            stage.id === 'dedup' &&
-            workflowStatus?.deduplication &&
-            (workflowStatus.deduplication.blockingGroups ?? workflowStatus.deduplication.pendingGroups) > 0
-              ? workflowStatus.deduplication.blockingGroups ?? workflowStatus.deduplication.pendingGroups
-              : null;
+            stage.id === 'sources' && state === 'warning'
+              ? workflowStatus?.sources.warningsCount ?? 0
+              : stage.id === 'dedup' &&
+                  workflowStatus?.deduplication &&
+                  (workflowStatus.deduplication.blockingGroups ?? workflowStatus.deduplication.pendingGroups) > 0
+                ? workflowStatus.deduplication.blockingGroups ?? workflowStatus.deduplication.pendingGroups
+                : null;
 
           return (
             <React.Fragment key={stage.id}>

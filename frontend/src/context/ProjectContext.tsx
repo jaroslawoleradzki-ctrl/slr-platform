@@ -63,15 +63,17 @@ export const computeWorkflowStatus = (
   // Stage 2: Sources & Ingestion
   let sourcesState: WorkflowStageState = 'not_started';
   let sourcesCount: number | null = 0;
+  let sourcesWarningsCount: number | null = 0;
   let sourcesLabel: string | null = 'Brak danych';
 
   if (errors.sources) {
     sourcesState = 'error';
     sourcesCount = null;
+    sourcesWarningsCount = null;
     sourcesLabel = 'Błąd';
   } else if (imports && imports.length > 0) {
-    const hasWarning = imports.some((i) => (i.effective_status ?? i.status) === 'warning');
-    sourcesState = hasWarning ? 'warning' : 'completed';
+    sourcesWarningsCount = imports.filter((i) => (i.effective_status ?? i.status) === 'warning').length;
+    sourcesState = sourcesWarningsCount > 0 ? 'warning' : 'completed';
     sourcesCount = imports.length;
     sourcesLabel = `${imports.length} importów`;
   }
@@ -318,7 +320,7 @@ export const computeWorkflowStatus = (
 
   return {
     search: { state: searchState, count: searchCount, label: searchLabel },
-    sources: { state: sourcesState, count: sourcesCount, label: sourcesLabel },
+    sources: { state: sourcesState, count: sourcesCount, warningsCount: sourcesWarningsCount, label: sourcesLabel },
     normalization: { state: normState, count: normCount, label: normLabel },
     deduplication: {
       state: dedupState,
@@ -1374,7 +1376,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
           }
         : imp
     );
-    const hasWarning = updatedImports.some((imp) => (imp.effectiveStatus ?? imp.status) === 'warning');
+    const warningsCount = updatedImports.filter((imp) => (imp.effectiveStatus ?? imp.status) === 'warning').length;
     const importsCount = updatedImports.length > 0 ? updatedImports.length : (project?.imports?.length ?? 0);
 
     setProjects((currentProjects) => currentProjects.map((p) => {
@@ -1397,13 +1399,14 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
     setWorkflowStatus((current) => {
       if (!current) return current;
-      const sourcesState = importsCount > 0 ? (hasWarning ? 'warning' : 'completed') : 'not_started';
+      const sourcesState = importsCount > 0 ? (warningsCount > 0 ? 'warning' : 'completed') : 'not_started';
       return {
         ...current,
         sources: {
           ...current.sources,
           state: sourcesState,
           count: importsCount > 0 ? importsCount : current.sources.count,
+          warningsCount,
           label: importsCount > 0 ? `${importsCount} importów` : current.sources.label,
         },
       };
