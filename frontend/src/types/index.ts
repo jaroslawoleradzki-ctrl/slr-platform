@@ -757,6 +757,7 @@ export interface WorkflowNavigationStatus {
   sources: {
     state: WorkflowStageState;
     count: number | null;
+    warningsCount?: number | null;
     label: string | null;
   };
   normalization: {

@@ -62,6 +62,37 @@ describe('Sources ingestion upload', () => {
     </ProjectProvider>,
   );
 
+  it('reports 2 unresolved warnings when there are 11 total imports', async () => {
+    vi.spyOn(projectApiService, 'getSourcesSummary').mockResolvedValue({
+      project_id: 'lean_energy',
+      working_collection: { total_records: 110 },
+      source_summaries: [{ source: 'RIS', source_kind: 'file', successful_imports_count: 9, warning_imports_count: 2, failed_imports_count: 0, records_added_count: 110, last_import_at: null, last_import_status: 'warning' }],
+      import_history: Array.from({ length: 11 }, (_, index) => ({
+        import_id: `i${index + 1}`, source_type: 'file' as const, filename: `file-${index + 1}.ris`, format: 'RIS' as const,
+        provider: null, query: null, records_count: 10, status: index < 2 ? 'warning' as const : 'success' as const,
+        effective_status: index < 2 ? 'warning' as const : 'success' as const,
+        warnings: index < 2 ? ['Missing fields'] : [], created_at: '',
+      })),
+    });
+    renderPage();
+
+    expect(await screen.findByRole('status')).toHaveTextContent('Pozostało 2 ostrzeżeń do rozstrzygnięcia.');
+    expect(screen.getByText('file-11.ris')).toBeInTheDocument();
+  });
+
+  it('does not show unresolved warning notice when warning count is zero', async () => {
+    vi.spyOn(projectApiService, 'getSourcesSummary').mockResolvedValue({
+      project_id: 'lean_energy',
+      working_collection: { total_records: 1 },
+      source_summaries: [{ source: 'RIS', source_kind: 'file', successful_imports_count: 1, warning_imports_count: 0, failed_imports_count: 0, records_added_count: 1, last_import_at: null, last_import_status: 'success' }],
+      import_history: [{ import_id: 'i1', source_type: 'file', filename: 'clean.ris', format: 'RIS', provider: null, query: null, records_count: 1, status: 'success', effective_status: 'success', warnings: [], created_at: '' }],
+    });
+    renderPage();
+
+    expect(await screen.findByText('clean.ris')).toBeInTheDocument();
+    expect(screen.queryByText(/Pozostało .* ostrzeżeń do rozstrzygnięcia/)).not.toBeInTheDocument();
+  });
+
   it('uploads a file, shows success and refreshes the project import history', async () => {
     vi.spyOn(projectApiService, 'importBibliographicFile').mockResolvedValue({
       import_id: 'import-new',

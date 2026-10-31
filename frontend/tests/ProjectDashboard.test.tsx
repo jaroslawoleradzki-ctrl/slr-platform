@@ -277,6 +277,30 @@ describe('ProjectDashboardPage — real data, no mock values', () => {
     expect(screen.getAllByText('Brak danych').length).toBeGreaterThanOrEqual(1);
   });
 
+  it('shows unresolved warnings separately from the total import count', async () => {
+    const warningImports: BibliographicImportHistoryRecord[] = Array.from({ length: 11 }, (_, index) => ({
+      import_id: `i${index + 1}`, project_id: 'lean_energy', source_type: 'file', filename: `file-${index + 1}.bib`,
+      format: 'BibTeX', provider: null, query: null, records_count: 10, total_available: null,
+      status: index < 2 ? 'warning' : 'success', created_at: '', warnings: index < 2 ? ['Missing fields'] : [],
+    }));
+    vi.spyOn(projectApiService, 'getSearchStrategy').mockResolvedValue(null);
+    vi.spyOn(projectApiService, 'getBibliographicImports').mockResolvedValue(warningImports);
+    vi.spyOn(projectApiService, 'getNormalization').mockResolvedValue(null);
+    vi.spyOn(projectApiService, 'getDuplicateGroups').mockResolvedValue(EMPTY_DEDUP);
+    renderWithNav();
+
+    await waitFor(() => expect(document.querySelector('#stage-card-sources')).not.toBeNull());
+    const stageCard = document.querySelector('#stage-card-sources') as HTMLElement;
+    await waitFor(() => expect(stageCard).toHaveAttribute('data-state', 'warning'));
+    expect(stageCard).toHaveTextContent('2 ostrzeżeń');
+    expect(stageCard).toHaveTextContent('11 importów');
+    const sourcesLink = screen.getByRole('link', { name: /Sources & Imports/i });
+    expect(within(sourcesLink).getByText('2 ostrzeżeń')).toBeInTheDocument();
+    const stepperSources = within(screen.getByTestId('workflow-stepper')).getByRole('link', { name: /2\. Sources/ });
+    expect(stepperSources).toHaveTextContent('2');
+    expect(stepperSources).toHaveAttribute('title', expect.stringContaining('2 ostrzeżeń'));
+  });
+
   // ── Real data for each stage ─────────────────────────────────────────────────
   it('renders real data for all four stages: group count, import count, normalization, dedup', async () => {
     vi.spyOn(projectApiService, 'getSearchStrategy').mockResolvedValue(STRATEGY_2_GROUPS);
