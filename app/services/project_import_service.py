@@ -49,6 +49,7 @@ from app.services.import_identity import (
     fingerprint_publication,
     source_occurrence_id,
 )
+from app.services.project_duplicate_service import ProjectDuplicateService
 
 
 def _doi_evidence(publication: Publication) -> tuple[str | None, str | None, str]:
@@ -185,6 +186,16 @@ class ProjectImportService:
                 self._source_repo = SqliteImportSourceRecordRepository(database_path)
             else:
                 self._source_repo = default_import_source_record_repository()
+        self._duplicate_projection = (
+            ProjectDuplicateService(
+                repository=self._pub_repo,
+                transaction_manager=self._tx_manager,
+                source_record_repository=self._source_repo,
+            )
+            if isinstance(self._pub_repo, SqliteProjectPublicationRepository)
+            and isinstance(self._source_repo, SqliteImportSourceRecordRepository)
+            else None
+        )
 
     def import_provider_results_group(
         self,
@@ -304,6 +315,10 @@ class ProjectImportService:
                 self._norm_repo.delete_for_project(project_id, connection=conn)
             else:
                 self._norm_repo.delete_for_project(project_id)
+        if self._duplicate_projection is not None:
+            self._duplicate_projection.materialize_candidate_group_projection(
+                project_id, connection=conn
+            )
 
         return group_result
 
@@ -985,6 +1000,10 @@ class ProjectImportService:
                 self._norm_repo.delete_for_project(project_id, connection=conn)
             else:
                 self._norm_repo.delete_for_project(project_id)
+        if self._duplicate_projection is not None:
+            self._duplicate_projection.materialize_candidate_group_projection(
+                project_id, connection=conn
+            )
 
         return import_result, history_record
 

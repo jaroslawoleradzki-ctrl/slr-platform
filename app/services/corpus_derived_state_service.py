@@ -25,13 +25,16 @@ from app.repositories.corpus_finalization_repository import (
 )
 from app.repositories.normalization_execution_repository import (
     NormalizationExecutionRepository,
+    SqliteNormalizationExecutionRepository,
     default_normalization_execution_repository,
 )
 from app.repositories.project_publication_repository import (
     ProjectPublicationRepository,
+    SqliteProjectPublicationRepository,
     default_project_publication_repository,
 )
-from app.services.normalization_service import normalize_project
+from app.repositories.transaction_manager import SqliteTransactionManager
+from app.services.normalization_operation import run_project_normalization
 from app.services.pre_screening_review_service import CorpusFinalizedError
 from app.services.project_duplicate_service import ProjectDuplicateService
 
@@ -67,8 +70,13 @@ class CorpusDerivedStateService:
         finalization_repository: CorpusFinalizationRepository | None = None,
     ) -> None:
         self._publications = publication_repository or default_project_publication_repository()
-        self._executions = normalization_execution_repository or default_normalization_execution_repository()
-        self._duplicates = duplicate_service or ProjectDuplicateService()
+        database_path = getattr(self._publications, "_database_path", None)
+        self._executions = normalization_execution_repository or (
+            SqliteNormalizationExecutionRepository(database_path)
+            if database_path is not None
+            else default_normalization_execution_repository()
+        )
+        self._duplicates = duplicate_service or ProjectDuplicateService(repository=self._publications)
         if finalization_repository is not None:
             self._finalizations: CorpusFinalizationRepository | None = finalization_repository
         elif hasattr(self._publications, "_database_path"):
@@ -93,11 +101,25 @@ class CorpusDerivedStateService:
                     "derived-state rebuild is locked."
                 )
 
-        execution = normalize_project(self._publications, project_id)
-        self._executions.save(execution)
-
-        reconciliation = self._duplicates.reconcile_with_active_corpus(project_id)
-        live_groups = self._duplicates.get_candidate_duplicate_groups(project_id)
+        if isinstance(self._publications, SqliteProjectPublicationRepository):
+            with SqliteTransactionManager(self._publications._database_path).transaction() as connection:
+                execution = run_project_normalization(
+                    self._publications, self._executions, project_id,
+                    duplicate_service=self._duplicates, connection=connection,
+                )
+                reconciliation = self._duplicates.reconcile_with_active_corpus(
+                    project_id, connection=connection
+                )
+                live_groups = self._duplicates.materialize_candidate_group_projection(
+                    project_id, connection=connection
+                )
+        else:
+            execution = run_project_normalization(
+                self._publications, self._executions, project_id,
+                duplicate_service=self._duplicates,
+            )
+            reconciliation = self._duplicates.reconcile_with_active_corpus(project_id)
+            live_groups = self._duplicates.get_candidate_duplicate_groups(project_id)
 
         return CorpusDerivedStateRebuildReport(
             project_id=project_id,

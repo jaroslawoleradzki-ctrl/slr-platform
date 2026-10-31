@@ -1,5 +1,9 @@
+import logging
+import sqlite3
 from dataclasses import dataclass
 from functools import reduce
+from pathlib import Path
+from time import perf_counter
 from uuid import UUID
 
 from app.api.dto.deduplication import (
@@ -23,11 +27,12 @@ from app.normalization.doi import normalize_doi
 from app.repositories.duplicate_merge_repository import (
     DuplicateMergeRepository,
     InMemoryDuplicateMergeRepository,
-    default_duplicate_merge_repository,
+    SqliteDuplicateMergeRepository,
 )
 from app.repositories.duplicate_review_decision_repository import (
     DuplicateReviewDecisionRepository,
     GroupNotFoundError,
+    SqliteDuplicateReviewDecisionRepository,
     default_duplicate_review_decision_repository,
 )
 from app.repositories.import_source_record_repository import (
@@ -44,9 +49,12 @@ from app.services.active_publication_filter import (
     provides_removed_record_listing,
     repository_provides_method,
 )
+from app.services.duplicate_diagnostics import request_correlation
 from app.services.duplicate_group_builder import DuplicateGroupBuilder, duplicate_group_builder
 from app.services.duplicate_readiness_service import evaluate_duplicate_readiness
 from app.services.publication_merge_policy import publication_merge_policy
+
+logger = logging.getLogger(__name__)
 
 
 def _shared(records: list[Publication]) -> list[SharedIdentifierResponse]:
@@ -112,21 +120,26 @@ class ProjectDuplicateService:
         source_record_repository: ImportSourceRecordRepository | None = None,
     ) -> None:
         self._repository = repository or default_project_publication_repository()
-        self._decision_repository = decision_repository or default_duplicate_review_decision_repository()
+        database_path = getattr(self._repository, "_database_path", None)
+        self._decision_repository = decision_repository or (
+            SqliteDuplicateReviewDecisionRepository(database_path)
+            if database_path is not None
+            else default_duplicate_review_decision_repository()
+        )
         self._merge_repository = merge_repository or (
-            default_duplicate_merge_repository()
-            if hasattr(self._repository, "_database_path")
+            SqliteDuplicateMergeRepository(database_path)
+            if database_path is not None
             else InMemoryDuplicateMergeRepository()
         )
         self._transaction_manager = transaction_manager or SqliteTransactionManager(
-            getattr(self._repository, "_database_path", "data/slr-platform.db")
+            database_path or "data/slr-platform.db"
         )
         self._source_records: ImportSourceRecordRepository | None
         if source_record_repository is not None:
             self._source_records = source_record_repository
-        elif hasattr(self._repository, "_database_path"):
+        elif database_path is not None:
             self._source_records = SqliteImportSourceRecordRepository(
-                self._repository._database_path
+                database_path
             )
         else:
             self._source_records = None
@@ -185,13 +198,36 @@ class ProjectDuplicateService:
             )
         return publications, group
 
-    def get_candidate_duplicate_groups(self, project_id: str) -> DuplicateGroupListResponse:
-        publications = self._active_publications(project_id)
+    def get_candidate_duplicate_groups(
+        self, project_id: str, *, connection: sqlite3.Connection | None = None
+    ) -> DuplicateGroupListResponse:
+        database_path = getattr(self._repository, "_database_path", None)
+        if connection is None and database_path is not None:
+            read_connection = sqlite3.connect(
+                f"{Path(database_path).resolve().as_uri()}?mode=ro",
+                uri=True,
+            )
+            try:
+                read_connection.execute("BEGIN")
+                return self.get_candidate_duplicate_groups(
+                    project_id, connection=read_connection
+                )
+            finally:
+                read_connection.close()
+
+        started = perf_counter()
+        active_started = perf_counter()
+        publications = self._active_publications(project_id, connection=connection)
+        active_read_seconds = perf_counter() - active_started
         by_id = {p.record_id: p for p in publications}
-        decisions = self._decision_repository.list_decisions_for_project(project_id)
-        merges = self._merge_repository.list_merges_for_project(project_id)
+        state_started = perf_counter()
+        decisions = self._decision_repository.list_decisions_for_project(project_id, connection=connection)
+        merges = self._merge_repository.list_merges_for_project(project_id, connection=connection)
+        state_read_seconds = perf_counter() - state_started
         responses: list[DuplicateGroupResponse] = []
+        group_started = perf_counter()
         live_groups = {str(group.group_id): group for group in self._build_groups(publications)}
+        group_build_seconds = perf_counter() - group_started
         for group_id, group in live_groups.items():
             members = [by_id[i] for i in group.publication_ids]
             decision = decisions.get(group_id)
@@ -255,34 +291,12 @@ class ProjectDuplicateService:
                 )
             )
 
-        if self._source_records is not None:
-            self._source_records.clear_candidate_groups(project_id)
-            for response in responses:
-                publication_ids = [record.id for record in response.records]
-                for merged_id in response.merged_publication_ids or []:
-                    if merged_id not in publication_ids:
-                        publication_ids.append(merged_id)
-                live_group = live_groups.get(response.group_id)
-                self._source_records.update_candidate_group(
-                    project_id,
-                    publication_ids,
-                    response.group_id,
-                    match_type=live_group.match_type if live_group else None,
-                    match_reason=live_group.match_reason if live_group else None,
-                )
-                self._source_records.record_candidate_group_snapshot(
-                    project_id,
-                    response.group_id,
-                    publication_ids,
-                    match_type=live_group.match_type if live_group else None,
-                    match_reason=live_group.match_reason if live_group else None,
-                    status=response.status.value,
-                )
-
+        readiness_started = perf_counter()
         readiness = evaluate_duplicate_readiness(
             live_groups.values(), decisions, merges
         )
-        return DuplicateGroupListResponse(
+        readiness_seconds = perf_counter() - readiness_started
+        result = DuplicateGroupListResponse(
             project_id=project_id,
             total_groups_count=len(responses),
             groups=responses,
@@ -300,6 +314,70 @@ class ProjectDuplicateService:
                 reason=readiness.reason,
             ),
         )
+        serialization_started = perf_counter()
+        response_bytes = len(result.model_dump_json().encode("utf-8"))
+        serialization_seconds = perf_counter() - serialization_started
+        logger.info(
+            "duplicate_groups_read correlation_id=%s duration_ms=%.3f active_read_ms=%.3f decision_merge_read_ms=%.3f "
+            "group_build_ms=%.3f readiness_ms=%.3f serialization_ms=%.3f active_publications=%d live_groups=%d "
+            "response_groups=%d response_bytes=%d",
+            request_correlation.get(),
+            (perf_counter() - started) * 1000,
+            active_read_seconds * 1000,
+            state_read_seconds * 1000,
+            group_build_seconds * 1000,
+            readiness_seconds * 1000,
+            serialization_seconds * 1000,
+            len(publications),
+            len(live_groups),
+            len(responses),
+            response_bytes,
+        )
+        return result
+
+    def materialize_candidate_group_projection(
+        self, project_id: str, *, connection: sqlite3.Connection
+    ) -> DuplicateGroupListResponse:
+        """Refresh source-record group metadata and first-write snapshots atomically.
+
+        Call only inside the transaction that changed the active publication
+        set or normalized its contents. The corresponding GET remains read-only.
+        """
+        response = self.get_candidate_duplicate_groups(project_id, connection=connection)
+        if self._source_records is None:
+            return response
+        live_groups = {
+            str(group.group_id): group
+            for group in self._build_groups(
+                self._active_publications(project_id, connection=connection)
+            )
+        }
+        self._source_records.clear_candidate_groups(project_id, connection=connection)
+        for group_response in response.groups:
+            publication_ids = [record.id for record in group_response.records]
+            for merged_id in group_response.merged_publication_ids or []:
+                if merged_id not in publication_ids:
+                    publication_ids.append(merged_id)
+            live_group = live_groups.get(group_response.group_id)
+            kwargs = {
+                "match_type": live_group.match_type if live_group else None,
+                "match_reason": live_group.match_reason if live_group else None,
+            }
+            self._source_records.update_candidate_group(
+                project_id,
+                publication_ids,
+                group_response.group_id,
+                connection=connection,
+            )
+            self._source_records.record_candidate_group_snapshot(
+                project_id,
+                group_response.group_id,
+                publication_ids,
+                **kwargs,
+                status=group_response.status.value,
+                connection=connection,
+            )
+        return response
 
     def record_decision(
         self, project_id: str, group_id: str, decision: DuplicateDecisionType | str, rationale: str | None = None
@@ -375,6 +453,7 @@ class ProjectDuplicateService:
                 connection=connection,
             )
             merge = self._merge_group_core(project_id, group_id, publications, group, connection)
+            self.materialize_candidate_group_projection(project_id, connection=connection)
             canonical_id = merge.canonical_record_id
         return DuplicateGroupMergeResponse(
             project_id=project_id,
@@ -394,7 +473,9 @@ class ProjectDuplicateService:
             rationale=record.rationale if record else None,
         )
 
-    def reconcile_with_active_corpus(self, project_id: str) -> DuplicateReconciliationReport:
+    def reconcile_with_active_corpus(
+        self, project_id: str, *, connection: sqlite3.Connection | None = None
+    ) -> DuplicateReconciliationReport:
         """Remove stale duplicate state referencing records outside the Active Corpus.
 
         Deterministic reconciliation for projects previously deduplicated over
@@ -407,25 +488,26 @@ class ProjectDuplicateService:
         No publication rows, screening decisions, or finalization records are
         touched. The operation is idempotent: a second run removes nothing.
         """
-        active = self._active_publications(project_id)
+        active = self._active_publications(project_id, connection=connection)
+        kwargs = {"connection": connection} if connection is not None else {}
         active_ids = {publication.record_id for publication in active}
 
         if hasattr(self._repository, "get_all_publications"):
-            full_population = list(self._repository.get_all_publications(project_id))
+            full_population = list(self._repository.get_all_publications(project_id, **kwargs))
         else:
-            full_population = list(self._repository.get_publications(project_id))
+            full_population = list(self._repository.get_publications(project_id, **kwargs))
         present_ids = {publication.record_id for publication in full_population}
 
         removed_ids: set[UUID] = set()
         if provides_removed_record_listing(self._repository):
             removed_ids = set(
-                self._repository.get_pre_screening_removed_record_ids(project_id)  # type: ignore[attr-defined]
+                self._repository.get_pre_screening_removed_record_ids(project_id, **kwargs)  # type: ignore[attr-defined]
             )
 
         superseded_by: dict[UUID, UUID | None] = {}
         has_supersession_map = repository_provides_method(self._repository, "get_superseded_by_map")
         if has_supersession_map:
-            superseded_by = dict(self._repository.get_superseded_by_map(project_id))
+            superseded_by = dict(self._repository.get_superseded_by_map(project_id, **kwargs))
 
         def is_removed_or_absent(record_id: UUID) -> bool:
             if record_id in removed_ids:
@@ -453,17 +535,17 @@ class ProjectDuplicateService:
         }
 
         removed_merges: list[str] = []
-        for group_id, merge in self._merge_repository.list_merges_for_project(project_id).items():
+        for group_id, merge in self._merge_repository.list_merges_for_project(project_id, **kwargs).items():
             if group_id in tainted_group_ids or any(
                 is_removed_or_absent(member) for member in merge.merged_publication_ids
             ):
-                if self._merge_repository.delete_merge(project_id, group_id):
+                if self._merge_repository.delete_merge(project_id, group_id, **kwargs):
                     removed_merges.append(group_id)
 
         removed_decisions: list[str] = []
-        for group_id in self._decision_repository.list_decisions_for_project(project_id):
+        for group_id in self._decision_repository.list_decisions_for_project(project_id, **kwargs):
             if group_id in tainted_group_ids:
-                if self._decision_repository.delete_decision(project_id, group_id):
+                if self._decision_repository.delete_decision(project_id, group_id, **kwargs):
                     removed_decisions.append(group_id)
 
         # Physically archived members absent from every collection read never

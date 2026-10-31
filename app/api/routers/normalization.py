@@ -12,7 +12,8 @@ from app.repositories.project_publication_repository import (
     ProjectNotFoundError,
     ProjectPublicationRepository,
 )
-from app.services.normalization_service import NormalizationExecution, normalize_project
+from app.services.normalization_operation import run_project_normalization
+from app.services.normalization_service import NormalizationExecution
 
 router = APIRouter(prefix="/projects", tags=["normalization"])
 
@@ -48,10 +49,9 @@ def run_normalization(
     ),
 ) -> NormalizationResponse:
     try:
-        execution = normalize_project(repository, project_id)
+        execution = run_project_normalization(repository, execution_repository, project_id)
     except ProjectNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
-    execution_repository.save(execution)
     return _response(execution)
 
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sqlite3
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
@@ -61,6 +62,7 @@ def _changed(before: Publication, after: Publication) -> tuple[int, int, int, in
 def _read_active_corpus(
     repository: ProjectPublicationRepository,
     project_id: str,
+    connection: sqlite3.Connection | None = None,
 ) -> list[Publication]:
     """Return the authoritative Active Project Corpus for normalization input.
 
@@ -75,14 +77,23 @@ def _read_active_corpus(
     """
     if provides_active_corpus(repository):
         get_active = getattr(repository, "get_active_publications")
-        return list(get_active(project_id))
-    return list(repository.get_publications(project_id))
+        return list(
+            get_active(project_id, connection=connection)
+            if connection is not None
+            else get_active(project_id)
+        )
+    return list(
+        repository.get_publications(project_id, connection=connection)
+        if connection is not None
+        else repository.get_publications(project_id)
+    )
 
 
 def _persist_normalized_corpus(
     repository: ProjectPublicationRepository,
     project_id: str,
     normalized: list[Publication],
+    connection: sqlite3.Connection | None = None,
 ) -> None:
     """Persist normalized active records without touching non-active rows.
 
@@ -101,14 +112,22 @@ def _persist_normalized_corpus(
                 "non-active rows"
             )
         for publication in normalized:
-            repository.update_publication(project_id, publication)
+            if connection is None:
+                repository.update_publication(project_id, publication)
+            else:
+                repository.update_publication(project_id, publication, connection=connection)
         return
-    repository.replace_publications(project_id, normalized)
+    if connection is None:
+        repository.replace_publications(project_id, normalized)
+    else:
+        repository.replace_publications(project_id, normalized, connection=connection)
 
 
 def normalize_project(
     repository: ProjectPublicationRepository,
     project_id: str,
+    *,
+    connection: sqlite3.Connection | None = None,
 ) -> NormalizationExecution:
     """Normalize exactly the authoritative Active Project Corpus (WP2).
 
@@ -118,9 +137,9 @@ def normalize_project(
     actually processed, not all ``project_publications`` rows.
     """
     started_at = datetime.now(timezone.utc)
-    publications = _read_active_corpus(repository, project_id)
+    publications = _read_active_corpus(repository, project_id, connection)
     normalized = [normalize_publication(publication) for publication in publications]
-    _persist_normalized_corpus(repository, project_id, normalized)
+    _persist_normalized_corpus(repository, project_id, normalized, connection)
 
     counts = [0, 0, 0, 0, 0]
     for before, after in zip(publications, normalized):

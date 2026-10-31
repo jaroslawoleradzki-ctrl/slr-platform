@@ -39,6 +39,7 @@ from app.repositories.duplicate_merge_repository import SqliteDuplicateMergeRepo
 from app.repositories.duplicate_review_decision_repository import (
     SqliteDuplicateReviewDecisionRepository,
 )
+from app.repositories.import_source_record_repository import ImportSourceRecord, SqliteImportSourceRecordRepository
 from app.repositories.normalization_execution_repository import (
     SqliteNormalizationExecutionRepository,
 )
@@ -231,7 +232,8 @@ def test_g_removed_title_sharing_record_creates_no_candidate(stores) -> None:
     assert response.total_groups_count == 1
 
 
-def test_h_retained_to_removed_transition_rebuild_clears_derived_state(stores) -> None:
+@pytest.mark.parametrize("fail_final_projection", [False, True])
+def test_h_retained_to_removed_transition_rebuild_clears_derived_state(stores, monkeypatch, fail_final_projection) -> None:
     pubs = stores["pubs"]
     review = stores["review"]
     import_id = uuid4()
@@ -240,6 +242,15 @@ def test_h_retained_to_removed_transition_rebuild_clears_derived_state(stores) -
     third = make_publication(index=23, title="Unrelated study", doi="10.1000/unrelated", source="Semantic Scholar", source_id="S2-23")
     pubs.import_source_publications(PROJECT_ID, [first, second, third], import_id=import_id)
 
+    source = SqliteImportSourceRecordRepository(stores["db_path"])
+    for index, publication in enumerate([first, second, third]):
+        source.create_source_record(ImportSourceRecord(
+            source_record_id=f"rebuild-source-{index}", project_id=PROJECT_ID,
+            import_id=import_id, source_filename="synthetic", source_file_hash=None,
+            source_record_index=index + 1, title=publication.title, publication_year=None,
+            original_doi=None, normalized_doi=None, authors=(), document_type=None,
+            provenance={"source": "synthetic"}, canonical_publication_id=str(publication.record_id),
+        ))
     duplicates = stores["duplicates"]
     group_id = duplicates.get_candidate_duplicate_groups(PROJECT_ID).groups[0].group_id
     duplicates.record_decision(PROJECT_ID, group_id, "APPROVE")
@@ -249,6 +260,35 @@ def test_h_retained_to_removed_transition_rebuild_clears_derived_state(stores) -
     review.remove_record(
         PROJECT_ID, import_id, second.record_id, reason=PreScreeningRemovalReason.RETRIEVAL_ARTEFACT
     )
+    assert len(source.list_source_records(PROJECT_ID)) == 3
+    assert any(record.duplicate_candidate_group_id == group_id for record in source.list_source_records(PROJECT_ID))
+    if fail_final_projection:
+        before_publications = pubs.get_all_publications(PROJECT_ID)
+        before_records = source.list_source_records(PROJECT_ID)
+        before_snapshots = source.list_candidate_group_snapshots(PROJECT_ID)
+        before_merges = stores["merges"].list_merges_for_project(PROJECT_ID)
+        before_decisions = stores["decisions"].list_decisions_for_project(PROJECT_ID)
+        original = duplicates.materialize_candidate_group_projection
+        calls = 0
+
+        def fail_final(*args, **kwargs):
+            nonlocal calls
+            calls += 1
+            result = original(*args, **kwargs)
+            if calls == 2:
+                raise RuntimeError("injected final rebuild projection failure")
+            return result
+
+        monkeypatch.setattr(duplicates, "materialize_candidate_group_projection", fail_final)
+        with pytest.raises(RuntimeError, match="injected final rebuild projection failure"):
+            stores["rebuild"].rebuild(PROJECT_ID)
+        assert pubs.get_all_publications(PROJECT_ID) == before_publications
+        assert source.list_source_records(PROJECT_ID) == before_records
+        assert source.list_candidate_group_snapshots(PROJECT_ID) == before_snapshots
+        assert stores["merges"].list_merges_for_project(PROJECT_ID) == before_merges
+        assert stores["decisions"].list_decisions_for_project(PROJECT_ID) == before_decisions
+        assert stores["executions"].get_for_project(PROJECT_ID) is None
+        return
     report = stores["rebuild"].rebuild(PROJECT_ID)
 
     assert report.normalization_processed_records == 2
@@ -258,6 +298,11 @@ def test_h_retained_to_removed_transition_rebuild_clears_derived_state(stores) -
     assert stores["decisions"].get_decision(PROJECT_ID, group_id) is None
     assert {p.record_id for p in pubs.get_active_publications(PROJECT_ID)} == {first.record_id, third.record_id}
     assert duplicates.get_candidate_duplicate_groups(PROJECT_ID).total_groups_count == 0
+    source = SqliteImportSourceRecordRepository(stores["db_path"])
+    assert all(
+        record.duplicate_candidate_group_id is None
+        for record in source.list_source_records(PROJECT_ID)
+    )
 
 
 def test_i_providers_flow_through_single_active_corpus_contract(stores) -> None:
@@ -358,3 +403,43 @@ def test_o_rebuild_creates_no_formal_screening_decisions(stores) -> None:
     stores["rebuild"].rebuild(PROJECT_ID)
     stores["rebuild"].rebuild(PROJECT_ID)
     assert _screening_decision_count(stores["db_path"]) == 0
+
+
+def test_rebuild_defaults_use_the_publication_database(stores):
+    _seed_ten_publications(stores)
+    service = CorpusDerivedStateService(publication_repository=stores["pubs"])
+
+    report = service.rebuild(PROJECT_ID)
+
+    assert report.active_duplicate_groups_count == 1
+    assert stores["executions"].get_for_project(PROJECT_ID).processed_records == 7
+
+
+@pytest.mark.parametrize("failure_stage", ["projection", "summary"])
+def test_rebuild_projection_failure_rolls_back_normalization(stores, monkeypatch, failure_stage):
+    _seed_ten_publications(stores)
+    before = stores["pubs"].get_all_publications(PROJECT_ID)
+    snapshots = SqliteImportSourceRecordRepository(stores["db_path"])
+    before_snapshots = snapshots.list_candidate_group_snapshots(PROJECT_ID)
+    original = ProjectDuplicateService.materialize_candidate_group_projection
+
+    def fail_after_projection(self, *args, **kwargs):
+        original(self, *args, **kwargs)
+        raise RuntimeError("injected rebuild projection failure")
+
+    if failure_stage == "projection":
+        monkeypatch.setattr(ProjectDuplicateService, "materialize_candidate_group_projection", fail_after_projection)
+    else:
+        save = stores["executions"].save
+
+        def fail_after_summary(*args, **kwargs):
+            save(*args, **kwargs)
+            raise RuntimeError("injected rebuild summary failure")
+
+        monkeypatch.setattr(stores["executions"], "save", fail_after_summary)
+    with pytest.raises(RuntimeError, match=f"injected rebuild {failure_stage} failure"):
+        stores["rebuild"].rebuild(PROJECT_ID)
+
+    assert stores["pubs"].get_all_publications(PROJECT_ID) == before
+    assert snapshots.list_candidate_group_snapshots(PROJECT_ID) == before_snapshots
+    assert stores["executions"].get_for_project(PROJECT_ID) is None
