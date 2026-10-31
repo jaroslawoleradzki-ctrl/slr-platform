@@ -61,7 +61,11 @@ It was not run on HomeLab.
 - `uv run --frozen --no-sync mypy app`: **PASS**.
 - `uv run --frozen --no-sync mypy scripts/backup_homelab.py`: **PASS**.
 - `openspec validate --all --strict`: **5 passed, 0 failed**.
-- `python3 scripts/agent/safe_git_inspect.py diff --check`: **PASS**.
+- `python3 scripts/agent/safe_git_inspect.py diff --check` passed for the
+  tracked worktree diff. The first PR CI run found trailing Markdown hard-break
+  spaces in the new release note, which that local check did not cover while
+  the note was untracked. They were removed in the follow-up commit; the branch
+  CI run checks the complete commit diff.
 - Full backend `bash scripts/agent/safe_pytest.sh`: **2,745 passed, 1 failed**.
   The sole failure is `test_configured_free_models_are_in_standalone_catalog`, which
   expects `opencode/nemotron-3-ultra-free` in the installed OpenCode catalog.
