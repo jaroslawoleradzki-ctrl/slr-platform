@@ -63,15 +63,17 @@ export const computeWorkflowStatus = (
   // Stage 2: Sources & Ingestion
   let sourcesState: WorkflowStageState = 'not_started';
   let sourcesCount: number | null = 0;
+  let sourcesWarningsCount: number | null = 0;
   let sourcesLabel: string | null = 'Brak danych';
 
   if (errors.sources) {
     sourcesState = 'error';
     sourcesCount = null;
+    sourcesWarningsCount = null;
     sourcesLabel = 'Błąd';
   } else if (imports && imports.length > 0) {
-    const hasWarning = imports.some((i) => (i.effective_status ?? i.status) === 'warning');
-    sourcesState = hasWarning ? 'warning' : 'completed';
+    sourcesWarningsCount = imports.filter((i) => (i.effective_status ?? i.status) === 'warning').length;
+    sourcesState = sourcesWarningsCount > 0 ? 'warning' : 'completed';
     sourcesCount = imports.length;
     sourcesLabel = `${imports.length} importów`;
   }
@@ -318,7 +320,7 @@ export const computeWorkflowStatus = (
 
   return {
     search: { state: searchState, count: searchCount, label: searchLabel },
-    sources: { state: sourcesState, count: sourcesCount, label: sourcesLabel },
+    sources: { state: sourcesState, count: sourcesCount, warningsCount: sourcesWarningsCount, label: sourcesLabel },
     normalization: { state: normState, count: normCount, label: normLabel },
     deduplication: {
       state: dedupState,
@@ -434,6 +436,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [prismaMetricsError, setPrismaMetricsError] = useState<string | null>(null);
   const [duplicateData, setDuplicateData] = useState<ApiDuplicateGroupListResponse | null>(null);
   const [duplicateGroupError, setDuplicateGroupError] = useState<string | null>(null);
+  const duplicateRequestStartedAtRef = useRef<Record<string, number>>({});
 
   const [currentSearchStrategy, setCurrentSearchStrategy] = useState<EditableSearchStrategy | null>(null);
   const [lastExecutedSearchStrategy, setLastExecutedSearchStrategy] = useState<EditableSearchStrategy | null>(null);
@@ -480,6 +483,8 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const refreshWorkflowStatus = useCallback(async (projectId?: string) => {
     const targetProjectId = projectId || activeProjectIdRef.current;
     if (!targetProjectId) return;
+    const loadStartedAt = performance.now();
+    let recordedFirstVisible = false;
 
     setWorkflowStatusLoading(true);
     setWorkflowStatusError(null);
@@ -533,6 +538,16 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
         errors
       );
       setWorkflowStatus(status);
+      if (!recordedFirstVisible) {
+        recordedFirstVisible = true;
+        requestAnimationFrame(() => {
+          performance.measure('slr:workflow-status-first-visible', {
+            start: loadStartedAt,
+            end: performance.now(),
+            detail: { outcome: Object.values(errors).some(Boolean) ? 'partial' : 'success' },
+          });
+        });
+      }
     };
 
     const markStages = (stages: string[], loading: boolean) => {
@@ -556,6 +571,18 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
       );
 
     const STATUS_TIMEOUT_MS = 8000;
+    const dedupRequestStartedAt = performance.now();
+    duplicateRequestStartedAtRef.current[targetProjectId] = dedupRequestStartedAt;
+    const dedupRequest = trackMemo(`${targetProjectId}:dedup`, () =>
+      withTimeout(projectApiService.getDuplicateGroups(targetProjectId), STATUS_TIMEOUT_MS)
+    ).catch((reason: unknown) => {
+      performance.measure('slr:duplicate-groups-timeout', {
+        start: dedupRequestStartedAt,
+        end: performance.now(),
+        detail: { outcome: reason instanceof Error && reason.message === 'timeout' ? 'timeout' : 'request_error' },
+      });
+      throw reason;
+    });
 
     const [
       searchRes,
@@ -572,7 +599,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
       track('searchRes', withTimeout(projectApiService.getSearchStrategy(targetProjectId), STATUS_TIMEOUT_MS), ['search']),
       track('importsRes', withTimeout(projectApiService.getBibliographicImports(targetProjectId), STATUS_TIMEOUT_MS), ['sources']),
       track('normRes', withTimeout(projectApiService.getNormalization(targetProjectId), STATUS_TIMEOUT_MS), ['normalization']),
-      track('dedupRes', trackMemo(`${targetProjectId}:dedup`, () => withTimeout(projectApiService.getDuplicateGroups(targetProjectId), STATUS_TIMEOUT_MS)), ['deduplication']),
+      track('dedupRes', dedupRequest, ['deduplication']),
       track('screeningRes', withTimeout(screeningApi.getOverview(targetProjectId, reviewer), STATUS_TIMEOUT_MS), ['screening']),
       track('fullTextRes', withTimeout(screeningApi.getFullTextOverview(targetProjectId, reviewer), STATUS_TIMEOUT_MS), ['fullTextScreening']),
       track('qaRes', withTimeout(qualityAssessmentApi.getOverview(targetProjectId, reviewer), STATUS_TIMEOUT_MS), ['qualityAssessment']),
@@ -793,6 +820,22 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
     void refreshProjects();
     return () => stopFetchAllPolling();
   }, [refreshProjects]);
+
+  useEffect(() => {
+    if (!duplicateData) return undefined;
+    const projectId = duplicateData.project_id;
+    const requestStartedAt = duplicateRequestStartedAtRef.current[projectId];
+    if (requestStartedAt === undefined) return undefined;
+    const frame = requestAnimationFrame(() => {
+      if (activeProjectIdRef.current !== projectId) return;
+      performance.measure('slr:duplicate-groups-render', {
+        start: requestStartedAt,
+        end: performance.now(),
+        detail: { outcome: 'success', group_count: duplicateData.total_groups_count },
+      });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [duplicateData]);
 
   const setActiveProjectId = useCallback((id: string) => {
     if (activeProjectIdRef.current === id) return;
@@ -1333,7 +1376,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
           }
         : imp
     );
-    const hasWarning = updatedImports.some((imp) => (imp.effectiveStatus ?? imp.status) === 'warning');
+    const warningsCount = updatedImports.filter((imp) => (imp.effectiveStatus ?? imp.status) === 'warning').length;
     const importsCount = updatedImports.length > 0 ? updatedImports.length : (project?.imports?.length ?? 0);
 
     setProjects((currentProjects) => currentProjects.map((p) => {
@@ -1356,13 +1399,14 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
     setWorkflowStatus((current) => {
       if (!current) return current;
-      const sourcesState = importsCount > 0 ? (hasWarning ? 'warning' : 'completed') : 'not_started';
+      const sourcesState = importsCount > 0 ? (warningsCount > 0 ? 'warning' : 'completed') : 'not_started';
       return {
         ...current,
         sources: {
           ...current.sources,
           state: sourcesState,
           count: importsCount > 0 ? importsCount : current.sources.count,
+          warningsCount,
           label: importsCount > 0 ? `${importsCount} importów` : current.sources.label,
         },
       };
@@ -1373,6 +1417,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
     memoCacheRef.current = {};
     inFlightRef.current = {};
     const targetProjectId = activeProjectIdRef.current;
+    duplicateRequestStartedAtRef.current[targetProjectId] = performance.now();
     setWorkflowStatusLoading(true);
     setDuplicateGroupError(null);
 

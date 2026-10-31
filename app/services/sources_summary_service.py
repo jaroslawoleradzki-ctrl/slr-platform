@@ -75,6 +75,10 @@ class SourcesSummaryService:
             else []
         )
         approvals_by_source = {item.source_record_id: item for item in approvals}
+        snapshot_match_types = {
+            str(item["group_id"]): item.get("match_type")
+            for item in self._source_repo.list_candidate_group_snapshots(project_id)
+        }
         for rec in sorted(raw_history, key=lambda x: (x.created_at, str(x.import_id)), reverse=True):
             decision = review_decisions.get(rec.import_id)
             if decision is not None and decision.decision == "rejected":
@@ -90,14 +94,18 @@ class SourcesSummaryService:
             exact_doi_match_count = sum(
                 1 for item in skip_records if item.match_type == "exact_doi"
             )
+            effective_match_types = [
+                snapshot_match_types.get(item.duplicate_candidate_group_id or "")
+                or item.duplicate_match_type
+                for item in source_records
+            ]
             title_candidate_count = sum(
                 1
-                for item in source_records
-                if item.duplicate_match_type
-                in {"title_candidate", "identical_title", "conflicting_identifiers"}
+                for match_type in effective_match_types
+                if match_type in {"title_candidate", "identical_title", "conflicting_identifiers"}
             )
             similar_title_count = sum(
-                1 for item in source_records if item.duplicate_match_type == "similar_title"
+                1 for match_type in effective_match_types if match_type == "similar_title"
             )
             invalid_doi_count = sum(
                 1 for item in source_records if item.doi_status == "invalid"

@@ -196,7 +196,9 @@ export const ProjectDashboardPage: React.FC = () => {
               label="2. Sources & Imports"
               state={s.sources.state}
               primary={s.sources.state === 'not_started' ? null
-                : s.sources.count !== null ? formatImportCount(s.sources.count) : null}
+                : s.sources.state === 'warning'
+                  ? `${s.sources.warningsCount ?? 0} ostrzeżeń`
+                  : s.sources.count !== null ? formatImportCount(s.sources.count) : null}
               secondary={s.sources.label}
               route={`/projects/${pid}/sources`}
               loading={workflowStatusLoadingStages['sources']}

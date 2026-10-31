@@ -3,6 +3,8 @@
 from datetime import datetime, timezone
 from uuid import UUID
 
+import pytest
+
 from app.domain import (
     Author,
     Identifier,
@@ -10,7 +12,12 @@ from app.domain import (
     ProvenanceEntry,
 )
 from app.domain.publication import Publication
-from app.repositories.project_publication_repository import ProjectPublicationRepository
+from app.repositories.normalization_execution_repository import SqliteNormalizationExecutionRepository
+from app.repositories.project_publication_repository import (
+    ProjectPublicationRepository,
+    SqliteProjectPublicationRepository,
+)
+from app.repositories.transaction_manager import SqliteTransactionManager
 from app.services.normalization_service import normalize_project
 
 
@@ -129,3 +136,51 @@ def test_normalize_project_preserves_record_ids_and_state() -> None:
     assert publications[0].schema_version == "1.0"
     assert publications[0].title == "Paper 1"
     assert publications[0].language == "en"
+
+
+def test_sqlite_normalization_rolls_back_middle_publication_failure(tmp_path) -> None:
+    database = tmp_path / "normalization-rollback.db"
+
+    class FailingRepository(SqliteProjectPublicationRepository):
+        updates = 0
+
+        def update_publication(self, project_id, publication, *, connection=None):
+            self.updates += 1
+            super().update_publication(project_id, publication, connection=connection)
+            if self.updates == 2:
+                raise RuntimeError("injected middle-row failure")
+
+    repository = FailingRepository(database)
+    project_id = "lean_energy"
+    publications = [
+        _publication(record_id=UUID("11111111-1111-1111-1111-111111111111"), language="eng"),
+        _publication(record_id=UUID("22222222-2222-2222-2222-222222222222"), language="ENG"),
+    ]
+    repository.add_publications(project_id, publications)
+
+    with pytest.raises(RuntimeError, match="injected middle-row failure"):
+        with SqliteTransactionManager(database).transaction() as connection:
+            normalize_project(repository, project_id, connection=connection)
+
+    assert [item.language for item in repository.get_publications(project_id)] == ["eng", "ENG"]
+
+
+def test_normalization_summary_and_publications_share_rollback(tmp_path) -> None:
+    database = tmp_path / "normalization-summary-rollback.db"
+    repository = SqliteProjectPublicationRepository(database)
+    executions = SqliteNormalizationExecutionRepository(database)
+    transaction_manager = SqliteTransactionManager(database)
+    project_id = "lean_energy"
+    repository.add_publications(
+        project_id,
+        [_publication(record_id=UUID("33333333-3333-3333-3333-333333333333"), language="eng")],
+    )
+
+    with pytest.raises(RuntimeError, match="injected summary rollback"):
+        with transaction_manager.transaction() as connection:
+            execution = normalize_project(repository, project_id, connection=connection)
+            executions.save(execution, connection=connection)
+            raise RuntimeError("injected summary rollback")
+
+    assert repository.get_publications(project_id)[0].language == "eng"
+    assert executions.get_for_project(project_id) is None

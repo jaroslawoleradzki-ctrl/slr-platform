@@ -924,21 +924,34 @@ class MixedProjectApiService implements ProjectApiService {
   }
 
   async getDuplicateGroups(projectId: string): Promise<ApiDuplicateGroupListResponse> {
-    const response = await fetch(`${API_BASE_URL}/projects/${projectId}/duplicate-groups`, {
-      headers: {
-        Accept: 'application/json',
-      },
-    });
+    const startedAt = performance.now();
+    let outcome = 'success';
+    try {
+      const response = await fetch(`${API_BASE_URL}/projects/${projectId}/duplicate-groups`, {
+        headers: {
+          Accept: 'application/json',
+        },
+      });
 
-    if (!response.ok) {
-      if (response.status === 404) {
-        throw new Error(`Projekt '${projectId}' nie został odnaleziony w API backendu.`);
+      if (!response.ok) {
+        outcome = `http_${response.status}`;
+        if (response.status === 404) {
+          throw new Error(`Projekt '${projectId}' nie został odnaleziony w API backendu.`);
+        }
+        throw new Error(`Błąd serwera API backend (HTTP ${response.status}): Nie udało się pobrać grup duplikatów.`);
       }
-      throw new Error(`Błąd serwera API backend (HTTP ${response.status}): Nie udało się pobrać grup duplikatów.`);
-    }
 
-    const data: ApiDuplicateGroupListResponse = await response.json();
-    return data;
+      return await response.json() as ApiDuplicateGroupListResponse;
+    } catch (error) {
+      if (outcome === 'success') outcome = 'network_or_parse_error';
+      throw error;
+    } finally {
+      performance.measure('slr:duplicate-groups-api', {
+        start: startedAt,
+        end: performance.now(),
+        detail: { outcome },
+      });
+    }
   }
 
   async postDuplicateGroupDecision(

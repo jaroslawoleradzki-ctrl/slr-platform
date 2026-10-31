@@ -56,7 +56,9 @@ class ProjectPublicationRepository(Protocol):
     def get_screening_corpus_publications(
         self, project_id: str, *, connection: sqlite3.Connection | None = None
     ) -> list[Publication]: ...
-    def get_active_publications(self, project_id: str) -> list[Publication]: ...
+    def get_active_publications(
+        self, project_id: str, *, connection: sqlite3.Connection | None = None
+    ) -> list[Publication]: ...
     def get_active_publications_with_position(self, project_id: str) -> list[tuple[int | None, Publication]]: ...
     def count_active_by_project(self, project_id: str) -> int: ...
     def delete_publication(
@@ -175,6 +177,8 @@ class ProjectPublicationRepository(Protocol):
         self,
         project_id: str,
         publications: list[Publication],
+        *,
+        connection: sqlite3.Connection | None = None,
     ) -> None:
         """Replace a project's collection after a normalization or cleanup transformation."""
         ...

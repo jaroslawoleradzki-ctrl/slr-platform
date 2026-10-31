@@ -1,13 +1,22 @@
 import sqlite3
 from pathlib import Path
+from uuid import UUID
 
 from fastapi.testclient import TestClient
 
 from app.api.main import app
 from app.api.routers.normalization import get_normalization_execution_repository
 from app.api.routers.search_strategy import get_project_publication_repository
+from app.domain.author import Author
+from app.domain.project import Project
+from app.domain.provenance import ProvenanceEntry
+from app.domain.publication import Publication
 from app.repositories.normalization_execution_repository import SqliteNormalizationExecutionRepository
-from app.repositories.project_publication_repository import DemoProjectPublicationRepository
+from app.repositories.project_publication_repository import (
+    DemoProjectPublicationRepository,
+    SqliteProjectPublicationRepository,
+)
+from app.repositories.project_repository import SqliteProjectRepository
 
 
 def _client(repository: DemoProjectPublicationRepository, database: Path) -> TestClient:
@@ -95,6 +104,48 @@ def test_second_run_replaces_latest_project_result(tmp_path: Path) -> None:
             "SELECT COUNT(*) FROM normalization_executions WHERE project_id = ?",
             ("lean_energy",),
         ).fetchone()[0] == 1
+
+
+def test_sqlite_normalization_api_rolls_back_middle_publication_failure(tmp_path: Path) -> None:
+    database = tmp_path / "normalization-api-rollback.db"
+    SqliteProjectRepository(database).create(Project(project_id="rollback-project", title="Rollback"))
+
+    class FailingPublicationRepository(SqliteProjectPublicationRepository):
+        updates = 0
+
+        def update_publication(self, project_id, publication, *, connection=None):
+            self.updates += 1
+            super().update_publication(project_id, publication, connection=connection)
+            if self.updates == 2:
+                raise RuntimeError("injected API middle-publication failure")
+
+    repository = FailingPublicationRepository(database)
+    publications = [
+        Publication(
+            record_id=record_id,
+            title=f"Synthetic normalization rollback publication {index}",
+            authors=[Author(display_name="Synthetic Author")],
+            publication_year=2024,
+            language=language,
+            provenance=[ProvenanceEntry(source="synthetic", source_record_id=f"rollback-{index}")],
+        )
+        for index, (record_id, language) in enumerate(
+            (
+                (UUID("11111111-1111-1111-1111-111111111111"), "eng"),
+                (UUID("22222222-2222-2222-2222-222222222222"), "ENG"),
+            )
+        )
+    ]
+    repository.add_publications("rollback-project", publications)
+    app.dependency_overrides[get_project_publication_repository] = lambda: repository
+    app.dependency_overrides[get_normalization_execution_repository] = lambda: SqliteNormalizationExecutionRepository(database)
+    client = TestClient(app, raise_server_exceptions=False)
+
+    response = client.post("/api/v1/projects/rollback-project/normalization")
+
+    assert response.status_code == 500
+    assert [item.language for item in repository.get_publications("rollback-project")] == ["eng", "ENG"]
+    assert SqliteNormalizationExecutionRepository(database).get_for_project("rollback-project") is None
 
 
 def test_new_migration_applies_after_existing_migrations(tmp_path: Path) -> None:

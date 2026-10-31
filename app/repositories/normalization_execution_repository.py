@@ -21,7 +21,9 @@ class NormalizationExecutionRepository(Protocol):
     - Deleting execution records upon collection reset or import invalidation.
     """
 
-    def save(self, execution: NormalizationExecution) -> NormalizationExecution:
+    def save(
+        self, execution: NormalizationExecution, *, connection: sqlite3.Connection | None = None
+    ) -> NormalizationExecution:
         """Save or update the single latest normalization execution record for a project."""
         ...
 
@@ -42,8 +44,10 @@ class SqliteNormalizationExecutionRepository:
         self._database_path.parent.mkdir(parents=True, exist_ok=True)
         self._apply_migrations()
 
-    def save(self, execution: NormalizationExecution) -> NormalizationExecution:
-        with self._connect() as connection:
+    def save(
+        self, execution: NormalizationExecution, *, connection: sqlite3.Connection | None = None
+    ) -> NormalizationExecution:
+        def persist(connection: sqlite3.Connection) -> None:
             connection.execute(
                 """
                 INSERT INTO normalization_executions (
@@ -79,6 +83,11 @@ class SqliteNormalizationExecutionRepository:
                     execution.error_message,
                 ),
             )
+        if connection is not None:
+            persist(connection)
+        else:
+            with self._connect() as own_connection:
+                persist(own_connection)
         return execution
 
     def get_for_project(self, project_id: str) -> NormalizationExecution | None:

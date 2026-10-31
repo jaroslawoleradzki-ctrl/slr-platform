@@ -265,17 +265,33 @@ describe('v0.2.2 — WorkflowNavigationStatus Unit & Integration Tests', () => {
     await waitFor(() => expect(screen.getByText('1 importów')).toBeInTheDocument());
     unmount2();
 
-    // 3. Warning imports
-    const warnImports: BibliographicImportHistoryRecord[] = [
-      {
-        ...validImports[0],
-        status: 'warning',
-        warnings: ['Missing fields'],
-      },
-    ];
+    // 3. 11 total imports, of which 2 still have unresolved warnings.
+    const warnImports: BibliographicImportHistoryRecord[] = Array.from({ length: 11 }, (_, index) => ({
+      ...validImports[0],
+      import_id: `i${index + 1}`,
+      status: index < 2 ? 'warning' : 'success',
+      warnings: index < 2 ? ['Missing fields'] : [],
+    }));
     vi.spyOn(projectApiService, 'getBibliographicImports').mockResolvedValue(warnImports);
     renderNav('/projects/lean_energy/sources');
-    await waitFor(() => expect(screen.getByText('1 importów')).toBeInTheDocument());
+    const sourcesLink = screen.getByRole('link', { name: /Sources & Imports/i });
+    await waitFor(() => expect(sourcesLink).toHaveAttribute('data-stage-state', 'warning'));
+    expect(within(sourcesLink).getByText('2 ostrzeżeń')).toBeInTheDocument();
+    expect(within(sourcesLink).queryByText('11 importów')).not.toBeInTheDocument();
+  });
+
+  it('shows no warning state when all 11 imports have resolved warnings', async () => {
+    const validImports: BibliographicImportHistoryRecord[] = Array.from({ length: 11 }, (_, index) => ({
+      import_id: `i${index + 1}`, project_id: 'lean_energy', source_type: 'file', filename: 'data.bib',
+      format: 'BibTeX', provider: null, query: null, records_count: 50, total_available: null,
+      status: 'success', created_at: '', warnings: [],
+    }));
+    vi.spyOn(projectApiService, 'getBibliographicImports').mockResolvedValue(validImports);
+    renderNav('/projects/lean_energy/sources');
+    const sourcesLink = screen.getByRole('link', { name: /Sources & Imports/i });
+    await waitFor(() => expect(sourcesLink).toHaveAttribute('data-stage-state', 'completed'));
+    expect(within(sourcesLink).getByText('11 importów')).toBeInTheDocument();
+    expect(within(sourcesLink).queryByText(/ostrzeżeń/)).not.toBeInTheDocument();
   });
 
   it('F. Mock leakage: 45 do oceny and 425 pending values from MOCK_PROJECTS do not leak into navigation', async () => {

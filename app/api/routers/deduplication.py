@@ -1,4 +1,10 @@
+import logging
+from time import perf_counter
+from uuid import uuid4
+
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.routing import APIRoute
+from starlette.types import Message, Receive, Scope, Send
 
 from app.api.dto.deduplication import (
     DuplicateGroupDecisionRequest,
@@ -9,12 +15,46 @@ from app.api.dto.deduplication import (
 )
 from app.repositories.duplicate_review_decision_repository import GroupNotFoundError
 from app.repositories.project_publication_repository import ProjectNotFoundError
+from app.services.duplicate_diagnostics import request_correlation
 from app.services.project_duplicate_service import (
     ProjectDuplicateService,
     project_duplicate_service,
 )
 
-router = APIRouter(prefix="/projects", tags=["deduplication"])
+logger = logging.getLogger(__name__)
+
+
+class DuplicateTimingRoute(APIRoute):
+    async def handle(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["method"] != "GET" or not self.path.endswith("/duplicate-groups"):
+            await super().handle(scope, receive, send)
+            return
+        started = perf_counter()
+        correlation_id = uuid4().hex
+        token = request_correlation.set(correlation_id)
+        response_status = 500
+        response_bytes = 0
+
+        async def measured_send(message: Message) -> None:
+            nonlocal response_status, response_bytes
+            if message["type"] == "http.response.start":
+                response_status = message["status"]
+            elif message["type"] == "http.response.body":
+                response_bytes += len(message.get("body", b""))
+            await send(message)
+            if message["type"] == "http.response.body" and not message.get("more_body", False):
+                logger.info(
+                    "duplicate_groups_response_complete correlation_id=%s status=%d response_bytes=%d duration_ms=%.3f",
+                    correlation_id, response_status, response_bytes, (perf_counter() - started) * 1000,
+                )
+
+        try:
+            await super().handle(scope, receive, measured_send)
+        finally:
+            request_correlation.reset(token)
+
+
+router = APIRouter(prefix="/projects", tags=["deduplication"], route_class=DuplicateTimingRoute)
 
 
 def get_duplicate_service() -> ProjectDuplicateService:
@@ -35,18 +75,37 @@ def get_project_duplicate_groups(
     project_id: str,
     service: ProjectDuplicateService = Depends(get_duplicate_service),
 ) -> DuplicateGroupListResponse:
+    started = perf_counter()
+    correlation_id = request_correlation.get()
     try:
-        return service.get_candidate_duplicate_groups(project_id)
+        result = service.get_candidate_duplicate_groups(project_id)
     except ProjectNotFoundError as exc:
+        logger.info(
+            "duplicate_groups_http correlation_id=%s status=404 duration_ms=%.3f",
+            correlation_id,
+            (perf_counter() - started) * 1000,
+        )
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Project '{project_id}' not found.",
         ) from exc
     except Exception as exc:
+        logger.error(
+            "duplicate_groups_http correlation_id=%s status=500 error_type=%s duration_ms=%.3f",
+            correlation_id,
+            type(exc).__name__,
+            (perf_counter() - started) * 1000,
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error retrieving duplicate groups: {str(exc)}",
         ) from exc
+    logger.info(
+        "duplicate_groups_http correlation_id=%s status=200 duration_ms=%.3f",
+        correlation_id,
+        (perf_counter() - started) * 1000,
+    )
+    return result
 
 
 @router.post(

@@ -130,6 +130,70 @@ def test_remove_record_with_reason_and_audit(service_setup):
     assert removed_page.items[0].record_id == p2.record_id
 
 
+def test_pre_screening_projection_failure_rolls_back_removal_and_archive(service_setup, monkeypatch):
+    service, pub_repo, decision_repo, _ = service_setup
+    project_id = "test_project"
+    import_id = uuid4()
+    first = make_publication(index=101, title="Synthetic prescreen candidate title", source="ris")
+    second = make_publication(index=102, title="Synthetic prescreen candidate title", source="ris")
+    pub_repo.import_source_publications(project_id, [first, second], import_id=import_id)
+    projection = service._duplicate_projection
+    assert projection is not None
+    original = projection.materialize_candidate_group_projection
+
+    def fail_after_projection(*args, **kwargs):
+        original(*args, **kwargs)
+        raise RuntimeError("injected pre-screen projection failure")
+
+    monkeypatch.setattr(projection, "materialize_candidate_group_projection", fail_after_projection)
+    with pytest.raises(RuntimeError, match="pre-screen projection failure"):
+        service.remove_record(
+            project_id,
+            import_id,
+            first.record_id,
+            reason=PreScreeningRemovalReason.RETRIEVAL_ARTEFACT,
+            reviewer_id="reviewer-test",
+        )
+
+    assert len(pub_repo.get_active_publications(project_id)) == 2
+    assert decision_repo.get_latest_decision(project_id, first.record_id) is None
+    assert service._archive_repo.get_archived_record(project_id, first.record_id) is None
+
+
+def test_pre_screening_restore_projection_failure_rolls_back_restore(service_setup, monkeypatch):
+    service, pub_repo, decision_repo, _ = service_setup
+    project_id = "test_project"
+    import_id = uuid4()
+    first = make_publication(index=111, title="Synthetic prescreen restore candidate", source="ris")
+    second = make_publication(index=112, title="Synthetic prescreen restore candidate", source="ris")
+    pub_repo.import_source_publications(project_id, [first, second], import_id=import_id)
+    service.remove_record(
+        project_id,
+        import_id,
+        first.record_id,
+        reason=PreScreeningRemovalReason.RETRIEVAL_ARTEFACT,
+        reviewer_id="reviewer-test",
+    )
+    projection = service._duplicate_projection
+    assert projection is not None
+    before_snapshots = projection._source_records.list_candidate_group_snapshots(project_id)
+    before_archive = service._archive_repo.get_archived_record(project_id, first.record_id)
+    original = projection.materialize_candidate_group_projection
+
+    def fail_after_projection(*args, **kwargs):
+        original(*args, **kwargs)
+        raise RuntimeError("injected pre-screen restore projection failure")
+
+    monkeypatch.setattr(projection, "materialize_candidate_group_projection", fail_after_projection)
+    with pytest.raises(RuntimeError, match="pre-screen restore projection failure"):
+        service.restore_record(project_id, import_id, first.record_id, reviewer_id="reviewer-test")
+
+    assert len(pub_repo.get_active_publications(project_id)) == 1
+    assert decision_repo.get_latest_decision(project_id, first.record_id).status is PreScreeningStatus.REMOVED
+    assert service._archive_repo.get_archived_record(project_id, first.record_id) == before_archive
+    assert projection._source_records.list_candidate_group_snapshots(project_id) == before_snapshots
+
+
 def test_remove_record_requires_note_for_other_reason(service_setup):
     service, pub_repo, decision_repo, history_repo = service_setup
     project_id = "test_project"

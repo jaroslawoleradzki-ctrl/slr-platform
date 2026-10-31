@@ -73,6 +73,10 @@ export const Sidebar: React.FC = () => {
       return <Badge variant="pending_action">{item.label}</Badge>;
     }
 
+    if (stageId === 'sources' && item.state === 'warning') {
+      return <Badge variant="pending_action">{workflowStatus.sources.warningsCount ?? 0} ostrzeżeń</Badge>;
+    }
+
     if (item.state === 'in_progress' || item.state === 'warning' || item.state === 'error' || item.state === 'completed') {
       const p = getStageStatusPresentation(item.state, 12);
       return (

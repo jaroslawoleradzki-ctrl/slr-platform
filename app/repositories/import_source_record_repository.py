@@ -200,8 +200,9 @@ class ImportSourceRecordRepository(Protocol):
         *,
         match_type: str | None = None,
         match_reason: str | None = None,
+        connection: sqlite3.Connection | None = None,
     ) -> int: ...
-    def clear_candidate_groups(self, project_id: str) -> None: ...
+    def clear_candidate_groups(self, project_id: str, *, connection: sqlite3.Connection | None = None) -> None: ...
     def record_candidate_group_snapshot(
         self,
         project_id: str,
@@ -211,6 +212,7 @@ class ImportSourceRecordRepository(Protocol):
         match_type: str | None,
         match_reason: str | None,
         status: str,
+        connection: sqlite3.Connection | None = None,
     ) -> None: ...
     def list_candidate_group_snapshots(self, project_id: str) -> list[dict]: ...
     def mark_recovered(
@@ -621,11 +623,12 @@ class SqliteImportSourceRecordRepository:
         *,
         match_type=None,
         match_reason=None,
+        connection=None,
     ):
         if not publication_ids:
             return 0
         placeholders = ",".join("?" for _ in publication_ids)
-        with self._connect() as conn:
+        def update(conn):
             if match_type is not None:
                 cursor = conn.execute(
                     f"""UPDATE import_source_records
@@ -647,17 +650,24 @@ class SqliteImportSourceRecordRepository:
                         WHERE project_id=? AND canonical_publication_id IN ({placeholders})""",
                     (group_id, project_id, *publication_ids),
                 )
-            conn.commit()
             return cursor.rowcount
-
-    def clear_candidate_groups(self, project_id):
+        if connection is not None:
+            return update(connection)
         with self._connect() as conn:
+            return update(conn)
+
+    def clear_candidate_groups(self, project_id, *, connection=None):
+        def clear(conn):
             conn.execute(
                 "UPDATE import_source_records SET duplicate_candidate_group_id=NULL "
                 "WHERE project_id=?",
                 (project_id,),
             )
-            conn.commit()
+        if connection is not None:
+            clear(connection)
+        else:
+            with self._connect() as conn:
+                clear(conn)
 
     def record_candidate_group_snapshot(
         self,
@@ -668,8 +678,9 @@ class SqliteImportSourceRecordRepository:
         match_type,
         match_reason,
         status,
+        connection=None,
     ):
-        with self._connect() as conn:
+        def record(conn):
             conn.execute(
                 """INSERT OR IGNORE INTO duplicate_candidate_group_snapshots
                    (project_id, group_id, publication_ids_json, match_type,
@@ -685,7 +696,11 @@ class SqliteImportSourceRecordRepository:
                     datetime.now(timezone.utc).isoformat(),
                 ),
             )
-            conn.commit()
+        if connection is not None:
+            record(connection)
+        else:
+            with self._connect() as conn:
+                record(conn)
 
     def list_candidate_group_snapshots(self, project_id):
         with self._connect() as conn:
