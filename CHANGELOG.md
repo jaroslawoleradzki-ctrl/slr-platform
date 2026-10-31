@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.7.9] — 2026-10-31
+
 ### Fixed
 
 - Duplicate-group reads no longer write candidate projections or snapshots. Imports,
@@ -11,6 +13,12 @@
 - First-load diagnostics now correlate duplicate request stages through ASGI response
   completion; browser coverage verifies real group members and readiness against a
   disposable API and the production frontend build.
+
+### Added
+
+- A manual HomeLab backup utility creates a private timestamped backup of the live
+  SQLite database through SQLite Online Backup API and preserves Compose and `.env`
+  file permissions. It validates the copied database and retains older backups.
 
 ## [0.7.8] — 2026-10-30
 
