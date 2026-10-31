@@ -19,6 +19,7 @@ from app.repositories.corpus_finalization_repository import (
     CorpusFinalizationRepository,
     SqliteCorpusFinalizationRepository,
 )
+from app.repositories.import_source_record_repository import SqliteImportSourceRecordRepository
 from app.repositories.pre_screening_archive_repository import (
     PreScreeningArchiveRepository,
     default_pre_screening_archive_repository,
@@ -39,6 +40,7 @@ from app.repositories.screening_decision_repository import (
 from app.repositories.transaction_manager import (
     SqliteTransactionManager,
 )
+from app.services.project_duplicate_service import ProjectDuplicateService
 
 
 class PreScreeningRecordNotFoundError(LookupError):
@@ -88,6 +90,17 @@ class PreScreeningReviewService:
         )
         self._tx_manager = transaction_manager or (
             SqliteTransactionManager(self._pub_repo._database_path)
+            if hasattr(self._pub_repo, "_database_path")
+            else None
+        )
+        self._duplicate_projection = (
+            ProjectDuplicateService(
+                repository=self._pub_repo,
+                transaction_manager=self._tx_manager,
+                source_record_repository=SqliteImportSourceRecordRepository(
+                    self._pub_repo._database_path
+                ),
+            )
             if hasattr(self._pub_repo, "_database_path")
             else None
         )
@@ -172,9 +185,17 @@ class PreScreeningReviewService:
 
         if connection is not None:
             _execute(connection)
+            if self._duplicate_projection is not None:
+                self._duplicate_projection.materialize_candidate_group_projection(
+                    project_id, connection=connection
+                )
         elif self._tx_manager is not None:
             with self._tx_manager.transaction() as conn:
                 _execute(conn)
+                if self._duplicate_projection is not None:
+                    self._duplicate_projection.materialize_candidate_group_projection(
+                        project_id, connection=conn
+                    )
         else:
             _execute(None)
 
@@ -259,6 +280,10 @@ class PreScreeningReviewService:
             if self._tx_manager is not None:
                 with self._tx_manager.transaction() as conn:
                     _execute_existing(conn)
+                    if self._duplicate_projection is not None:
+                        self._duplicate_projection.materialize_candidate_group_projection(
+                            project_id, connection=conn
+                        )
             else:
                 _execute_existing(None)
 
@@ -287,6 +312,10 @@ class PreScreeningReviewService:
                 if self._tx_manager is not None:
                     with self._tx_manager.transaction() as conn:
                         _execute_restored(conn)
+                        if self._duplicate_projection is not None:
+                            self._duplicate_projection.materialize_candidate_group_projection(
+                                project_id, connection=conn
+                            )
                 else:
                     _execute_restored(None)
 

@@ -1,5 +1,17 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- Duplicate-group reads no longer write candidate projections or snapshots. Imports,
+  pre-screen changes, merges and normalization refresh them within their mutation
+  transaction. Derived-state rebuild also includes its existing reconciliation and
+  final projection in one transaction, preventing stale group IDs or partial rebuilds.
+- First-load diagnostics now correlate duplicate request stages through ASGI response
+  completion; browser coverage verifies real group members and readiness against a
+  disposable API and the production frontend build.
+
 ## [0.7.8] — 2026-10-30
 
 ### Fixed

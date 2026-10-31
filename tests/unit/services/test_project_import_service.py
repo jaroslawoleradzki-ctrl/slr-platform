@@ -102,6 +102,77 @@ def test_transaction_import_new_records_success(import_service, pub_repo, histor
     assert report.status is IntegrityAuditStatus.OK
 
 
+def test_file_import_projection_failure_rolls_back_publications_and_import_history(
+    import_service, pub_repo, history_repo, monkeypatch
+):
+    publications = [
+        Publication(
+            record_id=record_id,
+            title="Synthetic transactional candidate title for file import",
+            authors=[],
+            publication_year=2024,
+            provenance=[ProvenanceEntry(source="ris", source_record_id=f"ris-{index}")],
+            created_at=_TIME,
+        )
+        for index, record_id in enumerate(
+            (
+                UUID("00000000-0000-0000-0000-000000000201"),
+                UUID("00000000-0000-0000-0000-000000000202"),
+            )
+        )
+    ]
+    projection = import_service._duplicate_projection
+    assert projection is not None
+    original = projection.materialize_candidate_group_projection
+
+    def fail_after_projection(*args, **kwargs):
+        original(*args, **kwargs)
+        raise RuntimeError("injected file-import projection failure")
+
+    monkeypatch.setattr(projection, "materialize_candidate_group_projection", fail_after_projection)
+    with pytest.raises(RuntimeError, match="file-import projection failure"):
+        import_service.import_bibliographic_publications(
+            "lean_energy", "synthetic.ris", "RIS", publications
+        )
+
+    assert pub_repo.get_publications("lean_energy") == []
+    assert history_repo.list_for_project("lean_energy") == []
+    assert import_service._source_repo.list_source_records("lean_energy") == []
+    assert import_service._source_repo.list_candidate_group_snapshots("lean_energy") == []
+
+
+def test_provider_import_projection_failure_rolls_back_publications_and_history(
+    import_service, pub_repo, history_repo, monkeypatch
+):
+    record = SearchResultRecordResponse(
+        id="00000000-0000-0000-0000-000000000203",
+        title="Synthetic provider publication for projection rollback",
+        authors=["Synthetic Author"],
+        year=2024,
+        provider="openalex",
+        source_id="W203",
+        doi="10.1000/projection-rollback",
+    )
+    projection = import_service._duplicate_projection
+    assert projection is not None
+    original = projection.materialize_candidate_group_projection
+
+    def fail_after_projection(*args, **kwargs):
+        original(*args, **kwargs)
+        raise RuntimeError("injected provider-import projection failure")
+
+    monkeypatch.setattr(projection, "materialize_candidate_group_projection", fail_after_projection)
+    with pytest.raises(RuntimeError, match="provider-import projection failure"):
+        import_service.import_provider_results_group(
+            "lean_energy", "openalex", [record], "synthetic query", 1
+        )
+
+    assert pub_repo.get_publications("lean_energy") == []
+    assert history_repo.list_for_project("lean_energy") == []
+    assert import_service._source_repo.list_source_records("lean_energy") == []
+    assert import_service._source_repo.list_candidate_group_snapshots("lean_energy") == []
+
+
 def test_transaction_import_mixed_records(import_service, pub_repo, history_repo, audit_service):
     project_id = "lean_energy"
     pub1 = Publication(

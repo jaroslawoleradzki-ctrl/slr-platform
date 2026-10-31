@@ -48,6 +48,7 @@ from app.repositories.transaction_manager import (
     default_transaction_manager,
 )
 from app.services.duplicate_group_builder import DuplicateGroupBuilder
+from app.services.project_duplicate_service import ProjectDuplicateService
 
 
 class ImportNotFoundError(LookupError):
@@ -141,6 +142,15 @@ class ImportReviewService:
         )
         self._builder = builder or DuplicateGroupBuilder()
         self._database_path = Path(database_path) if database_path is not None else None
+        self._duplicate_projection = (
+            ProjectDuplicateService(
+                repository=self._publications,
+                transaction_manager=self._transaction_manager,
+                source_record_repository=self._source_records,
+            )
+            if database_path is not None
+            else None
+        )
 
     def get_review(self, project_id: str, import_id: UUID) -> ImportReviewDetail:
         record = self._history.get(project_id, import_id)
@@ -279,6 +289,10 @@ class ImportReviewService:
                 self._normalization.delete_for_project(
                     project_id, connection=connection
                 )
+                if self._duplicate_projection is not None:
+                    self._duplicate_projection.materialize_candidate_group_projection(
+                        project_id, connection=connection
+                    )
             return decision
 
     def _detail(
@@ -552,17 +566,14 @@ class ImportReviewService:
                 continue
             members = {str(value) for value in group.publication_ids}
             decided.update(members & target_ids)
-        if decided:
-            return decided
-
         def snapshots(conn: sqlite3.Connection) -> set[str]:
-            found: set[str] = set()
+            found: set[str] = set(decided)
             rows = conn.execute(
-                "SELECT publication_ids_json, status FROM duplicate_candidate_group_snapshots WHERE project_id = ?",
+                "SELECT publication_ids_json, group_id FROM duplicate_candidate_group_snapshots WHERE project_id = ?",
                 (project_id,),
             ).fetchall()
             for row in rows:
-                if str(row[1]).lower() not in {"approved", "rejected", "merged"}:
+                if str(row[1]) not in decisions:
                     continue
                 members = {str(value) for value in json.loads(str(row[0]))}
                 found.update(members & target_ids)

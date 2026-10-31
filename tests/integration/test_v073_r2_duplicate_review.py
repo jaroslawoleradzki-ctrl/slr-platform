@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import sqlite3
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from threading import Barrier, Event
 
 import pytest
 from fastapi.testclient import TestClient
@@ -24,7 +26,9 @@ from app.repositories.project_publication_repository import (
 )
 from app.repositories.transaction_manager import SqliteTransactionManager
 from app.services.project_duplicate_service import ProjectDuplicateService
+from app.services.project_import_service import ProjectImportService
 from app.services.screening_input_service import ScreeningInputReadinessStatus, ScreeningInputService
+from tests.fixtures.factories import make_publication
 
 
 def _ris(title: str, year: int | None = None, doi: str | None = None) -> str:
@@ -81,18 +85,129 @@ def _groups(client: TestClient):
 
 
 def test_real_path_title_candidate_includes_doi_bearing_counterpart(environment) -> None:
-    client, _, source, _, _, _ = environment
+    client, _, source, _, _, db = environment
     _upload(client, "GS01.ris", _ris("Real Shared Title", 2020, "10.1000/real-shared"))
     _upload(client, "GS2.ris", _ris("Real Shared Title", 2021))
+    # Candidate projection and membership snapshots are materialized with the
+    # import transaction, never as a side effect of this GET.
+    before_ids = {
+        record.source_record_id: record.duplicate_candidate_group_id
+        for record in source.list_source_records("p1")
+    }
+    with sqlite3.connect(db) as connection:
+        before_snapshots = connection.execute(
+            "SELECT project_id, group_id, publication_ids_json, match_type, match_reason, status, observed_at "
+            "FROM duplicate_candidate_group_snapshots ORDER BY group_id"
+        ).fetchall()
     groups = _groups(client)
+    after_ids = {
+        record.source_record_id: record.duplicate_candidate_group_id
+        for record in source.list_source_records("p1")
+    }
+    with sqlite3.connect(db) as connection:
+        after_snapshots = connection.execute(
+            "SELECT project_id, group_id, publication_ids_json, match_type, match_reason, status, observed_at "
+            "FROM duplicate_candidate_group_snapshots ORDER BY group_id"
+        ).fetchall()
+    assert after_ids == before_ids
+    assert after_snapshots == before_snapshots
     assert len(groups) == 1
     assert groups[0]["records_count"] == 2
     assert "conflicting DOI" in groups[0]["reason"]
+    assert set(before_ids.values()) == {groups[0]["group_id"]}
     records = source.list_source_records("p1")
     assert len(records) == 2
     assert {record.duplicate_candidate_group_id for record in records} == {
         groups[0]["group_id"]
     }
+
+
+def test_duplicate_group_get_preserves_all_history_with_and_without_candidates(environment) -> None:
+    client, _, source, duplicate_service, decisions, db = environment
+    merges = SqliteDuplicateMergeRepository(db)
+    _upload(client, "merged-a.ris", _ris("Historical merged group", 2020))
+    _upload(client, "merged-b.ris", _ris("Historical merged group", 2021))
+    merged_group = _groups(client)[0]
+    duplicate_service.record_decision("p1", merged_group["group_id"], "APPROVE", "human-approved")
+    duplicate_service.merge_group("p1", merged_group["group_id"])
+    _upload(client, "pending-a.ris", _ris("Pending candidate group", 2020))
+    _upload(client, "pending-b.ris", _ris("Pending candidate group", 2021))
+
+    with sqlite3.connect(db) as connection:
+        before_snapshots = connection.execute(
+            "SELECT * FROM duplicate_candidate_group_snapshots WHERE project_id = 'p1' ORDER BY group_id"
+        ).fetchall()
+    before_ids = {
+        record.source_record_id: record.duplicate_candidate_group_id
+        for record in source.list_source_records("p1")
+    }
+    before_decisions = decisions.list_decisions_for_project("p1")
+    before_merges = merges.list_merges_for_project("p1")
+
+    response = _groups(client)
+
+    assert any(group["status"] == "PENDING" for group in response)
+    assert any(group["status"] == "MERGED" for group in response)
+    assert {
+        record.source_record_id: record.duplicate_candidate_group_id
+        for record in source.list_source_records("p1")
+    } == before_ids
+    assert decisions.list_decisions_for_project("p1") == before_decisions
+    assert merges.list_merges_for_project("p1") == before_merges
+    with sqlite3.connect(db) as connection:
+        assert connection.execute(
+            "SELECT * FROM duplicate_candidate_group_snapshots WHERE project_id = 'p1' ORDER BY group_id"
+        ).fetchall() == before_snapshots
+
+    with sqlite3.connect(db) as connection:
+        connection.execute("INSERT INTO projects(project_id,title) VALUES ('p2','Empty project')")
+        connection.commit()
+    empty_before = {
+        "ids": source.list_source_records("p2"),
+        "decisions": decisions.list_decisions_for_project("p2"),
+        "merges": merges.list_merges_for_project("p2"),
+        "snapshots": source.list_candidate_group_snapshots("p2"),
+    }
+    assert client.get("/api/v1/projects/p2/duplicate-groups").json()["groups"] == []
+    assert empty_before == {
+        "ids": source.list_source_records("p2"),
+        "decisions": decisions.list_decisions_for_project("p2"),
+        "merges": merges.list_merges_for_project("p2"),
+        "snapshots": source.list_candidate_group_snapshots("p2"),
+    }
+
+
+def test_parallel_duplicate_reads_during_import_return_complete_states(environment) -> None:
+    client, _, _, _, _, _ = environment
+    barrier = Barrier(9)
+
+    def read_groups():
+        barrier.wait(timeout=5)
+        return client.get("/api/v1/projects/p1/duplicate-groups")
+
+    def import_pair():
+        barrier.wait(timeout=5)
+        return _upload(
+            client,
+            "concurrent-pair.ris",
+            _ris("Concurrent synthetic candidate", 2020) + _ris("Concurrent synthetic candidate", 2021),
+        )
+
+    with ThreadPoolExecutor(max_workers=9) as executor:
+        reads = [executor.submit(read_groups) for _ in range(8)]
+        imported = executor.submit(import_pair)
+        responses = [future.result(timeout=20) for future in reads]
+        import_response = imported.result(timeout=20)
+
+    assert import_response.status_code == 201, import_response.text
+    for response in responses:
+        assert response.status_code == 200, response.text
+        payload = response.json()
+        assert payload["project_id"] == "p1"
+        assert payload["total_groups_count"] == len(payload["groups"])
+        assert all(group["records_count"] == len(group["records"]) for group in payload["groups"])
+    final = client.get("/api/v1/projects/p1/duplicate-groups").json()
+    assert any(group["records_count"] == 2 for group in final["groups"])
 
 
 def test_both_title_only_candidates_are_visible_and_identically_reasoned(environment) -> None:
@@ -278,3 +393,82 @@ def test_source_record_api_exposes_candidate_group(environment) -> None:
     items = response.json()["items"]
     assert items
     assert items[0]["duplicate_candidate_group_id"] == group["group_id"]
+
+
+def test_duplicate_http_diagnostics_measure_completed_response(environment, caplog):
+    client, _, _, _, _, _ = environment
+    caplog.set_level("INFO")
+    response = client.get("/api/v1/projects/p1/duplicate-groups")
+    assert response.status_code == 200
+    completed = [r.getMessage() for r in caplog.records if "duplicate_groups_response_complete" in r.getMessage()]
+    assert len(completed) == 1
+    assert "status=200" in completed[0]
+    assert f"response_bytes={len(response.content)}" in completed[0]
+    assert "p1" not in completed[0]
+    correlation = completed[0].split("correlation_id=", 1)[1].split()[0]
+    stages = [r.getMessage() for r in caplog.records if r.getMessage().startswith("duplicate_groups_read ")]
+    assert len(stages) == 1
+    assert f"correlation_id={correlation}" in stages[0]
+    assert "readiness_ms=" in stages[0]
+
+
+@pytest.mark.parametrize("journal_mode", ["DELETE", "WAL"])
+def test_import_between_corpus_and_decision_reads_preserves_complete_snapshot(environment, monkeypatch, journal_mode):
+    client, _, _, service, _, database = environment
+    with sqlite3.connect(database) as connection:
+        assert connection.execute(f"PRAGMA journal_mode={journal_mode}").fetchone()[0].upper() == journal_mode
+    _upload(client, "before.ris", _ris("Original synthetic publication", 2020))
+    before = client.get("/api/v1/projects/p1/duplicate-groups").json()
+    # Prepare repository schemas before the forced interleaving: in DELETE
+    # mode schema initialization itself can require an exclusive write lock.
+    importer = ProjectImportService(
+        publication_repository=SqliteProjectPublicationRepository(database),
+        import_history_repository=SqliteImportHistoryRepository(database),
+        normalization_repository=SqliteNormalizationExecutionRepository(database),
+        source_record_repository=SqliteImportSourceRecordRepository(database),
+        transaction_manager=SqliteTransactionManager(database),
+    )
+    new_publications = [make_publication(
+        index=index, title="Concurrent complete candidate", doi=None,
+        source="ris", source_id=f"concurrent-{index}",
+    ) for index in (811, 812)]
+    corpus_read = Event()
+    writer_materialized = Event()
+    resume_read = Event()
+    original_read = service._active_publications
+    original_materialize = ProjectDuplicateService.materialize_candidate_group_projection
+
+    def paused_read(*args, **kwargs):
+        result = original_read(*args, **kwargs)
+        corpus_read.set()
+        assert resume_read.wait(5), "reader was not released"
+        return result
+
+    def observe_write(self, *args, **kwargs):
+        result = original_materialize(self, *args, **kwargs)
+        writer_materialized.set()
+        return result
+
+    monkeypatch.setattr(service, "_active_publications", paused_read)
+    monkeypatch.setattr(ProjectDuplicateService, "materialize_candidate_group_projection", observe_write)
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        reader = executor.submit(client.get, "/api/v1/projects/p1/duplicate-groups")
+        assert corpus_read.wait(5)
+        writer = executor.submit(
+            importer.import_bibliographic_publications, "p1", "during-read.ris", "RIS", new_publications,
+        )
+        try:
+            assert writer_materialized.wait(5), "writer did not reach its uncommitted projection"
+        finally:
+            resume_read.set()
+        response = reader.result(timeout=10)
+        imported = writer.result(timeout=10)
+    assert response.status_code == 200
+    assert imported[0].imported_count == 2
+    assert response.json() == before
+    after = client.get("/api/v1/projects/p1/duplicate-groups").json()
+    assert after != before
+    assert after["total_groups_count"] == 1
+    assert after["readiness"]["pending_review_groups"] == 1
+    assert after["readiness"]["screening_ready"] is False
+    assert {r["title"] for r in after["groups"][0]["records"]} == {"Concurrent complete candidate"}

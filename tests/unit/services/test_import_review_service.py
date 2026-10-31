@@ -393,7 +393,7 @@ def test_merged_publication_blocks_rejection(tmp_path: Path) -> None:
 def test_duplicate_review_decision_blocks_rejection(tmp_path: Path) -> None:
     first = _publication(1, "10.1000/decided")
     second = _publication(2, "10.1000/decided")
-    database, service, publications, _, _, _, import_id, decisions, _ = _environment(
+    database, service, publications, sources, _, _, import_id, decisions, _ = _environment(
         tmp_path, [first, second]
     )
     group = DuplicateGroupBuilder().build(
@@ -404,11 +404,56 @@ def test_duplicate_review_decision_blocks_rejection(tmp_path: Path) -> None:
         str(group.group_id),
         DuplicateGroupReviewDecision(decision=DuplicateDecision.REJECT),
     )
+    # The first observation stays immutable as PENDING even after a reviewer
+    # decision exists. Remove one live member so this decision is discoverable
+    # only through snapshot membership during the rejection safety check.
+    sources.record_candidate_group_snapshot(
+        PROJECT_ID,
+        str(group.group_id),
+        [str(first.record_id), str(second.record_id)],
+        match_type=group.match_type,
+        match_reason=group.match_reason,
+        status="PENDING",
+    )
+    publications.delete_publication(PROJECT_ID, second.record_id)
+    before_snapshot = sources.list_candidate_group_snapshots(PROJECT_ID)
+    assert before_snapshot[0]["status"] == "PENDING"
 
     with pytest.raises(ImportRejectionBlockedError) as blocked:
         service.reject(PROJECT_ID, import_id, reviewer_id="alice", confirm_rejection=True)
     assert "duplicate_decision" in {blocker.code for blocker in blocked.value.blockers}
-    assert len(publications.get_all_publications(PROJECT_ID)) == 2
+    assert publications.get_all_publications(PROJECT_ID) == [first]
+    assert sources.list_candidate_group_snapshots(PROJECT_ID) == before_snapshot
+    assert decisions.get_decision(PROJECT_ID, str(group.group_id)).decision is DuplicateDecision.REJECT
+
+
+def test_import_rejection_projection_failure_rolls_back_corpus_and_projection(tmp_path: Path, monkeypatch) -> None:
+    first = _publication(1, "10.1000/reject-projection")
+    second = _publication(2, "10.1000/reject-projection")
+    database, service, publications, sources, history, _, import_id, _, _ = _environment(
+        tmp_path, [first, second]
+    )
+    projection = service._duplicate_projection
+    assert projection is not None
+    transaction_manager = SqliteTransactionManager(database)
+    with transaction_manager.transaction() as connection:
+        projection.materialize_candidate_group_projection(PROJECT_ID, connection=connection)
+    before_ids = [item.duplicate_candidate_group_id for item in sources.list_source_records(PROJECT_ID)]
+    before_snapshots = sources.list_candidate_group_snapshots(PROJECT_ID)
+    original = projection.materialize_candidate_group_projection
+
+    def fail_after_projection(*args, **kwargs):
+        original(*args, **kwargs)
+        raise RuntimeError("injected import-rejection projection failure")
+
+    monkeypatch.setattr(projection, "materialize_candidate_group_projection", fail_after_projection)
+    with pytest.raises(RuntimeError, match="import-rejection projection failure"):
+        service.reject(PROJECT_ID, import_id, reviewer_id="alice", confirm_rejection=True)
+
+    assert publications.get_all_publications(PROJECT_ID) == [first, second]
+    assert history.get(PROJECT_ID, import_id).status == "warning"
+    assert [item.duplicate_candidate_group_id for item in sources.list_source_records(PROJECT_ID)] == before_ids
+    assert sources.list_candidate_group_snapshots(PROJECT_ID) == before_snapshots
 
 
 def _assert_blocker(database, service, publications, import_id, sql, params, code):
