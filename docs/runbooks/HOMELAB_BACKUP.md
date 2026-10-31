@@ -1,55 +1,60 @@
 # HomeLab SLR Platform backup
 
-The manual backup script is `scripts/backup_homelab.py`. Its defaults match the
-verified HomeLab installation:
-
-- Compose project: `slr-platform-v078`
-- Container: `slr-platform`
-- Compose file: `/home/cloud/slr-deploy-v078/compose.prod.yaml`
-- Environment file: `/home/cloud/slr-deploy-v078/.env`
-- SQLite database in the container: `/app/data/slr-platform.db`
-- Persistent host data mount: `/data/compose/18/data`
-- Backup root: `/home/cloud/slr-backups/slr-platform-v078`
-
-Run the script from the repository root. It streams the script over SSH and
-executes it on HomeLab; it does not install or change the running stack:
+Run locally on HomeLab as `cloud` with Docker access:
 
 ```bash
-ssh cloud@192.168.100.22 'python3 -' < scripts/backup_homelab.py
+python3 /home/cloud/slr-platform-update/scripts/backup_homelab.py
 ```
 
-Each run creates a UTC timestamped directory below the backup root with mode
-`0700`. It copies the Compose and `.env` files while preserving their file
-modes, then uses Python's SQLite Online Backup API from the running container.
-The source database is opened read-only; the online backup is first written to
-the container's temporary directory, copied to the backup directory, copied
-back into a temporary container path, and checked with `PRAGMA integrity_check`.
-SHA-256 checksums are written for the database and both configuration files.
+The default configuration source is the stored Compose of Portainer stack 18,
+`slr-platform`, in environment 3. The old deployment directory is not needed.
+The script reads the API token from
+`/home/cloud/.config/portainer-slr/api-token` and the trusted certificate SHA-256
+fingerprint from `/home/cloud/.config/portainer-slr/tls-sha256`. Both files must
+be regular, owned by the executing user and private (`0600`); their directory
+must be `0700`. The TLS certificate is pinned before the token is transmitted.
+Tokens and raw API/command error bodies are never included in output.
+After token revocation or certificate replacement, securely update these files
+before the next backup; API failure does not fall back to stale configuration.
 
-The script checks that the expected container is running, belongs to the
-expected Compose project, uses the expected Compose file, and has the verified
-persistent data mount. It fails closed if those paths or the runtime database
-path differ. Success prints `BACKUP_SUCCESS` and the backup directory. Failure
-prints `BACKUP_FAILED`; any partial backup is retained with an
-`INCOMPLETE.txt` marker for inspection. Existing backups are never removed.
+Production defaults:
 
-The `.env` copy contains credentials. Keep the backup root restricted to its
-owner and use the project's approved secure storage procedure before moving a
-backup elsewhere.
+- Portainer: `https://127.0.0.1:9443`; project/container `slr-platform`.
+- Live database: `/app/data/slr-platform.db` in the running container.
+- Host bind mounts remain `/data/compose/18/data` and `/data/compose/18/projects`.
+- New backups: `/home/cloud/slr-backups/slr-platform/slr-platform-<UTC timestamp>`.
+- Existing backups in `slr-platform-v078` are retained unchanged.
 
-## Manual Portainer update from `development`
+Each backup directory is `0700`. It contains `database.sqlite3`, the exact
+Portainer `compose.prod.yaml` (`0600`), an empty compatibility `.env`, nonsecret
+`stack-metadata.json`, and SHA-256 checksums. The Compose contains runtime
+credentials: keep it private and never copy it into Git or reports. The API
+credential itself is not backed up. A restore uses this self-contained Compose;
+it does not need the retired `.env`, original Git checkout or Portainer API.
 
-After the desired commit is merged, build or publish an image from that exact
-`development` commit before updating the stack. In Portainer, open **Stacks** →
-`slr-platform-v078` → **Editor**, select the Compose configuration for the
-existing stack, and change the `slr-platform` image to the prepared image tag.
-Keep the existing `.env` and both explicit bind mounts unchanged, then use
-**Update the stack**. Verify the new container and `/api/health` before
-considering the update complete.
+Before database backup, Docker Compose renders the saved file without deploying
+and the script compares environment, image, mounts, ports, network, command,
+restart, logging and ulimits against the live container. Git-managed, inactive,
+wrong-environment or non-self-contained stack configurations are rejected.
+The SQLite Online Backup API reads the live database and creates a consistent
+copy in container `/tmp`; after copying it out, the script copies it back to a
+separate temporary path and runs `PRAGMA integrity_check`. Temporary files are
+removed; existing backups and production data are never removed.
 
-The repository-root `compose.yaml` is for local development: its `./data` and
-`./projects` mounts are relative to the checkout. Do not use it as the HomeLab
-production stack source, because those relative paths do not point to the
-verified persistent HomeLab directories. Preserve
-`/data/compose/18/data:/app/data` and
-`/data/compose/18/projects:/app/projects` in the Portainer configuration.
+To verify configuration restoration, copy only the configuration into a fresh
+private temporary directory and run `docker compose -p slr-platform -f
+<temporary-directory>/compose.prod.yaml config --quiet`. This is validation,
+not deployment. Confirm rendered configuration against the current container;
+never use `up`, `down`, or restore a database over the live database as a test.
+Database restoration must be a separate approved maintenance operation.
+
+This script backs up SQLite and deployment configuration. It does not recursively
+copy the host `projects` directory or other application assets. Keep the existing
+independent filesystem backup policy for those assets.
+
+`SLR_BACKUP_*` overrides support isolated tests or explicit local Compose/env
+sources. Default API settings can be overridden with `PORTAINER_URL`,
+`PORTAINER_STACK_ID`, `PORTAINER_ENDPOINT_ID`, `PORTAINER_TOKEN_FILE` and
+`PORTAINER_PIN_FILE` under that prefix. Legacy local-file mode requires both
+`SLR_BACKUP_COMPOSE_FILE` and `SLR_BACKUP_ENV_FILE` and retains the previous
+permission-preserving copy behavior.
